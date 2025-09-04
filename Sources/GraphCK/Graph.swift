@@ -159,23 +159,25 @@ public class Graph: NSObject {
    executed to determine if iCloud support is available or not.
    */
     public init(name: String? = nil, type: String? = nil) {
+    GraphValueTransformer.register()
     self.name = name ?? GraphStoreDescription.name
     self.type = type ?? GraphStoreDescription.type
     self.location = GraphStoreDescription.location
     route = "Local/\(self.name)"
     super.init()
     prepareGraphContextRegistry()
-    prepareManagedObjectContext(enableCloud: false, locate: location)
+    prepareManagedObjectContext(locate: location)
   }
     
     public init(name: String? = nil, locate: GraphStoreDescription.locations, type: String? = nil) {
+    GraphValueTransformer.register()
     self.name = name ?? GraphStoreDescription.name
     self.type = type ?? GraphStoreDescription.type
     self.location = GraphStoreDescription.setLocation(locate)
     route = "Local/\(self.name)"
     super.init()
     prepareGraphContextRegistry()
-    prepareManagedObjectContext(enableCloud: false, locate: location)
+    prepareManagedObjectContext(locate: location)
   }
       
   /**

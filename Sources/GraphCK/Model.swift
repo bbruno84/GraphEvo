@@ -24,6 +24,7 @@
  */
 
 import CoreData
+import Foundation
 
 internal struct ModelIdentifier {
   static let entityName: String = "ManagedEntity"
@@ -162,10 +163,10 @@ internal struct Model {
     
     
     let propertyValue = NSAttributeDescription()
-    propertyValue.valueTransformerName = "DefaultTransformer" 
     propertyValue.name = "object"
     propertyValue.attributeType = .transformableAttributeType
-    propertyValue.attributeValueClassName = "Any"
+    propertyValue.attributeValueClassName = NSStringFromClass(NSObject.self)
+    propertyValue.valueTransformerName = GraphValueTransformer.name.rawValue
     propertyValue.isOptional = false
     propertyValue.allowsExternalBinaryDataStorage = true
     entityPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
