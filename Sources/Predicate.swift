@@ -162,6 +162,14 @@ public func >=(left: String, right: NSNumber) -> Predicate {
   return build(left, right, type: .greaterThanOrEqualTo)
 }
 
+public func >=(left: String, right: NSDate) -> Predicate {
+  return build(left, right, type: .greaterThanOrEqualTo)
+}
+
+public func <=(left: String, right: NSDate) -> Predicate {
+  return build(left, right, type: .lessThanOrEqualTo)
+}
+
 /**
  An operator to create a property Predicate where key is
  less than value.

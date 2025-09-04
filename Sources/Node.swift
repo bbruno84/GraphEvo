@@ -123,7 +123,7 @@ public class Node: NSObject, Codable {
     }
     
     p.forEach {
-      self[$0.key] = $0.value
+        self[dynamicMember: $0.key] = $0.value
     }
   }
   
@@ -212,15 +212,24 @@ public class Node: NSObject, Codable {
    Access properties using the subscript operator.
    - Parameter name: A property name value.
    - Returns: The optional Any value.
-   */
+   
   public subscript(name: String) -> Any? {
     get {
-      return node[name]
+        return node.getProperty(named: name)
     }
     set(value) {
-      node[name] = value
+        node.setProperty(named: name, value: value)
     }
   }
+   */
+    
+    private func getProperty(named name: String) -> Any? {
+        return node.getProperty(named: name)
+    }
+    
+    private func setProperty(named name: String, value: Any?) {
+        node.setProperty(named: name, value: value)
+    }
   
   /**
    Access properties using the dynamic property subscript operator.
@@ -229,10 +238,10 @@ public class Node: NSObject, Codable {
    */
   public subscript(dynamicMember member: String) -> Any? {
     get {
-      return self[member]
+        return self.getProperty(named: member)//[member]
     }
     set(value) {
-      self[member] = value
+        self.setProperty(named: member, value: value)//[member] = value
     }
   }
   

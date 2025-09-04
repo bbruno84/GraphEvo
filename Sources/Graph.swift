@@ -33,9 +33,34 @@ public struct GraphStoreDescription {
   static let type: String = NSSQLiteStoreType
   
   /// URL reference to where the Graph datastore will live.
-  static var location: URL {
-    return File.path(.applicationSupportDirectory, path: "CosmicMind/Graph/")!
-  }
+  static var location: URL = File.path(.applicationSupportDirectory, path: "CosmicMind/Graph/")!
+  
+
+    static var appGroupLocation: URL {
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.MyHomeBills")!.appendingPathComponent("CosmicMind/Graph/")
+    }
+    
+    public enum locations {
+        case standard
+        case appGroup
+    }
+    
+    public enum graphCloudIdentifiers : String {
+        case old
+        case application
+        case todayExtension
+        case widgetExtension
+    }
+
+    static func setLocation(_ locating: GraphStoreDescription.locations)->URL {
+  
+        switch locating {
+        case .standard:
+            return location
+        case .appGroup:
+            return appGroupLocation
+        }
+    }
 }
 
 @objc(GraphDelegate)
@@ -78,12 +103,20 @@ public protocol GraphDelegate {
 public class Graph: NSObject {
   /// Graph location.
   internal var location: URL
+    
+  public var locationPublic : URL { return location}
   
   /// Graph rouute/
   public internal(set) var route: String
   
   /// Graph name.
   public internal(set) var name: String
+    
+  /// Graph User.
+  public internal(set) var appIdentifier: String?
+    
+  /// Graph should be rebuilded from cloud data
+  public internal(set) var rebuildFromCloud: Bool?
   
   /// Graph type.
   public internal(set) var type: String
@@ -121,16 +154,26 @@ public class Graph: NSObject {
    - Parameter location: A location for storage.
    executed to determine if iCloud support is available or not.
    */
-  public init(name: String? = nil, type: String? = nil) {
+    public init(name: String? = nil, type: String? = nil) {
     self.name = name ?? GraphStoreDescription.name
     self.type = type ?? GraphStoreDescription.type
     self.location = GraphStoreDescription.location
     route = "Local/\(self.name)"
     super.init()
     prepareGraphContextRegistry()
-    prepareManagedObjectContext(enableCloud: false)
+    prepareManagedObjectContext(enableCloud: false, locate: location)
   }
-  
+    
+    public init(name: String? = nil, locate: GraphStoreDescription.locations, type: String? = nil) {
+    self.name = name ?? GraphStoreDescription.name
+    self.type = type ?? GraphStoreDescription.type
+    self.location = GraphStoreDescription.setLocation(locate)
+    route = "Local/\(self.name)"
+    super.init()
+    prepareGraphContextRegistry()
+    prepareManagedObjectContext(enableCloud: false, locate: location)
+  }
+      
   /**
    Initializer to named Graph with optional type and location.
    - Parameter cloud: A name for the Graph.
@@ -139,14 +182,29 @@ public class Graph: NSObject {
    - Parameter completion: An Optional completion block that is
    executed to determine if iCloud support is available or not.
    */
-  public init(cloud name: String, completion: ((Bool, Error?) -> Void)? = nil) {
-    route = "Cloud/\(name)"
-    self.name = name
-    type = NSSQLiteStoreType
-    location = GraphStoreDescription.location
-    super.init()
-    self.completion = completion
-    prepareGraphContextRegistry()
-    prepareManagedObjectContext(enableCloud: true)
-  }
+    public init(cloud name: String,appIdentifier: GraphStoreDescription.graphCloudIdentifiers?,rebuild: Bool? = false, completion: ((Bool, Error?) -> Void)? = nil) {
+        route = "Cloud/\(name)"
+        self.name = name
+        self.appIdentifier = appIdentifier?.rawValue
+        self.rebuildFromCloud = rebuild
+        type = NSSQLiteStoreType
+        location = GraphStoreDescription.location
+        super.init()
+        self.completion = completion
+        prepareGraphContextRegistry()
+        prepareManagedObjectContext(enableCloud: true, locate: location)
+    }
+    
+    public init(cloud name: String,appIdentifier: GraphStoreDescription.graphCloudIdentifiers?,rebuild: Bool? = false, locate: GraphStoreDescription.locations, completion: ((Bool, Error?) -> Void)? = nil) {
+        route = "Cloud/\(name)"
+        self.name = name
+        self.appIdentifier = appIdentifier?.rawValue
+        self.rebuildFromCloud = rebuild
+        type = NSSQLiteStoreType
+        location = GraphStoreDescription.setLocation(locate)
+        super.init()
+        self.completion = completion
+        prepareGraphContextRegistry()
+        prepareManagedObjectContext(enableCloud: true, locate: location)
+    }
 }

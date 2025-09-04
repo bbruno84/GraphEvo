@@ -30,24 +30,42 @@ import CoreData
  to the iCloud account directly.
  */
 @objc(GraphCloudStorageTransition)
-public enum GraphCloudStorageTransition: Int {
+public enum GraphCloudStorageTransition: UInt {
   case accountAdded
   case accountRemoved
   case contentRemoved
   case initialImportCompleted
+  case unknown
   
-  init(type : NSPersistentStoreUbiquitousTransitionType) {
+  init(type : UInt) {
     switch type {
-    case .accountAdded:
+    case 1:
       self = .accountAdded
-    case .accountRemoved:
+    case 2:
       self = .accountRemoved
-    case .contentRemoved:
+    case 3:
       self = .contentRemoved
-    case .initialImportCompleted:
+    case 4:
       self = .initialImportCompleted
+    default:
+      self = .unknown
     }
   }
+    
+    var debugDescription : String {
+        switch self {
+        case .accountAdded:
+            return "accountAdded"
+        case .accountRemoved:
+            return "accountRemoved"
+        case .contentRemoved:
+            return "contentRemoved"
+        case .initialImportCompleted:
+            return "initialImportCompleted"
+        default:
+            return "unknown"
+        }
+    }
 }
 
 internal struct Coordinator {
@@ -81,22 +99,30 @@ internal extension Graph {
    - Parameter supported: A boolean indicating whether cloud
    storage is supported.
    */
-  func addPersistentStore(supported: Bool) {
-    guard let moc = managedObjectContext else {
-      return
-    }
-    
-    var options: [AnyHashable: Any]?
-    
-    if supported {
-      options = [AnyHashable: Any]()
-      options?[NSPersistentStoreUbiquitousContentNameKey] = name
-    }
+    func addPersistentStore(supported: Bool) {
+        guard let moc = managedObjectContext else {
+            return
+        }
+        
+        var options: [AnyHashable: Any]?
+        
+        if supported {
+            options = [AnyHashable: Any]()
+            options?[NSPersistentStoreUbiquitousContentNameKey] = name
+            if let identifier = appIdentifier {
+                options?[NSPersistentStoreUbiquitousPeerTokenOption] = identifier
+            }
+            if rebuildFromCloud == true {
+                options?[NSPersistentStoreRebuildFromUbiquitousContentOption] = 1
+            }
+            
+        }
     
     prepareSQLite()
     
     do {
-      try moc.persistentStoreCoordinator?.addPersistentStore(ofType: type, configurationName: nil, at: location, options: options)
+      //try moc.persistentStoreCoordinator?.addPersistentStore(ofType: type, configurationName: nil, at: location, options: options)
+        try moc.persistentStoreCoordinator?.addPersistentStore(type: .sqlite, at: location, options: options)
       
       location = moc.persistentStoreCoordinator!.persistentStores.first!.url!
       
@@ -104,7 +130,14 @@ internal extension Graph {
         completion?(false, GraphError(message: "[Graph Error: iCloud is not supported.]"))
       }
     } catch let e as NSError {
-      fatalError("[Graph Error: \(e.localizedDescription)]")
+        
+        NotificationCenter.default.post(name: Notification.Name(rawValue: "showErrorPopup" ),
+                                        object: nil,
+                                        userInfo: ["error": e.localizedFailureReason ?? e.localizedDescription])
+        
+        //debugPrint("[Graph Error: \(e.localizedDescription)]")
+        debugPrint("[Graph Error: \(e.localizedFailureReason ?? e.localizedDescription)]")
+//      fatalError("[Graph Error: \(e.localizedDescription)]")
     }
   }
   
@@ -122,6 +155,7 @@ internal extension Graph {
   
   @objc
   func persistentStoreWillChange(_ notification: Notification) {
+    
     guard let moc = managedObjectContext else {
       return
     }
@@ -133,23 +167,24 @@ internal extension Graph {
       self?.reset()
     }
     
-    guard let type = (notification as NSNotification).userInfo?[NSPersistentStoreUbiquitousTransitionTypeKey] as? NSPersistentStoreUbiquitousTransitionType else {
-      return
+    guard let tipo = notification.userInfo?[NSPersistentStoreUbiquitousTransitionTypeKey] as? UInt else {
+        return
     }
     
-    let t = GraphCloudStorageTransition(type: type)
-    
+    let t = GraphCloudStorageTransition(type: tipo)
     
     delegate?.graphWillPrepareCloudStorage?(graph: self, transition: t)
   }
   
   @objc
   func persistentStoreDidChange(_ notification: Notification) {
+    
     GraphContextRegistry.added[route] = true
     
     completion?(true, nil)
     
     delegate?.graphDidPrepareCloudStorage?(graph: self)
+    
   }
   
   @objc

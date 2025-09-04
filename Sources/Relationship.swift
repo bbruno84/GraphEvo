@@ -191,7 +191,7 @@ extension Array where Element: Relationship {
   public func object(types: [String]) -> [Entity] {
     var s : Set<Entity> = []
     forEach { [types = types] (r) in
-      guard let e = r.subject else {
+      guard let e = r.object else {
         return
       }
       

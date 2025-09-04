@@ -160,7 +160,9 @@ internal struct Model {
     actionPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     relationshipPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     
+    
     let propertyValue = NSAttributeDescription()
+    propertyValue.valueTransformerName = "DefaultTransformer" 
     propertyValue.name = "object"
     propertyValue.attributeType = .transformableAttributeType
     propertyValue.attributeValueClassName = "Any"

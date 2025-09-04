@@ -83,10 +83,10 @@ internal extension Graph {
    Prapres the managedObjectContext.
    - Parameter iCloud: A boolean to enable iCloud.
    */
-  func prepareManagedObjectContext(enableCloud: Bool) {
+    func prepareManagedObjectContext(enableCloud: Bool, locate: URL) {
     guard let moc = GraphContextRegistry.managedObjectContexts[route] else {
       GraphContextRegistry.enableCloud[route] = enableCloud
-      location = GraphStoreDescription.location.appendingPathComponent(route)
+      location = locate.appendingPathComponent(route)
       
       managedObjectContext = Context.create(.mainQueueConcurrencyType)
       managedObjectContext.persistentStoreCoordinator = Coordinator.create(type: type, location: location)
@@ -137,6 +137,8 @@ fileprivate extension Graph {
     
     let storeDescription = NSPersistentStoreDescription()
     storeDescription.shouldAddStoreAsynchronously = false
+    storeDescription.shouldMigrateStoreAutomatically = true //Added by bruno
+    storeDescription.shouldInferMappingModelAutomatically = true //Addeed by bruno
     storeDescription.url = location
     
     let container = NSPersistentContainer(name: name, storeDescription: storeDescription)
