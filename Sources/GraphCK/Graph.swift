@@ -71,6 +71,7 @@ public protocol GraphDelegate {
    - Parameter graph: A Graph instance.
    - Parameter transition: A GraphCloudStorageTransition value.
    */
+  @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
   @objc
   optional func graphWillPrepareCloudStorage(graph: Graph, transition: GraphCloudStorageTransition)
   
@@ -79,6 +80,7 @@ public protocol GraphDelegate {
    did prepare cloud storage.
    - Parameter graph: A Graph instance.
    */
+  @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
   @objc
   optional func graphDidPrepareCloudStorage(graph: Graph)
   
@@ -87,6 +89,7 @@ public protocol GraphDelegate {
    will update from cloud storage.
    - Parameter graph: A Graph instance.
    */
+  @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
   @objc
   optional func graphWillUpdateFromCloudStorage(graph: Graph)
   
@@ -95,6 +98,7 @@ public protocol GraphDelegate {
    did update from cloud storage.
    - Parameter graph: A Graph instance.
    */
+  @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
   @objc
   optional func graphDidUpdateFromCloudStorage(graph: Graph)
 }
@@ -182,29 +186,19 @@ public class Graph: NSObject {
    - Parameter completion: An Optional completion block that is
    executed to determine if iCloud support is available or not.
    */
-    public init(cloud name: String,appIdentifier: GraphStoreDescription.graphCloudIdentifiers?,rebuild: Bool? = false, completion: ((Bool, Error?) -> Void)? = nil) {
-        route = "Cloud/\(name)"
-        self.name = name
+    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported. This initializer now creates a local store.")
+    public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, completion: ((Bool, Error?) -> Void)? = nil) {
+        self.init(name: name)
         self.appIdentifier = appIdentifier?.rawValue
         self.rebuildFromCloud = rebuild
-        type = NSSQLiteStoreType
-        location = GraphStoreDescription.location
-        super.init()
         self.completion = completion
-        prepareGraphContextRegistry()
-        prepareManagedObjectContext(enableCloud: true, locate: location)
     }
-    
-    public init(cloud name: String,appIdentifier: GraphStoreDescription.graphCloudIdentifiers?,rebuild: Bool? = false, locate: GraphStoreDescription.locations, completion: ((Bool, Error?) -> Void)? = nil) {
-        route = "Cloud/\(name)"
-        self.name = name
+
+    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported. This initializer now creates a local store.")
+    public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, locate: GraphStoreDescription.locations, completion: ((Bool, Error?) -> Void)? = nil) {
+        self.init(name: name, locate: locate)
         self.appIdentifier = appIdentifier?.rawValue
         self.rebuildFromCloud = rebuild
-        type = NSSQLiteStoreType
-        location = GraphStoreDescription.setLocation(locate)
-        super.init()
         self.completion = completion
-        prepareGraphContextRegistry()
-        prepareManagedObjectContext(enableCloud: true, locate: location)
     }
 }

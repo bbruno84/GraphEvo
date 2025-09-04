@@ -28,7 +28,6 @@ import CoreData
 internal struct GraphContextRegistry {
   static var dispatchToken = false
   static var added: [String: Bool]!
-  static var enableCloud: [String: Bool]!
   static var managedObjectContexts: [String: NSManagedObjectContext]!
 }
 
@@ -75,51 +74,26 @@ internal extension Graph {
     
     GraphContextRegistry.dispatchToken = true
     GraphContextRegistry.added = [:]
-    GraphContextRegistry.enableCloud = [:]
     GraphContextRegistry.managedObjectContexts = [String: NSManagedObjectContext]()
   }
   
   /**
    Prapres the managedObjectContext.
-   - Parameter iCloud: A boolean to enable iCloud.
+   - Parameter locate: The location URL.
    */
-    func prepareManagedObjectContext(enableCloud: Bool, locate: URL) {
+  func prepareManagedObjectContext(locate: URL) {
     guard let moc = GraphContextRegistry.managedObjectContexts[route] else {
-      GraphContextRegistry.enableCloud[route] = enableCloud
       location = locate.appendingPathComponent(route)
       
       managedObjectContext = Context.create(.mainQueueConcurrencyType)
       managedObjectContext.persistentStoreCoordinator = Coordinator.create(type: type, location: location)
       GraphContextRegistry.managedObjectContexts[route] = managedObjectContext
       
-      if enableCloud {
-        preparePersistentStoreCoordinatorNotificationHandlers()
-        
-        managedObjectContext.perform { [weak self] in
-          self?.addPersistentStore(supported: true)
-        }
-      } else {
-        addPersistentStore(supported: false)
-      }
+      addPersistentStore(supported: false)
       return
     }
     
     managedObjectContext = moc
-    
-    guard let isCloudEnabled = GraphContextRegistry.enableCloud[route] else {
-      return
-    }
-    
-    preparePersistentStoreCoordinatorNotificationHandlers()
-    
-    managedObjectContext.perform { [weak self, isCloudEnabled = isCloudEnabled] in
-      guard let s = self else {
-        return
-      }
-      
-      s.completion?(isCloudEnabled, isCloudEnabled ? nil : GraphError(message: "[Graph Error: iCloud is not supported.]"))
-      s.delegate?.graphDidPrepareCloudStorage?(graph: s)
-    }
   }
   
   /// Prepares the SQLight file if needed.
