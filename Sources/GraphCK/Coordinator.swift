@@ -23,10 +23,12 @@
  * THE SOFTWARE.
  */
 
+// NOTE (M2): Legacy coordinator APIs retained for binary/source compatibility. Not used by the modern stack.
+
 import CoreData
 
 /**
- Cloud stroage transition types for when changes happen
+ Cloud storage transition types for when changes happen
  to the iCloud account directly.
  */
 @objc(GraphCloudStorageTransition)
@@ -68,6 +70,7 @@ public enum GraphCloudStorageTransition: UInt {
     }
 }
 
+@available(*, deprecated, message: "M2: Replaced by NSPersistentCloudKitContainer; kept for compatibility")
 internal struct Coordinator {
   /**
    Creates a NSPersistentStoreCoordinator.
@@ -92,7 +95,7 @@ internal struct Coordinator {
   }
 }
 
-/// NSPersistentStoreCoordinator extension.
+@available(*, deprecated, message: "M2: Replaced by NSPersistentCloudKitContainer; kept for compatibility")
 internal extension Graph {
   /**
    Adds the persistentStore to the persistentStoreCoordinator.

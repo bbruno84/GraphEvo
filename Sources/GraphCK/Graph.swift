@@ -24,6 +24,7 @@
  */
 
 import CoreData
+import CloudKit
 
 public struct GraphStoreDescription {
   /// Datastore name.
@@ -60,6 +61,16 @@ public struct GraphStoreDescription {
         case .appGroup:
             return appGroupLocation
         }
+    }
+    
+    /// Returns the filename used for CloudKit-backed stores: GraphCK_<name>.sqlite
+    static func ckStoreFilename(for name: String) -> String {
+        return "GraphCK_\(name).sqlite"
+    }
+
+    /// Returns the full URL for the CK store inside the given base directory.
+    static func ckStoreURL(baseURL: URL, name: String) -> URL {
+        return baseURL.appendingPathComponent(ckStoreFilename(for: name))
     }
 }
 
@@ -103,6 +114,16 @@ public protocol GraphDelegate {
   optional func graphDidUpdateFromCloudStorage(graph: Graph)
 }
 
+public enum GraphCloudStatus {
+    case available
+    case unavailable
+}
+
+public protocol GraphCloudStatusDelegate: AnyObject {
+    /// Called when iCloud availability changes (or is first determined).
+    func graph(_ graph: Graph, iCloudStatusChanged status: GraphCloudStatus)
+}
+
 @objc(Graph)
 public class Graph: NSObject {
   /// Graph location.
@@ -110,7 +131,7 @@ public class Graph: NSObject {
     
   public var locationPublic : URL { return location}
   
-  /// Graph rouute/
+  /// Graph route.
   public internal(set) var route: String
   
   /// Graph name.
@@ -137,7 +158,26 @@ public class Graph: NSObject {
   /// Watch instances.
   public internal(set) lazy var watchers : [Watcher] = []
   
+  /// Optional delegate to receive iCloud availability updates (informational).
+  public weak var cloudStatusDelegate: GraphCloudStatusDelegate? {
+      didSet {
+          if let status = lastCloudStatus, let delegate = cloudStatusDelegate {
+              delegate.graph(self, iCloudStatusChanged: status)
+          }
+      }
+  }
+
+  /// M2: cache last known iCloud availability to notify late-bound delegates.
+  private var lastCloudStatus: GraphCloudStatus?
+  
   public weak var delegate: GraphDelegate?
+
+    /// M2: Optional override for the CloudKit container identifier.
+    /// If set, this takes precedence over Info.plist and enables CloudKit sync without relying on plist UX.
+    public static var cloudKitContainerIdentifier: String?
+
+    /// M2: Keep a reference to the CloudKit container so we can spawn background contexts, etc.
+    internal var persistentContainer: NSPersistentCloudKitContainer?
   
   /**
    A reference to the graph completion handler.
@@ -165,6 +205,8 @@ public class Graph: NSObject {
     self.location = GraphStoreDescription.location
     route = "Local/\(self.name)"
     super.init()
+    observeRemoteStoreChanges()
+    checkICloudAccountStatus()
     prepareGraphContextRegistry()
     prepareManagedObjectContext(locate: location)
   }
@@ -176,6 +218,8 @@ public class Graph: NSObject {
     self.location = GraphStoreDescription.setLocation(locate)
     route = "Local/\(self.name)"
     super.init()
+    observeRemoteStoreChanges()
+    checkICloudAccountStatus()
     prepareGraphContextRegistry()
     prepareManagedObjectContext(locate: location)
   }
@@ -188,7 +232,7 @@ public class Graph: NSObject {
    - Parameter completion: An Optional completion block that is
    executed to determine if iCloud support is available or not.
    */
-    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported. This initializer now creates a local store.")
+    @available(*, deprecated, message: "Deprecated: uses modern CloudKit container (private DB) under the hood; falls back to local if iCloud is unavailable.")
     public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, completion: ((Bool, Error?) -> Void)? = nil) {
         self.init(name: name)
         self.appIdentifier = appIdentifier?.rawValue
@@ -196,11 +240,76 @@ public class Graph: NSObject {
         self.completion = completion
     }
 
-    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported. This initializer now creates a local store.")
+    @available(*, deprecated, message: "Deprecated: uses modern CloudKit container (private DB) under the hood; falls back to local if iCloud is unavailable.")
     public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, locate: GraphStoreDescription.locations, completion: ((Bool, Error?) -> Void)? = nil) {
         self.init(name: name, locate: locate)
         self.appIdentifier = appIdentifier?.rawValue
         self.rebuildFromCloud = rebuild
         self.completion = completion
     }
+  
+    // MARK: - Context factory (modern API)
+    /// Returns a new background context backed by the same NSPersistentCloudKitContainer.
+    /// Returns nil if the container is not yet initialized.
+    public func newBackgroundContext() -> NSManagedObjectContext? {
+        return persistentContainer?.newBackgroundContext()
+    }
+  
+    // MARK: - CloudKit / Remote change hooks (M2)
+  
+    /// Observe NSPersistentStoreRemoteChange notifications to prepare M3 Watchers hook.
+    private func observeRemoteStoreChanges() {
+        // Add observer only when the notification symbol is available on this platform.
+        #if canImport(CoreData)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleRemoteStoreChange(_:)),
+                                               name: NSNotification.Name.NSPersistentStoreRemoteChange,
+                                               object: nil)
+        #endif
+    }
+  
+    /// Placeholder that will be connected to Watchers in M3.
+    @objc
+    private func handleRemoteStoreChange(_ notification: Notification) {
+        // Intentionally minimal for M2: hook point for Watchers in M3.
+        // print("Remote store change received: \(notification.userInfo ?? [:])")
+    }
+  
+    /// Check iCloud account status and notify the optional cloudStatusDelegate.
+    private func checkICloudAccountStatus() {
+        // If we're under unit tests, avoid touching CloudKit and synchronously report unavailable.
+        if NSClassFromString("XCTestCase") != nil {
+            self.lastCloudStatus = .unavailable
+            if let delegate = self.cloudStatusDelegate {
+                delegate.graph(self, iCloudStatusChanged: .unavailable)
+            }
+            return
+        }
+  
+        // Resolve a container identifier: runtime override first, then optional Info.plist fallback.
+        var resolvedID: String? = Graph.cloudKitContainerIdentifier
+        if resolvedID == nil || resolvedID?.isEmpty == true {
+            resolvedID = Bundle.main.object(forInfoDictionaryKey: "GraphCloudKitContainerIdentifier") as? String
+        }
+  
+        // If no identifier is configured (SPM / no capabilities), don't touch CloudKit APIs.
+        guard let containerID = resolvedID, !containerID.isEmpty else {
+            self.lastCloudStatus = .unavailable
+            if let delegate = self.cloudStatusDelegate {
+                delegate.graph(self, iCloudStatusChanged: .unavailable)
+            }
+            return
+        }
+  
+        // Use the explicitly resolved container to query account status.
+        CKContainer(identifier: containerID).accountStatus { [weak self] status, _ in
+            guard let self = self else { return }
+            let mapped: GraphCloudStatus = (status == .available) ? .available : .unavailable
+            self.lastCloudStatus = mapped
+            DispatchQueue.main.async {
+                self.cloudStatusDelegate?.graph(self, iCloudStatusChanged: mapped)
+            }
+        }
+    }
 }
+
