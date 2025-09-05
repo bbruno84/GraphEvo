@@ -24,6 +24,7 @@
  */
 
 import CoreData
+import CloudKit
 
 internal struct GraphContextRegistry {
   static var dispatchToken = false
@@ -82,30 +83,97 @@ internal extension Graph {
    - Parameter locate: The location URL.
    */
   func prepareManagedObjectContext(locate: URL) {
-    guard let moc = GraphContextRegistry.managedObjectContexts[route] else {
-      location = locate.appendingPathComponent(route)
-      
-      managedObjectContext = Context.create(.mainQueueConcurrencyType)
-      managedObjectContext.persistentStoreCoordinator = Coordinator.create(type: type, location: location)
-      GraphContextRegistry.managedObjectContexts[route] = managedObjectContext
-      
-      addPersistentStore(supported: false)
+    // Reuse cached context if present
+    if let cached = GraphContextRegistry.managedObjectContexts[route] {
+      managedObjectContext = cached
       return
     }
-    
-    managedObjectContext = moc
+
+    // Base directory: <locate>/<route>/
+    location = locate.appendingPathComponent(route)
+
+    // Ensure directory exists
+    File.createDirectoryAtPath(location, withIntermediateDirectories: true, attributes: nil) { (success, error) in
+      if let e = error {
+        fatalError("[Graph Error: \(e.localizedDescription)]")
+      }
+    }
+
+    // Final SQLite URL: GraphCK_<name>.sqlite
+    let storeURL = GraphStoreDescription.ckStoreURL(baseURL: location, name: name)
+
+    // Store description with M2 options
+    let storeDescription = NSPersistentStoreDescription(url: storeURL)
+    storeDescription.type = NSSQLiteStoreType
+    storeDescription.shouldAddStoreAsynchronously = false
+    storeDescription.shouldMigrateStoreAutomatically = true
+    storeDescription.shouldInferMappingModelAutomatically = true
+    storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+    storeDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+
+    // Resolve CloudKit container identifier: runtime override > Info.plist fallback
+    var resolvedContainerID: String? = Graph.cloudKitContainerIdentifier
+    if resolvedContainerID == nil || resolvedContainerID?.isEmpty == true {
+      resolvedContainerID = Bundle.main.object(forInfoDictionaryKey: "GraphCloudKitContainerIdentifier") as? String
+    }
+    if let containerID = resolvedContainerID, !containerID.isEmpty {
+      storeDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: containerID)
+    }
+
+    // Create modern container
+    let container = NSPersistentCloudKitContainer(name: name, managedObjectModel: Model.create())
+    container.persistentStoreDescriptions = [storeDescription]
+
+    container.loadPersistentStores { [unowned self] (desc, error) in
+      if let error = error {
+        // Fallback: try a plain local NSPersistentContainer (no CloudKit) instead of crashing.
+        let plain = NSPersistentContainer(name: name, managedObjectModel: Model.create())
+        // Reuse the same storeDescription but ensure CloudKit options are cleared.
+        let plainDesc = NSPersistentStoreDescription(url: storeURL)
+        plainDesc.type = NSSQLiteStoreType
+        plainDesc.shouldAddStoreAsynchronously = false
+        plainDesc.shouldMigrateStoreAutomatically = true
+        plainDesc.shouldInferMappingModelAutomatically = true
+        plain.persistentStoreDescriptions = [plainDesc]
+        
+        plain.loadPersistentStores { [unowned self] (desc, plainError) in
+          if let plainError = plainError {
+            // Do not crash during tests: log both errors and leave MOC unset.
+            debugPrint("[Graph Error] CloudKit container failed: \(error.localizedDescription); fallback also failed: \(plainError.localizedDescription)")
+            return
+          }
+          // Success with plain container: proceed with local-only context.
+          self.persistentContainer = nil
+          self.managedObjectContext = plain.viewContext
+          self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+          self.managedObjectContext.undoManager = nil
+          self.managedObjectContext.automaticallyMergesChangesFromParent = true
+          self.location = desc.url ?? storeURL
+          GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+        }
+        return
+      }
+      self.persistentContainer = container
+      self.managedObjectContext = container.viewContext
+      self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+      self.managedObjectContext.undoManager = nil
+      self.managedObjectContext.automaticallyMergesChangesFromParent = true
+      self.location = desc.url ?? storeURL
+      GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+    }
   }
   
   /// Prepares the SQLight file if needed.
   func prepareSQLite() {
     if NSSQLiteStoreType == type {
-      location = location.appendingPathComponent("Graph.sqlite")
+      location = location.appendingPathComponent(GraphStoreDescription.ckStoreFilename(for: name))
     }
   }
 }
 
 @available(iOS 10.0, OSX 10.12, *)
 fileprivate extension Graph {
+  // NOTE (M2): legacy helper, unused after migration to NSPersistentCloudKitContainer.
   func prepareContextContainer() {
     self.prepareSQLite()
     

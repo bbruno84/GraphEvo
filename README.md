@@ -4,13 +4,16 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 
 ---
 
-## ✅ Stato attuale (Milestone M0 – Bootstrap Clean)
+## ✅ Stato attuale (Milestone M2 – CloudKit Container)
 
-- Rimosso completamente il supporto a **iCloud Ubiquitous Store**
-- I costruttori `init(cloud:...)` sono **deprecati**
-- Ogni istanza di `Graph` usa ora uno **store locale SQLite**
-- Delegate legacy relativi al cloud sono **deprecati** e in no-op
-- Supporto a `Graph(name:)`, `Graph(name:locate:)` completamente funzionante
+- Refactor modello (M1) completato: rimosso `Transformable` generico, introdotto `ValueTransformer` sicuro
+- Sostituito `NSPersistentContainer` con `NSPersistentCloudKitContainer`
+- Store SQLite rinominato automaticamente in `GraphCK_<name>.sqlite`
+- Opzioni abilitate: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
+- Delegate `GraphCloudStatusDelegate` per notificare disponibilità iCloud (funziona anche senza entitlements, fallback locale)
+- Fallback automatico su store locale se iCloud non disponibile/non configurato
+- Costruttori `init(cloud:...)` deprecati ma reindirizzati al container CloudKit moderno
+- **Configurazione CloudKit**: supporto a override runtime dell’identifier (`Graph.cloudKitContainerIdentifier`) o fallback Info.plist
 
 ---
 
@@ -27,9 +30,9 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 | Milestone | Descrizione | Stato |
 |----------|-------------|-------|
 | **M0** | Pulizia codice, rimozione iCloud classico | ✅ Completato |
-| **M1** | Refactor model, preparazione per CloudKit | 🔜 |
-| **M2** | Supporto a CloudKit (sincronizzazione) | ⏳ |
-| **M3** | Supporto sharing multi-account (CloudKit sharing) | ⏳ |
+| **M1** | Refactor model, preparazione per CloudKit | ✅ Completato |
+| **M2** | Supporto a CloudKit (sincronizzazione) | ✅ Completato |
+| **M3** | Supporto sharing multi-account (CloudKit sharing) | 🔜 |
 
 ---
 
@@ -41,6 +44,19 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 
 ---
 
-## 📖 Licenza
+## ☁️ Configurazione CloudKit
 
-MIT License – © CosmicMind / Fork a cura di [@bbruno84](https://github.com/bbruno84)
+Per abilitare la sincronizzazione con il database privato CloudKit, è necessario specificare un **container identifier**.
+
+È possibile farlo in due modi:
+
+1. **Override a runtime** (consigliato):
+   ```swift
+   Graph.cloudKitContainerIdentifier = "iCloud.com.tuodominio.laTuaApp"
+   let graph = Graph(name: "Main")
+   ```
+
+2. **Info.plist fallback** (opzionale):
+   - Aggiungere una chiave `GraphCloudKitContainerIdentifier` di tipo `String` con valore `iCloud.com.tuodominio.laTuaApp`.
+
+Se non viene specificato alcun identifier, lo store funziona comunque in modalità **locale** senza sincronizzazione.
