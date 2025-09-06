@@ -33,7 +33,7 @@ final class GraphCKTests: XCTestCase {
 
         // 4) Save / Fetch roundtrip (uses original Graph APIs if present)
         //    If your project uses a different API to persist entities, adjust this block accordingly.
-        do {
+        
             let e = Entity("note")
             e[dynamicMember: "title"] = "Hello M2"
 
@@ -46,9 +46,7 @@ final class GraphCKTests: XCTestCase {
             debugPrint("Results: \(results.count)")
             let titles = results.compactMap { $0[dynamicMember: "title"] as? String }
             XCTAssertTrue(titles.contains("Hello M2"), "Expected to find the saved entity by title")
-        } catch {
-            XCTFail("Save/Fetch roundtrip failed with error: \(error)")
-        }
+        
     }
 
     // MARK: - Cloud status / identifier stubs
