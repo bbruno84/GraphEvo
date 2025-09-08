@@ -113,10 +113,13 @@ internal extension Graph {
     
     do {
       //try moc.persistentStoreCoordinator?.addPersistentStore(ofType: type, configurationName: nil, at: location, options: options)
-        try moc.persistentStoreCoordinator?.addPersistentStore(type: .sqlite, at: location, options: options)
-      
-      location = moc.persistentStoreCoordinator!.persistentStores.first!.url!
-      
+        let addedStore = try moc.persistentStoreCoordinator?.addPersistentStore(type: .sqlite, at: location, options: options)
+        
+        if let url = addedStore?.url {
+            location = url
+        } else if let firstURL = moc.persistentStoreCoordinator?.persistentStores.first?.url {
+            location = firstURL
+        }
     } catch let e as NSError {
         
         NotificationCenter.default.post(name: Notification.Name(rawValue: "showErrorPopup" ),

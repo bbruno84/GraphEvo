@@ -37,7 +37,7 @@ public final class AnyCodableObject: NSObject, NSSecureCoding, Codable {
             AnyCodableObject.self,
             NSArrayOfAnyCodableObject.self,
             DictionaryOfAnyCodableObject.self
-        ], forKey: "value")
+        ], forKey: "value") ?? NSNull()
     }
     
     // MARK: - Codable

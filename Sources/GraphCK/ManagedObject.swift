@@ -50,7 +50,7 @@ internal class ManagedObject: NSManagedObject {
   }
 }
 
-internal protocol PerformAndWaitable: class {
+internal protocol PerformAndWaitable: AnyObject {
   var managedObjectContext: NSManagedObjectContext? { get }
 }
 
