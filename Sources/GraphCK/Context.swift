@@ -145,6 +145,8 @@ internal extension Graph {
           // Success with plain container: proceed with local-only context.
           self.persistentContainer = nil
           self.managedObjectContext = plain.viewContext
+          // Mark local author for potential filtering in Persistent History (configurable)
+          self.managedObjectContext.transactionAuthor = "app"
           self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
           self.managedObjectContext.undoManager = nil
           self.managedObjectContext.automaticallyMergesChangesFromParent = true
@@ -155,11 +157,17 @@ internal extension Graph {
       }
       self.persistentContainer = container
       self.managedObjectContext = container.viewContext
+      // Mark local author for potential filtering in Persistent History (configurable)
+      self.managedObjectContext.transactionAuthor = "app"
       self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
       self.managedObjectContext.undoManager = nil
       self.managedObjectContext.automaticallyMergesChangesFromParent = true
       self.location = desc.url ?? storeURL
       GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+      NotificationCenter.default.addObserver(self,
+                                             selector: #selector(handlePersistentStoreRemoteChange(_:)),
+                                             name: .NSPersistentStoreRemoteChange,
+                                             object: container.persistentStoreCoordinator)
     }
   }
   

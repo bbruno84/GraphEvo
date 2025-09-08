@@ -18,6 +18,8 @@ final class GraphModelTransformerTests: XCTestCase {
 
     func testStringPropertyRoundTrip() async throws {
         let g = Graph(name: "ModelTransformerTests1")
+        g.clear()
+        g.sync()
         let e = Entity("Note")
         e[dynamicMember: "title"] = "Hello"
 
