@@ -471,68 +471,92 @@ public class Watch<T: Node>: Watchable {
    Notifies inserted watchers from cloud changes.
    - Parameter notification: NSNotification reference.
    */
-  @objc
-  internal func notifyInsertedWatchersFromCloud(_ notification: Notification) {
-    guard let objectIDs = notification.userInfo?[NSInsertedObjectsKey] as? NSSet else {
-      return
+    @objc
+    internal func notifyInsertedWatchersFromCloud(_ notification: Notification) {
+      // Process only notifications posted for this watch's MOC
+      guard
+        let ctx = graph.managedObjectContext,
+        let notifCtx = notification.object as? NSManagedObjectContext,
+        notifCtx === ctx
+      else { return }
+      #if DEBUG
+      print("[GraphCK][Watch] cloud: inserted keys=\(Array((notification.userInfo ?? [:]).keys))")
+      #endif
+      guard let payload = notification.userInfo?[NSInsertedObjectsKey] as? NSSet else {
+        return
+      }
+      guard let moc = graph.managedObjectContext else { return }
+
+      let objects = NSMutableSet()
+      if let ids = payload.allObjects as? [NSManagedObjectID] {
+        ids.forEach { objects.add(moc.object(with: $0)) }
+      } else if let managed = payload.allObjects as? [NSManagedObject] {
+        managed.forEach { objects.add($0) }
+      } else {
+        return
+      }
+
+      delegateToInsertedWatchers(filtered(objects), source: .cloud)
     }
-    
-    guard let moc = graph.managedObjectContext else {
-      return
-    }
-    
-    let objects = NSMutableSet()
-    (objectIDs.allObjects as! [NSManagedObjectID]).forEach { [unowned moc] (objectID: NSManagedObjectID) in
-      objects.add(moc.object(with: objectID))
-    }
-    
-    delegateToInsertedWatchers(filtered(objects), source: .cloud)
-  }
-  
   /**
    Notifies updated watchers from cloud changes.
    - Parameter notification: NSNotification reference.
    */
-  @objc
-  internal func notifyUpdatedWatchersFromCloud(_ notification: Notification) {
-    guard let objectIDs = notification.userInfo?[NSUpdatedObjectsKey] as? NSSet else {
-      return
+    @objc
+    internal func notifyUpdatedWatchersFromCloud(_ notification: Notification) {
+      // Process only notifications posted for this watch's MOC
+      guard
+        let ctx = graph.managedObjectContext,
+        let notifCtx = notification.object as? NSManagedObjectContext,
+        notifCtx === ctx
+      else { return }
+      #if DEBUG
+      print("[GraphCK][Watch] cloud: updated keys=\(Array((notification.userInfo ?? [:]).keys))")
+      #endif
+      guard let payload = notification.userInfo?[NSUpdatedObjectsKey] as? NSSet else { return }
+      guard let moc = graph.managedObjectContext else { return }
+
+      let objects = NSMutableSet()
+      if let ids = payload.allObjects as? [NSManagedObjectID] {
+        ids.forEach { objects.add(moc.object(with: $0)) }
+      } else if let managed = payload.allObjects as? [NSManagedObject] {
+        managed.forEach { objects.add($0) }
+      } else {
+        return
+      }
+
+      delegateToUpdatedWatchers(filtered(objects), source: .cloud)
     }
-    
-    guard let moc = graph.managedObjectContext else {
-      return
-    }
-    
-    let objects = NSMutableSet()
-    (objectIDs.allObjects as! [NSManagedObjectID]).forEach { [unowned moc] (objectID: NSManagedObjectID) in
-      objects.add(moc.object(with: objectID))
-    }
-    
-    delegateToUpdatedWatchers(filtered(objects), source: .cloud)
-  }
   
   /**
    Notifies deleted watchers from cloud changes.
    - Parameter notification: NSNotification reference.
    */
-  @objc
-  internal func notifyDeletedWatchersFromCloud(_ notification: Notification) {
-    guard let objectIDs = notification.userInfo?[NSDeletedObjectsKey] as? NSSet else {
-      return
-    }
-    
-    guard let moc = graph.managedObjectContext else {
-      return
-    }
-    
-    let objects = NSMutableSet()
-    (objectIDs.allObjects as! [NSManagedObjectID]).forEach { [unowned moc] (objectID: NSManagedObjectID) in
-      objects.add(moc.object(with: objectID))
-    }
-    
-    delegateToDeletedWatchers(filtered(objects), source: .cloud)
-  }
-}
+    @objc
+    internal func notifyDeletedWatchersFromCloud(_ notification: Notification) {
+      // Process only notifications posted for this watch's MOC
+      guard
+        let ctx = graph.managedObjectContext,
+        let notifCtx = notification.object as? NSManagedObjectContext,
+        notifCtx === ctx
+      else { return }
+      #if DEBUG
+      print("[GraphCK][Watch] cloud: deleted keys=\(Array((notification.userInfo ?? [:]).keys))")
+      #endif
+      guard let payload = notification.userInfo?[NSDeletedObjectsKey] as? NSSet else { return }
+      guard let moc = graph.managedObjectContext else { return }
+
+      let objects = NSMutableSet()
+      if let ids = payload.allObjects as? [NSManagedObjectID] {
+        ids.forEach { objects.add(moc.object(with: $0)) }
+      } else if let managed = payload.allObjects as? [NSManagedObject] {
+        managed.forEach { objects.add($0) }
+      } else {
+        return
+      }
+
+      delegateToDeletedWatchers(filtered(objects), source: .cloud)
+    }}
 
 fileprivate extension Watch {
   /**
@@ -942,6 +966,7 @@ fileprivate extension Watch {
   /// Removes the watcher.
   func removeFromObservation() {
     NotificationCenter.default.removeObserver(self)
+      NotificationCenter.default.removeObserver(self, name: .GraphCKSimulatedRemoteChange, object: nil)
   }
   
   /// Prepares the Watch instance.
@@ -951,20 +976,24 @@ fileprivate extension Watch {
   }
   
   /// Prepares the instance for save notifications.
-  func addForObservation() {
-    guard let moc = graph.managedObjectContext else {
-      return
+    func addForObservation() {
+      guard let moc = graph.managedObjectContext else {
+        return
+      }
+
+      let defaultCenter = NotificationCenter.default
+      defaultCenter.addObserver(self, selector: #selector(notifyInsertedWatchers), name: .NSManagedObjectContextDidSave, object: moc)
+      defaultCenter.addObserver(self, selector: #selector(notifyUpdatedWatchers), name: .NSManagedObjectContextDidSave, object: moc)
+      defaultCenter.addObserver(self, selector: #selector(notifyDeletedWatchers), name: .NSManagedObjectContextObjectsDidChange, object: moc)
+      defaultCenter.addObserver(self,selector: #selector(notifyInsertedWatchersFromCloud(_:)),name: .GraphCKSimulatedRemoteChange, object: nil)
+      defaultCenter.addObserver(self,selector: #selector(notifyUpdatedWatchersFromCloud(_:)),name: .GraphCKSimulatedRemoteChange,object: nil)
+      defaultCenter.addObserver(self,selector: #selector(notifyDeletedWatchersFromCloud(_:)),name: .GraphCKSimulatedRemoteChange,object: nil)
     }
-    
-    let defaultCenter = NotificationCenter.default
-    defaultCenter.addObserver(self, selector: #selector(notifyInsertedWatchers), name: .NSManagedObjectContextDidSave, object: moc)
-    defaultCenter.addObserver(self, selector: #selector(notifyUpdatedWatchers), name: .NSManagedObjectContextDidSave, object: moc)
-    defaultCenter.addObserver(self, selector: #selector(notifyDeletedWatchers), name: .NSManagedObjectContextObjectsDidChange, object: moc)
-  }
   
   /// Prepares graph for watching.
   func prepareGraph() {
     graph.watchers.append(Watcher(object: self))
+    removeFromObservation() // evita registrazioni multiple
   }
   
   /**

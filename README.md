@@ -4,16 +4,16 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 
 ---
 
-## ✅ Stato attuale (Milestone M2 – CloudKit Container)
+## ✅ Milestone M3 – Watchers & Remote Change
 
 - Refactor modello (M1) completato: rimosso `Transformable` generico, introdotto `ValueTransformer` sicuro
-- Sostituito `NSPersistentContainer` con `NSPersistentCloudKitContainer`
+- Supporto `NSPersistentCloudKitContainer` (M2)
 - Store SQLite rinominato automaticamente in `GraphCK_<name>.sqlite`
 - Opzioni abilitate: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
-- Delegate `GraphCloudStatusDelegate` per notificare disponibilità iCloud (funziona anche senza entitlements, fallback locale)
-- Fallback automatico su store locale se iCloud non disponibile/non configurato
-- Costruttori `init(cloud:...)` deprecati ma reindirizzati al container CloudKit moderno
-- **Configurazione CloudKit**: supporto a override runtime dell’identifier (`Graph.cloudKitContainerIdentifier`) o fallback Info.plist
+- Delegate `GraphCloudStatusDelegate` per notificare disponibilità iCloud (fallback locale se non disponibile)
+- Integrazione Watchers con supporto a notifiche locali e remote via **Persistent History Tracking**
+- Notifica custom `GraphCKSimulatedRemoteChange` usata nei test per simulare cambiamenti da remoto
+- **Configurazione CloudKit**: override runtime dell’identifier (`Graph.cloudKitContainerIdentifier`) o fallback Info.plist
 
 ---
 
@@ -28,19 +28,29 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 ## 🚧 Roadmap
 
 | Milestone | Descrizione | Stato |
-|----------|-------------|-------|
-| **M0** | Pulizia codice, rimozione iCloud classico | ✅ Completato |
-| **M1** | Refactor model, preparazione per CloudKit | ✅ Completato |
-| **M2** | Supporto a CloudKit (sincronizzazione) | ✅ Completato |
-| **M3** | Supporto sharing multi-account (CloudKit sharing) | 🔜 |
+|----------|-----------------------------------------------|-------|
+| **M0**   | Pulizia codice, rimozione iCloud classico     | ✅ Completato |
+| **M1**   | Refactor model, preparazione per CloudKit     | ✅ Completato |
+| **M2**   | Supporto a CloudKit (sincronizzazione)        | ✅ Completato |
+| **M3**   | Supporto Watchers con notifiche remote        | ✅ Completato |
+| **M4**   | Supporto sharing multi-account (CloudKit sharing) | 🔜 |
 
 ---
 
 ## 🧪 Test
 
 - Il progetto builda correttamente su iOS 16+
-- Le istanze di `Graph` funzionano come store locali
-- Compatibilità piena con `Watcher`, `Search`, `Entity`, `Relationship`
+- I test coprono Watchers sia per notifiche locali che per simulazioni di cambiamenti remoti
+- Compatibilità piena con `Entity`, `Relationship`, `Search`
+
+---
+
+## 📌 Note operative
+
+- In produzione verificare il comportamento delle notifiche con CloudKit:
+  - Possibili **doppie callback** del delegato (locale + remoto) da analizzare.
+  - Necessario investigare l'**autore delle modifiche** (transaction author) per discriminare le modifiche provenienti da CloudKit rispetto a quelle locali.
+- Questi aspetti sono monitorati e verranno documentati in modo esteso quando emergeranno in scenari reali.
 
 ---
 

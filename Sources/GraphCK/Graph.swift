@@ -26,6 +26,11 @@
 import CoreData
 import CloudKit
 
+extension Notification.Name {
+    /// Custom remote-change notification used by tests to avoid clashing with the real CloudKit one.
+    static let GraphCKSimulatedRemoteChange = Notification.Name("GraphCK.SimulatedRemoteChange")
+}
+
 public struct GraphStoreDescription {
   /// Datastore name.
   static let name: String = "default"
@@ -257,22 +262,27 @@ public class Graph: NSObject {
   
     // MARK: - CloudKit / Remote change hooks (M2)
   
-    /// Observe NSPersistentStoreRemoteChange notifications to prepare M3 Watchers hook.
+    /// Observe only the custom test channel here (the real remote observer lives in Graph+PersistentHistory).
     private func observeRemoteStoreChanges() {
-        // Add observer only when the notification symbol is available on this platform.
         #if canImport(CoreData)
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handleRemoteStoreChange(_:)),
-                                               name: NSNotification.Name.NSPersistentStoreRemoteChange,
-                                               object: nil)
+        let nc = NotificationCenter.default
+        // Test channel: watchers already know how to consume this payload.
+        nc.addObserver(self,
+                       selector: #selector(handleRemoteStoreChange(_:)),
+                       name: .GraphCKSimulatedRemoteChange,
+                       object: nil)
         #endif
     }
   
-    /// Placeholder that will be connected to Watchers in M3.
     @objc
     private func handleRemoteStoreChange(_ notification: Notification) {
-        // Intentionally minimal for M2: hook point for Watchers in M3.
-        // print("Remote store change received: \(notification.userInfo ?? [:])")
+        // Only merge; Watchers observe and dispatch separately.
+        guard notification.name == .GraphCKSimulatedRemoteChange else { return }
+        guard let moc = managedObjectContext else { return }
+        moc.perform { [weak moc] in
+            guard let moc = moc else { return }
+            moc.mergeChanges(fromContextDidSave: notification)
+        }
     }
   
     /// Check iCloud account status and notify the optional cloudStatusDelegate.
@@ -312,4 +322,3 @@ public class Graph: NSObject {
         }
     }
 }
-
