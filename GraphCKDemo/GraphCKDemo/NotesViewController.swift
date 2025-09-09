@@ -22,14 +22,21 @@ final class NotesViewController: UIViewController {
         super.viewDidLoad()
                 
         
-        
         title = "Notes"
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            navigationController?.navigationBar.prefersLargeTitles = true
+            navigationItem.largeTitleDisplayMode = .always
+        } else {
+            navigationController?.navigationBar.prefersLargeTitles = false
+            navigationItem.largeTitleDisplayMode = .never
+        }
         view.backgroundColor = .systemBackground
 
         configureTableView()
         configureNavBar()
         loadNotes()
         setupWatcher()
+        print("🧩 NotesViewController viewDidLoad completed. Frame: \(view.frame)")
     }
 
     // MARK: - UI Setup
@@ -41,6 +48,7 @@ final class NotesViewController: UIViewController {
         tableView.dataSource = self
         tableView.delegate = self
         view.addSubview(tableView)
+        print("🪑 TableView added to view with frame: \(tableView.frame)")
     }
 
     private func configureNavBar() {
@@ -98,6 +106,7 @@ final class NotesViewController: UIViewController {
         watcher.delegate = self
         self.watcher = watcher
         self.strongWatcher = watcher  // 👈 mantiene la reference forte
+        print("👀 Watcher setup completed")
     }
 }
 
@@ -128,7 +137,10 @@ extension NotesViewController: UITableViewDelegate {
 
     func tableView(_ tableView: UITableView,
                    didSelectRowAt indexPath: IndexPath) {
-        toggleFavorite(notes[indexPath.row])
+        let note = notes[indexPath.row]
+        let detailVC = NoteDetailViewController(note: note)
+        let nav = UINavigationController(rootViewController: detailVC)
+        present(nav, animated: true)
         tableView.deselectRow(at: indexPath, animated: true)
     }
 

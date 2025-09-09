@@ -24,20 +24,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         print("✅ SceneDelegate started")
 
         let window = UIWindow(windowScene: windowScene)
-        let tabBarController = UITabBarController()
-
-        let notesVC = NotesViewController()
-        notesVC.tabBarItem = UITabBarItem(title: "Notes", image: nil, tag: 0)
-
-        let developerVC = DeveloperViewController()
-        developerVC.view.backgroundColor = .systemBackground
-        developerVC.tabBarItem = UITabBarItem(title: "Developer", image: nil, tag: 1)
-
-        tabBarController.viewControllers = [
-            UINavigationController(rootViewController: notesVC),
-            UINavigationController(rootViewController: developerVC)
-        ]
-
+        let tabBarController = MainTabBarController()
         window.rootViewController = tabBarController
         self.window = window
         window.makeKeyAndVisible()
