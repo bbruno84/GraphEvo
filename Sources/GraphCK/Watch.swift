@@ -479,10 +479,7 @@ public class Watch<T: Node>: Watchable {
         let notifCtx = notification.object as? NSManagedObjectContext,
         notifCtx === ctx
       else { return }
-      #if DEBUG
-      print("[GraphCK][Watch] cloud: inserted keys=\(Array((notification.userInfo ?? [:]).keys))")
-      #endif
-      guard let payload = notification.userInfo?[NSInsertedObjectsKey] as? NSSet else {
+            guard let payload = notification.userInfo?[NSInsertedObjectsKey] as? NSSet else {
         return
       }
       guard let moc = graph.managedObjectContext else { return }
@@ -510,9 +507,6 @@ public class Watch<T: Node>: Watchable {
         let notifCtx = notification.object as? NSManagedObjectContext,
         notifCtx === ctx
       else { return }
-      #if DEBUG
-      print("[GraphCK][Watch] cloud: updated keys=\(Array((notification.userInfo ?? [:]).keys))")
-      #endif
       guard let payload = notification.userInfo?[NSUpdatedObjectsKey] as? NSSet else { return }
       guard let moc = graph.managedObjectContext else { return }
 
@@ -540,9 +534,6 @@ public class Watch<T: Node>: Watchable {
         let notifCtx = notification.object as? NSManagedObjectContext,
         notifCtx === ctx
       else { return }
-      #if DEBUG
-      print("[GraphCK][Watch] cloud: deleted keys=\(Array((notification.userInfo ?? [:]).keys))")
-      #endif
       guard let payload = notification.userInfo?[NSDeletedObjectsKey] as? NSSet else { return }
       guard let moc = graph.managedObjectContext else { return }
 

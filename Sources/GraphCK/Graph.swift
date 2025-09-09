@@ -257,7 +257,13 @@ public class Graph: NSObject {
     /// Returns a new background context backed by the same NSPersistentCloudKitContainer.
     /// Returns nil if the container is not yet initialized.
     public func newBackgroundContext() -> NSManagedObjectContext? {
-        return persistentContainer?.newBackgroundContext()
+        guard let container = persistentContainer else { return nil }
+        let bg = container.newBackgroundContext()
+        // Ensure history filtering can identify this device's writes
+        bg.transactionAuthor = GraphDeviceAuthor.current()
+        // Prefer incoming server values to win on conflict
+        bg.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        return bg
     }
   
     // MARK: - CloudKit / Remote change hooks (M2)

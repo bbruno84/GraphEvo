@@ -26,6 +26,17 @@
 import CoreData
 import CloudKit
 
+// Unique author per device for filtering local writes in Persistent History
+enum GraphDeviceAuthor {
+  private static let key = "GraphCK.deviceAuthor"
+  static func current() -> String {
+    if let s = UserDefaults.standard.string(forKey: key) { return s }
+    let s = UUID().uuidString
+    UserDefaults.standard.set(s, forKey: key)
+    return s
+  }
+}
+
 internal struct GraphContextRegistry {
   static var dispatchToken = false
   static var added: [String: Bool]!
@@ -120,12 +131,17 @@ internal extension Graph {
       storeDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: containerID)
     }
 
+    print("🛠 [GraphCK] Creating CloudKit container named: \(name)")
+
     // Create modern container
     let container = NSPersistentCloudKitContainer(name: name, managedObjectModel: Model.create())
     container.persistentStoreDescriptions = [storeDescription]
 
+    print("📦 [GraphCK] Loading persistent store at: \(storeURL)")
+
     container.loadPersistentStores { [unowned self] (desc, error) in
       if let error = error {
+        print("⚠️ [GraphCK] Failed to load CloudKit store. Error: \(error)")
         // Fallback: try a plain local NSPersistentContainer (no CloudKit) instead of crashing.
         let plain = NSPersistentContainer(name: name, managedObjectModel: Model.create())
         // Reuse the same storeDescription but ensure CloudKit options are cleared.
@@ -143,10 +159,12 @@ internal extension Graph {
             return
           }
           // Success with plain container: proceed with local-only context.
+          print("✅ [GraphCK] Fallback local store loaded successfully at: \(storeURL.lastPathComponent)")
           self.persistentContainer = nil
           self.managedObjectContext = plain.viewContext
-          // Mark local author for potential filtering in Persistent History (configurable)
-          self.managedObjectContext.transactionAuthor = "app"
+          // Mark per-device author for potential filtering in Persistent History
+          self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
+          self.managedObjectContext.name = "GraphCK.viewContext"
           self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
           self.managedObjectContext.undoManager = nil
           self.managedObjectContext.automaticallyMergesChangesFromParent = true
@@ -157,17 +175,28 @@ internal extension Graph {
       }
       self.persistentContainer = container
       self.managedObjectContext = container.viewContext
-      // Mark local author for potential filtering in Persistent History (configurable)
-      self.managedObjectContext.transactionAuthor = "app"
+      // Mark per-device author for potential filtering in Persistent History
+      self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
+      self.managedObjectContext.name = "GraphCK.viewContext"
       self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
       self.managedObjectContext.undoManager = nil
       self.managedObjectContext.automaticallyMergesChangesFromParent = true
       self.location = desc.url ?? storeURL
       GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
-      NotificationCenter.default.addObserver(self,
-                                             selector: #selector(handlePersistentStoreRemoteChange(_:)),
-                                             name: .NSPersistentStoreRemoteChange,
-                                             object: container.persistentStoreCoordinator)
+      print("✅ [GraphCK] CloudKit persistent container loaded successfully.")
+      if GraphContextRegistry.added[self.route] != true {
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handlePersistentStoreRemoteChange(_:)),
+                                               name: .NSPersistentStoreRemoteChange,
+                                               object: container.persistentStoreCoordinator)
+        GraphContextRegistry.added[self.route] = true
+        print("📡 [GraphCK] Registered for NSPersistentStoreRemoteChange notifications.")
+      } else {
+        print("📡 [GraphCK] Remote change observer already registered for route: \(self.route)")
+      }
+      // Prepare Persistent History bootstrap on launch (token restore / bootstrap-from-now).
+      // This is safe to call multiple times; it will no-op if already initialized.
+      self.ph_prepareOnLaunchAfterContainerReady()
     }
   }
   

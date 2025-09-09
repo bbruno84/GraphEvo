@@ -126,7 +126,7 @@ internal struct Model {
     let nodeClass = NSAttributeDescription()
     nodeClass.name = "nodeClass"
     nodeClass.attributeType = .integer64AttributeType
-    nodeClass.isOptional = false
+    nodeClass.isOptional = true
     entityProperties.append(nodeClass.copy() as! NSAttributeDescription)
     actionProperties.append(nodeClass.copy() as! NSAttributeDescription)
     relationshipProperties.append(nodeClass.copy() as! NSAttributeDescription)
@@ -136,7 +136,7 @@ internal struct Model {
     let type = NSAttributeDescription()
     type.name = "type"
     type.attributeType = .stringAttributeType
-    type.isOptional = false
+    type.isOptional = true
     entityProperties.append(type.copy() as! NSAttributeDescription)
     actionProperties.append(type.copy() as! NSAttributeDescription)
     relationshipProperties.append(type.copy() as! NSAttributeDescription)
@@ -146,7 +146,7 @@ internal struct Model {
     let createdDate = NSAttributeDescription()
     createdDate.name = "createdDate"
     createdDate.attributeType = .dateAttributeType
-    createdDate.isOptional = false
+    createdDate.isOptional = true
     entityProperties.append(createdDate.copy() as! NSAttributeDescription)
     actionProperties.append(createdDate.copy() as! NSAttributeDescription)
     relationshipProperties.append(createdDate.copy() as! NSAttributeDescription)
@@ -156,7 +156,7 @@ internal struct Model {
     let propertyName = NSAttributeDescription()
     propertyName.name = "name"
     propertyName.attributeType = .stringAttributeType
-    propertyName.isOptional = false
+    propertyName.isOptional = true
     entityPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     actionPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     relationshipPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
@@ -167,7 +167,7 @@ internal struct Model {
     propertyValue.attributeType = .transformableAttributeType
     propertyValue.attributeValueClassName = NSStringFromClass(NSObject.self)
     propertyValue.valueTransformerName = GraphValueTransformer.name.rawValue
-    propertyValue.isOptional = false
+    propertyValue.isOptional = true
     propertyValue.allowsExternalBinaryDataStorage = true
     entityPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
     actionPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
@@ -175,16 +175,16 @@ internal struct Model {
     
     let propertyRelationship = NSRelationshipDescription()
     propertyRelationship.name = "node"
-    propertyRelationship.minCount = 1
+    propertyRelationship.minCount = 0
     propertyRelationship.maxCount = 1
-    propertyRelationship.isOptional = false
+    propertyRelationship.isOptional = true
     propertyRelationship.deleteRule = .noActionDeleteRule
     
     let propertySetRelationship = NSRelationshipDescription()
     propertySetRelationship.name = "propertySet"
     propertySetRelationship.minCount = 0
     propertySetRelationship.maxCount = 0
-    propertySetRelationship.isOptional = false
+    propertySetRelationship.isOptional = true
     propertySetRelationship.deleteRule = .noActionDeleteRule
     propertyRelationship.inverseRelationship = propertySetRelationship
     propertySetRelationship.inverseRelationship = propertyRelationship
@@ -209,23 +209,23 @@ internal struct Model {
     let tagName = NSAttributeDescription()
     tagName.name = "name"
     tagName.attributeType = .stringAttributeType
-    tagName.isOptional = false
+    tagName.isOptional = true
     entityTagProperties.append(tagName.copy() as! NSAttributeDescription)
     actionTagProperties.append(tagName.copy() as! NSAttributeDescription)
     relationshipTagProperties.append(tagName.copy() as! NSAttributeDescription)
     
     let tagRelationship = NSRelationshipDescription()
     tagRelationship.name = "node"
-    tagRelationship.minCount = 1
+    tagRelationship.minCount = 0
     tagRelationship.maxCount = 1
-    tagRelationship.isOptional = false
+    tagRelationship.isOptional = true
     tagRelationship.deleteRule = .noActionDeleteRule
     
     let tagSetRelationship = NSRelationshipDescription()
     tagSetRelationship.name = "tagSet"
     tagSetRelationship.minCount = 0
     tagSetRelationship.maxCount = 0
-    tagSetRelationship.isOptional = false
+    tagSetRelationship.isOptional = true
     tagSetRelationship.deleteRule = .noActionDeleteRule
     tagRelationship.inverseRelationship = tagSetRelationship
     tagSetRelationship.inverseRelationship = tagRelationship
@@ -250,23 +250,23 @@ internal struct Model {
     let groupName = NSAttributeDescription()
     groupName.name = "name"
     groupName.attributeType = .stringAttributeType
-    groupName.isOptional = false
+    groupName.isOptional = true
     entityGroupProperties.append(groupName.copy() as! NSAttributeDescription)
     actionGroupProperties.append(groupName.copy() as! NSAttributeDescription)
     relationshipGroupProperties.append(groupName.copy() as! NSAttributeDescription)
     
     let groupRelationship = NSRelationshipDescription()
     groupRelationship.name = "node"
-    groupRelationship.minCount = 1
+    groupRelationship.minCount = 0
     groupRelationship.maxCount = 1
-    groupRelationship.isOptional = false
+    groupRelationship.isOptional = true
     groupRelationship.deleteRule = .noActionDeleteRule
     
     let groupSetRelationship = NSRelationshipDescription()
     groupSetRelationship.name = "groupSet"
     groupSetRelationship.minCount = 0
     groupSetRelationship.maxCount = 0
-    groupSetRelationship.isOptional = false
+    groupSetRelationship.isOptional = true
     groupSetRelationship.deleteRule = .noActionDeleteRule
     groupRelationship.inverseRelationship = groupSetRelationship
     groupSetRelationship.inverseRelationship = groupRelationship
@@ -291,7 +291,7 @@ internal struct Model {
     actionSubjectSetRelationship.name = "subjectSet"
     actionSubjectSetRelationship.minCount = 0
     actionSubjectSetRelationship.maxCount = 0
-    actionSubjectSetRelationship.isOptional = false
+    actionSubjectSetRelationship.isOptional = true
     actionSubjectSetRelationship.deleteRule = .noActionDeleteRule
     actionSubjectSetRelationship.destinationEntity = entityDescription
     
@@ -299,7 +299,7 @@ internal struct Model {
     actionSubjectRelationship.name = "actionSubjectSet"
     actionSubjectRelationship.minCount = 0
     actionSubjectRelationship.maxCount = 0
-    actionSubjectRelationship.isOptional = false
+    actionSubjectRelationship.isOptional = true
     actionSubjectRelationship.deleteRule = .noActionDeleteRule
     actionSubjectRelationship.destinationEntity = actionDescription
     actionSubjectRelationship.inverseRelationship = actionSubjectSetRelationship
@@ -314,7 +314,7 @@ internal struct Model {
     actionObjectSetRelationship.name = "objectSet"
     actionObjectSetRelationship.minCount = 0
     actionObjectSetRelationship.maxCount = 0
-    actionObjectSetRelationship.isOptional = false
+    actionObjectSetRelationship.isOptional = true
     actionObjectSetRelationship.deleteRule = .noActionDeleteRule
     actionObjectSetRelationship.destinationEntity = entityDescription
     
@@ -322,7 +322,7 @@ internal struct Model {
     actionObjectRelationship.name = "actionObjectSet"
     actionObjectRelationship.minCount = 0
     actionObjectRelationship.maxCount = 0
-    actionObjectRelationship.isOptional = false
+    actionObjectRelationship.isOptional = true
     actionObjectRelationship.deleteRule = .noActionDeleteRule
     actionObjectRelationship.destinationEntity = actionDescription
     actionObjectRelationship.inverseRelationship = actionObjectSetRelationship
@@ -335,7 +335,7 @@ internal struct Model {
     // Inverse relationship for Subjects -- B.
     let relationshipSubjectSetRelationship = NSRelationshipDescription()
     relationshipSubjectSetRelationship.name = "subject"
-    relationshipSubjectSetRelationship.minCount = 1
+    relationshipSubjectSetRelationship.minCount = 0
     relationshipSubjectSetRelationship.maxCount = 1
     relationshipSubjectSetRelationship.isOptional = true
     relationshipSubjectSetRelationship.deleteRule = .noActionDeleteRule
@@ -345,7 +345,7 @@ internal struct Model {
     relationshipSubjectRelationship.name = "relationshipSubjectSet"
     relationshipSubjectRelationship.minCount = 0
     relationshipSubjectRelationship.maxCount = 0
-    relationshipSubjectRelationship.isOptional = false
+    relationshipSubjectRelationship.isOptional = true
     relationshipSubjectRelationship.deleteRule = .noActionDeleteRule
     relationshipSubjectRelationship.destinationEntity = relationshipDescription
     
@@ -359,7 +359,7 @@ internal struct Model {
     // Inverse relationship for Objects -- B.
     let relationshipObjectSetRelationship = NSRelationshipDescription()
     relationshipObjectSetRelationship.name = "object"
-    relationshipObjectSetRelationship.minCount = 1
+    relationshipObjectSetRelationship.minCount = 0
     relationshipObjectSetRelationship.maxCount = 1
     relationshipObjectSetRelationship.isOptional = true
     relationshipObjectSetRelationship.deleteRule = .noActionDeleteRule
@@ -369,7 +369,7 @@ internal struct Model {
     relationshipObjectRelationship.name = "relationshipObjectSet"
     relationshipObjectRelationship.minCount = 0
     relationshipObjectRelationship.maxCount = 0
-    relationshipObjectRelationship.isOptional = false
+    relationshipObjectRelationship.isOptional = true
     relationshipObjectRelationship.deleteRule = .noActionDeleteRule
     relationshipObjectRelationship.destinationEntity = relationshipDescription
     relationshipObjectRelationship.inverseRelationship = relationshipObjectSetRelationship
