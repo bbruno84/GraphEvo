@@ -62,9 +62,9 @@ final class DeveloperViewController: UIViewController {
 
         let stressTestActions: [(String, Selector)] = [
             ("Create Attachment (1.5MB)", #selector(createLargeAttachment)),
-            ("Link to First Note", #selector(linkToFirstNote)),
-            ("Log All Attachments", #selector(logAllAttachments)),
-            ("Pulisci Tutto", #selector(clearAllTestData))
+            ("Pulisci Tutto", #selector(clearAllTestData)),
+            ("Stress Test", #selector(stressTest)),
+            ("DB Dump", #selector(dumpTestSummary))
         ]
 
         stressTestActions.forEach { title, selector in
@@ -111,36 +111,83 @@ final class DeveloperViewController: UIViewController {
         GraphProvider.shared.graph.sync()
     }
 
-    @objc private func linkToFirstNote() {
-        print("🔗 Link Attachment to First Note")
-        guard let note = Search<Entity>(graph: graph).where(.type("Note")).sync().first else {
-            print("⚠️ No note found")
-            return
-        }
-        guard let attachment = Search<Entity>(graph: graph).where(.type("Attachment")).sync().first else {
-            print("⚠️ No attachment found")
-            return
-        }
-        let rel = Relationship("NoteAttachment", graph: graph)
-        rel.subject = note
-        rel.object = attachment
-        GraphProvider.shared.graph.sync()
-    }
-
-    @objc private func logAllAttachments() {
-        let attachments = Search<Entity>(graph: graph).where(.type("Attachment")).sync()
-        print("📦 Attachments: found \(attachments.count)")
-        for (i, entity) in attachments.enumerated() {
-            let size = (entity[dynamicMember: "object"] as? Data)?.count ?? 0
-            print("🔹 [\(i)] title: \(entity[dynamicMember: "title"] ?? "nil"), size: \(size) bytes")
-        }
-    }
-
     @objc private func clearAllTestData() {
         
         print("🧽 Clear Notes, Attachments, Relationships")
-        Search<Entity>(graph: graph).where(.type("Note")).sync().forEach { $0.delete() }
-        Search<Entity>(graph: graph).where(.type("Attachment")).sync().forEach { $0.delete() }
-        Search<Relationship>(graph: graph).where(.type("NoteAttachment")).sync().forEach { $0.delete() }
+        graph.clear()
+    }
+    
+    @objc private func stressTest() {
+        print("🚀 Inizio stress test...")
+
+        let graph = GraphProvider.shared.graph
+        clearAllTestData()
+
+        var createdNotes: [Entity] = []
+        var createdAttachments: [Entity] = []
+        var favoriteNotes: [Entity] = []
+        var totalAttachmentBytes = 0
+
+        let total = Int.random(in: 90...110)
+        print("🧮 Numero casuale di note da creare: \(total)")
+
+        for i in 1...total {
+            let note = Entity("Note", graph: graph)
+            note[dynamicMember: "title"] = "Stress Note \(i)"
+            note[dynamicMember: "createdAt"] = Date()
+
+            // 10% probabilità: aggiunta attachment con dimensione random tra 1.5 MB e 2 MB
+            if Int.random(in: 1...10) == 1 {
+                let attachment = Entity("Attachment", graph: graph)
+                attachment[dynamicMember: "title"] = "Attachment \(i)"
+
+                let randomSize = Int.random(in: 1_500_000...2_000_000)
+                let data = Data(repeating: 0xBB, count: randomSize)
+                attachment[dynamicMember: "object"] = data
+                totalAttachmentBytes += data.count
+
+                let rel = Relationship("NoteAttachment", graph: graph)
+                rel.object = note
+                rel.subject = attachment
+
+                createdAttachments.append(attachment)
+            }
+
+            // 25% probabilità: aggiunta tag favorite
+            if Bool.random(), Int.random(in: 0...3) == 0 {
+                note.add(tags: "favorite")
+                favoriteNotes.append(note)
+            }
+
+            createdNotes.append(note)
+        }
+
+        graph.sync()
+
+        print("🔥 STRESS TEST COMPLETATO 🔥")
+        print("📒 Note totali create: \(createdNotes.count)")
+        print("🔗 Allegati associati: \(createdAttachments.count)")
+        print("⭐️ Note marcate favorite: \(favoriteNotes.count)")
+        print("📦 Dimensione totale allegati: \(ByteCountFormatter.string(fromByteCount: Int64(totalAttachmentBytes), countStyle: .file)) (\(totalAttachmentBytes) byte)")
+    }
+    
+    @objc private func dumpTestSummary() {
+        let graph = GraphProvider.shared.graph
+
+        let notes = Search<Entity>(graph: graph).where(.type("Note")).sync()
+        let attachments = Search<Entity>(graph: graph).where(.type("Attachment")).sync()
+        let relationships = Search<Relationship>(graph: graph).where(.type("NoteAttachment")).sync()
+        let favorites = notes.filter { $0.has(tags: "favorite") }
+
+        let totalAttachmentBytes = attachments.reduce(0) { sum, entity in
+            let data = entity[dynamicMember: "object"] as? Data
+            return sum + (data?.count ?? 0)
+        }
+
+        print("📊 DUMP DELLO STATO ATTUALE")
+        print("📒 Note totali: \(notes.count)")
+        print("🔗 Relazioni 'NoteAttachment': \(relationships.count)")
+        print("⭐️ Note con tag 'favorite': \(favorites.count)")
+        print("📦 Dimensione totale allegati: \(ByteCountFormatter.string(fromByteCount: Int64(totalAttachmentBytes), countStyle: .file)) (\(totalAttachmentBytes) byte)")
     }
 }
