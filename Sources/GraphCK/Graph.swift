@@ -163,11 +163,12 @@ public class Graph: NSObject {
         route = "Local/\(self.name)"
         GraphMigrationManager.handlePhase(.preInit, graph: nil)
         super.init()
-        GraphMigrationManager.handlePhase(.postInit, graph: self)
+        
         observeRemoteStoreChanges()
         checkICloudAccountStatus()
         prepareGraphContextRegistry()
         prepareManagedObjectContext(locate: location)
+        GraphMigrationManager.handlePhase(.postInit, graph: self)
         GraphMigrationManager.handlePhase(.ready, graph: self)
     }
     
@@ -179,11 +180,12 @@ public class Graph: NSObject {
         route = "Local/\(self.name)"
         GraphMigrationManager.handlePhase(.preInit, graph: nil)
         super.init()
-        GraphMigrationManager.handlePhase(.postInit, graph: self)
+        
         observeRemoteStoreChanges()
         checkICloudAccountStatus()
         prepareGraphContextRegistry()
         prepareManagedObjectContext(locate: location)
+        GraphMigrationManager.handlePhase(.postInit, graph: self)
         GraphMigrationManager.handlePhase(.ready, graph: self)
     }
   
@@ -205,11 +207,12 @@ public class Graph: NSObject {
 
         GraphMigrationManager.handlePhase(.preInit, storeURL: storeURL, graph: nil)
         super.init()
-        GraphMigrationManager.handlePhase(.postInit, graph: self)
+        
         observeRemoteStoreChanges()
         checkICloudAccountStatus()
         prepareGraphContextRegistry()
         prepareManagedObjectContext(locate: location)
+        GraphMigrationManager.handlePhase(.postInit, graph: self)
         GraphMigrationManager.handlePhase(.ready, graph: self)
     }
       

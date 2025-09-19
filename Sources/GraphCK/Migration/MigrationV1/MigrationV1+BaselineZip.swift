@@ -282,7 +282,7 @@ extension MigrationV1 {
                         try DedupTool.deduplicateBetween(
                             primaryGraph: localGraph,
                             secondaryGraph: baselineGraph,
-                            discriminator: discriminator
+                            discriminator: discriminator, uuidFieldMap: Graph.uuidFieldMap
                         )
 
                         print("[MigrationV1] Deduplication completed. Primary: local store, Secondary: baseline store at \(baselineURL.lastPathComponent).")

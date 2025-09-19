@@ -28,7 +28,7 @@ public final class DedupTool {
     }
     
     /// Deduplicate entities across two Graph instances (for baseline merge use case).
-    public static func deduplicateBetween(primaryGraph: Graph, secondaryGraph: Graph, discriminator: DedupDiscriminator) throws {
+    public static func deduplicateBetween(primaryGraph: Graph, secondaryGraph: Graph, discriminator: DedupDiscriminator, uuidFieldMap: [String: String]) throws {
         let primaryEntities = Search<Entity>(graph: primaryGraph).where(.type("*")).sync()
         let secondaryEntities = Search<Entity>(graph: secondaryGraph).where(.type("*")).sync()
         
@@ -37,14 +37,22 @@ public final class DedupTool {
         
         var groupedEntities = [String: (primary: Entity?, secondary: Entity?)]()
         
+        func key(for entity: Entity) -> String {
+            if let uuidField = uuidFieldMap[entity.type], let uuidValue = entity.properties[uuidField] as? String {
+                return uuidValue
+            }
+            return entity.id
+        }
+        
         for entity in primaryEntities {
-            groupedEntities[entity.id, default: (nil, nil)].primary = entity
+            groupedEntities[key(for: entity), default: (nil, nil)].primary = entity
         }
         for entity in secondaryEntities {
-            if let existing = groupedEntities[entity.id] {
-                groupedEntities[entity.id] = (existing.primary, entity)
+            let entityKey = key(for: entity)
+            if let existing = groupedEntities[entityKey] {
+                groupedEntities[entityKey] = (existing.primary, entity)
             } else {
-                groupedEntities[entity.id] = (nil, entity)
+                groupedEntities[entityKey] = (nil, entity)
             }
         }
         
@@ -88,11 +96,11 @@ public final class DedupTool {
     }
     
     /// Deduplicate the entire database.
-    public func deduplicateAll() throws {
+    public func deduplicateAll(uuidFieldMap: [String: String]) throws {
 
         let allEntities = Search<Entity>(graph: graph).where(.type("*")).sync()
         
-        let grouped = groupEntitiesByUUID(allEntities)
+        let grouped = groupEntitiesByUUID(allEntities, uuidFieldMap: uuidFieldMap)
         
         for (_, entities) in grouped {
             if entities.count > 1 {
@@ -114,9 +122,16 @@ public final class DedupTool {
     }
     
     /// Deduplicate only a single entity (useful during CloudKit sync).
-    public func deduplicateSingle(_ entity: Entity) throws {
+    public func deduplicateSingle(_ entity: Entity, uuidFieldMap: [String: String]) throws {
         
-        let duplicates: [Entity] = Search<Entity>(graph: graph).where(.type("*")).sync().filter{$0.id == entity.id}
+        let duplicates: [Entity] = Search<Entity>(graph: graph).where(.type("*")).sync().filter {
+            if let uuidField = uuidFieldMap[$0.type], let uuidValue = $0.properties[uuidField] as? String,
+               let entityUuidField = uuidFieldMap[entity.type], let entityUuidValue = entity.properties[entityUuidField] as? String {
+                return uuidValue == entityUuidValue
+            } else {
+                return $0.id == entity.id
+            }
+        }
         
         guard duplicates.count > 1 else {
             return
@@ -137,10 +152,15 @@ public final class DedupTool {
         graph.sync()
     }
     
-    private func groupEntitiesByUUID(_ entities: [Entity]) -> [String: [Entity]] {
+    private func groupEntitiesByUUID(_ entities: [Entity], uuidFieldMap: [String: String]) -> [String: [Entity]] {
         var dict = [String: [Entity]]()
         for entity in entities {
-            let key = entity.id
+            let key: String
+            if let uuidField = uuidFieldMap[entity.type], let uuidValue = entity.properties[uuidField] as? String {
+                key = uuidValue
+            } else {
+                key = entity.id
+            }
             dict[key, default: []].append(entity)
         }
         return dict
@@ -267,6 +287,3 @@ public final class DedupTool {
         }
     }
 }
-
-
-

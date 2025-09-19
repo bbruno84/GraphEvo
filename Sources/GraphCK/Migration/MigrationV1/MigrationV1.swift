@@ -234,6 +234,7 @@ extension MigrationV1 {
                         }
                     } catch {
                         print("❌ Errore nel decoding dell'oggetto legacy: \(error)")
+                        log.graph.error("❌ Errore nel decoding dell'oggetto legacy: \(error)")
                     }
                 } else {
                     // È un oggetto semplice: Double, String, Date, ecc.

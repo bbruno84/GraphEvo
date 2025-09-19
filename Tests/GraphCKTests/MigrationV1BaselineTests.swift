@@ -134,7 +134,7 @@ final class MigrationV1BaselineTests: XCTestCase {
         try DedupTool.deduplicateBetween(
             primaryGraph: localGraph,
             secondaryGraph: baselineGraph,
-            discriminator: discriminator
+            discriminator: discriminator, uuidFieldMap: Graph.uuidFieldMap
         )
 
         // 7. Post-condition: dopo il dedup non devono esserci più entità del massimo iniziale
@@ -143,17 +143,28 @@ final class MigrationV1BaselineTests: XCTestCase {
         let finalCount = Search<Entity>(graph: localGraph).where(.type("*")).sync().count
         XCTAssertLessThanOrEqual(finalCount, localCount + baselineCount,
                                  "Deduplication should not increase entity count")
+
+        // 8. Verifica unicità degli UUID dopo dedup
+        var seenUUIDs = Set<String>()
+        let allEntities = Search<Entity>(graph: localGraph).where(.type("*")).sync()
+        for entity in allEntities {
+            if let uuidField = Graph.uuidFieldMap[entity.type],
+               let uuidValue = entity[dynamicMember: uuidField] as? String {
+                XCTAssertFalse(seenUUIDs.contains(uuidValue), "Duplicato trovato per \(entity.type) con UUID=\(uuidValue)")
+                seenUUIDs.insert(uuidValue)
+            }
+        }
     }
     
     func testOpenGraphFromSQLiteFile() throws {
         // 1. Recupera Graph.sqlite legacy dal bundle
         let bundle = Bundle.module
-        guard let legacySQLiteURL = bundle.url(forResource: "Graph-migrated", withExtension: "sqlite") else {
+        guard let legacySQLiteURL = bundle.url(forResource: "Graph", withExtension: "sqlite") else {
             XCTFail("Graph.sqlite non trovato nel bundle")
             return
         }
-        let legacyShmURL = bundle.url(forResource: "Graph-migrated", withExtension: "sqlite-shm")
-        let legacyWalURL = bundle.url(forResource: "Graph-migrated", withExtension: "sqlite-wal")
+        let legacyShmURL = bundle.url(forResource: "Graph", withExtension: "sqlite-shm")
+        let legacyWalURL = bundle.url(forResource: "Graph", withExtension: "sqlite-wal")
 
         // 2. Copia in una directory temporanea
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("TestGraphSQLite-\(UUID().uuidString)")

@@ -45,6 +45,9 @@ public final class GraphMigrationManager {
     /// Tracks the current migration index for sequential execution.
     private static var currentMigrationIndex: Int = 0
     
+    /// Tracks active migrations that have been activated in .preInit phase.
+    private static var activeMigrations: Set<String> = []
+
     /// Registers a callback to be executed during a given lifecycle phase.
     /// The callback receives the store URL and an optional Graph context. Some phases may not provide a Graph instance.
     public static func registerCallback(for phase: GraphLifecyclePhase, _ callback: @escaping (URL, Graph?) -> Void) {
@@ -81,11 +84,20 @@ public final class GraphMigrationManager {
     private static func runNextMigration(for phase: GraphLifecyclePhase, storeURL: URL, graph: Graph?) {
         guard currentMigrationIndex < migrations.count else { return }
         let migration = migrations[currentMigrationIndex]
-        if !migration.needsRun(at: phase, storeURL: storeURL, graph: graph) {
+        
+        let isActive = activeMigrations.contains(migration.id)
+        let needsRun = migration.needsRun(at: phase, storeURL: storeURL, graph: graph)
+        
+        if !isActive && !needsRun {
             currentMigrationIndex += 1
             runNextMigration(for: phase, storeURL: storeURL, graph: graph)
             return
         }
+        
+        if needsRun && phase == .preInit {
+            activeMigrations.insert(migration.id)
+        }
+        
         migration.handlePhase(phase, storeURL: storeURL, graph: graph) { result in
             switch result {
             case .done, .fallback:

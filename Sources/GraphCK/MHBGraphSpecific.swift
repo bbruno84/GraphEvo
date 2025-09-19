@@ -100,6 +100,14 @@ extension Graph {
         return relazioni
     }
     
+    static let uuidFieldMap: [String: String] = ["Bolletta" : "codice_bolletta",
+                                                 "MediaBollette" : "codice_multimediaBolletta",
+                                                 "Conteggi" : "codice_anno",
+                                                 "Categoria" : "codice_categoria",
+                                                 "Conteggi_abitazione" : "codice_anno",
+                                                 "RecurrenciesRule" : "codice_regola",
+                                                 "AttributiCustom" : "AttributiCustom"]
+    
     
     //    var relazioniABITAZIONE : [Relationship] {
     //        let search = Search<Relationship>(graph: db).where(.type("Relazioni_categoria_abitazione"))
