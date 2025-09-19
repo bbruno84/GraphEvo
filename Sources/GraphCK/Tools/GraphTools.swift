@@ -9,7 +9,7 @@ import Foundation
 import UIKit
 import PDFKit
 
-class GraphTools {
+enum GraphTools {
     
     @discardableResult
     static func saveUIImageToDisk(_ image: UIImage, named name: String) -> URL? {

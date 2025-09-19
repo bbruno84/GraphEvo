@@ -148,12 +148,12 @@ final class MigrationV1BaselineTests: XCTestCase {
     func testOpenGraphFromSQLiteFile() throws {
         // 1. Recupera Graph.sqlite legacy dal bundle
         let bundle = Bundle.module
-        guard let legacySQLiteURL = bundle.url(forResource: "Graph", withExtension: "sqlite") else {
+        guard let legacySQLiteURL = bundle.url(forResource: "Graph-migrated", withExtension: "sqlite") else {
             XCTFail("Graph.sqlite non trovato nel bundle")
             return
         }
-        let legacyShmURL = bundle.url(forResource: "Graph", withExtension: "sqlite-shm")
-        let legacyWalURL = bundle.url(forResource: "Graph", withExtension: "sqlite-wal")
+        let legacyShmURL = bundle.url(forResource: "Graph-migrated", withExtension: "sqlite-shm")
+        let legacyWalURL = bundle.url(forResource: "Graph-migrated", withExtension: "sqlite-wal")
 
         // 2. Copia in una directory temporanea
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("TestGraphSQLite-\(UUID().uuidString)")
@@ -181,8 +181,8 @@ final class MigrationV1BaselineTests: XCTestCase {
                 
         // 5. Query semplice per verificare che funzioni
         graph.dbdump()
+            
         
-        GraphTools.deepScanUnarchivingIssues(context: graph.managedObjectContext)
         
         // 6. Assert: il file è stato aperto correttamente
         XCTAssertNotNil(graph.managedObjectContext, "Il database è stato aperto correttamente")

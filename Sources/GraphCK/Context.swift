@@ -241,7 +241,7 @@ internal extension Graph {
     }
   }
 }
-
+/*
 @available(iOS 10.0, OSX 10.12, *)
 fileprivate extension Graph {
   // NOTE (M2): legacy helper, unused after migration to NSPersistentCloudKitContainer.
@@ -261,3 +261,4 @@ fileprivate extension Graph {
     }
   }
 }
+*/
