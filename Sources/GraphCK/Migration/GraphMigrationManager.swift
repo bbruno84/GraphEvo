@@ -18,6 +18,7 @@ public enum GraphMigrationResult {
 public protocol GraphMigration {
     var id: String { get }
     func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, storeURL: URL, graph: Graph?, completion: @escaping (GraphMigrationResult) -> Void)
+    func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, storeURL: URL, graph: Graph?) -> Bool
 }
 
 /// Manages the migrations of the Graph store.
@@ -44,19 +45,6 @@ public final class GraphMigrationManager {
     /// Tracks the current migration index for sequential execution.
     private static var currentMigrationIndex: Int = 0
     
-    /// Runs MigrationV1 if needed (synchronous). Returns true if a migration is required/executed.
-    @discardableResult
-    public static func migrateStoreIfNeeded(storeURL: URL) throws -> Bool {
-        _ = initialized
-        return try MigrationV1.execute(storeURL: storeURL)
-    }
-    
-    /// Kicks off baseline.zip processing asynchronously. Safe to call after Graph is fully initialized.
-    public static func kickoffBaselineMergeIfPresent(storeURL: URL, localGraph: Graph) {
-        _ = initialized
-        MigrationV1.mergeBaselineIfPresent(storeURL: storeURL, localGraph: localGraph)
-    }
-    
     /// Registers a callback to be executed during a given lifecycle phase.
     /// The callback receives the store URL and an optional Graph context. Some phases may not provide a Graph instance.
     public static func registerCallback(for phase: GraphLifecyclePhase, _ callback: @escaping (URL, Graph?) -> Void) {
@@ -70,7 +58,8 @@ public final class GraphMigrationManager {
 
     /// Registers a migration to be executed at lifecycle phases.
     public static func registerMigration(_ migration: GraphMigration) {
-        _ = initialized
+        // Ensure we do not register the same migration twice (by id).
+        guard !migrations.contains(where: { $0.id == migration.id }) else { return }
         migrations.append(migration)
     }
     
@@ -92,6 +81,11 @@ public final class GraphMigrationManager {
     private static func runNextMigration(for phase: GraphLifecyclePhase, storeURL: URL, graph: Graph?) {
         guard currentMigrationIndex < migrations.count else { return }
         let migration = migrations[currentMigrationIndex]
+        if !migration.needsRun(at: phase, storeURL: storeURL, graph: graph) {
+            currentMigrationIndex += 1
+            runNextMigration(for: phase, storeURL: storeURL, graph: graph)
+            return
+        }
         migration.handlePhase(phase, storeURL: storeURL, graph: graph) { result in
             switch result {
             case .done, .fallback:

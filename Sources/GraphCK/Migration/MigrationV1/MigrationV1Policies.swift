@@ -11,13 +11,30 @@ import UIKit
 import PDFKit
 
 /// Policy di migrazione per ManagedEntityProperty (campo object).
-class MigrationV1EntityPropertyPolicy: NSEntityMigrationPolicy {
+@objc(MigrationV1EntityPropertyPolicy)
+public final class MigrationV1EntityPropertyPolicy: NSEntityMigrationPolicy {
     
-    override func createDestinationInstances(
+    override init() {
+        debugPrint("Migrating ManagedEntityProperty Class (V1)")
+        super.init()
+    }
+    
+    @objc func createCustomDestinationInstance(
+        forSource sInstance: NSManagedObject,
+        withName destName: String,
+        in mapping: NSEntityMapping,
+        manager: NSMigrationManager
+    ) throws -> NSManagedObject {
+        debugPrint("Creating custom destination instance")
+        return NSManagedObject()
+    }
+    
+    public override func createDestinationInstances(
         forSource sInstance: NSManagedObject,
         in mapping: NSEntityMapping,
         manager: NSMigrationManager
     ) throws {
+        debugPrint("Creating destination instances")
         // For custom mapping types we create the destination instance manually
         guard let destName = mapping.destinationEntityName else { return }
         let dInstance = NSEntityDescription.insertNewObject(forEntityName: destName, into: manager.destinationContext)
@@ -150,8 +167,9 @@ private extension MigrationV1EntityPropertyPolicy {
 }
 
 /// Policy di migrazione per ManagedRelationshipProperty (campo object).
-class MigrationV1RelationshipPropertyPolicy: NSEntityMigrationPolicy {
-    override func createDestinationInstances(
+@objc(MigrationV1RelationshipPropertyPolicy)
+public class MigrationV1RelationshipPropertyPolicy: NSEntityMigrationPolicy {
+    public override func createDestinationInstances(
         forSource sInstance: NSManagedObject,
         in mapping: NSEntityMapping,
         manager: NSMigrationManager
@@ -179,8 +197,10 @@ class MigrationV1RelationshipPropertyPolicy: NSEntityMigrationPolicy {
 }
 
 /// Policy di migrazione per ManagedActionProperty (campo object).
-class MigrationV1ActionPropertyPolicy: NSEntityMigrationPolicy {
-    override func createDestinationInstances(
+///
+@objc(MigrationV1ActionPropertyPolicy)
+public class MigrationV1ActionPropertyPolicy: NSEntityMigrationPolicy {
+    public override func createDestinationInstances(
         forSource sInstance: NSManagedObject,
         in mapping: NSEntityMapping,
         manager: NSMigrationManager

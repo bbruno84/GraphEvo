@@ -94,11 +94,17 @@ internal extension Graph {
    - Parameter locate: The location URL.
    */
   func prepareManagedObjectContext(locate: URL) {
-    // Base directory: <locate>/<route>/
-    location = locate.appendingPathComponent(route)
+    // Normalizza il percorso in base al tipo di input
+    if locate.pathExtension == "sqlite" {
+        // Se è già un file .sqlite, usalo direttamente
+        location = locate
+    } else {
+        // Altrimenti, trattalo come directory e aggiungi Graph.sqlite
+        location = locate.appendingPathComponent("Graph.sqlite")
+    }
 
     // Final SQLite URL: use new API to get store URL
-    let storeURL = GraphStoreDescription.storeURL(baseURL: location)
+    let storeURL = location
 
     if type == NSInMemoryStoreType {
       // In-memory store configuration
@@ -132,11 +138,12 @@ internal extension Graph {
       return
     }
 
-    // Ensure directory exists
-    File.createDirectoryAtPath(location, withIntermediateDirectories: true, attributes: nil) { (success, error) in
-      if let e = error {
-        fatalError("[Graph Error: \(e.localizedDescription)]")
-      }
+    // Ensure parent directory exists, not the .sqlite file itself
+    let dirURL = storeURL.deletingLastPathComponent()
+    File.createDirectoryAtPath(dirURL, withIntermediateDirectories: true, attributes: nil) { (success, error) in
+        if let e = error {
+            fatalError("[Graph Error: \(e.localizedDescription)]")
+        }
     }
 
     // Store description with M2 options

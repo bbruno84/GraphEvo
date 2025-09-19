@@ -189,11 +189,21 @@ public class Graph: NSObject {
   
     public init(storeURL: URL, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
         GraphValueTransformer.register()
-        self.name = storeURL.deletingPathExtension().lastPathComponent
+
+        if storeURL.pathExtension == "sqlite" {
+            // Caso: viene passato direttamente il file .sqlite
+            self.name = storeURL.deletingPathExtension().lastPathComponent
+            self.location = storeURL.deletingLastPathComponent()
+        } else {
+            // Caso: viene passata una directory -> ci aspettiamo Graph.sqlite dentro
+            self.name = storeURL.lastPathComponent
+            self.location = storeURL
+        }
+
         self.type = backend.coreDataType
-        self.location = storeURL.deletingLastPathComponent()
-        self.route = "Local/\(self.name)"
-        GraphMigrationManager.handlePhase(.preInit, graph: nil)
+        self.route = "" // non usiamo più route per evitare percorsi doppi
+
+        GraphMigrationManager.handlePhase(.preInit, storeURL: storeURL, graph: nil)
         super.init()
         GraphMigrationManager.handlePhase(.postInit, graph: self)
         observeRemoteStoreChanges()

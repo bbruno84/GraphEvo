@@ -28,7 +28,7 @@ enum MigrationV1MappingModel {
         entityMapping.name = "ManagedEntity"
         entityMapping.sourceEntityName = "ManagedEntity"
         entityMapping.destinationEntityName = "ManagedEntity"
-        entityMapping.mappingType = .copyEntityMappingType
+        entityMapping.mappingType = .transformEntityMappingType
         // No policy, campi diretti
         
         // EntityProperty -> EntityProperty mapping
@@ -38,6 +38,7 @@ enum MigrationV1MappingModel {
         entityPropertyMapping.destinationEntityName = "ManagedEntityProperty"
         entityPropertyMapping.mappingType = .customEntityMappingType
         entityPropertyMapping.entityMigrationPolicyClassName = NSStringFromClass(MigrationV1EntityPropertyPolicy.self)
+        
         
         // RelationshipProperty -> RelationshipProperty mapping
         let relationshipPropertyMapping = NSEntityMapping()
@@ -60,49 +61,49 @@ enum MigrationV1MappingModel {
         tagMapping.name = "ManagedEntityTag"
         tagMapping.sourceEntityName = "ManagedEntityTag"
         tagMapping.destinationEntityName = "ManagedEntityTag"
-        tagMapping.mappingType = .copyEntityMappingType
+        tagMapping.mappingType = .transformEntityMappingType
 
         let groupMapping = NSEntityMapping()
         groupMapping.name = "ManagedEntityGroup"
         groupMapping.sourceEntityName = "ManagedEntityGroup"
         groupMapping.destinationEntityName = "ManagedEntityGroup"
-        groupMapping.mappingType = .copyEntityMappingType
+        groupMapping.mappingType = .transformEntityMappingType
 
         let actionMapping = NSEntityMapping()
         actionMapping.name = "ManagedAction"
         actionMapping.sourceEntityName = "ManagedAction"
         actionMapping.destinationEntityName = "ManagedAction"
-        actionMapping.mappingType = .copyEntityMappingType
+        actionMapping.mappingType = .transformEntityMappingType
 
         let actionTagMapping = NSEntityMapping()
         actionTagMapping.name = "ManagedActionTag"
         actionTagMapping.sourceEntityName = "ManagedActionTag"
         actionTagMapping.destinationEntityName = "ManagedActionTag"
-        actionTagMapping.mappingType = .copyEntityMappingType
+        actionTagMapping.mappingType = .transformEntityMappingType
 
         let actionGroupMapping = NSEntityMapping()
         actionGroupMapping.name = "ManagedActionGroup"
         actionGroupMapping.sourceEntityName = "ManagedActionGroup"
         actionGroupMapping.destinationEntityName = "ManagedActionGroup"
-        actionGroupMapping.mappingType = .copyEntityMappingType
+        actionGroupMapping.mappingType = .transformEntityMappingType
 
         let relationshipMapping = NSEntityMapping()
         relationshipMapping.name = "ManagedRelationship"
         relationshipMapping.sourceEntityName = "ManagedRelationship"
         relationshipMapping.destinationEntityName = "ManagedRelationship"
-        relationshipMapping.mappingType = .copyEntityMappingType
+        relationshipMapping.mappingType = .transformEntityMappingType
 
         let relationshipTagMapping = NSEntityMapping()
         relationshipTagMapping.name = "ManagedRelationshipTag"
         relationshipTagMapping.sourceEntityName = "ManagedRelationshipTag"
         relationshipTagMapping.destinationEntityName = "ManagedRelationshipTag"
-        relationshipTagMapping.mappingType = .copyEntityMappingType
+        relationshipTagMapping.mappingType = .transformEntityMappingType
 
         let relationshipGroupMapping = NSEntityMapping()
         relationshipGroupMapping.name = "ManagedRelationshipGroup"
         relationshipGroupMapping.sourceEntityName = "ManagedRelationshipGroup"
         relationshipGroupMapping.destinationEntityName = "ManagedRelationshipGroup"
-        relationshipGroupMapping.mappingType = .copyEntityMappingType
+        relationshipGroupMapping.mappingType = .transformEntityMappingType
 
         mappingModel.entityMappings = [
             entityMapping,

@@ -1,11 +1,3 @@
-//
-//  ModelIdentifier.swift
-//  GraphCK
-//
-//  Created by Valerio Buriani on 11/09/25.
-//
-
-
 /*
  * The MIT License (MIT)
  *
@@ -168,7 +160,9 @@ internal struct MigrationV1LegacyModel {
     actionPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     relationshipPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     
+    
     let propertyValue = NSAttributeDescription()
+    propertyValue.valueTransformerName = "DefaultTransformer"
     propertyValue.name = "object"
     propertyValue.attributeType = .transformableAttributeType
     propertyValue.attributeValueClassName = "Any"
@@ -399,8 +393,8 @@ internal struct MigrationV1LegacyModel {
     relationshipTagDescription.properties = relationshipTagProperties as! [NSPropertyDescription]
     relationshipGroupDescription.properties = relationshipGroupProperties as! [NSPropertyDescription]
     
-    MigrationV1LegacyModel.managedObjectModel = NSManagedObjectModel()
-    MigrationV1LegacyModel.managedObjectModel?.entities = [
+      MigrationV1LegacyModel.managedObjectModel = NSManagedObjectModel()
+      MigrationV1LegacyModel.managedObjectModel?.entities = [
       entityDescription,
       entityPropertyDescription,
       entityTagDescription,

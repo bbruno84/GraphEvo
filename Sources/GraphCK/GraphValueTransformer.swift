@@ -37,6 +37,21 @@ final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
         ]
     }
     
+    override func reverseTransformedValue(_ value: Any?) -> Any? {
+            guard let data = value as? Data else {
+                return nil
+            }
+
+            do {
+                let classSet = NSSet(array: Self.allowedTopLevelClasses) as! Set<AnyHashable>
+                let unarchived = try NSKeyedUnarchiver.unarchivedObject(ofClasses: classSet, from: data)
+                return unarchived
+            } catch {
+                print("❌ [GraphValueTransformer] Errore durante l'unarchiviazione: \(error)")
+                return nil
+            }
+        }
+    
     /// Registers the transformer globally.
     static func register() {
         let transformer = GraphValueTransformer()

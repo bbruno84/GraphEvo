@@ -67,8 +67,8 @@ internal class ManagedNode: ManagedObject {
     /// A reference to the properties.
     internal var properties: [String: Any] {
         return performAndWait { node in
-            node.propertySet.reduce(into: [String: Any]()) {
-                $0[$1.name] = $1.object
+            node.propertySet.reduce(into: [String: Any]()) { result, prop in
+                result[prop.name] = ManagedNode.decodeIfData(prop.primitiveValue(forKey: "object"))
             }
         } ?? [:]
     }
@@ -267,12 +267,23 @@ extension ManagedNode: Comparable {
 }
 
 extension ManagedNode {
-    @objc
+    /*@objc
     func getProperty(named name: String) -> Any? {
         return performAndWait { node in
             node.propertySet.first {
                 $0.name == name
             }?.object
+        }
+    }*/
+    
+    @objc
+    func getProperty(named name: String) -> Any? {
+        return performAndWait { node in
+            guard let prop = node.propertySet.first(where: { $0.name == name }) else {
+                return nil
+            }
+
+            return ManagedNode.decodeIfData(prop.primitiveValue(forKey: "object"))
         }
     }
 
@@ -288,16 +299,34 @@ extension ManagedNode {
                 return
             }
 
+            // Archive the value before saving
+            let archivedObject: Any
+            do {
+                archivedObject = try GraphArchiver.archive(object)
+            } catch {
+                print("[Graph Error: Failed to archive value for property '\(name)': \(error)]")
+                return
+            }
+
             guard let p = property else {
                 guard let moc = managedObjectContext else {
                     return
                 }
-
-                Swift.type(of: self).createProperty(name: name, object: object, node: action, managedObjectContext: moc)
+                // Pass archived value to createProperty
+                Swift.type(of: self).createProperty(name: name, object: archivedObject, node: action, managedObjectContext: moc)
                 return
             }
 
-            p.object = object
+            p.object = archivedObject
         }
+    }
+
+    private static func decodeIfData(_ value: Any?) -> Any? {
+        guard let data = value as? Data else {
+            return value
+        }
+        
+        let transformer = GraphValueTransformer()
+        return transformer.reverseTransformedValue(data)
     }
 }

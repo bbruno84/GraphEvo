@@ -15,7 +15,7 @@ public enum GraphMigrations {
     public static func registerAll() {
         GraphMigrationManager.registerMigration(MigrationV1())
         // 🔜 Future migrations go here, in order:
-        // GraphMigrationManager.registerMigration(MigrationV2.self)
-        // GraphMigrationManager.registerMigration(MigrationV3.self)
+        // GraphMigrationManager.registerMigration(MigrationV2())
+        // GraphMigrationManager.registerMigration(MigrationV3())
     }
 }

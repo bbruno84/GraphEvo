@@ -8,6 +8,8 @@
 
 import Foundation
 import CoreData
+import UIKit
+import PDFKit
 
 extension Graph {
     var tutteLeAbitazioni : [Entity?]{
@@ -128,5 +130,75 @@ extension Graph {
         self.pS?.url
     }
     
+    func dbdump() {
+        let allEntities = Search<Entity>(graph: self).where(.type("*")).sync()
+        print("🔎 Entity count: \(allEntities.count)")
+
+        var expectedPDF = 0
+        var expectedImage = 0
+        var PDFcount = 0
+        var imageCount = 0
+        var dataCount = 0
+        var otherCount = 0
+        var categorieCount = 0
+        var categorieCustom = 0
+        
+        var entityTypeCounts: [String: Int] = [:]
+        
+        for entitiy in allEntities {
+            entityTypeCounts[entitiy.type, default: 0] += 1
+        }
+        
+        print("📊 Entities trovate:")
+        for (type, count) in entityTypeCounts.sorted(by: { $0.value > $1.value }) {
+            print("   • \(type): \(count)")
+            switch type {
+                case "MediaBollette":
+                let mediaEntities = Search<Entity>(graph: self).where(.type("MediaBollette")).sync()
+                for entity in mediaEntities {
+                    if entity[dynamicMember: "media_type"] as? String == "pdf" {
+                        expectedPDF += 1
+                    } else if entity[dynamicMember: "media_type"] as? String == "img" {
+                        expectedImage += 1
+                    }
+                    if let value = entity[dynamicMember: "media"] {
+                        if value is UIImage {
+                            
+                            imageCount += 1
+                        } else if let data = value as? Data {
+                            if PDFDocument(data: data) != nil {
+                                PDFcount += 1
+                                //saveDocumentToDisk(document, named: UUID().uuidString)
+                            } else if UIImage(data: data) != nil {
+                                imageCount += 1
+                            } else {
+                                dataCount += 1
+                            }
+                        } else {
+                            otherCount += 1
+                        }
+                    }
+                }
+                print("     • Expected images: \(expectedImage)")
+                print("     • 🖼️ UIImage: \(imageCount)")
+                print("     • Expected PDFs: \(expectedPDF)")
+                print("     • 📄 PDFDocument: \(PDFcount)")
+            case "Categoria":
+                let categorie = Search<Entity>(graph: self).where(.type("Categoria")).sync()
+                for categoria in categorie {
+                    if categoria[dynamicMember: "tipo"] as? String == "custom" {
+                        categorieCustom += 1
+                    } else {
+                        categorieCount += 1
+                    }
+                }
+                print("     • di cui custom: \(categorieCustom)")
+            default:
+                continue
+            }
+        }
+    }
+    
 }
+
 

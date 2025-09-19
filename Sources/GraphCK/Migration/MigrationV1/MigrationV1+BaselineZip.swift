@@ -8,6 +8,10 @@
 import Foundation
 import CoreData
 
+#if canImport(ZIPFoundation)
+import ZIPFoundation
+#endif
+
 // MARK: - Baseline Zip Helpers
 
 extension MigrationV1 {
@@ -38,23 +42,36 @@ extension MigrationV1 {
                     .appendingPathComponent(".baseline", isDirectory: true)
                     .appendingPathComponent(storeName, isDirectory: true)
                 
-                // Cerca baseline.zip nelle sottocartelle
+                // Cerca baseline.zip nelle sottocartelle <hash>
+                var latestZip: URL?
+                var latestDate: Date?
                 if let enumerator = fm.enumerator(
                     at: baselineRoot,
-                    includingPropertiesForKeys: [.isRegularFileKey],
-                    options: [.skipsHiddenFiles]
+                    includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
                 ) {
                     for case let fileURL as URL in enumerator {
                         if fileURL.lastPathComponent == "baseline.zip" {
-                            completion(fileURL)
-                            return
+                            if let attrs = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]),
+                               let modDate = attrs.contentModificationDate {
+                                if latestDate == nil || modDate > latestDate! {
+                                    latestDate = modDate
+                                    latestZip = fileURL
+                                }
+                            } else if latestZip == nil {
+                                latestZip = fileURL
+                            }
                         }
                     }
                 }
+                if let found = latestZip {
+                    completion(found)
+                    return
+                }
                 
                 // Fallback: cerca baseline.zip più recente ovunque nel container
-                var latestZip: URL?
-                var latestDate: Date?
+                latestZip = nil
+                latestDate = nil
                 if let allEnum = fm.enumerator(
                     at: containerURL,
                     includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
@@ -141,40 +158,70 @@ extension MigrationV1 {
         }
     }
 
+    /// Extracts the SQLite file named "Graph.sqlite" from the baseline zip using ZIPFoundation.
+    /// - Parameter zipURL: URL of the baseline.zip file.
+    /// - Returns: URL of the extracted SQLite file.
+    /// - Throws: Throws if extraction or deserialization fails.
+    static func extractSQLiteFromBaseline(zipURL: URL) throws -> URL {
+        let fm = FileManager.default
+
+        #if !canImport(ZIPFoundation)
+        throw NSError(domain: "MigrationV1", code: 9001, userInfo: [NSLocalizedDescriptionKey: "ZIPFoundation is not available. Add it via SPM to extract baseline.zip on iOS."])
+        #else
+        let archive = try Archive(url: zipURL, accessMode: .read)
+
+        // Read 'storeFilenameToData' entry into memory
+        guard let plistEntry = archive["storeFilenameToData"] else {
+            throw NSError(domain: "MigrationV1", code: 9003, userInfo: [NSLocalizedDescriptionKey: "'storeFilenameToData' not found inside baseline.zip"])
+        }
+
+        var plistData = Data()
+        _ = try archive.extract(plistEntry) { chunk in
+            plistData.append(chunk)
+        }
+
+        // Decode NSKeyedArchiver plist -> [String: Data] mapping (filename -> SQLite bytes)
+        let allowedClasses: [AnyClass] = [
+            NSDictionary.self, NSMutableDictionary.self,
+            NSString.self, NSData.self, NSNumber.self, NSDate.self
+        ]
+        guard let dict = try NSKeyedUnarchiver.unarchivedObject(
+            ofClasses: allowedClasses,
+            from: plistData
+        ) as? [String: Any] else {
+            throw NSError(domain: "MigrationV1", code: 9004, userInfo: [NSLocalizedDescriptionKey: "Invalid 'storeFilenameToData' archive structure."])
+        }
+        guard let sqliteData = dict["Graph.sqlite"] as? Data else {
+            throw NSError(domain: "MigrationV1", code: 9005, userInfo: [NSLocalizedDescriptionKey: "'Graph.sqlite' data not found in storeFilenameToData."])
+        }
+
+        // Write SQLite bytes to a temporary file
+        let tempDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+        let sqliteURL = tempDir.appendingPathComponent("Graph.sqlite")
+        try sqliteData.write(to: sqliteURL, options: .atomic)
+
+        print("[MigrationV1] Extracted SQLite store to \(sqliteURL.path)")
+        return sqliteURL
+        #endif
+    }
+
     /// Migrates the baseline store at the given URL using MigrationV1LegacyModel as source and Model as destination.
     /// - Parameter baselineURL: URL of the baseline store to migrate.
     /// - Returns: URL of the migrated temporary store.
     /// - Throws: Propagates errors from migration process.
     static func migrateBaseline(baselineURL: URL) throws -> URL {
-        print("[MigrationV1] Starting migration of baseline at \(baselineURL.path)")
-
-        let fm = FileManager.default
-        let tempDir = baselineURL.deletingLastPathComponent()
-        let tempStoreURL = tempDir.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
-
-        let sourceModel = MigrationV1LegacyModel.create()
-        let destinationModel = Model.create()
-        let mappingModel = MigrationV1MappingModel.create()
-
-        let migrationManager = NSMigrationManager(sourceModel: sourceModel, destinationModel: destinationModel)
-
-        do {
-            try migrationManager.migrateStore(
-                from: baselineURL,
-                sourceType: NSSQLiteStoreType,
-                options: nil,
-                with: mappingModel,
-                toDestinationURL: tempStoreURL,
-                destinationType: NSSQLiteStoreType,
-                destinationOptions: nil
-            )
-            print("[MigrationV1] Migration successful. Migrated store at \(tempStoreURL.path)")
-            return tempStoreURL
-        } catch {
-            print("[MigrationV1] Migration failed with error: \(error)")
-            throw error
+        var sqliteURL = baselineURL
+        if baselineURL.pathExtension.lowercased() == "zip" {
+            print("[MigrationV1] baselineURL is a zip archive, extracting SQLite store first.")
+            sqliteURL = try extractSQLiteFromBaseline(zipURL: baselineURL)
+        } else {
+            print("[MigrationV1] baselineURL is a SQLite store, proceeding with migration.")
         }
+        
+        return sqliteURL
     }
+    
 }
 
 // MARK: - Baseline Merge Step
@@ -204,38 +251,43 @@ extension MigrationV1 {
                     // Step 2: Backup the found baseline.zip to migrationV1 folder (both locally and in ubiquity).
                     let storeDirectory = storeURL.deletingLastPathComponent()
                     try backupBaselineZip(baselineURL, storeDirectory: storeDirectory)
-                    // Step 3: Log that the baseline has been backed up and is ready for migration.
                     print("[MigrationV1] baseline.zip backed up and ready for migration at \(baselineURL.path).")
-                    // Step 4: Migrate the baseline and get the migrated store URL.
-                    let migratedBaselineURL = try migrateBaseline(baselineURL: baselineURL)
-                    print("[MigrationV1] Migrated baseline store available at \(migratedBaselineURL.path)")
-                    
-                    // Step 5: Open Graph instances for local and baseline stores, count entities, create discriminator, and deduplicate.
+
+                    // Step 3: Migrate the baseline (zip -> Graph.sqlite bytes -> temp store -> current model)
+                    //let migratedBaselineURL = try migrateBaseline(baselineURL: baselineURL)
+                    //print("[MigrationV1] Migrated baseline store available at \(migratedBaselineURL.path)")
+
+                    // Step 4: Open Graph instances and run deduplication (baseline merged into local)
                     do {
-                        let baselineGraph = Graph(storeURL: migratedBaselineURL, backend: .inMemory)
-                        
+                        // IMPORTANT: reuse the live localGraph; open a temporary Graph for the migrated baseline.
+                        let baselineGraph = Graph(storeURL: baselineURL, backend: .inMemory)
+
+                        // Count entities to feed the discriminator
                         let localCount = Search<Entity>(graph: localGraph).where(.type("*")).sync().count
                         let baselineCount = Search<Entity>(graph: baselineGraph).where(.type("*")).sync().count
-                        
+
+                        // Decide origin by context identity
                         let discriminator = BaselineDedupDiscriminator(
                             localEntityCount: localCount,
                             baselineEntityCount: baselineCount,
                             originOf: { entity in
-                                if entity.managedNode.managedObjectContext == localGraph.managedObjectContext {
+                                if entity.managedNode.managedObjectContext === localGraph.managedObjectContext {
                                     return .local
                                 } else {
                                     return .baseline
                                 }
                             }
                         )
-                        
+
                         try DedupTool.deduplicateBetween(
                             primaryGraph: localGraph,
                             secondaryGraph: baselineGraph,
                             discriminator: discriminator
                         )
-                        print("[MigrationV1] Deduplication completed. Primary: local store, Secondary: baseline store at \(migratedBaselineURL.lastPathComponent).")
-                        // Set flag in ubiquitous key-value store
+
+                        print("[MigrationV1] Deduplication completed. Primary: local store, Secondary: baseline store at \(baselineURL.lastPathComponent).")
+
+                        // Step 5: Mark as processed so we don't redo it
                         ubiquitousStore.set(true, forKey: "MigrationV1BaselineProcessed")
                         ubiquitousStore.synchronize()
                         completion(.done)
@@ -243,9 +295,8 @@ extension MigrationV1 {
                         print("[MigrationV1] Error during deduplication process: \(error)")
                         completion(.error(error))
                     }
-                    
                 } catch {
-                    print("[MigrationV1] Error while backing up or migrating baseline.zip: \(error)")
+                    print("[MigrationV1] Error while backing up baseline.zip: \(error)")
                     completion(.error(error))
                 }
             }

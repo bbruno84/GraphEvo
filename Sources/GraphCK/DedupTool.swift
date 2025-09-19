@@ -29,34 +29,61 @@ public final class DedupTool {
     
     /// Deduplicate entities across two Graph instances (for baseline merge use case).
     public static func deduplicateBetween(primaryGraph: Graph, secondaryGraph: Graph, discriminator: DedupDiscriminator) throws {
-        let localEntities = Search<Entity>(graph: primaryGraph).where(.type("*")).sync()
-        let baselineEntities = Search<Entity>(graph: secondaryGraph).where(.type("*")).sync()
+        let primaryEntities = Search<Entity>(graph: primaryGraph).where(.type("*")).sync()
+        let secondaryEntities = Search<Entity>(graph: secondaryGraph).where(.type("*")).sync()
         
-        var dict = [String: [Entity]]()
-        for entity in localEntities {
-            dict[entity.id, default: []].append(entity)
+        print("[DedupTool] Loaded \(primaryEntities.count) entities from primary graph")
+        print("[DedupTool] Loaded \(secondaryEntities.count) entities from secondary graph")
+        
+        var groupedEntities = [String: (primary: Entity?, secondary: Entity?)]()
+        
+        for entity in primaryEntities {
+            groupedEntities[entity.id, default: (nil, nil)].primary = entity
         }
-        for entity in baselineEntities {
-            dict[entity.id, default: []].append(entity)
+        for entity in secondaryEntities {
+            if let existing = groupedEntities[entity.id] {
+                groupedEntities[entity.id] = (existing.primary, entity)
+            } else {
+                groupedEntities[entity.id] = (nil, entity)
+            }
         }
         
         let tool = DedupTool(graph: primaryGraph, discriminator: discriminator)
         
-        for (_, entities) in dict {
-            if entities.count > 1 {
-                var preferred = entities[0]
-                for entity in entities.dropFirst() {
-                    preferred = discriminator.choosePreferred(preferred, entity)
+        var totalMerged = 0
+        var totalCreated = 0
+        
+        for (id, pair) in groupedEntities {
+            let primaryEntity = pair.primary
+            let secondaryEntity = pair.secondary
+            
+            if let primaryEntity = primaryEntity, secondaryEntity == nil {
+                // Only primary exists, keep as is
+            } else if primaryEntity == nil, let secondaryEntity = secondaryEntity {
+                // Only secondary exists, create new entity in primary and copy metadata/relationships
+                guard let context = primaryGraph.managedObjectContext else {
+                    print("[DedupTool] ERROR: Primary graph has no managed object context, cannot create entity for ID \(id)")
+                    continue
                 }
-                
-                for entity in entities {
-                    if entity !== preferred {
-                        tool.mergeRelationships(from: entity, into: preferred)
-                        tool.deleteEntity(entity)
-                    }
+                let newManagedEntity = ManagedEntity(secondaryEntity.type, managedObjectContext: context)
+                let newEntity = Entity(managedNode: newManagedEntity)
+                // NOTE: Entity.id is read-only; cannot force to match the secondary's id here.
+                tool.copyMetadata(from: secondaryEntity, to: newEntity)
+                tool.mergeRelationships(from: secondaryEntity, into: newEntity)
+                totalCreated += 1
+            } else if let primaryEntity = primaryEntity, let secondaryEntity = secondaryEntity {
+                // Both exist, call discriminator
+                let preferred = discriminator.choosePreferred(primaryEntity, secondaryEntity)
+                if preferred === primaryEntity {
+                } else {
+                    tool.copyMetadata(from: secondaryEntity, to: primaryEntity, preferred: true)
+                    tool.mergeRelationships(from: secondaryEntity, into: primaryEntity)
+                    totalMerged += 1
                 }
             }
         }
+        
+        print("[DedupTool] Deduplication between graphs completed. Total merged entities: \(totalMerged), total new entities created in primary: \(totalCreated)")
         primaryGraph.sync()
     }
     
@@ -77,6 +104,7 @@ public final class DedupTool {
                 for entity in entities {
                     if entity !== preferred {
                         mergeRelationships(from: entity, into: preferred)
+                        copyMetadata(from: entity, to: preferred, preferred: true)
                         deleteEntity(entity)
                     }
                 }
@@ -102,6 +130,7 @@ public final class DedupTool {
         for dup in duplicates {
             if dup !== preferred {
                 mergeRelationships(from: dup, into: preferred)
+                copyMetadata(from: dup, to: preferred, preferred: true)
                 deleteEntity(dup)
             }
         }
@@ -218,15 +247,26 @@ public final class DedupTool {
         entity.delete()
     }
     // Helper to copy properties, tags, and groups from one Node to another
-    private func copyMetadata(from source: Node, to target: Node) {
+    private func copyMetadata(from source: Node, to target: Node, preferred: Bool = false) {
         for (key, value) in source.properties {
-            target[dynamicMember: key] = value
+            if target.properties[key] == nil {
+                target[dynamicMember: key] = value
+            } else if preferred {
+                target[dynamicMember: key] = value
+            }
         }
         for tag in source.tags {
-            target.add(tags: tag)
+            if !target.tags.contains(tag) {
+                target.add(tags: tag)
+            }
         }
         for group in source.groups {
-            target.add(to: group)
+            if !target.groups.contains(group) {
+                target.add(to: group)
+            }
         }
     }
 }
+
+
+
