@@ -99,8 +99,8 @@ internal extension Graph {
         // Se è già un file .sqlite, usalo direttamente
         location = locate
     } else {
-        // Altrimenti, trattalo come directory e aggiungi Graph.sqlite
-        location = locate.appendingPathComponent("Graph.sqlite")
+        // Rispetta il route (Local/<name> o Cloud/<name>)
+        location = locate.appendingPathComponent(route).appendingPathComponent("Graph.sqlite")
     }
 
     // Final SQLite URL: use new API to get store URL
