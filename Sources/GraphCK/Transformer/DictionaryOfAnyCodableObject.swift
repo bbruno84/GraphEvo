@@ -8,7 +8,7 @@
 import Foundation
 
 @objc(DictionaryOfAnyCodableObject)
-public final class DictionaryOfAnyCodableObject: NSObject, NSSecureCoding, Codable {
+public final class DictionaryOfAnyCodableObject: NSObject, NSSecureCoding, Codable, Collection {
     
     public static var supportsSecureCoding: Bool = true
     
@@ -36,4 +36,11 @@ public final class DictionaryOfAnyCodableObject: NSObject, NSSecureCoding, Codab
     public func encode(to encoder: Encoder) throws {
         try items.encode(to: encoder)
     }
+    
+    // MARK: - Collection
+    public typealias Index = Dictionary<String, AnyCodableObject>.Index
+    public var startIndex: Index { items.startIndex }
+    public var endIndex: Index { items.endIndex }
+    public func index(after i: Index) -> Index { items.index(after: i) }
+    public subscript(position: Index) -> (key: String, value: AnyCodableObject) { items[position] }
 }
