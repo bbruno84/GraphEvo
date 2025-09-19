@@ -10,45 +10,6 @@ import CoreData
 import UIKit
 import PDFKit
 
-/// Helper KVO per NSMigrationManager.migrationProgress con log leggibili (solo API pubbliche)
-final class MigrationV1ProgressObserver: NSObject {
-    override func observeValue(
-        forKeyPath keyPath: String?,
-        of object: Any?,
-        change: [NSKeyValueChangeKey : Any]?,
-        context: UnsafeMutableRawPointer?
-    ) {
-        guard keyPath == "migrationProgress",
-              let mgr = object as? NSMigrationManager else { return }
-        
-        let pct = Int((mgr.migrationProgress * 100.0).rounded())
-        let steps: [NSEntityMapping] = mgr.mappingModel.entityMappings ?? []
-        let total = steps.count
-        let idx: Int = {
-            guard total > 0 else { return 0 }
-            let approx = Int(floor(Double(mgr.migrationProgress) * Double(total)))
-            return max(0, min(approx, max(total - 1, 0)))
-        }()
-        let current = (0..<total).contains(idx) ? steps[idx] : nil
-        let name   = current?.name ?? "idle"
-        let src    = current?.sourceEntityName ?? "nil"
-        let dst    = current?.destinationEntityName ?? "nil"
-        let policy = current?.entityMigrationPolicyClassName ?? "none"
-        
-        // Log version hashes if available
-        var hashesStr = ""
-        if let current = current {
-            if let srcHash = current.sourceEntityVersionHash {
-                hashesStr += " | srcHash: \(srcHash.map { String(format: "%02x", $0) }.joined())"
-            }
-            if let dstHash = current.destinationEntityVersionHash {
-                hashesStr += " | dstHash: \(dstHash.map { String(format: "%02x", $0) }.joined())"
-            }
-        }
-        
-        debugPrint("[MigrationV1][Progress] \(pct)% | step \(min(idx, max(total-1, 0)))/\(total) | \(name) (\(src) → \(dst)) | policy: \(policy)\(hashesStr)")
-    }
-}
 
 /// Esegue la prima migrazione ufficiale (legacy -> modello attuale).
 public struct MigrationV1: GraphMigration {
@@ -234,7 +195,6 @@ extension MigrationV1 {
                         }
                     } catch {
                         print("❌ Errore nel decoding dell'oggetto legacy: \(error)")
-                        log.graph.error("❌ Errore nel decoding dell'oggetto legacy: \(error)")
                     }
                 } else {
                     // È un oggetto semplice: Double, String, Date, ecc.

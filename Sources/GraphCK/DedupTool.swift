@@ -65,7 +65,7 @@ public final class DedupTool {
             let primaryEntity = pair.primary
             let secondaryEntity = pair.secondary
             
-            if let primaryEntity = primaryEntity, secondaryEntity == nil {
+            if let _ = primaryEntity, secondaryEntity == nil {
                 // Only primary exists, keep as is
             } else if primaryEntity == nil, let secondaryEntity = secondaryEntity {
                 // Only secondary exists, create new entity in primary and copy metadata/relationships

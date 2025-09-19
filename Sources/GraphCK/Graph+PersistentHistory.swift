@@ -180,8 +180,8 @@ private extension Graph {
     func _ph_currentStoreUUID() -> String? {
         guard let psc = persistentContainer?.persistentStoreCoordinator else { return nil }
         for store in psc.persistentStores {
-            if let meta = try? psc.metadata(for: store),
-               let uuid = meta[NSStoreUUIDKey] as? String {
+            let meta = psc.metadata(for: store)
+            if let uuid = meta[NSStoreUUIDKey] as? String {
                 return uuid
             }
         }
@@ -227,11 +227,14 @@ internal extension Graph {
         // Procedi con l’elaborazione della history (userInfo + post notifica custom)
         processPersistentHistoryForRemoteChange()
     }
+}
 
-    // MARK: - Launch-time bootstrap (called after container is ready)
+// MARK: - Launch-time bootstrap (called after container is ready)
 
+@objc
+public extension Graph {
     @objc
-    public func ph_prepareOnLaunchAfterContainerReady() {
+    func ph_prepareOnLaunchAfterContainerReady() {
         _ph_markLaunchAndDetectColdStart()
         // Load token from disk (if any)
         if _ph_lastToken == nil {

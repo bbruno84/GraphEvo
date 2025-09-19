@@ -73,6 +73,8 @@ public final class GraphMigrationManager {
     ///   - graph: Optional Graph instance (may be nil in early phases).
     public static func handlePhase(_ phase: GraphLifecyclePhase, storeURL: URL, graph: Graph?) {
         _ = initialized
+        // Post notification for phase change
+        postPhaseNotification(phase: phase, storeURL: storeURL, graph: graph)
         // Fire callbacks
         callbacks[phase]?.forEach { $0(storeURL, graph) }
         // Reset migration index for every phase
@@ -122,5 +124,27 @@ public final class GraphMigrationManager {
             resolvedURL = GraphStoreDescription.storeURL(baseURL: GraphStoreDescription.location)
         }
         handlePhase(phase, storeURL: resolvedURL, graph: graph)
+    }
+}
+
+// MARK: - Notifications
+public extension Notification.Name {
+    /// Notification posted when a migration phase changes.
+    static let migrationPhaseDidChange = Notification.Name("GraphMigrationManager.migrationPhaseDidChange")
+}
+
+private extension GraphMigrationManager {
+    /// Posts a notification for migration phase changes.
+    static func postPhaseNotification(phase: GraphLifecyclePhase, storeURL: URL, graph: Graph?) {
+        let userInfo: [String: Any] = [
+            "phase": phase,
+            "storeURL": storeURL,
+            "graphID": graph?.name ?? ""
+        ]
+        NotificationCenter.default.post(
+            name: .migrationPhaseDidChange,
+            object: nil,
+            userInfo: userInfo
+        )
     }
 }
