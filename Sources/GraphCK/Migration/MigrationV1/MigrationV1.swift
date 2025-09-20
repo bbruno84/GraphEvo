@@ -20,19 +20,31 @@ public struct MigrationV1: GraphMigration {
         switch phase {
         case .preInit:
             do {
+                // 0. Esiste un file
+                let fm = FileManager.default
+                guard fm.fileExists(atPath: storeURL.path) else { return false }
+                
+                // 1. Compatibilità Core Data
                 let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
                     ofType: NSSQLiteStoreType,
                     at: storeURL
                 )
-                // If compatible, no migration needed
-                let isNeeded = !Model.create().isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata)
-                if isNeeded {
-                    print("[MigrationV1] Model is incompatible, migration needed")
+                let isCompatible = Model.create().isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata)
+                
+                // 2. Versioni GraphCK / App
+                let currentVersions = try GraphStoreMetadata.read(from: storeURL)
+                let requiredVersions = GraphStoreDescription.requiredVersions
+                let needsUpgrade = GraphStoreMetadata.needsUpgrade(current: currentVersions,
+                                                                   required: requiredVersions)
+                
+                if !isCompatible || needsUpgrade {
+                    print("[MigrationV1] Migrazione necessaria: compatibilità=\(!isCompatible), upgrade=\(needsUpgrade)")
+                    return true
                 }
-                return isNeeded
+                return false
             } catch {
-                // Error loading metadata, assume migration needed
-                print("[MigrationV1] unable to load metadata, assuming migration needed")
+                // Se non riusciamo a leggere i metadata → assumiamo che serva migrazione
+                print("[MigrationV1] Errore nel leggere metadata, assumo che la migrazione sia necessaria: \(error)")
                 return true
             }
         default:
@@ -55,8 +67,9 @@ public struct MigrationV1: GraphMigration {
             if let graph = graph {
                 
                 GraphValueTransformer.register()
-                
+                Self.applyAppDataVersion(graph: graph)
                 Self.mergeBaselineIfPresent(storeURL: storeURL, localGraph: graph, completion: completion)
+                
             } else {
                 completion(.done)
             }
@@ -68,6 +81,66 @@ public struct MigrationV1: GraphMigration {
             completion(.done)
         }
     }
+    
+    public func handleRemoteChanges(
+        storeURL: URL,
+        graph: Graph?,
+        inserted: [NSManagedObjectID],
+        updated: [NSManagedObjectID]
+    ) {
+        
+
+        guard let _graph = graph else {return}
+
+        guard let context = _graph.newBackgroundContext() else {return}
+
+        context.perform {
+            let idsToCheck = inserted + updated
+            guard !idsToCheck.isEmpty else {return}
+
+            let requiredVersion = GraphStoreDescription.requiredVersions.appData
+            var updatedCount = 0
+
+            for objectID in idsToCheck {
+                do {
+                    let object = try context.existingObject(with: objectID)
+                    let currentVersion = object.value(forKey: "appDataVersion") as? Int
+
+                    if let cv = currentVersion, let requiredVersion {
+                        if cv < requiredVersion {
+                            object.setValue(requiredVersion, forKey: "appDataVersion")
+                            updatedCount += 1
+                            
+                        }
+                    } else {
+                        // nil → legacy, forza scrittura
+                        object.setValue(requiredVersion, forKey: "appDataVersion")
+                        updatedCount += 1
+                    }
+                } catch {
+                    print("[MigrationV1] ❌ Failed to fetch object \(objectID): \(error)")
+                }
+            }
+
+            if context.hasChanges {
+                do {
+                    try context.save()
+                    
+                    if let main = graph?.managedObjectContext {
+                        main.perform {
+                            main.mergeChanges(fromContextDidSave: Notification(name: .NSManagedObjectContextDidSave, object: context))
+                        }
+                    }
+                } catch {
+                    print("[MigrationV1] ❌ Failed to save context after updating appDataVersion: \(error)")
+                }
+            } else {
+                print("[MigrationV1] ℹ️ Context has no changes")
+            }
+        }
+    }
+    
+    
     
     internal static func execute(
         storeURL: URL
@@ -85,6 +158,18 @@ public struct MigrationV1: GraphMigration {
         
         //Registra il transformer definitivo
         GraphValueTransformer.register()
+
+        // Aggiorna i metadata dello store con le versioni richieste
+        do {
+            try GraphStoreMetadata.write(
+                GraphStoreDescription.requiredVersions,
+                to: storeURL,
+                model: Model.create()
+            )
+            print("📝 [MigrationV1] Metadata aggiornati: \(GraphStoreDescription.requiredVersions)")
+        } catch {
+            print("⚠️ [MigrationV1] Impossibile aggiornare i metadata: \(error)")
+        }
         
         return true
     }
@@ -167,9 +252,6 @@ extension MigrationV1 {
             "ManagedRelationshipProperty"
         ]
         
-        var nilCount = 0
-        
-        var legacyTypeCounts: [String: Int] = [:]
         
         for entityName in propertyEntities {
             let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: entityName)
@@ -177,65 +259,8 @@ extension MigrationV1 {
             
             let results = try context.fetch(fetchRequest)
             
-            for object in results {
-                guard let rawObject = object.value(forKey: "object") else {
-                    print("⚠️ Campo object nil, saltato")
-                    nilCount += 1
-                    continue
-                }
-                
-                if let data = rawObject as? Data {
-                    do {
-                        // 🔎 Verifica se è un PDF in formato raw data (PDFDocument archived as Data)
-                        if let pdf = PDFDocument(data: data), let pdfData = pdf.dataRepresentation() {
-                            let encoded = try GraphArchiver.archive(pdfData)
-                            reassignSafely(encoded, to: object)
-                            legacyTypeCounts["PDFDocument(rawData)", default: 0] += 1
-                            continue
-                        }
-                    } catch {
-                        print("❌ Errore nel decoding dell'oggetto legacy: \(error)")
-                    }
-                } else {
-                    // È un oggetto semplice: Double, String, Date, ecc.
-                    do {
-                        if let image = rawObject as? UIImage, let data = image.pngData() {
-                            let encoded = try GraphArchiver.archive(data)
-                            reassignSafely(encoded, to: object)
-                        } else {
-                            let encoded = try GraphArchiver.archive(rawObject)
-                            reassignSafely(encoded, to: object)
-                        }
-                        
-                        let typeName = String(describing: type(of: rawObject))
-                        legacyTypeCounts[typeName, default: 0] += 1
-                        
-                    } catch {
-                        let typeName = String(describing: type(of: rawObject))
-                        print("❌ Trasformazione fallita per oggetto \(typeName): \(error)")
-                        
-                        if rawObject is UIImage {
-                            // 🔁 Usa immagine di fallback
-                            if let fallback = UIImage(systemName: "questionmark.square"),
-                               let fallbackData = fallback.pngData() {
-                                do {
-                                    let encoded = try GraphArchiver.archive(fallbackData)
-                                    reassignSafely(encoded, to: object)
-                                    print("🛟 Immagine di fallback salvata per tipo \(typeName)")
-                                } catch {
-                                    print("❌ Fallita archiviazione dell'immagine di fallback: \(error)")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // Dopo il ciclo degli oggetti, stampa il riepilogo dei tipi legacy
-        }
-        
-        print("📊 Tipi legacy trovati:")
-        for (type, count) in legacyTypeCounts.sorted(by: { $0.value > $1.value }) {
-            print("   • \(type): \(count)")
+            Self.migrateProperties(results, in: context)
+            
         }
 
         if context.hasChanges {
@@ -278,11 +303,102 @@ extension MigrationV1 {
         print("✅ Migrazione legacy completata e store disconnesso.")
     }
     
-    private static func reassignSafely(_ value: Any, to property: NSManagedObject) {
-        property.setValue(value, forKey: "object")
+    private static func migrateProperties(_ objects: [NSManagedObject], in context: NSManagedObjectContext) {
+        var legacyTypeCounts: [String: Int] = [:]
+
+        for object in objects {
+            guard let rawObject = object.value(forKey: "object") else { continue }
+
+            do {
+                if let rawData = rawObject as? Data {
+                    // Try PDF first
+                    if let pdf = PDFDocument(data: rawData), let pdfData = pdf.dataRepresentation() {
+                        let encoded = try GraphArchiver.archive(pdfData)
+                        reassignSafely(encoded, to: object)
+                        legacyTypeCounts["PDFDocument(rawData)", default: 0] += 1
+                    } else {
+                        // Generic Data → enforce nested-Data policy
+                        let encoded = try GraphArchiver.archive(rawData)
+                        reassignSafely(encoded, to: object)
+                        legacyTypeCounts["__NSCFData", default: 0] += 1
+                    }
+                } else if let image = rawObject as? UIImage, let data = image.pngData() {
+                    let encoded = try GraphArchiver.archive(data)
+                    reassignSafely(encoded, to: object)
+                    legacyTypeCounts["UIImage", default: 0] += 1
+                } else {
+                    let encoded = try GraphArchiver.archive(rawObject)
+                    reassignSafely(encoded, to: object)
+                    let typeName = String(describing: type(of: rawObject))
+                    legacyTypeCounts[typeName, default: 0] += 1
+                }
+            } catch {
+                // On failure, assign a safe placeholder instead of nil
+                if let placeholder = try? GraphArchiver.archive("MIGRATION_FAILED") {
+                    reassignSafely(placeholder, to: object)
+                    print("❌ MigrationV1: failed to archive \(type(of: rawObject)), stored placeholder")
+                } else {
+                    print("❌ MigrationV1: failed to archive \(type(of: rawObject)) and no placeholder could be stored")
+                }
+            }
+
+            // 🔧 Update appDataVersion if attribute exists, forcing the write
+            if object.entity.attributesByName.keys.contains("appDataVersion") {
+                let requiredVersion = GraphStoreDescription.requiredVersions.appData
+                object.willChangeValue(forKey: "appDataVersion")
+                object.setPrimitiveValue(requiredVersion, forKey: "appDataVersion")
+                object.didChangeValue(forKey: "appDataVersion")
+            }
+        }
+
+        if context.hasChanges {
+            do { try context.save() }
+            catch { print("❌ MigrationV1: failed to save context: \(error)") }
+        }
+
+        if !legacyTypeCounts.isEmpty {
+            print("📊 Tipi migrati: \(legacyTypeCounts)")
+        }
+    }
+    
+    private static func reassignSafely(_ value: Any?, to property: NSManagedObject) {
+        // Force a change even if the new value is isEqual: to the old one
+        property.willChangeValue(forKey: "object")
+        property.setPrimitiveValue(value, forKey: "object")
+        property.didChangeValue(forKey: "object")
+    }
+    
+    internal static func applyAppDataVersion(graph: Graph) {
+        guard let context = graph.managedObjectContext else {
+            print("[MigrationV1] ⚠️ No managedObjectContext available, skipping appDataVersion update")
+            return
+        }
+        context.performAndWait {
+            let propertyEntities = [
+                "ManagedEntityProperty",
+                "ManagedActionProperty",
+                "ManagedRelationshipProperty"
+            ]
+            for entityName in propertyEntities {
+                let fetch = NSFetchRequest<NSManagedObject>(entityName: entityName)
+                do {
+                    let results = try context.fetch(fetch)
+                    for object in results {
+                        object.setValue(GraphStoreDescription.requiredVersions.appData, forKey: "appDataVersion")
+                    }
+                } catch {
+                    print("[MigrationV1] ⚠️ Failed to update appDataVersion for \(entityName): \(error)")
+                }
+            }
+            if context.hasChanges {
+                do {
+                    try context.save()
+                    print("📝 [MigrationV1] appDataVersion applied to properties")
+                } catch {
+                    print("[MigrationV1] ❌ Failed to save appDataVersion changes: \(error)")
+                }
+            }
+        }
     }
     
 }
-
-
-

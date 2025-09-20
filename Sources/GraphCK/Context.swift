@@ -203,6 +203,20 @@ internal extension Graph {
           self.managedObjectContext.automaticallyMergesChangesFromParent = true
           self.location = desc.url ?? storeURL
           GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+
+          if let store = plain.persistentStoreCoordinator.persistentStores.first {
+              do {
+                  let current = try GraphStoreMetadata.read(from: storeURL)
+                  if current.graphModel == nil || current.appData == nil {
+                      try GraphStoreMetadata.write(GraphStoreDescription.requiredVersions,
+                                                   using: plain.persistentStoreCoordinator,
+                                                   for: store)
+                      print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(GraphStoreDescription.requiredVersions)")
+                  }
+              } catch {
+                  print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
+              }
+          }
         }
         return
       }
@@ -216,6 +230,21 @@ internal extension Graph {
       self.managedObjectContext.automaticallyMergesChangesFromParent = true
       self.location = desc.url ?? storeURL
       GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+
+      if let store = container.persistentStoreCoordinator.persistentStores.first {
+          do {
+              let current = try GraphStoreMetadata.read(from: storeURL)
+              if current.graphModel == nil || current.appData == nil {
+                  try GraphStoreMetadata.write(GraphStoreDescription.requiredVersions,
+                                               using: container.persistentStoreCoordinator,
+                                               for: store)
+                  print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(GraphStoreDescription.requiredVersions)")
+              }
+          } catch {
+              print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
+          }
+      }
+
       print("✅ [GraphCK] CloudKit persistent container loaded successfully.")
       if GraphContextRegistry.added[self.route] != true {
         NotificationCenter.default.addObserver(self,

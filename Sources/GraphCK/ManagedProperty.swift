@@ -28,6 +28,12 @@ import CoreData
 @objc(ManagedProperty)
 internal class ManagedProperty: NamedManagedObject {
   @NSManaged internal var object: Any
+  @NSManaged internal var appDataVersion: NSNumber?
+  
+  internal var appDataVersionValue: Int? {
+    get { appDataVersion?.intValue }
+    set { appDataVersion = newValue as NSNumber? }
+  }
   
   /**
    Initializer that accepts a name, value and
