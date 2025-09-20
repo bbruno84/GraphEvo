@@ -4,21 +4,21 @@
 import PackageDescription
 
 let package = Package(
-    name: "GraphCK",
+    name: "Graph",
     platforms: [
         .iOS(.v16), .macOS(.v12) // opzionale macOS se ti serve
     ],
     products: [
-        .library(name: "GraphCK", targets: ["GraphCK"])
+        .library(name: "Graph", targets: ["Graph"])
         // .library(name: "GraphCKMigration", targets: ["GraphCKMigration"]) // se lo separi
     ], dependencies: [
         .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.0")
     ],
     targets: [
         .target(
-            name: "GraphCK",
+            name: "Graph",
             dependencies: ["ZIPFoundation"],
-            path: "Sources/GraphCK",
+            path: "Sources/Graph",
             swiftSettings: [
                 .define("GRAPHCK_IOS16"),
                 .unsafeFlags(["-Xfrontend", "-strict-concurrency=targeted"])// se vuoi eventuali #if
@@ -30,9 +30,9 @@ let package = Package(
         //     path: "Sources/GraphCKMigration"
         // ),
         .testTarget(
-            name: "GraphCKTests",
-            dependencies: ["GraphCK", "ZIPFoundation"],
-            path: "Tests/GraphCKTests",
+            name: "GraphTests",
+            dependencies: ["Graph", "ZIPFoundation"],
+            path: "Tests/GraphTests",
             resources: [.process("Resources")]
         )
         // .testTarget(
