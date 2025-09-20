@@ -94,24 +94,57 @@ internal extension Graph {
    - Parameter locate: The location URL.
    */
   func prepareManagedObjectContext(locate: URL) {
+    // Normalizza il percorso in base al tipo di input
+    if locate.pathExtension == "sqlite" {
+        // Se è già un file .sqlite, usalo direttamente
+        location = locate
+    } else {
+        // Rispetta il route (Local/<name> o Cloud/<name>)
+        location = locate.appendingPathComponent(route).appendingPathComponent("Graph.sqlite")
+    }
+
+    // Final SQLite URL: use new API to get store URL
+    let storeURL = location
+
+    if type == NSInMemoryStoreType {
+      // In-memory store configuration
+      let storeDescription = NSPersistentStoreDescription()
+      storeDescription.type = NSInMemoryStoreType
+
+      let container = NSPersistentContainer(name: name, managedObjectModel: Model.create())
+      container.persistentStoreDescriptions = [storeDescription]
+
+      container.loadPersistentStores { [unowned self] (desc, error) in
+        if let error = error {
+          fatalError("[Graph Error] Failed to load in-memory store: \(error.localizedDescription)")
+        }
+        self.persistentContainer = nil
+        self.managedObjectContext = container.viewContext
+        // Mark per-device author for potential filtering in Persistent History
+        self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
+        self.managedObjectContext.name = "GraphCK.viewContext"
+        self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        self.managedObjectContext.undoManager = nil
+        self.managedObjectContext.automaticallyMergesChangesFromParent = true
+        self.location = storeURL
+        GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+      }
+      return
+    }
+
     // Reuse cached context if present
     if let cached = GraphContextRegistry.managedObjectContexts[route] {
       managedObjectContext = cached
       return
     }
 
-    // Base directory: <locate>/<route>/
-    location = locate.appendingPathComponent(route)
-
-    // Ensure directory exists
-    File.createDirectoryAtPath(location, withIntermediateDirectories: true, attributes: nil) { (success, error) in
-      if let e = error {
-        fatalError("[Graph Error: \(e.localizedDescription)]")
-      }
+    // Ensure parent directory exists, not the .sqlite file itself
+    let dirURL = storeURL.deletingLastPathComponent()
+    File.createDirectoryAtPath(dirURL, withIntermediateDirectories: true, attributes: nil) { (success, error) in
+        if let e = error {
+            fatalError("[Graph Error: \(e.localizedDescription)]")
+        }
     }
-
-    // Final SQLite URL: GraphCK_<name>.sqlite
-    let storeURL = GraphStoreDescription.ckStoreURL(baseURL: location, name: name)
 
     // Store description with M2 options
     let storeDescription = NSPersistentStoreDescription(url: storeURL)
@@ -200,14 +233,15 @@ internal extension Graph {
     }
   }
   
-  /// Prepares the SQLight file if needed.
+  /// Prepares the SQLite file if needed.
   func prepareSQLite() {
     if NSSQLiteStoreType == type {
-      location = location.appendingPathComponent(GraphStoreDescription.ckStoreFilename(for: name))
+      // Append the fixed store filename (without GraphCK_ prefix)
+      location = location.appendingPathComponent(GraphStoreDescription.storeFilename())
     }
   }
 }
-
+/*
 @available(iOS 10.0, OSX 10.12, *)
 fileprivate extension Graph {
   // NOTE (M2): legacy helper, unused after migration to NSPersistentCloudKitContainer.
@@ -227,3 +261,4 @@ fileprivate extension Graph {
     }
   }
 }
+*/

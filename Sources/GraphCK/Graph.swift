@@ -31,54 +31,6 @@ extension Notification.Name {
     static let GraphCKSimulatedRemoteChange = Notification.Name("GraphCK.SimulatedRemoteChange")
 }
 
-public struct GraphStoreDescription {
-  /// Datastore name.
-  static let name: String = "default"
-  
-  /// Graph type.
-  static let type: String = NSSQLiteStoreType
-  
-  /// URL reference to where the Graph datastore will live.
-  static var location: URL = File.path(.applicationSupportDirectory, path: "CosmicMind/Graph/")!
-  
-
-    static var appGroupLocation: URL {
-        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.MyHomeBills")!.appendingPathComponent("CosmicMind/Graph/")
-    }
-    
-    public enum locations {
-        case standard
-        case appGroup
-    }
-    
-    public enum graphCloudIdentifiers : String {
-        case old
-        case application
-        case todayExtension
-        case widgetExtension
-    }
-
-    static func setLocation(_ locating: GraphStoreDescription.locations)->URL {
-  
-        switch locating {
-        case .standard:
-            return location
-        case .appGroup:
-            return appGroupLocation
-        }
-    }
-    
-    /// Returns the filename used for CloudKit-backed stores: GraphCK_<name>.sqlite
-    static func ckStoreFilename(for name: String) -> String {
-        return "GraphCK_\(name).sqlite"
-    }
-
-    /// Returns the full URL for the CK store inside the given base directory.
-    static func ckStoreURL(baseURL: URL, name: String) -> URL {
-        return baseURL.appendingPathComponent(ckStoreFilename(for: name))
-    }
-}
-
 @objc(GraphDelegate)
 public protocol GraphDelegate {
   /**
@@ -196,38 +148,73 @@ public class Graph: NSObject {
     NotificationCenter.default.removeObserver(self)
   }
   
+  
   /**
    Initializer to named Graph with optional type and location.
    - Parameter name: A name for the Graph.
-   - Parameter type: Graph type.
-   - Parameter location: A location for storage.
+   - Parameter backend: Graph store backend.
    executed to determine if iCloud support is available or not.
    */
-    public init(name: String? = nil, type: String? = nil) {
-    GraphValueTransformer.register()
-    self.name = name ?? GraphStoreDescription.name
-    self.type = type ?? GraphStoreDescription.type
-    self.location = GraphStoreDescription.location
-    route = "Local/\(self.name)"
-    super.init()
-    observeRemoteStoreChanges()
-    checkICloudAccountStatus()
-    prepareGraphContextRegistry()
-    prepareManagedObjectContext(locate: location)
-  }
+    public init(name: String? = nil, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
+        GraphValueTransformer.register()
+        self.name = name ?? GraphStoreDescription.name
+        self.type = backend.coreDataType
+        self.location = GraphStoreDescription.location
+        route = "Local/\(self.name)"
+        GraphMigrationManager.handlePhase(.preInit, graph: nil)
+        super.init()
+        
+        observeRemoteStoreChanges()
+        checkICloudAccountStatus()
+        prepareGraphContextRegistry()
+        prepareManagedObjectContext(locate: location)
+        GraphMigrationManager.handlePhase(.postInit, graph: self)
+        GraphMigrationManager.handlePhase(.ready, graph: self)
+    }
     
-    public init(name: String? = nil, locate: GraphStoreDescription.locations, type: String? = nil) {
-    GraphValueTransformer.register()
-    self.name = name ?? GraphStoreDescription.name
-    self.type = type ?? GraphStoreDescription.type
-    self.location = GraphStoreDescription.setLocation(locate)
-    route = "Local/\(self.name)"
-    super.init()
-    observeRemoteStoreChanges()
-    checkICloudAccountStatus()
-    prepareGraphContextRegistry()
-    prepareManagedObjectContext(locate: location)
-  }
+    public init(name: String? = nil, locate: GraphStoreDescription.locations, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
+        GraphValueTransformer.register()
+        self.name = name ?? GraphStoreDescription.name
+        self.type = backend.coreDataType
+        self.location = GraphStoreDescription.setLocation(locate)
+        route = "Local/\(self.name)"
+        GraphMigrationManager.handlePhase(.preInit, graph: nil)
+        super.init()
+        
+        observeRemoteStoreChanges()
+        checkICloudAccountStatus()
+        prepareGraphContextRegistry()
+        prepareManagedObjectContext(locate: location)
+        GraphMigrationManager.handlePhase(.postInit, graph: self)
+        GraphMigrationManager.handlePhase(.ready, graph: self)
+    }
+  
+    public init(storeURL: URL, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
+        GraphValueTransformer.register()
+
+        if storeURL.pathExtension == "sqlite" {
+            // Caso: viene passato direttamente il file .sqlite
+            self.name = storeURL.deletingPathExtension().lastPathComponent
+            self.location = storeURL.deletingLastPathComponent()
+        } else {
+            // Caso: viene passata una directory -> ci aspettiamo Graph.sqlite dentro
+            self.name = storeURL.lastPathComponent
+            self.location = storeURL
+        }
+
+        self.type = backend.coreDataType
+        self.route = "" // non usiamo più route per evitare percorsi doppi
+
+        GraphMigrationManager.handlePhase(.preInit, storeURL: storeURL, graph: nil)
+        super.init()
+        
+        observeRemoteStoreChanges()
+        checkICloudAccountStatus()
+        prepareGraphContextRegistry()
+        prepareManagedObjectContext(locate: location)
+        GraphMigrationManager.handlePhase(.postInit, graph: self)
+        GraphMigrationManager.handlePhase(.ready, graph: self)
+    }
       
   /**
    Initializer to named Graph with optional type and location.
@@ -239,7 +226,7 @@ public class Graph: NSObject {
    */
     @available(*, deprecated, message: "Deprecated: uses modern CloudKit container (private DB) under the hood; falls back to local if iCloud is unavailable.")
     public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, completion: ((Bool, Error?) -> Void)? = nil) {
-        self.init(name: name)
+        self.init(name: name, backend: .sqlite)
         self.appIdentifier = appIdentifier?.rawValue
         self.rebuildFromCloud = rebuild
         self.completion = completion
@@ -247,7 +234,7 @@ public class Graph: NSObject {
 
     @available(*, deprecated, message: "Deprecated: uses modern CloudKit container (private DB) under the hood; falls back to local if iCloud is unavailable.")
     public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, locate: GraphStoreDescription.locations, completion: ((Bool, Error?) -> Void)? = nil) {
-        self.init(name: name, locate: locate)
+        self.init(name: name, locate: locate, backend: .sqlite)
         self.appIdentifier = appIdentifier?.rawValue
         self.rebuildFromCloud = rebuild
         self.completion = completion

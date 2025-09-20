@@ -11,11 +11,13 @@ let package = Package(
     products: [
         .library(name: "GraphCK", targets: ["GraphCK"])
         // .library(name: "GraphCKMigration", targets: ["GraphCKMigration"]) // se lo separi
+    ], dependencies: [
+        .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.0")
     ],
     targets: [
         .target(
             name: "GraphCK",
-            dependencies: [],
+            dependencies: ["ZIPFoundation"],
             path: "Sources/GraphCK",
             swiftSettings: [
                 .define("GRAPHCK_IOS16"),
@@ -29,8 +31,9 @@ let package = Package(
         // ),
         .testTarget(
             name: "GraphCKTests",
-            dependencies: ["GraphCK"],
-            path: "Tests/GraphCKTests"
+            dependencies: ["GraphCK", "ZIPFoundation"],
+            path: "Tests/GraphCKTests",
+            resources: [.process("Resources")]
         )
         // .testTarget(
         //     name: "GraphCKMigrationTests",
