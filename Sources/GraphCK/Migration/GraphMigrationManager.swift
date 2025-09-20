@@ -19,6 +19,14 @@ public protocol GraphMigration {
     var id: String { get }
     func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, storeURL: URL, graph: Graph?, completion: @escaping (GraphMigrationResult) -> Void)
     func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, storeURL: URL, graph: Graph?) -> Bool
+    /// Handle remote changes delivered from Persistent History.
+    func handleRemoteChanges(storeURL: URL, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID])
+}
+
+public extension GraphMigration {
+    func handleRemoteChanges(storeURL: URL, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID]) {
+        // Default empty implementation
+    }
 }
 
 /// Manages the migrations of the Graph store.
@@ -131,6 +139,8 @@ public final class GraphMigrationManager {
 public extension Notification.Name {
     /// Notification posted when a migration phase changes.
     static let migrationPhaseDidChange = Notification.Name("GraphMigrationManager.migrationPhaseDidChange")
+    
+    
 }
 
 private extension GraphMigrationManager {
@@ -147,4 +157,18 @@ private extension GraphMigrationManager {
             userInfo: userInfo
         )
     }
+    
+
 }
+extension GraphMigrationManager {
+    /// Handles remote entity changes from Persistent History by notifying all registered migrations.
+    public static func handleRemoteEntityChanges(storeURL: URL, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID]) {
+        _ = initialized
+        for migration in migrations {
+            migration.handleRemoteChanges(storeURL: storeURL, graph: graph, inserted: inserted, updated: updated)
+        }
+    }
+}
+
+
+

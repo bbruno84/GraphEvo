@@ -160,8 +160,7 @@ internal struct Model {
     entityPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     actionPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     relationshipPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
-    
-    
+
     let propertyValue = NSAttributeDescription()
     propertyValue.name = "object"
     propertyValue.attributeType = .transformableAttributeType
@@ -172,6 +171,15 @@ internal struct Model {
     entityPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
     actionPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
     relationshipPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
+
+    // appDataVersion attribute
+    let appDataVersion = NSAttributeDescription()
+    appDataVersion.name = "appDataVersion"
+    appDataVersion.attributeType = .integer64AttributeType
+    appDataVersion.isOptional = true
+    entityPropertyProperties.append(appDataVersion.copy() as! NSAttributeDescription)
+    actionPropertyProperties.append(appDataVersion.copy() as! NSAttributeDescription)
+    relationshipPropertyProperties.append(appDataVersion.copy() as! NSAttributeDescription)
     
     let propertyRelationship = NSRelationshipDescription()
     propertyRelationship.name = "node"

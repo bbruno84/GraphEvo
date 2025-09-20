@@ -262,17 +262,19 @@ public extension Graph {
     }
 }
 
-private extension Graph {
+internal extension Graph {
     func processPersistentHistoryForRemoteChange() {
-        guard let container = persistentContainer else { return }
+        print("[PH][DEBUG] processPersistentHistoryForRemoteChange CALLED for \(self.name)")
+        guard let container = persistentContainer else {return}
         let psc = container.persistentStoreCoordinator
-        guard !psc.persistentStores.isEmpty else { return }
+        guard !psc.persistentStores.isEmpty else {return}
+        guard !psc.persistentStores.isEmpty else {return}
 
         let bg = container.newBackgroundContext()
         bg.transactionAuthor = GraphDeviceAuthor.current()
         bg.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         bg.perform { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {return }
 
             // Richiesta: tutte le transazioni dopo l’ultimo token noto
             let token: NSPersistentHistoryToken? = self._ph_lastToken
@@ -285,9 +287,8 @@ private extension Graph {
             do {
                 guard let result = try bg.execute(request) as? NSPersistentHistoryResult,
                       let transactions = result.result as? [NSPersistentHistoryTransaction],
-                      !transactions.isEmpty else {
-                    return
-                }
+                      !transactions.isEmpty else {return}
+
 
                 // Raccogliamo gli ObjectID per tipo di change
                 var insertedIDs: [NSManagedObjectID] = []
@@ -350,6 +351,14 @@ private extension Graph {
                     NSDeletedObjectsKey:  NSSet(array: deletedIDs)
                 ]
 
+                // Prima di postare la notifica, chiama GraphMigrationManager.handleRemoteEntityChanges
+                let storeURL = GraphStoreDescription.storeURL(baseURL: self.location)
+                GraphMigrationManager.handleRemoteEntityChanges(
+                    storeURL: storeURL,
+                    graph: self,
+                    inserted: insertedIDs,
+                    updated: updatedIDs
+                )
                 // Post sul main (i watcher sono tipicamente agganciati sul main runloop)
                 DispatchQueue.main.async {
                     let targetMOC = self.managedObjectContext ?? container.viewContext
@@ -360,8 +369,21 @@ private extension Graph {
                     )
                 }
             } catch {
-                // Silenzioso per robustezza nei build di test
-            }
+                // Expand error handling for persistent history token store mismatch (error code 134501)
+                let nsError = error as NSError
+                // 134501: "Unable to find stores referenced in History Token" (NSCocoaErrorDomain)
+                if nsError.domain == NSCocoaErrorDomain,
+                   nsError.code == 134501 {
+                    self._ph_lastToken = nil
+                    self._ph_tokenStore.clear()
+                    let storeUUID = self._ph_currentStoreUUID()
+                    self._ph_tokenStore.clearBackup(storeUUID: storeUUID)
+                    return
+                }
+                debugPrint("[PH][DEBUG] Error processing remote change: \(error)")
+                }
+                
+            
         }
     }
 }
