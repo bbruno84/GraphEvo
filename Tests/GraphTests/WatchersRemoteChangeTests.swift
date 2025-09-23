@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import GraphCK
+@testable import Graph
 import CoreData
 
 final class WatchersRemoteChangeTests: XCTestCase {
@@ -19,7 +19,9 @@ final class WatchersRemoteChangeTests: XCTestCase {
     /// Create a Graph and a Watcher for a given entity type, retain the watcher strongly.
     @discardableResult
     private func makeGraphAndWatcher(named graphName: String, watchingType type: String) -> (graph: Graph, watcher: Watch<Entity>) {
-        let graph = Graph(name: graphName)
+        var config = GraphStoreConfiguration()
+        config.name = graphName
+        let graph = Graph(configuration: config)
         let watcher = Watch<Entity>(graph: graph).where(.type(type))
         self.strongWatcher = watcher
         return (graph, watcher)
@@ -63,8 +65,10 @@ final class WatchersRemoteChangeTests: XCTestCase {
                 onInsert?(entity, source)
             }
         }
-
-        let graph = Graph(name: "TestLocalWatcher")
+        
+        var config = GraphStoreConfiguration()
+        config.name = "TestLocalWatcher"
+        let graph = Graph(configuration: config)
         let delegate = Delegate()
         let watcher = Watch<Entity>(graph: graph).where(.type("T"))
         watcher.delegate = delegate
@@ -98,8 +102,10 @@ final class WatchersRemoteChangeTests: XCTestCase {
                 onUpdate?(entity, property, value, source)
             }
         }
-
-        let graph = Graph(name: "TestUpdateWatcher")
+        
+        var config = GraphStoreConfiguration()
+        config.name = "TestUpdateWatcher"
+        let graph = Graph(configuration: config)
         let delegate = Delegate()
         let watcher = Watch<Entity>(graph: graph).where(.type("T"))
         watcher.delegate = delegate
@@ -137,8 +143,10 @@ final class WatchersRemoteChangeTests: XCTestCase {
                 onRemove?(entity, property, value, source)
             }
         }
-
-        let graph = Graph(name: "TestRemoveWatcher")
+        
+        var config = GraphStoreConfiguration()
+        config.name = "TestRemoveWatcher"
+        let graph = Graph(configuration: config)
         let delegate = Delegate()
         let watcher = Watch<Entity>(graph: graph).where(.type("T"))
         watcher.delegate = delegate

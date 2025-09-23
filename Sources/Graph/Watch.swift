@@ -377,7 +377,7 @@ public class Watch<T: Node>: Watchable {
    instance.
    - Parameter graph: A Graph instance.
    */
-  public init(graph: Graph = Graph()) {
+    public init(graph: Graph = Graph(configuration: GraphStoreConfiguration())) {
     self.graph = graph
     prepare()
   }

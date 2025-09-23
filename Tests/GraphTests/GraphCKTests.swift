@@ -7,7 +7,7 @@
 
 
 import XCTest
-@testable import GraphCK
+@testable import Graph
 
 final class GraphCKTests: XCTestCase {
 
@@ -22,10 +22,13 @@ final class GraphCKTests: XCTestCase {
         // Graph.cloudKitContainerIdentifier = "iCloud.com.yourdomain.yourapp"
 
         // 1) Init graph (local/AppGroup behavior preserved by existing initializers)
-        let g = Graph(name: name)
+        var config = GraphStoreConfiguration()
+        config.name = name
+        let g = Graph(configuration: config)
+        
 
         // 2) Check file naming
-        let storeURL = g.locationPublic
+        guard let storeURL = g.runtimeStoreURL else {XCTIssue(type: .assertionFailure, compactDescription: "No Store URL available"); return}
         XCTAssertEqual(storeURL.lastPathComponent, "GraphCK_\(name).sqlite", "Store file should be renamed to GraphCK_<name>.sqlite")
 
         // 3) Context should be ready
@@ -34,7 +37,7 @@ final class GraphCKTests: XCTestCase {
         // 4) Save / Fetch roundtrip (uses original Graph APIs if present)
         //    If your project uses a different API to persist entities, adjust this block accordingly.
         
-            let e = Entity("note")
+            let e = Entity("note", graph: g)
             e[dynamicMember: "title"] = "Hello M2"
 
             // Persist (adjust if your Entity save API differs)
@@ -71,7 +74,9 @@ final class GraphCKTests: XCTestCase {
         Graph.cloudKitContainerIdentifier = nil
         
         let exp = self.expectation(description: "cloud status callback without identifier")
-        let g = Graph(name: "StatusProbe_NoID")
+        var config = GraphStoreConfiguration()
+        config.name = "StatusProbe_NoID"
+        let g = Graph(configuration: config)
         let stub = CloudStatusDelegateStub(expectation: exp)
         g.cloudStatusDelegate = stub
         
@@ -91,7 +96,9 @@ final class GraphCKTests: XCTestCase {
         Graph.cloudKitContainerIdentifier = "iCloud.com.example.dummy"
         
         let exp = self.expectation(description: "cloud status callback with identifier")
-        let g = Graph(name: "StatusProbe_WithID")
+        var config = GraphStoreConfiguration()
+        config.name = "StatusProbe_WithID"
+        let g = Graph(configuration: config)
         let stub = CloudStatusDelegateStub(expectation: exp)
         g.cloudStatusDelegate = stub
         

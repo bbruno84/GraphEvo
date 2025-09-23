@@ -15,7 +15,7 @@
 import XCTest
 import UIKit
 import PDFKit
-@testable import GraphCK
+@testable import Graph
 
 final class GraphValueTransformerRoundtripTests: XCTestCase {
 

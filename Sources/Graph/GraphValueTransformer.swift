@@ -9,7 +9,7 @@ import Foundation
 import UIKit
 import PDFKit
 
-enum GraphArchiverError: Error {
+public enum GraphArchiverError: Error {
     case unsupported(String)
 }
 
@@ -31,11 +31,11 @@ enum GraphAllowedClasses {
 
 /// Serializza oggetti legacy (usati nel vecchio campo `object`) in modo sicuro.
 /// Garantisce compatibilità con `GraphValueTransformer`.
-enum GraphArchiver {
+public enum GraphArchiver {
     
     /// Serializza un oggetto compatibile in `Data`.
     /// - Throws: se il tipo non è archiviabile.
-    static func archive(_ object: Any) throws -> Data {
+    public static func archive(_ object: Any) throws -> Data {
         let archivable: Any
 
         switch object {
@@ -89,17 +89,18 @@ enum GraphArchiver {
 /// A secure value transformer used to archive and unarchive property values in Graph.
 /// Ensures compatibility with `NSPersistentCloudKitContainer` by enforcing a strict class whitelist.
 @objc(GraphValueTransformer)
-final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
+public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
     
     /// The name used to register the transformer.
     static let name = NSValueTransformerName("GraphValueTransformer")
     
     /// Class whitelist for secure decoding.
-    override class var allowedTopLevelClasses: [AnyClass] {
+    public override class var allowedTopLevelClasses: [AnyClass] {
+        
         return GraphAllowedClasses.list
     }
     
-    override func reverseTransformedValue(_ value: Any?) -> Any? {
+    public override func reverseTransformedValue(_ value: Any?) -> Any? {
         guard let data = value as? Data else {
             return nil
         }
@@ -127,9 +128,21 @@ final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
             return nil
         }
     }
+
+    public override func transformedValue(_ value: Any?) -> Any? {
+        guard let value else { return nil }
+        do {
+            let data = try GraphArchiver.archive(value)
+            print("✅ [GraphValueTransformer] Transformed value of type \(type(of: value)) into Data (\(data.count) bytes)")
+            return data
+        } catch {
+            print("❌ [GraphValueTransformer] Failed to transform value of type \(type(of: value)): \(error)")
+            return nil
+        }
+    }
     
     /// Registers the transformer globally.
-    static func register() {
+    public static func register() {
         let transformer = GraphValueTransformer()
         ValueTransformer.setValueTransformer(transformer, forName: GraphValueTransformer.name)
     }

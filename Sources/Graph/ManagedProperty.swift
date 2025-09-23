@@ -43,9 +43,19 @@ internal class ManagedProperty: NamedManagedObject {
    - Parameter node: A ManagedNode subclass.
    - Parameter managedObjectContext: A reference to a NSManagedObjectContext.
    */
-  convenience init(name: String, object: Any, node: ManagedNode, managedObjectContext: NSManagedObjectContext) {    
+  convenience init(name: String, object: Any, node: ManagedNode, managedObjectContext: NSManagedObjectContext) {
     self.init(name: name, node: node, managedObjectContext: managedObjectContext)
-    self.object = object
+    do {
+        self.object = try GraphArchiver.archive(object)
+        let moc = managedObjectContext
+        if let route = GraphContextRegistry.managedObjectContexts.first(where: { $0.value == moc })?.key,
+           let config = GraphContextRegistry.configurations[route] {
+            self.appDataVersionValue = config.requiredAppDataVersion
+        }
+    } catch {
+        print("[Graph Error] Failed to archive object '\(name)' of type \(type(of: object)): \(error)")
+        self.object = Data() // fallback to empty Data
+    }
   }
   
   /// Marks node for deletion.

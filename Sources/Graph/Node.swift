@@ -100,7 +100,9 @@ public class Node: NSObject, Codable {
    */
   public required convenience init(from decoder: Decoder) throws {
     let graphInfo = decoder.userInfo[.graph]
-    let graph = graphInfo as? Graph ?? Graph(name: graphInfo as? String ?? GraphStoreDescription.name)
+    var configuration = GraphStoreConfiguration()
+    configuration.name = graphInfo as? String ?? "default"
+    let graph = graphInfo as? Graph ?? Graph(configuration: configuration)
     
     let values = try decoder.container(keyedBy: CodingKeys.self)
     let type = try values.decode(String.self, forKey: .type)
@@ -143,7 +145,10 @@ public class Node: NSObject, Codable {
    */
   @nonobjc
   public convenience init(_ type: String, graph: String) {
-    self.init(type, graph: Graph(name: graph))
+    var configuration = GraphStoreConfiguration()
+      configuration.name = graph
+      let graph = Graph(configuration: configuration)
+    self.init(type, graph: graph)
   }
   
   /**
@@ -161,9 +166,10 @@ public class Node: NSObject, Codable {
    Initializer that accepts a type value.
    - Parameter _ type: A reference to a type.
    */
-  public convenience init(_ type: String) {
-    self.init(type, graph: GraphStoreDescription.name)
-  }
+  // public convenience init(_ type: String) {
+  //   self.init(type, graph: GraphStoreDescription.name)
+  // }
+  #warning("⚠️ init(_ type: String) is commented out for verification. Refactor call sites to use init(type:graph:) instead.")
   
   /// Generic creation of the managed node type.
   class func createNode(_ type: String, in context: NSManagedObjectContext) -> ManagedNode {
@@ -228,6 +234,7 @@ public class Node: NSObject, Codable {
     }
     
     private func setProperty(named name: String, value: Any?) {
+        print("[Graph Debug] setProperty '\(name)' value=\(String(describing: value)) type=\(Swift.type(of: value))")
         node.setProperty(named: name, value: value)
     }
   

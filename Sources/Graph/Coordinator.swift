@@ -94,7 +94,7 @@ internal struct Coordinator {
     return coordinator!
   }
 }
-
+/*
 @available(*, deprecated, message: "M2: Replaced by NSPersistentCloudKitContainer; kept for compatibility")
 internal extension Graph {
   /**
@@ -133,3 +133,4 @@ internal extension Graph {
   }
   
 }
+*/

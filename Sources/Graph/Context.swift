@@ -41,6 +41,7 @@ internal struct GraphContextRegistry {
   static var dispatchToken = false
   static var added: [String: Bool]!
   static var managedObjectContexts: [String: NSManagedObjectContext]!
+  static var configurations: [String: GraphStoreConfiguration]!
 }
 
 internal struct Context {
@@ -74,6 +75,48 @@ internal struct Context {
     
     return moc
   }
+
+  internal static func makeLocalContainer(name: String, storeURL: URL, configuration: GraphStoreConfiguration) -> NSPersistentContainer {
+    print("🛠 [GraphCK] Preparing LOCAL container at: \(storeURL)")
+    print("🔎 [GraphCK] (Theory) Local storeURL should be: \(storeURL)")
+    let storeDescription = NSPersistentStoreDescription(url: storeURL)
+    storeDescription.type = NSSQLiteStoreType
+    storeDescription.shouldAddStoreAsynchronously = false
+    storeDescription.shouldMigrateStoreAutomatically = true
+    storeDescription.shouldInferMappingModelAutomatically = true
+    
+    let container = NSPersistentContainer(name: name, managedObjectModel: Model.create())
+    container.persistentStoreDescriptions = [storeDescription]
+    print("🔎 [GraphCK] (After load) Local container will use store at: \(storeURL)")
+    print("✅ [GraphCK] Local container created with store at: \(storeURL)")
+    return container
+  }
+  
+  internal static func makeCloudContainer(name: String, storeURL: URL, configuration: GraphStoreConfiguration) -> NSPersistentCloudKitContainer {
+    print("🛠 [GraphCK] Preparing CLOUD container at: \(storeURL)")
+    print("🔎 [GraphCK] (Theory) Cloud storeURL should be: \(storeURL)")
+    let storeDescription = NSPersistentStoreDescription(url: storeURL)
+    storeDescription.type = NSSQLiteStoreType
+    storeDescription.shouldAddStoreAsynchronously = false
+    storeDescription.shouldMigrateStoreAutomatically = true
+    storeDescription.shouldInferMappingModelAutomatically = true
+    storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+    storeDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+
+    var resolvedContainerID: String? = configuration.cloudKitContainerIdentifier
+    if resolvedContainerID == nil || resolvedContainerID?.isEmpty == true {
+      resolvedContainerID = Bundle.main.object(forInfoDictionaryKey: "GraphCloudKitContainerIdentifier") as? String
+    }
+    if let containerID = resolvedContainerID, !containerID.isEmpty {
+      storeDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: containerID)
+    }
+    
+    let container = NSPersistentCloudKitContainer(name: name, managedObjectModel: Model.create())
+    container.persistentStoreDescriptions = [storeDescription]
+    print("🔎 [GraphCK] (After load) Cloud container will use store at: \(storeURL)")
+    print("✅ [GraphCK] Cloud container created with store at: \(storeURL)")
+    return container
+  }
 }
 
 /// NSManagedObjectContext extension.
@@ -87,24 +130,16 @@ internal extension Graph {
     GraphContextRegistry.dispatchToken = true
     GraphContextRegistry.added = [:]
     GraphContextRegistry.managedObjectContexts = [String: NSManagedObjectContext]()
+    GraphContextRegistry.configurations = [String: GraphStoreConfiguration]()
   }
   
   /**
-   Prapres the managedObjectContext.
-   - Parameter locate: The location URL.
+   Prepares the managedObjectContext.
+   - Parameter configuration: The store configuration.
    */
-  func prepareManagedObjectContext(locate: URL) {
-    // Normalizza il percorso in base al tipo di input
-    if locate.pathExtension == "sqlite" {
-        // Se è già un file .sqlite, usalo direttamente
-        location = locate
-    } else {
-        // Rispetta il route (Local/<name> o Cloud/<name>)
-        location = locate.appendingPathComponent(route).appendingPathComponent("Graph.sqlite")
-    }
-
-    // Final SQLite URL: use new API to get store URL
-    let storeURL = location
+  func prepareManagedObjectContext(configuration: GraphStoreConfiguration) {
+    let storeURL = configuration.resolvedStoreURL
+    runtimeStoreURL = storeURL
 
     if type == NSInMemoryStoreType {
       // In-memory store configuration
@@ -126,8 +161,9 @@ internal extension Graph {
         self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
-        self.location = storeURL
+        self.runtimeStoreURL = storeURL
         GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+        GraphContextRegistry.configurations[self.route] = configuration
       }
       return
     }
@@ -146,119 +182,131 @@ internal extension Graph {
         }
     }
 
-    // Store description with M2 options
-    let storeDescription = NSPersistentStoreDescription(url: storeURL)
-    storeDescription.type = NSSQLiteStoreType
-    storeDescription.shouldAddStoreAsynchronously = false
-    storeDescription.shouldMigrateStoreAutomatically = true
-    storeDescription.shouldInferMappingModelAutomatically = true
-    storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-    storeDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+    if let _ = configuration.cloudKitContainerIdentifier {
+      let container = Context.makeCloudContainer(name: name, storeURL: storeURL, configuration: configuration)
 
-    // Resolve CloudKit container identifier: runtime override > Info.plist fallback
-    var resolvedContainerID: String? = Graph.cloudKitContainerIdentifier
-    if resolvedContainerID == nil || resolvedContainerID?.isEmpty == true {
-      resolvedContainerID = Bundle.main.object(forInfoDictionaryKey: "GraphCloudKitContainerIdentifier") as? String
-    }
-    if let containerID = resolvedContainerID, !containerID.isEmpty {
-      storeDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: containerID)
-    }
+      print("🛠 [GraphCK] Creating CloudKit container named: \(name)")
+      print("📦 [GraphCK] Loading persistent store configured at: \(storeURL)")
 
-    print("🛠 [GraphCK] Creating CloudKit container named: \(name)")
+      container.loadPersistentStores { [unowned self] (desc, error) in
+        if let error = error {
+          print("⚠️ [GraphCK] Failed to load CloudKit store. Error: \(error)")
+          // Fallback: try a plain local NSPersistentContainer (no CloudKit) instead of crashing.
+          let plain = Context.makeLocalContainer(name: name, storeURL: storeURL, configuration: configuration)
+          
+          plain.loadPersistentStores { [unowned self] (desc, plainError) in
+            if let plainError = plainError {
+              // Do not crash during tests: log both errors and leave MOC unset.
+              debugPrint("[Graph Error] CloudKit container failed: \(error.localizedDescription); fallback also failed: \(plainError.localizedDescription)")
+              return
+            }
+            // Success with plain container: proceed with local-only context.
+            print("✅ [GraphCK] Fallback local store loaded successfully at: \(storeURL.lastPathComponent)")
+            self.persistentContainer = nil
+            self.managedObjectContext = plain.viewContext
+            // Mark per-device author for potential filtering in Persistent History
+            self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
+            self.managedObjectContext.name = "GraphCK.viewContext"
+            self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+            self.managedObjectContext.undoManager = nil
+            self.managedObjectContext.automaticallyMergesChangesFromParent = true
+            self.runtimeStoreURL = desc.url ?? storeURL
+            print("🔎 [GraphCK] (Resolved) runtimeStoreURL = \(String(describing: self.runtimeStoreURL))")
+            GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+            GraphContextRegistry.configurations[self.route] = configuration
 
-    // Create modern container
-    let container = NSPersistentCloudKitContainer(name: name, managedObjectModel: Model.create())
-    container.persistentStoreDescriptions = [storeDescription]
-
-    print("📦 [GraphCK] Loading persistent store at: \(storeURL)")
-
-    container.loadPersistentStores { [unowned self] (desc, error) in
-      if let error = error {
-        print("⚠️ [GraphCK] Failed to load CloudKit store. Error: \(error)")
-        // Fallback: try a plain local NSPersistentContainer (no CloudKit) instead of crashing.
-        let plain = NSPersistentContainer(name: name, managedObjectModel: Model.create())
-        // Reuse the same storeDescription but ensure CloudKit options are cleared.
-        let plainDesc = NSPersistentStoreDescription(url: storeURL)
-        plainDesc.type = NSSQLiteStoreType
-        plainDesc.shouldAddStoreAsynchronously = false
-        plainDesc.shouldMigrateStoreAutomatically = true
-        plainDesc.shouldInferMappingModelAutomatically = true
-        plain.persistentStoreDescriptions = [plainDesc]
-        
-        plain.loadPersistentStores { [unowned self] (desc, plainError) in
-          if let plainError = plainError {
-            // Do not crash during tests: log both errors and leave MOC unset.
-            debugPrint("[Graph Error] CloudKit container failed: \(error.localizedDescription); fallback also failed: \(plainError.localizedDescription)")
-            return
+            if let store = plain.persistentStoreCoordinator.persistentStores.first {
+                do {
+                    let current = try GraphStoreMetadata.read(from: configuration, at: runtimeStoreURL)
+                    if current.graphModel == nil || current.appData == nil {
+                        try GraphStoreMetadata.write(configuration.requiredVersions,
+                                                     using: plain.persistentStoreCoordinator,
+                                                     for: store)
+                        print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(configuration.requiredVersions)")
+                    }
+                } catch {
+                    print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
+                }
+            }
           }
-          // Success with plain container: proceed with local-only context.
-          print("✅ [GraphCK] Fallback local store loaded successfully at: \(storeURL.lastPathComponent)")
-          self.persistentContainer = nil
-          self.managedObjectContext = plain.viewContext
-          // Mark per-device author for potential filtering in Persistent History
-          self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
-          self.managedObjectContext.name = "GraphCK.viewContext"
-          self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-          self.managedObjectContext.undoManager = nil
-          self.managedObjectContext.automaticallyMergesChangesFromParent = true
-          self.location = desc.url ?? storeURL
-          GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
-
-          if let store = plain.persistentStoreCoordinator.persistentStores.first {
-              do {
-                  let current = try GraphStoreMetadata.read(from: storeURL)
-                  if current.graphModel == nil || current.appData == nil {
-                      try GraphStoreMetadata.write(GraphStoreDescription.requiredVersions,
-                                                   using: plain.persistentStoreCoordinator,
-                                                   for: store)
-                      print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(GraphStoreDescription.requiredVersions)")
-                  }
-              } catch {
-                  print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
-              }
-          }
+          return
         }
-        return
-      }
-      self.persistentContainer = container
-      self.managedObjectContext = container.viewContext
-      // Mark per-device author for potential filtering in Persistent History
-      self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
-      self.managedObjectContext.name = "GraphCK.viewContext"
-      self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-      self.managedObjectContext.undoManager = nil
-      self.managedObjectContext.automaticallyMergesChangesFromParent = true
-      self.location = desc.url ?? storeURL
-      GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+        self.persistentContainer = container
+        self.managedObjectContext = container.viewContext
+        // Mark per-device author for potential filtering in Persistent History
+        self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
+        self.managedObjectContext.name = "GraphCK.viewContext"
+        self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        self.managedObjectContext.undoManager = nil
+        self.managedObjectContext.automaticallyMergesChangesFromParent = true
+        self.runtimeStoreURL = desc.url ?? storeURL
+        print("🔎 [GraphCK] (Resolved) runtimeStoreURL = \(String(describing: self.runtimeStoreURL))")
+        GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+        GraphContextRegistry.configurations[self.route] = configuration
 
-      if let store = container.persistentStoreCoordinator.persistentStores.first {
-          do {
-              let current = try GraphStoreMetadata.read(from: storeURL)
-              if current.graphModel == nil || current.appData == nil {
-                  try GraphStoreMetadata.write(GraphStoreDescription.requiredVersions,
-                                               using: container.persistentStoreCoordinator,
-                                               for: store)
-                  print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(GraphStoreDescription.requiredVersions)")
-              }
-          } catch {
-              print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
-          }
-      }
+        if let store = container.persistentStoreCoordinator.persistentStores.first {
+            do {
+                let current = try GraphStoreMetadata.read(from: configuration, at: runtimeStoreURL)
+                if current.graphModel == nil || current.appData == nil {
+                    try GraphStoreMetadata.write(configuration.requiredVersions,
+                                                 using: container.persistentStoreCoordinator,
+                                                 for: store)
+                    print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(configuration.requiredVersions)")
+                }
+            } catch {
+                print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
+            }
+        }
 
-      print("✅ [GraphCK] CloudKit persistent container loaded successfully.")
-      if GraphContextRegistry.added[self.route] != true {
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handlePersistentStoreRemoteChange(_:)),
-                                               name: .NSPersistentStoreRemoteChange,
-                                               object: container.persistentStoreCoordinator)
-        GraphContextRegistry.added[self.route] = true
-        print("📡 [GraphCK] Registered for NSPersistentStoreRemoteChange notifications.")
-      } else {
-        print("📡 [GraphCK] Remote change observer already registered for route: \(self.route)")
+        print("✅ [GraphCK] CloudKit persistent container loaded successfully.")
+        if GraphContextRegistry.added[self.route] != true {
+          NotificationCenter.default.addObserver(self,
+                                                 selector: #selector(handlePersistentStoreRemoteChange(_:)),
+                                                 name: .NSPersistentStoreRemoteChange,
+                                                 object: container.persistentStoreCoordinator)
+          GraphContextRegistry.added[self.route] = true
+          print("📡 [GraphCK] Registered for NSPersistentStoreRemoteChange notifications.")
+        } else {
+          print("📡 [GraphCK] Remote change observer already registered for route: \(self.route)")
+        }
+        // Prepare Persistent History bootstrap on launch (token restore / bootstrap-from-now).
+        // This is safe to call multiple times; it will no-op if already initialized.
+        self.ph_prepareOnLaunchAfterContainerReady()
       }
-      // Prepare Persistent History bootstrap on launch (token restore / bootstrap-from-now).
-      // This is safe to call multiple times; it will no-op if already initialized.
-      self.ph_prepareOnLaunchAfterContainerReady()
+    } else {
+      let container = Context.makeLocalContainer(name: name, storeURL: storeURL, configuration: configuration)
+
+      container.loadPersistentStores { [unowned self] (desc, error) in
+        if let error = error {
+          fatalError("[Graph Error] Failed to load local store: \(error.localizedDescription)")
+        }
+        self.persistentContainer = nil
+        self.managedObjectContext = container.viewContext
+        // Mark per-device author for potential filtering in Persistent History
+        self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
+        self.managedObjectContext.name = "GraphCK.viewContext"
+        self.managedObjectContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        self.managedObjectContext.undoManager = nil
+        self.managedObjectContext.automaticallyMergesChangesFromParent = true
+        self.runtimeStoreURL = desc.url ?? storeURL
+        print("🔎 [GraphCK] (Resolved) runtimeStoreURL = \(String(describing: self.runtimeStoreURL))")
+        GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
+        GraphContextRegistry.configurations[self.route] = configuration
+
+        if let store = container.persistentStoreCoordinator.persistentStores.first {
+            do {
+                let current = try GraphStoreMetadata.read(from: configuration, at: runtimeStoreURL)
+                if current.graphModel == nil || current.appData == nil {
+                    try GraphStoreMetadata.write(configuration.requiredVersions,
+                                                 using: container.persistentStoreCoordinator,
+                                                 for: store)
+                    print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(configuration.requiredVersions)")
+                }
+            } catch {
+                print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
+            }
+        }
+      }
     }
   }
   
@@ -266,7 +314,7 @@ internal extension Graph {
   func prepareSQLite() {
     if NSSQLiteStoreType == type {
       // Append the fixed store filename (without GraphCK_ prefix)
-      location = location.appendingPathComponent(GraphStoreDescription.storeFilename())
+      runtimeStoreURL = (runtimeStoreURL ?? configuration.resolvedLocation).appendingPathComponent("Graph.sqlite")
     }
   }
 }

@@ -10,14 +10,15 @@
 
 #if canImport(XCTest)
 import XCTest
-@testable import GraphCK
+@testable import Graph
 import CoreData
 
 final class PersistentHistoryTests: XCTestCase {
     func testSimulatedRemoteChangeTriggersMigration() throws {
         // 1. Create a fresh Graph with unique name
-        let graphName = "TestGraph)"
-        let graph = Graph(name: graphName)
+        var config = GraphStoreConfiguration()
+        config.name = "TestGraph)"
+        let graph = Graph(configuration: config)
 
         // 2. Insert a ManagedEntityProperty without appDataVersion
         let nbg = graph.newBackgroundContext()
@@ -54,7 +55,7 @@ final class PersistentHistoryTests: XCTestCase {
 
         XCTAssertEqual(
             version,
-            GraphStoreDescription.requiredVersions.appData,
+            graph.configuration.requiredVersions.appData,
             "appDataVersion should be upgraded on remote change"
         )
     }

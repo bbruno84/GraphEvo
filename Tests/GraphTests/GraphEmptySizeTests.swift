@@ -6,13 +6,14 @@
 //
 
 import XCTest
-@testable import GraphCK
+@testable import Graph
 
 final class GraphEmptySizeTests: XCTestCase {
     func testEmptyGraphFileSize() throws {
         // 1. Usa un nome random per non confliggere con altri test
-        let graphName = "EmptyGraph-\(UUID().uuidString)"
-        let graph = Graph(name: graphName)
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "EmptyGraph-\(UUID().uuidString)"
+        let graph = Graph(configuration: configuration)
 
         // 2. Sincronizza subito (crea i file sul disco)
         graph.sync()

@@ -43,9 +43,9 @@ public class Search<T: Node> {
    instance.
    - Parameter graph: A Graph instance.
    */
-  public init(graph: Graph = Graph()) {
-    self.graph = graph
-  }
+    public init(graph: Graph = Graph(configuration: GraphStoreConfiguration())) {
+        self.graph = graph
+    }
   
   /**
    Clears the search parameters.

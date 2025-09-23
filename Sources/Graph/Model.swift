@@ -43,12 +43,12 @@ internal struct ModelIdentifier {
   static let relationshipGroupName: String = "ManagedRelationshipGroup"
 }
 
-internal struct Model {
+public struct Model {
   /// A static reference to the managedObjectModel.
   static var managedObjectModel: NSManagedObjectModel?
   
   /// Creates a NSManagedObjectModel.
-  static func create() -> NSManagedObjectModel {
+  public static func create() -> NSManagedObjectModel {
     _ = Model.__once
     return Model.managedObjectModel!
   }
@@ -164,7 +164,8 @@ internal struct Model {
     let propertyValue = NSAttributeDescription()
     propertyValue.name = "object"
     propertyValue.attributeType = .transformableAttributeType
-    propertyValue.attributeValueClassName = NSStringFromClass(NSObject.self)
+    //propertyValue.attributeValueClassName = NSStringFromClass(NSObject.self)
+    propertyValue.attributeValueClassName = nil
     propertyValue.valueTransformerName = GraphValueTransformer.name.rawValue
     propertyValue.isOptional = true
     propertyValue.allowsExternalBinaryDataStorage = true

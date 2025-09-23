@@ -8,7 +8,7 @@
 
 import XCTest
 import CoreData
-@testable import GraphCK
+@testable import Graph
 
 final class MigrationV1Tests: XCTestCase {
     

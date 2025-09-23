@@ -33,42 +33,42 @@ extension Notification.Name {
 
 @objc(GraphDelegate)
 public protocol GraphDelegate {
-  /**
-   A delegation method that is executed when a graph instance
-   will prepare cloud storage.
-   - Parameter graph: A Graph instance.
-   - Parameter transition: A GraphCloudStorageTransition value.
-   */
-  @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
-  @objc
-  optional func graphWillPrepareCloudStorage(graph: Graph, transition: GraphCloudStorageTransition)
-  
-  /**
-   A delegation method that is executed when a graph instance
-   did prepare cloud storage.
-   - Parameter graph: A Graph instance.
-   */
-  @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
-  @objc
-  optional func graphDidPrepareCloudStorage(graph: Graph)
-  
-  /**
-   A delegation method that is executed when a graph instance
-   will update from cloud storage.
-   - Parameter graph: A Graph instance.
-   */
-  @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
-  @objc
-  optional func graphWillUpdateFromCloudStorage(graph: Graph)
-  
-  /**
-   A delegation method that is executed when a graph instance
-   did update from cloud storage.
-   - Parameter graph: A Graph instance.
-   */
-  @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
-  @objc
-  optional func graphDidUpdateFromCloudStorage(graph: Graph)
+    /**
+     A delegation method that is executed when a graph instance
+     will prepare cloud storage.
+     - Parameter graph: A Graph instance.
+     - Parameter transition: A GraphCloudStorageTransition value.
+     */
+    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
+    @objc
+    optional func graphWillPrepareCloudStorage(graph: Graph, transition: GraphCloudStorageTransition)
+    
+    /**
+     A delegation method that is executed when a graph instance
+     did prepare cloud storage.
+     - Parameter graph: A Graph instance.
+     */
+    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
+    @objc
+    optional func graphDidPrepareCloudStorage(graph: Graph)
+    
+    /**
+     A delegation method that is executed when a graph instance
+     will update from cloud storage.
+     - Parameter graph: A Graph instance.
+     */
+    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
+    @objc
+    optional func graphWillUpdateFromCloudStorage(graph: Graph)
+    
+    /**
+     A delegation method that is executed when a graph instance
+     did update from cloud storage.
+     - Parameter graph: A Graph instance.
+     */
+    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
+    @objc
+    optional func graphDidUpdateFromCloudStorage(graph: Graph)
 }
 
 public enum GraphCloudStatus {
@@ -83,163 +83,199 @@ public protocol GraphCloudStatusDelegate: AnyObject {
 
 @objc(Graph)
 public class Graph: NSObject {
-  /// Graph location.
-  internal var location: URL
     
-  public var locationPublic : URL { return location}
-  
-  /// Graph route.
-  public internal(set) var route: String
-  
-  /// Graph name.
-  public internal(set) var name: String
+    /// The configuration used to initialize this Graph.
+    public private(set) var configuration: GraphStoreConfiguration
     
-  /// Graph User.
-  public internal(set) var appIdentifier: String?
+    /// Graph name.
+    public var name: String { configuration.name }
+    /// Graph route.
+    public var route: String { configuration.route }
+    /// Graph location.
+    public var runtimeStoreURL: URL?
+    public var location: URL {
+        runtimeStoreURL ?? configuration.resolvedLocation
+    }
+    /// Graph type.
+    public var type: String { configuration.backend.coreDataType }
     
-  /// Graph should be rebuilded from cloud data
-  public internal(set) var rebuildFromCloud: Bool?
-  
-  /// Graph type.
-  public internal(set) var type: String
-  
-  /// Worker managedObjectContext.
-  public internal(set) var managedObjectContext: NSManagedObjectContext!
-  
-  /// Number of items to return.
-  public var batchSize = 0 // 0 == no limit
-  
-  /// Start the return results from this offset.
-  public var batchOffset = 0
-  
-  /// Watch instances.
-  public internal(set) lazy var watchers : [Watcher] = []
-  
-  /// Optional delegate to receive iCloud availability updates (informational).
-  public weak var cloudStatusDelegate: GraphCloudStatusDelegate? {
-      didSet {
-          if let status = lastCloudStatus, let delegate = cloudStatusDelegate {
-              delegate.graph(self, iCloudStatusChanged: status)
-          }
-      }
-  }
-
-  /// M2: cache last known iCloud availability to notify late-bound delegates.
-  private var lastCloudStatus: GraphCloudStatus?
-  
-  public weak var delegate: GraphDelegate?
-
+    /// Graph should be rebuilded from cloud data
+    public internal(set) var rebuildFromCloud: Bool?
+    
+    /// Worker managedObjectContext.
+    public internal(set) var managedObjectContext: NSManagedObjectContext!
+    
+    /// Number of items to return.
+    public var batchSize = 0 // 0 == no limit
+    
+    /// Start the return results from this offset.
+    public var batchOffset = 0
+    
+    /// Watch instances.
+    public internal(set) lazy var watchers : [Watcher] = []
+    
+    /// Optional delegate to receive iCloud availability updates (informational).
+    public weak var cloudStatusDelegate: GraphCloudStatusDelegate? {
+        didSet {
+            if let status = lastCloudStatus, let delegate = cloudStatusDelegate {
+                delegate.graph(self, iCloudStatusChanged: status)
+            }
+        }
+    }
+    
+    /// M2: cache last known iCloud availability to notify late-bound delegates.
+    private var lastCloudStatus: GraphCloudStatus?
+    
+    public weak var delegate: GraphDelegate?
+    
     /// M2: Optional override for the CloudKit container identifier.
     /// If set, this takes precedence over Info.plist and enables CloudKit sync without relying on plist UX.
     public static var cloudKitContainerIdentifier: String?
-
+    
     /// M2: Keep a reference to the CloudKit container so we can spawn background contexts, etc.
     internal var persistentContainer: NSPersistentCloudKitContainer?
-  
-  /**
-   A reference to the graph completion handler.
-   - Parameter success: A boolean indicating if the cloud connection
-   is possible or not.
-   */
-  internal var completion: ((Bool, Error?) -> Void)?
-  
-  /// Deinitializer that removes the Graph from NSNotificationCenter.
-  deinit {
-    NotificationCenter.default.removeObserver(self)
-  }
-  
-  
-  /**
-   Initializer to named Graph with optional type and location.
-   - Parameter name: A name for the Graph.
-   - Parameter backend: Graph store backend.
-   executed to determine if iCloud support is available or not.
-   */
-    public init(name: String? = nil, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
-        GraphValueTransformer.register()
-        self.name = name ?? GraphStoreDescription.name
-        self.type = backend.coreDataType
-        self.location = GraphStoreDescription.location
-        route = "Local/\(self.name)"
-        GraphMigrationManager.handlePhase(.preInit, graph: nil)
-        super.init()
-        
-        observeRemoteStoreChanges()
-        checkICloudAccountStatus()
-        prepareGraphContextRegistry()
-        prepareManagedObjectContext(locate: location)
-        GraphMigrationManager.handlePhase(.postInit, graph: self)
-        GraphMigrationManager.handlePhase(.ready, graph: self)
+    
+    /**
+     A reference to the graph completion handler.
+     - Parameter success: A boolean indicating if the cloud connection
+     is possible or not.
+     */
+    internal var completion: ((Bool, Error?) -> Void)?
+    
+    /// Deinitializer that removes the Graph from NSNotificationCenter.
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
-    public init(name: String? = nil, locate: GraphStoreDescription.locations, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
+    /// New initializer using GraphStoreConfiguration.
+    public init(configuration: GraphStoreConfiguration) {
+        self.configuration = configuration
         GraphValueTransformer.register()
-        self.name = name ?? GraphStoreDescription.name
-        self.type = backend.coreDataType
-        self.location = GraphStoreDescription.setLocation(locate)
-        route = "Local/\(self.name)"
-        GraphMigrationManager.handlePhase(.preInit, graph: nil)
+        Graph.cloudKitContainerIdentifier = configuration.cloudKitContainerIdentifier
+        GraphMigrationManager.handlePhase(.preInit,configuration: configuration, graph: nil)
         super.init()
-        
         observeRemoteStoreChanges()
         checkICloudAccountStatus()
         prepareGraphContextRegistry()
-        prepareManagedObjectContext(locate: location)
-        GraphMigrationManager.handlePhase(.postInit, graph: self)
-        GraphMigrationManager.handlePhase(.ready, graph: self)
+        prepareManagedObjectContext(configuration: configuration)
+        GraphMigrationManager.handlePhase(.postInit, configuration: nil, graph: self)
+        GraphMigrationManager.handlePhase(.ready, configuration: nil, graph: self)
     }
-  
-    public init(storeURL: URL, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
-        GraphValueTransformer.register()
-
+    
+    
+    /// Initialize a Graph directly from a store URL.
+    /// If the URL points to a .sqlite file, the name is derived from the filename (without extension).
+    /// If the URL points to a directory, the name is derived from the directory name
+    /// and the store is expected to be `Graph.sqlite` inside it.
+    public convenience init(storeURL: URL, backend: GraphStoreBackend = .sqlite) {
+        let resolvedName: String
+        let resolvedLocation: URL
+        
         if storeURL.pathExtension == "sqlite" {
-            // Caso: viene passato direttamente il file .sqlite
-            self.name = storeURL.deletingPathExtension().lastPathComponent
-            self.location = storeURL.deletingLastPathComponent()
+            // If a .sqlite file is passed, use its filename as name, and keep the full file URL as location
+            resolvedName = storeURL.deletingPathExtension().lastPathComponent
+            resolvedLocation = storeURL // keep full file URL, not just directory
         } else {
-            // Caso: viene passata una directory -> ci aspettiamo Graph.sqlite dentro
-            self.name = storeURL.lastPathComponent
-            self.location = storeURL
+            // If a directory is passed, expect Graph.sqlite inside
+            resolvedName = storeURL.lastPathComponent
+            resolvedLocation = storeURL
         }
-
-        self.type = backend.coreDataType
-        self.route = "" // non usiamo più route per evitare percorsi doppi
-
-        GraphMigrationManager.handlePhase(.preInit, storeURL: storeURL, graph: nil)
-        super.init()
         
-        observeRemoteStoreChanges()
-        checkICloudAccountStatus()
-        prepareGraphContextRegistry()
-        prepareManagedObjectContext(locate: location)
-        GraphMigrationManager.handlePhase(.postInit, graph: self)
-        GraphMigrationManager.handlePhase(.ready, graph: self)
+        var config = GraphStoreConfiguration()
+        config.name = resolvedName
+        config.backend = backend
+        config.location = resolvedLocation
+        
+        self.init(configuration: config)
     }
-      
-  /**
-   Initializer to named Graph with optional type and location.
-   - Parameter cloud: A name for the Graph.
-   - Parameter type: Graph type.
-   - Parameter location: A location for storage.
-   - Parameter completion: An Optional completion block that is
-   executed to determine if iCloud support is available or not.
-   */
-    @available(*, deprecated, message: "Deprecated: uses modern CloudKit container (private DB) under the hood; falls back to local if iCloud is unavailable.")
-    public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, completion: ((Bool, Error?) -> Void)? = nil) {
-        self.init(name: name, backend: .sqlite)
-        self.appIdentifier = appIdentifier?.rawValue
-        self.rebuildFromCloud = rebuild
-        self.completion = completion
-    }
-
-    @available(*, deprecated, message: "Deprecated: uses modern CloudKit container (private DB) under the hood; falls back to local if iCloud is unavailable.")
-    public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, locate: GraphStoreDescription.locations, completion: ((Bool, Error?) -> Void)? = nil) {
-        self.init(name: name, locate: locate, backend: .sqlite)
-        self.appIdentifier = appIdentifier?.rawValue
-        self.rebuildFromCloud = rebuild
-        self.completion = completion
-    }
-  
+    
+//    @available(*, unavailable, message: "This initializer is no longer supported. Use init(configuration:) instead.")
+//    /**
+//     Initializer to named Graph with optional type and location.
+//     - Parameter name: A name for the Graph.
+//     - Parameter backend: Graph store backend.
+//     executed to determine if iCloud support is available or not.
+//     */
+//    @available(*, unavailable, message: "This initializer is no longer supported. Use init(configuration:) instead.")
+//    public init(name: String? = nil, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
+//        
+//        fatalError("This initializer is no longer supported. Use init(configuration:) instead.")
+//        /*
+//         GraphValueTransformer.register()
+//         self.name = name ?? GraphStoreDescription.name
+//         self.type = backend.coreDataType
+//         self.location = GraphStoreDescription.location
+//         route = "Local/\(self.name)"
+//         GraphMigrationManager.handlePhase(.preInit, graph: nil)
+//         super.init()
+//         
+//         observeRemoteStoreChanges()
+//         checkICloudAccountStatus()
+//         prepareGraphContextRegistry()
+//         prepareManagedObjectContext(locate: location)
+//         GraphMigrationManager.handlePhase(.postInit, graph: self)
+//         GraphMigrationManager.handlePhase(.ready, graph: self)
+//         */
+//    }
+//    
+//    @available(*, unavailable, message: "This initializer is no longer supported. Use init(configuration:) instead.")
+//    public init(name: String? = nil, locate: GraphStoreDescription.locations, backend: GraphStoreDescription.GraphStoreBackend = .sqlite) {
+//        
+//        fatalError("This initializer is no longer supported. Use init(configuration:) instead.")
+//        /*
+//         GraphValueTransformer.register()
+//         self.name = name ?? GraphStoreDescription.name
+//         self.type = backend.coreDataType
+//         self.location = GraphStoreDescription.setLocation(locate)
+//         route = "Local/\(self.name)"
+//         GraphMigrationManager.handlePhase(.preInit, graph: nil)
+//         super.init()
+//         
+//         observeRemoteStoreChanges()
+//         checkICloudAccountStatus()
+//         prepareGraphContextRegistry()
+//         prepareManagedObjectContext(locate: location)
+//         GraphMigrationManager.handlePhase(.postInit, graph: self)
+//         GraphMigrationManager.handlePhase(.ready, graph: self)
+//         */
+//    }
+//
+//    
+//    
+//    @available(*, unavailable, message: "This initializer is no longer supported. Use init(configuration:) instead.")
+//    /**
+//     Initializer to named Graph with optional type and location.
+//     - Parameter cloud: A name for the Graph.
+//     - Parameter type: Graph type.
+//     - Parameter location: A location for storage.
+//     - Parameter completion: An Optional completion block that is
+//     executed to determine if iCloud support is available or not.
+//     */
+//    @available(*, unavailable, message: "Deprecated: uses modern CloudKit container (private DB) under the hood; falls back to local if iCloud is unavailable.")
+//    public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, completion: ((Bool, Error?) -> Void)? = nil) {
+//        //self.init(configuration: GraphStoreConfiguration())
+//        fatalError("This initializer is no longer supported. Use init(configuration:) instead.")
+//        /*
+//         self.init(name: name, backend: .sqlite)
+//         self.appIdentifier = appIdentifier?.rawValue
+//         self.rebuildFromCloud = rebuild
+//         self.completion = completion
+//         */
+//    }
+//    
+//    @available(*, unavailable, message: "This initializer is no longer supported. Use init(configuration:) instead.")
+//    
+//    public convenience init(cloud name: String, appIdentifier: GraphStoreDescription.graphCloudIdentifiers?, rebuild: Bool? = false, locate: GraphStoreDescription.locations, completion: ((Bool, Error?) -> Void)? = nil) {
+//        fatalError("This initializer is no longer supported. Use init(configuration:) instead.")
+//        
+//        /*
+//         self.init(name: name, locate: locate, backend: .sqlite)
+//         self.appIdentifier = appIdentifier?.rawValue
+//         self.rebuildFromCloud = rebuild
+//         self.completion = completion
+//         */
+//    }
+    
     // MARK: - Context factory (modern API)
     /// Returns a new background context backed by the same NSPersistentCloudKitContainer.
     /// Returns nil if the container is not yet initialized.
@@ -252,21 +288,21 @@ public class Graph: NSObject {
         bg.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         return bg
     }
-  
+    
     // MARK: - CloudKit / Remote change hooks (M2)
-  
+    
     /// Observe only the custom test channel here (the real remote observer lives in Graph+PersistentHistory).
     private func observeRemoteStoreChanges() {
-        #if canImport(CoreData)
+#if canImport(CoreData)
         let nc = NotificationCenter.default
         // Test channel: watchers already know how to consume this payload.
         nc.addObserver(self,
                        selector: #selector(handleRemoteStoreChange(_:)),
                        name: .GraphCKSimulatedRemoteChange,
                        object: nil)
-        #endif
+#endif
     }
-  
+    
     @objc
     private func handleRemoteStoreChange(_ notification: Notification) {
         // Only merge; Watchers observe and dispatch separately.
@@ -277,7 +313,7 @@ public class Graph: NSObject {
             moc.mergeChanges(fromContextDidSave: notification)
         }
     }
-  
+    
     /// Check iCloud account status and notify the optional cloudStatusDelegate.
     private func checkICloudAccountStatus() {
         // If we're under unit tests, avoid touching CloudKit and synchronously report unavailable.
@@ -288,13 +324,13 @@ public class Graph: NSObject {
             }
             return
         }
-  
+        
         // Resolve a container identifier: runtime override first, then optional Info.plist fallback.
         var resolvedID: String? = Graph.cloudKitContainerIdentifier
         if resolvedID == nil || resolvedID?.isEmpty == true {
             resolvedID = Bundle.main.object(forInfoDictionaryKey: "GraphCloudKitContainerIdentifier") as? String
         }
-  
+        
         // If no identifier is configured (SPM / no capabilities), don't touch CloudKit APIs.
         guard let containerID = resolvedID, !containerID.isEmpty else {
             self.lastCloudStatus = .unavailable
@@ -303,7 +339,7 @@ public class Graph: NSObject {
             }
             return
         }
-  
+        
         // Use the explicitly resolved container to query account status.
         CKContainer(identifier: containerID).accountStatus { [weak self] status, _ in
             guard let self = self else { return }
@@ -315,3 +351,5 @@ public class Graph: NSObject {
         }
     }
 }
+
+

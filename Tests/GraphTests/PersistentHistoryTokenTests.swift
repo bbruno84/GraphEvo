@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import GraphCK
+@testable import Graph
 
 /// Questi test NON generano vere transazioni di Persistent History (serve CloudKit reale).
 /// Validano invece:
@@ -21,7 +21,9 @@ final class PersistentHistoryTokenTests: XCTestCase {
 
     /// Crea un `Graph` col nome richiesto (nuovo store per test), matching lo stile dei vostri test.
     private func makeGraph(named graphName: String) -> Graph {
-        return Graph(name: graphName)
+        var config = GraphStoreConfiguration()
+        config.name = graphName
+        return Graph(configuration: config)
     }
 
     // MARK: - Tests

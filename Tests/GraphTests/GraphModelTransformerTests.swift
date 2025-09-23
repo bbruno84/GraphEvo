@@ -7,7 +7,7 @@
 
 
 import XCTest
-@testable import GraphCK
+@testable import Graph
 
 final class GraphModelTransformerTests: XCTestCase {
     
@@ -17,10 +17,12 @@ final class GraphModelTransformerTests: XCTestCase {
     }
 
     func testStringPropertyRoundTrip() async throws {
-        let g = Graph(name: "ModelTransformerTests1")
+        var config = GraphStoreConfiguration()
+        config.name = "ModelTransformerTests0"
+        let g = Graph(configuration: config)
         g.clear()
         g.sync()
-        let e = Entity("Note")
+        let e = Entity("Note", graph: g)
         e[dynamicMember: "title"] = "Hello"
 
         g.sync()
@@ -30,8 +32,10 @@ final class GraphModelTransformerTests: XCTestCase {
     }
 
     func testAllSupportedTypesRoundTrip() async throws {
-        let g = Graph(name: "ModelTransformerTests2")
-        let e = Entity("Multi")
+        var config = GraphStoreConfiguration()
+        config.name = "ModelTransformerTests2"
+        let g = Graph(configuration: config)
+        let e = Entity("Multi", graph: g)
 
         let now = Date()
         let data = "data".data(using: .utf8)!

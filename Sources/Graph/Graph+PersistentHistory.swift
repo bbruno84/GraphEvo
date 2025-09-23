@@ -352,9 +352,8 @@ internal extension Graph {
                 ]
 
                 // Prima di postare la notifica, chiama GraphMigrationManager.handleRemoteEntityChanges
-                let storeURL = GraphStoreDescription.storeURL(baseURL: self.location)
                 GraphMigrationManager.handleRemoteEntityChanges(
-                    storeURL: storeURL,
+                    configuration: self.configuration,
                     graph: self,
                     inserted: insertedIDs,
                     updated: updatedIDs

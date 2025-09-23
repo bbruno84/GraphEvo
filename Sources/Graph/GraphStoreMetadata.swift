@@ -1,6 +1,6 @@
 //
 //  GraphStoreMetadata.swift
-//  GraphCK
+//  Graph
 //
 //  Created by Valerio Buriani on 20/09/25.
 //
@@ -14,21 +14,23 @@ public enum GraphStoreMetadata {
     private static let appDataVersionKey    = "AppDataVersion"
 
     /// Legge le versioni correnti dai metadata dello store.
-    /// - Returns: GraphStoreDescription.Versions (nil = legacy/non presente)
-    public static func read(from storeURL: URL) throws -> GraphStoreDescription.Versions {
+    /// - Parameter configuration: configurazione completa dello store.
+    /// - Returns: GraphStoreConfiguration.Versions (nil = legacy/non presente)
+    public static func read(from configuration: GraphStoreConfiguration, at: URL? = nil) throws -> GraphStoreConfiguration.Versions {
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
             ofType: NSSQLiteStoreType,
-            at: storeURL
+            at: at ?? configuration.storeURL
         )
         let gm = metadata[graphModelVersionKey] as? Int
         let av = metadata[appDataVersionKey] as? Int
         return .init(graphModel: gm, appData: av)
     }
+    
 
     /// Scrive le versioni nei metadata usando un PSC già aperto.
     /// Non modifica nulla in memoria; persiste solo su disco.
     public static func write(
-        _ versions: GraphStoreDescription.Versions,
+        _ versions: GraphStoreConfiguration.Versions,
         using coordinator: NSPersistentStoreCoordinator,
         for store: NSPersistentStore
     ) throws {
@@ -40,15 +42,15 @@ public enum GraphStoreMetadata {
 
     /// Comodo helper: apre temporaneamente lo store, scrive i metadata e chiude.
     public static func write(
-        _ versions: GraphStoreDescription.Versions,
-        to storeURL: URL,
+        _ versions: GraphStoreConfiguration.Versions,
+        to configuration: GraphStoreConfiguration,
         model: NSManagedObjectModel
     ) throws {
         let psc = NSPersistentStoreCoordinator(managedObjectModel: model)
         let store = try psc.addPersistentStore(
             ofType: NSSQLiteStoreType,
             configurationName: nil,
-            at: storeURL,
+            at: configuration.storeURL,
             options: [
                 NSMigratePersistentStoresAutomaticallyOption: true,
                 NSInferMappingModelAutomaticallyOption: true
@@ -60,8 +62,8 @@ public enum GraphStoreMetadata {
 
     /// Decide se “serve upgrade” confrontando le versioni.
     /// Regola: `nil` è legacy (= 0). Si migra se `current < required` per uno dei due.
-    public static func needsUpgrade(current: GraphStoreDescription.Versions,
-                                    required: GraphStoreDescription.Versions) -> Bool {
+    public static func needsUpgrade(current: GraphStoreConfiguration.Versions,
+                                    required: GraphStoreConfiguration.Versions) -> Bool {
         let curGM = current.graphModel ?? 0
         let curAV = current.appData   ?? 0
         let reqGM = required.graphModel ?? 0

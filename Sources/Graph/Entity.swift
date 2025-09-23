@@ -32,6 +32,11 @@ public class Entity: Node {
     return node as! ManagedEntity
   }
   
+  /// A reference to his managedObjectContext
+    public var managedObjectContext : NSManagedObjectContext? {
+        return managedNode.managedObjectContext
+    }
+  
   
   /// A string representation of the Entity.
   public override var description: String {

@@ -11,31 +11,16 @@ import CoreData
 /// Configuration object for a Graph store.
 /// Encapsulates all options for backend, location, versioning and CloudKit.
 public struct GraphStoreConfiguration {
-    public var name: String
-    public var backend: GraphStoreBackend
-    public var location: URL
-    public var appGroupIdentifier: String?
-    public var cloudKitContainerIdentifier: String?
-    public var requiredGraphModelVersion: Int
-    public var requiredAppDataVersion: Int
+    public var name: String = "default"
+    public var backend: GraphStoreBackend = .sqlite
+    public var location: URL = File.path(.applicationSupportDirectory, path: "CosmicMind/Graph/")!
+    public var appGroupIdentifier: String? = nil
+    public var cloudKitContainerIdentifier: String? = nil
+    public var requiredGraphModelVersion: Int = 1
+    public var requiredAppDataVersion: Int = 1
 
-    public init(
-        name: String = "default",
-        backend: GraphStoreBackend = .sqlite,
-        location: URL = File.path(.applicationSupportDirectory, path: "CosmicMind/Graph/")!,
-        appGroupIdentifier: String? = nil,
-        cloudKitContainerIdentifier: String? = nil,
-        requiredGraphModelVersion: Int = 1,
-        requiredAppDataVersion: Int = 1
-    ) {
-        self.name = name
-        self.backend = backend
-        self.location = location
-        self.appGroupIdentifier = appGroupIdentifier
-        self.cloudKitContainerIdentifier = cloudKitContainerIdentifier
-        self.requiredGraphModelVersion = requiredGraphModelVersion
-        self.requiredAppDataVersion = requiredAppDataVersion
-    }
+    /// Public default initializer so this type can be used in default argument values.
+    public init() {}
 
     // MARK: - Computed resolution
 
@@ -56,7 +41,7 @@ public struct GraphStoreConfiguration {
         resolvedLocation.appendingPathComponent(storeFilename)
     }
 
-    /// Route (Local vs Cloud).
+    /// Route (Local vs Cloud) determinata dalla presenza del container CloudKit.
     public var route: String {
         cloudKitContainerIdentifier == nil ? "Local/\(name)" : "Cloud/\(name)"
     }
@@ -66,9 +51,23 @@ public struct GraphStoreConfiguration {
         Versions(graphModel: requiredGraphModelVersion, appData: requiredAppDataVersion)
     }
 
+    /// Resolved store URL that handles if location points directly to a file or a directory.
+    public var resolvedStoreURL: URL {
+        if location.pathExtension == "sqlite" {
+            // Already a full sqlite file path
+            return location
+        } else {
+            return resolvedLocation.appendingPathComponent(route).appendingPathComponent(storeFilename)
+        }
+    }
+
     public struct Versions: Equatable {
         public var graphModel: Int?
         public var appData: Int?
+        public init(graphModel: Int?, appData: Int?) {
+            self.graphModel = graphModel
+            self.appData = appData
+        }
     }
 }
 

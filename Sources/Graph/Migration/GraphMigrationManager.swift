@@ -8,6 +8,19 @@
 import Foundation
 import CoreData
 
+public struct GraphMigrationContext {
+    private var values: [String: Any]
+    public init(_ values: [String: Any] = [:]) {
+        self.values = values
+    }
+    public subscript<T>(key: String) -> T? {
+        return values[key] as? T
+    }
+    public mutating func set<T>(_ key: String, value: T) {
+        values[key] = value
+    }
+}
+
 /// A protocol for defining custom graph migrations.
 public enum GraphMigrationResult {
     case done
@@ -17,14 +30,14 @@ public enum GraphMigrationResult {
 
 public protocol GraphMigration {
     var id: String { get }
-    func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, storeURL: URL, graph: Graph?, completion: @escaping (GraphMigrationResult) -> Void)
-    func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, storeURL: URL, graph: Graph?) -> Bool
+    func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void)
+    func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?) -> Bool
     /// Handle remote changes delivered from Persistent History.
-    func handleRemoteChanges(storeURL: URL, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID])
+    func handleRemoteChanges(configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID])
 }
 
 public extension GraphMigration {
-    func handleRemoteChanges(storeURL: URL, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID]) {
+    func handleRemoteChanges(configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID]) {
         // Default empty implementation
     }
 }
@@ -33,10 +46,6 @@ public extension GraphMigration {
 /// This becomes the official system for all future migrations.
 public final class GraphMigrationManager {
     
-    private static let initialized: Void = {
-        GraphMigrations.registerAll()
-    }()
-    
     public enum GraphLifecyclePhase {
         case preInit
         case postInit
@@ -44,9 +53,9 @@ public final class GraphMigrationManager {
         case ready
     }
     
-    /// Stores lifecycle phase callbacks. The callback receives the store URL and an optional Graph context.
+    /// Stores lifecycle phase callbacks. The callback receives the store configuration and an optional Graph context.
     /// Some phases may not provide a Graph instance.
-    private static var callbacks: [GraphLifecyclePhase: [(URL, Graph?) -> Void]] = [:]
+    private static var callbacks: [GraphLifecyclePhase: [(GraphStoreConfiguration?, Graph?) -> Void]] = [:]
 
     /// Stores all registered migrations in order.
     private static var migrations: [GraphMigration] = []
@@ -57,9 +66,8 @@ public final class GraphMigrationManager {
     private static var activeMigrations: Set<String> = []
 
     /// Registers a callback to be executed during a given lifecycle phase.
-    /// The callback receives the store URL and an optional Graph context. Some phases may not provide a Graph instance.
-    public static func registerCallback(for phase: GraphLifecyclePhase, _ callback: @escaping (URL, Graph?) -> Void) {
-        _ = initialized
+    /// The callback receives the store configuration and an optional Graph context. Some phases may not provide a Graph instance.
+    public static func registerCallback(for phase: GraphLifecyclePhase, _ callback: @escaping (GraphStoreConfiguration?, Graph?) -> Void) {
         if callbacks[phase] != nil {
             callbacks[phase]?.append(callback)
         } else {
@@ -74,33 +82,37 @@ public final class GraphMigrationManager {
         migrations.append(migration)
     }
     
+    /// Registers multiple migrations to be executed at lifecycle phases.
+    public static func registerMigrations(_ migrations: [GraphMigration]) {
+        migrations.forEach { registerMigration($0) }
+    }
+    
     /// Executes all callbacks and registered migrations for the specified lifecycle phase, running migrations in sequence.
     /// - Parameters:
     ///   - phase: The lifecycle phase being handled.
-    ///   - storeURL: The Core Data store URL this phase refers to.
+    ///   - configuration: The Core Data store configuration this phase refers to.
     ///   - graph: Optional Graph instance (may be nil in early phases).
-    public static func handlePhase(_ phase: GraphLifecyclePhase, storeURL: URL, graph: Graph?) {
-        _ = initialized
+    public static func handlePhase(_ phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?) {
         // Post notification for phase change
-        postPhaseNotification(phase: phase, storeURL: storeURL, graph: graph)
+        postPhaseNotification(phase: phase, configuration: configuration, graph: graph)
         // Fire callbacks
-        callbacks[phase]?.forEach { $0(storeURL, graph) }
+        callbacks[phase]?.forEach { $0(configuration, graph) }
         // Reset migration index for every phase
         currentMigrationIndex = 0
-        runNextMigration(for: phase, storeURL: storeURL, graph: graph)
+        runNextMigration(for: phase, configuration: configuration, graph: graph)
     }
 
     /// Runs the next migration in sequence for the given phase.
-    private static func runNextMigration(for phase: GraphLifecyclePhase, storeURL: URL, graph: Graph?) {
+    private static func runNextMigration(for phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?) {
         guard currentMigrationIndex < migrations.count else { return }
         let migration = migrations[currentMigrationIndex]
         
         let isActive = activeMigrations.contains(migration.id)
-        let needsRun = migration.needsRun(at: phase, storeURL: storeURL, graph: graph)
+        let needsRun = migration.needsRun(at: phase, configuration: configuration, graph: graph, context: nil)
         
         if !isActive && !needsRun {
             currentMigrationIndex += 1
-            runNextMigration(for: phase, storeURL: storeURL, graph: graph)
+            runNextMigration(for: phase, configuration: configuration, graph: graph)
             return
         }
         
@@ -108,30 +120,18 @@ public final class GraphMigrationManager {
             activeMigrations.insert(migration.id)
         }
         
-        migration.handlePhase(phase, storeURL: storeURL, graph: graph) { result in
+        migration.handlePhase(phase, configuration: configuration, graph: graph, context: nil) { result in
             switch result {
             case .done, .fallback:
                 currentMigrationIndex += 1
                 if currentMigrationIndex < migrations.count {
-                    runNextMigration(for: phase, storeURL: storeURL, graph: graph)
+                    runNextMigration(for: phase, configuration: configuration, graph: graph)
                 }
             case .error(let error):
                 // Log error and stop further migrations
                 print("GraphMigrationManager: Migration '\(migration.id)' failed with error: \(error)")
             }
         }
-    }
-    
-    /// Convenience overload: derives the store URL if only a Graph (or none) is available.
-    public static func handlePhase(_ phase: GraphLifecyclePhase, graph: Graph?) {
-        _ = initialized
-        let resolvedURL: URL
-        if let g = graph {
-            resolvedURL = GraphStoreDescription.storeURL(baseURL: g.locationPublic)
-        } else {
-            resolvedURL = GraphStoreDescription.storeURL(baseURL: GraphStoreDescription.location)
-        }
-        handlePhase(phase, storeURL: resolvedURL, graph: graph)
     }
 }
 
@@ -145,10 +145,10 @@ public extension Notification.Name {
 
 private extension GraphMigrationManager {
     /// Posts a notification for migration phase changes.
-    static func postPhaseNotification(phase: GraphLifecyclePhase, storeURL: URL, graph: Graph?) {
+    static func postPhaseNotification(phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?) {
         let userInfo: [String: Any] = [
             "phase": phase,
-            "storeURL": storeURL,
+            "storeURL": configuration?.storeURL as Any,
             "graphID": graph?.name ?? ""
         ]
         NotificationCenter.default.post(
@@ -162,13 +162,9 @@ private extension GraphMigrationManager {
 }
 extension GraphMigrationManager {
     /// Handles remote entity changes from Persistent History by notifying all registered migrations.
-    public static func handleRemoteEntityChanges(storeURL: URL, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID]) {
-        _ = initialized
+    public static func handleRemoteEntityChanges(configuration: GraphStoreConfiguration?, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID]) {
         for migration in migrations {
-            migration.handleRemoteChanges(storeURL: storeURL, graph: graph, inserted: inserted, updated: updated)
+            migration.handleRemoteChanges(configuration: configuration, graph: graph, context: nil, inserted: inserted, updated: updated)
         }
     }
 }
-
-
-
