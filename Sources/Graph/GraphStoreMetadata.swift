@@ -19,7 +19,7 @@ public enum GraphStoreMetadata {
     public static func read(from configuration: GraphStoreConfiguration, at: URL? = nil) throws -> GraphStoreConfiguration.Versions {
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
             ofType: NSSQLiteStoreType,
-            at: at ?? configuration.storeURL
+            at: at ?? configuration.resolvedStoreURL
         )
         let gm = metadata[graphModelVersionKey] as? Int
         let av = metadata[appDataVersionKey] as? Int
@@ -50,7 +50,7 @@ public enum GraphStoreMetadata {
         let store = try psc.addPersistentStore(
             ofType: NSSQLiteStoreType,
             configurationName: nil,
-            at: configuration.storeURL,
+            at: configuration.resolvedStoreURL,
             options: [
                 NSMigratePersistentStoresAutomaticallyOption: true,
                 NSInferMappingModelAutomaticallyOption: true

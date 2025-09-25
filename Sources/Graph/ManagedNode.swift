@@ -268,13 +268,13 @@ extension ManagedNode: Comparable {
 
 extension ManagedNode {
     /*@objc
-    func getProperty(named name: String) -> Any? {
-        return performAndWait { node in
-            node.propertySet.first {
-                $0.name == name
-            }?.object
-        }
-    }*/
+     func getProperty(named name: String) -> Any? {
+     return performAndWait { node in
+     node.propertySet.first {
+     $0.name == name
+     }?.object
+     }
+     }*/
     
     @objc
     func getProperty(named name: String) -> Any? {
@@ -282,23 +282,23 @@ extension ManagedNode {
             guard let prop = node.propertySet.first(where: { $0.name == name }) else {
                 return nil
             }
-
+            
             return ManagedNode.decodeIfData(prop.primitiveValue(forKey: "object"))
         }
     }
-
+    
     @objc
     func setProperty(named name: String, value: Any?) {
         performAndWait { action in
             let property = action.propertySet.first {
                 Swift.type(of: self).asProperty($0)?.name == name
             }
-
+            
             guard let object = value else {
                 property?.delete()
                 return
             }
-
+            
             // Archive the value before saving
             let archivedObject: Any
             do {
@@ -307,7 +307,7 @@ extension ManagedNode {
                 print("[Graph Error: Failed to archive value for property '\(name)': \(error)]")
                 return
             }
-
+            
             guard let p = property else {
                 guard let moc = managedObjectContext else {
                     return
@@ -316,17 +316,85 @@ extension ManagedNode {
                 Swift.type(of: self).createProperty(name: name, object: archivedObject, node: action, managedObjectContext: moc)
                 return
             }
-
+            
             p.object = archivedObject
         }
     }
-
+    
     private static func decodeIfData(_ value: Any?) -> Any? {
+        func isBplist(_ d: Data) -> Bool {
+            d.count >= 8 && (String(data: d.prefix(8), encoding: .ascii) == "bplist00")
+        }
+        func hexHead(_ d: Data, _ n: Int = 12) -> String {
+            d.prefix(n).map { String(format:"%02X", $0) }.joined(separator: " ")
+        }
+        
         guard let data = value as? Data else {
             return value
         }
         
         let transformer = GraphValueTransformer()
-        return transformer.reverseTransformedValue(data)
+        let v1 = transformer.reverseTransformedValue(data)
+        
+        guard let v1 else {
+            return nil
+        }
+        
+        // Se dopo il transformer abbiamo ancora Data, tentiamo UN solo unarchive
+        if let nested = v1 as? Data {
+            if isBplist(nested) {
+                do {
+                    let final = try GraphArchiver.unarchive(nested)
+                    
+                    // Se l’unarchive restituisce ancora Data → lo consideriamo payload e lo ritorniamo
+                    if let innerData = final as? Data {
+                        return innerData
+                    }
+                    
+                    if let box = final as? AnyCodableObject {
+                        return box.value
+                    }
+                    
+                    return final
+                } catch {
+                    print("❌ GraphArchiver.unarchive failed: \(error)")
+                    return nested
+                }
+            } else {
+                // vero payload binario (non archiviato)
+                return nested
+            }
+        }
+        
+        return v1
     }
 }
+
+//    private static func decodeIfData(_ value: Any?) -> Any? {
+//        guard let data = value as? Data else {
+//            return value
+//        }
+//
+//        let transformer = GraphValueTransformer()
+//        let returnValue = transformer.reverseTransformedValue(data)
+//
+//        if let nestedData = returnValue as? Data {
+//            do {
+//                let final = try GraphArchiver.unarchive(nestedData)
+//                print("Returning nested object: \(Swift.type(of: final))")
+//                return final
+//            } catch {
+//                print("❌ Failed nested unarchive: \(error)")
+//                return nestedData
+//            }
+//        }
+//
+//        if let unwrapped = returnValue {
+//            print("Returning object: \(Swift.type(of: unwrapped))")
+//            return unwrapped
+//        } else {
+//            print("Returning object: nil")
+//            return nil
+//        }
+//    }
+//}

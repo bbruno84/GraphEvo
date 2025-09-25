@@ -24,9 +24,8 @@
  */
 
 import CoreData
-import Foundation
 
-internal struct ModelIdentifier {
+internal struct MigrationV1LegacyModelIdentifier {
   static let entityName: String = "ManagedEntity"
   static let entityPropertyName: String = "ManagedEntityProperty"
   static let entityTagName: String = "ManagedEntityTag"
@@ -43,14 +42,14 @@ internal struct ModelIdentifier {
   static let relationshipGroupName: String = "ManagedRelationshipGroup"
 }
 
-public struct Model {
+internal struct MigrationV1LegacyModel {
   /// A static reference to the managedObjectModel.
   static var managedObjectModel: NSManagedObjectModel?
   
   /// Creates a NSManagedObjectModel.
-  public static func create() -> NSManagedObjectModel {
-    _ = Model.__once
-    return Model.managedObjectModel!
+  static func create() -> NSManagedObjectModel {
+    _ = MigrationV1LegacyModel.__once
+    return MigrationV1LegacyModel.managedObjectModel!
   }
   
   /// Constructs the model once.
@@ -59,74 +58,74 @@ public struct Model {
     
     let entityDescription = NSEntityDescription()
     var entityProperties : [Any] = []
-    entityDescription.name = ModelIdentifier.entityName
-    entityDescription.managedObjectClassName = ModelIdentifier.entityName
+    entityDescription.name = MigrationV1LegacyModelIdentifier.entityName
+    entityDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.entityName
     
     let entityPropertyDescription = NSEntityDescription()
     var entityPropertyProperties : [Any] = []
-    entityPropertyDescription.name = ModelIdentifier.entityPropertyName
-    entityPropertyDescription.managedObjectClassName = ModelIdentifier.entityPropertyName
+    entityPropertyDescription.name = MigrationV1LegacyModelIdentifier.entityPropertyName
+    entityPropertyDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.entityPropertyName
     
     let entityTagDescription = NSEntityDescription()
     var entityTagProperties : [Any] = []
-    entityTagDescription.name = ModelIdentifier.entityTagName
-    entityTagDescription.managedObjectClassName = ModelIdentifier.entityTagName
+    entityTagDescription.name = MigrationV1LegacyModelIdentifier.entityTagName
+    entityTagDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.entityTagName
     
     let entityGroupDescription = NSEntityDescription()
     var entityGroupProperties : [Any] = []
-    entityGroupDescription.name = ModelIdentifier.entityGroupName
-    entityGroupDescription.managedObjectClassName = ModelIdentifier.entityGroupName
+    entityGroupDescription.name = MigrationV1LegacyModelIdentifier.entityGroupName
+    entityGroupDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.entityGroupName
     
     // Relationship
     
     let relationshipDescription = NSEntityDescription()
     var relationshipProperties : [Any] = []
-    relationshipDescription.name = ModelIdentifier.relationshipName
-    relationshipDescription.managedObjectClassName = ModelIdentifier.relationshipName
+    relationshipDescription.name = MigrationV1LegacyModelIdentifier.relationshipName
+    relationshipDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.relationshipName
     
     let relationshipPropertyDescription = NSEntityDescription()
     var relationshipPropertyProperties : [Any] = []
-    relationshipPropertyDescription.name = ModelIdentifier.relationshipPropertyName
-    relationshipPropertyDescription.managedObjectClassName = ModelIdentifier.relationshipPropertyName
+    relationshipPropertyDescription.name = MigrationV1LegacyModelIdentifier.relationshipPropertyName
+    relationshipPropertyDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.relationshipPropertyName
     
     let relationshipTagDescription = NSEntityDescription()
     var relationshipTagProperties : [Any] = []
-    relationshipTagDescription.name = ModelIdentifier.relationshipTagName
-    relationshipTagDescription.managedObjectClassName = ModelIdentifier.relationshipTagName
+    relationshipTagDescription.name = MigrationV1LegacyModelIdentifier.relationshipTagName
+    relationshipTagDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.relationshipTagName
     
     let relationshipGroupDescription = NSEntityDescription()
     var relationshipGroupProperties : [Any] = []
-    relationshipGroupDescription.name = ModelIdentifier.relationshipGroupName
-    relationshipGroupDescription.managedObjectClassName = ModelIdentifier.relationshipGroupName
+    relationshipGroupDescription.name = MigrationV1LegacyModelIdentifier.relationshipGroupName
+    relationshipGroupDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.relationshipGroupName
     
     // Action
     
     let actionDescription = NSEntityDescription()
     var actionProperties : [Any] = []
-    actionDescription.name = ModelIdentifier.actionName
-    actionDescription.managedObjectClassName = ModelIdentifier.actionName
+    actionDescription.name = MigrationV1LegacyModelIdentifier.actionName
+    actionDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.actionName
     
     let actionPropertyDescription = NSEntityDescription()
     var actionPropertyProperties : [Any] = []
-    actionPropertyDescription.name = ModelIdentifier.actionPropertyName
-    actionPropertyDescription.managedObjectClassName = ModelIdentifier.actionPropertyName
+    actionPropertyDescription.name = MigrationV1LegacyModelIdentifier.actionPropertyName
+    actionPropertyDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.actionPropertyName
     
     let actionTagDescription = NSEntityDescription()
     var actionTagProperties : [Any] = []
-    actionTagDescription.name = ModelIdentifier.actionTagName
-    actionTagDescription.managedObjectClassName = ModelIdentifier.actionTagName
+    actionTagDescription.name = MigrationV1LegacyModelIdentifier.actionTagName
+    actionTagDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.actionTagName
     
     let actionGroupDescription = NSEntityDescription()
     var actionGroupProperties : [Any] = []
-    actionGroupDescription.name = ModelIdentifier.actionGroupName
-    actionGroupDescription.managedObjectClassName = ModelIdentifier.actionGroupName
+    actionGroupDescription.name = MigrationV1LegacyModelIdentifier.actionGroupName
+    actionGroupDescription.managedObjectClassName = MigrationV1LegacyModelIdentifier.actionGroupName
     
     // nodeClass
     
     let nodeClass = NSAttributeDescription()
     nodeClass.name = "nodeClass"
     nodeClass.attributeType = .integer64AttributeType
-    nodeClass.isOptional = true
+    nodeClass.isOptional = false
     entityProperties.append(nodeClass.copy() as! NSAttributeDescription)
     actionProperties.append(nodeClass.copy() as! NSAttributeDescription)
     relationshipProperties.append(nodeClass.copy() as! NSAttributeDescription)
@@ -136,7 +135,7 @@ public struct Model {
     let type = NSAttributeDescription()
     type.name = "type"
     type.attributeType = .stringAttributeType
-    type.isOptional = true
+    type.isOptional = false
     entityProperties.append(type.copy() as! NSAttributeDescription)
     actionProperties.append(type.copy() as! NSAttributeDescription)
     relationshipProperties.append(type.copy() as! NSAttributeDescription)
@@ -146,7 +145,7 @@ public struct Model {
     let createdDate = NSAttributeDescription()
     createdDate.name = "createdDate"
     createdDate.attributeType = .dateAttributeType
-    createdDate.isOptional = true
+    createdDate.isOptional = false
     entityProperties.append(createdDate.copy() as! NSAttributeDescription)
     actionProperties.append(createdDate.copy() as! NSAttributeDescription)
     relationshipProperties.append(createdDate.copy() as! NSAttributeDescription)
@@ -156,44 +155,35 @@ public struct Model {
     let propertyName = NSAttributeDescription()
     propertyName.name = "name"
     propertyName.attributeType = .stringAttributeType
-    propertyName.isOptional = true
+    propertyName.isOptional = false
     entityPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     actionPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
     relationshipPropertyProperties.append(propertyName.copy() as! NSAttributeDescription)
-
+    
+    
     let propertyValue = NSAttributeDescription()
+    propertyValue.valueTransformerName = "DefaultTransformer"
     propertyValue.name = "object"
     propertyValue.attributeType = .transformableAttributeType
-    propertyValue.attributeValueClassName = NSStringFromClass(NSObject.self)
-    //propertyValue.attributeValueClassName = nil
-    propertyValue.valueTransformerName = GraphValueTransformer.name.rawValue
-    propertyValue.isOptional = true
+    propertyValue.attributeValueClassName = "Any"
+    propertyValue.isOptional = false
     propertyValue.allowsExternalBinaryDataStorage = true
     entityPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
     actionPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
     relationshipPropertyProperties.append(propertyValue.copy() as! NSAttributeDescription)
-
-    // appDataVersion attribute
-    let appDataVersion = NSAttributeDescription()
-    appDataVersion.name = "appDataVersion"
-    appDataVersion.attributeType = .integer64AttributeType
-    appDataVersion.isOptional = true
-    entityPropertyProperties.append(appDataVersion.copy() as! NSAttributeDescription)
-    actionPropertyProperties.append(appDataVersion.copy() as! NSAttributeDescription)
-    relationshipPropertyProperties.append(appDataVersion.copy() as! NSAttributeDescription)
     
     let propertyRelationship = NSRelationshipDescription()
     propertyRelationship.name = "node"
-    propertyRelationship.minCount = 0
+    propertyRelationship.minCount = 1
     propertyRelationship.maxCount = 1
-    propertyRelationship.isOptional = true
+    propertyRelationship.isOptional = false
     propertyRelationship.deleteRule = .noActionDeleteRule
     
     let propertySetRelationship = NSRelationshipDescription()
     propertySetRelationship.name = "propertySet"
     propertySetRelationship.minCount = 0
     propertySetRelationship.maxCount = 0
-    propertySetRelationship.isOptional = true
+    propertySetRelationship.isOptional = false
     propertySetRelationship.deleteRule = .noActionDeleteRule
     propertyRelationship.inverseRelationship = propertySetRelationship
     propertySetRelationship.inverseRelationship = propertyRelationship
@@ -218,23 +208,23 @@ public struct Model {
     let tagName = NSAttributeDescription()
     tagName.name = "name"
     tagName.attributeType = .stringAttributeType
-    tagName.isOptional = true
+    tagName.isOptional = false
     entityTagProperties.append(tagName.copy() as! NSAttributeDescription)
     actionTagProperties.append(tagName.copy() as! NSAttributeDescription)
     relationshipTagProperties.append(tagName.copy() as! NSAttributeDescription)
     
     let tagRelationship = NSRelationshipDescription()
     tagRelationship.name = "node"
-    tagRelationship.minCount = 0
+    tagRelationship.minCount = 1
     tagRelationship.maxCount = 1
-    tagRelationship.isOptional = true
+    tagRelationship.isOptional = false
     tagRelationship.deleteRule = .noActionDeleteRule
     
     let tagSetRelationship = NSRelationshipDescription()
     tagSetRelationship.name = "tagSet"
     tagSetRelationship.minCount = 0
     tagSetRelationship.maxCount = 0
-    tagSetRelationship.isOptional = true
+    tagSetRelationship.isOptional = false
     tagSetRelationship.deleteRule = .noActionDeleteRule
     tagRelationship.inverseRelationship = tagSetRelationship
     tagSetRelationship.inverseRelationship = tagRelationship
@@ -259,23 +249,23 @@ public struct Model {
     let groupName = NSAttributeDescription()
     groupName.name = "name"
     groupName.attributeType = .stringAttributeType
-    groupName.isOptional = true
+    groupName.isOptional = false
     entityGroupProperties.append(groupName.copy() as! NSAttributeDescription)
     actionGroupProperties.append(groupName.copy() as! NSAttributeDescription)
     relationshipGroupProperties.append(groupName.copy() as! NSAttributeDescription)
     
     let groupRelationship = NSRelationshipDescription()
     groupRelationship.name = "node"
-    groupRelationship.minCount = 0
+    groupRelationship.minCount = 1
     groupRelationship.maxCount = 1
-    groupRelationship.isOptional = true
+    groupRelationship.isOptional = false
     groupRelationship.deleteRule = .noActionDeleteRule
     
     let groupSetRelationship = NSRelationshipDescription()
     groupSetRelationship.name = "groupSet"
     groupSetRelationship.minCount = 0
     groupSetRelationship.maxCount = 0
-    groupSetRelationship.isOptional = true
+    groupSetRelationship.isOptional = false
     groupSetRelationship.deleteRule = .noActionDeleteRule
     groupRelationship.inverseRelationship = groupSetRelationship
     groupSetRelationship.inverseRelationship = groupRelationship
@@ -300,7 +290,7 @@ public struct Model {
     actionSubjectSetRelationship.name = "subjectSet"
     actionSubjectSetRelationship.minCount = 0
     actionSubjectSetRelationship.maxCount = 0
-    actionSubjectSetRelationship.isOptional = true
+    actionSubjectSetRelationship.isOptional = false
     actionSubjectSetRelationship.deleteRule = .noActionDeleteRule
     actionSubjectSetRelationship.destinationEntity = entityDescription
     
@@ -308,7 +298,7 @@ public struct Model {
     actionSubjectRelationship.name = "actionSubjectSet"
     actionSubjectRelationship.minCount = 0
     actionSubjectRelationship.maxCount = 0
-    actionSubjectRelationship.isOptional = true
+    actionSubjectRelationship.isOptional = false
     actionSubjectRelationship.deleteRule = .noActionDeleteRule
     actionSubjectRelationship.destinationEntity = actionDescription
     actionSubjectRelationship.inverseRelationship = actionSubjectSetRelationship
@@ -323,7 +313,7 @@ public struct Model {
     actionObjectSetRelationship.name = "objectSet"
     actionObjectSetRelationship.minCount = 0
     actionObjectSetRelationship.maxCount = 0
-    actionObjectSetRelationship.isOptional = true
+    actionObjectSetRelationship.isOptional = false
     actionObjectSetRelationship.deleteRule = .noActionDeleteRule
     actionObjectSetRelationship.destinationEntity = entityDescription
     
@@ -331,7 +321,7 @@ public struct Model {
     actionObjectRelationship.name = "actionObjectSet"
     actionObjectRelationship.minCount = 0
     actionObjectRelationship.maxCount = 0
-    actionObjectRelationship.isOptional = true
+    actionObjectRelationship.isOptional = false
     actionObjectRelationship.deleteRule = .noActionDeleteRule
     actionObjectRelationship.destinationEntity = actionDescription
     actionObjectRelationship.inverseRelationship = actionObjectSetRelationship
@@ -344,7 +334,7 @@ public struct Model {
     // Inverse relationship for Subjects -- B.
     let relationshipSubjectSetRelationship = NSRelationshipDescription()
     relationshipSubjectSetRelationship.name = "subject"
-    relationshipSubjectSetRelationship.minCount = 0
+    relationshipSubjectSetRelationship.minCount = 1
     relationshipSubjectSetRelationship.maxCount = 1
     relationshipSubjectSetRelationship.isOptional = true
     relationshipSubjectSetRelationship.deleteRule = .noActionDeleteRule
@@ -354,7 +344,7 @@ public struct Model {
     relationshipSubjectRelationship.name = "relationshipSubjectSet"
     relationshipSubjectRelationship.minCount = 0
     relationshipSubjectRelationship.maxCount = 0
-    relationshipSubjectRelationship.isOptional = true
+    relationshipSubjectRelationship.isOptional = false
     relationshipSubjectRelationship.deleteRule = .noActionDeleteRule
     relationshipSubjectRelationship.destinationEntity = relationshipDescription
     
@@ -368,7 +358,7 @@ public struct Model {
     // Inverse relationship for Objects -- B.
     let relationshipObjectSetRelationship = NSRelationshipDescription()
     relationshipObjectSetRelationship.name = "object"
-    relationshipObjectSetRelationship.minCount = 0
+    relationshipObjectSetRelationship.minCount = 1
     relationshipObjectSetRelationship.maxCount = 1
     relationshipObjectSetRelationship.isOptional = true
     relationshipObjectSetRelationship.deleteRule = .noActionDeleteRule
@@ -378,7 +368,7 @@ public struct Model {
     relationshipObjectRelationship.name = "relationshipObjectSet"
     relationshipObjectRelationship.minCount = 0
     relationshipObjectRelationship.maxCount = 0
-    relationshipObjectRelationship.isOptional = true
+    relationshipObjectRelationship.isOptional = false
     relationshipObjectRelationship.deleteRule = .noActionDeleteRule
     relationshipObjectRelationship.destinationEntity = relationshipDescription
     relationshipObjectRelationship.inverseRelationship = relationshipObjectSetRelationship
@@ -403,8 +393,8 @@ public struct Model {
     relationshipTagDescription.properties = relationshipTagProperties as! [NSPropertyDescription]
     relationshipGroupDescription.properties = relationshipGroupProperties as! [NSPropertyDescription]
     
-    Model.managedObjectModel = NSManagedObjectModel()
-    Model.managedObjectModel?.entities = [
+      MigrationV1LegacyModel.managedObjectModel = NSManagedObjectModel()
+      MigrationV1LegacyModel.managedObjectModel?.entities = [
       entityDescription,
       entityPropertyDescription,
       entityTagDescription,

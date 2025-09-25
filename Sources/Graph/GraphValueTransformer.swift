@@ -83,6 +83,20 @@ public enum GraphArchiver {
 
         return try NSKeyedArchiver.archivedData(withRootObject: archivable, requiringSecureCoding: true)
     }
+    
+    /// Deserializza un oggetto da Data usando la whitelist di classi consentite.
+    /// - Throws: se il dato non può essere deserializzato oppure il tipo non è consentito.
+    public static func unarchive(_ data: Data) throws -> Any {
+        do {
+            let classSet = NSSet(array: GraphAllowedClasses.list) as! Set<AnyHashable>
+            let object = try NSKeyedUnarchiver.unarchivedObject(ofClasses: classSet, from: data)
+            // Debug log opzionale:
+            // print("✅ [GraphArchiver] Successfully unarchived object: \(String(describing: object))")
+            return object as Any
+        } catch {
+            throw error
+        }
+    }
 }
 
 
@@ -125,18 +139,6 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
             return unarchived
         } catch {
             print("❌ [GraphValueTransformer] Errore durante l'unarchiviazione: \(error)")
-            return nil
-        }
-    }
-
-    public override func transformedValue(_ value: Any?) -> Any? {
-        guard let value else { return nil }
-        do {
-            let data = try GraphArchiver.archive(value)
-            print("✅ [GraphValueTransformer] Transformed value of type \(type(of: value)) into Data (\(data.count) bytes)")
-            return data
-        } catch {
-            print("❌ [GraphValueTransformer] Failed to transform value of type \(type(of: value)): \(error)")
             return nil
         }
     }
