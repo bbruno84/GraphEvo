@@ -264,7 +264,7 @@ public extension Graph {
 
 internal extension Graph {
     func processPersistentHistoryForRemoteChange() {
-        print("[PH][DEBUG] processPersistentHistoryForRemoteChange CALLED for \(self.name)")
+        
         guard let container = persistentContainer else {return}
         let psc = container.persistentStoreCoordinator
         guard !psc.persistentStores.isEmpty else {return}
