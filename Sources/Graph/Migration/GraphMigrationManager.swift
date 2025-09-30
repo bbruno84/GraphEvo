@@ -30,8 +30,8 @@ public enum GraphMigrationResult {
 
 public protocol GraphMigration {
     var id: String { get }
-    func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void)
-    func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?) -> Bool
+    func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context:GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void)
+    func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: inout GraphMigrationContext?) -> Bool
     /// Handle remote changes delivered from Persistent History.
     func handleRemoteChanges(configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID])
 }
@@ -64,6 +64,9 @@ public final class GraphMigrationManager {
     
     /// Tracks active migrations that have been activated in .preInit phase.
     private static var activeMigrations: Set<String> = []
+
+    /// Shared context for the entire migration cycle.
+    private static var currentContext: GraphMigrationContext? = nil
 
     /// Registers a callback to be executed during a given lifecycle phase.
     /// The callback receives the store configuration and an optional Graph context. Some phases may not provide a Graph instance.
@@ -99,33 +102,44 @@ public final class GraphMigrationManager {
         callbacks[phase]?.forEach { $0(configuration, graph) }
         // Reset migration index for every phase
         currentMigrationIndex = 0
-        runNextMigration(for: phase, configuration: configuration, graph: graph)
+        // Use existing context if present, otherwise create new one
+        if currentContext == nil {
+            currentContext = GraphMigrationContext()
+        }
+        runNextMigration(for: phase, configuration: configuration, graph: graph, context: currentContext)
+        // Reset context when phase is ready
+        if phase == .ready {
+            currentContext = nil
+        }
     }
 
     /// Runs the next migration in sequence for the given phase.
-    private static func runNextMigration(for phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?) {
+    private static func runNextMigration(for phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext? = nil) {
         guard currentMigrationIndex < migrations.count else { return }
         let migration = migrations[currentMigrationIndex]
-        
+
         let isActive = activeMigrations.contains(migration.id)
-        let needsRun = migration.needsRun(at: phase, configuration: configuration, graph: graph, context: nil)
-        
+        // Always pass the context to needsRun
+        var mutableContext = context
+        let needsRun = migration.needsRun(at: phase, configuration: configuration, graph: graph, context: &mutableContext)
+
         if !isActive && !needsRun {
             currentMigrationIndex += 1
-            runNextMigration(for: phase, configuration: configuration, graph: graph)
+            runNextMigration(for: phase, configuration: configuration, graph: graph, context: context)
             return
         }
-        
+
         if needsRun && phase == .preInit {
             activeMigrations.insert(migration.id)
         }
-        
-        migration.handlePhase(phase, configuration: configuration, graph: graph, context: nil) { result in
+
+        // Always pass the context to handlePhase
+        migration.handlePhase(phase, configuration: configuration, graph: graph, context: context) { result in
             switch result {
             case .done, .fallback:
                 currentMigrationIndex += 1
                 if currentMigrationIndex < migrations.count {
-                    runNextMigration(for: phase, configuration: configuration, graph: graph)
+                    runNextMigration(for: phase, configuration: configuration, graph: graph, context: context)
                 }
             case .error(let error):
                 // Log error and stop further migrations
@@ -162,9 +176,10 @@ private extension GraphMigrationManager {
 }
 extension GraphMigrationManager {
     /// Handles remote entity changes from Persistent History by notifying all registered migrations.
-    public static func handleRemoteEntityChanges(configuration: GraphStoreConfiguration?, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID]) {
+    public static func handleRemoteEntityChanges(configuration: GraphStoreConfiguration?, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID], context: GraphMigrationContext? = nil) {
+        let ctx = context ?? currentContext ?? GraphMigrationContext()
         for migration in migrations {
-            migration.handleRemoteChanges(configuration: configuration, graph: graph, context: nil, inserted: inserted, updated: updated)
+            migration.handleRemoteChanges(configuration: configuration, graph: graph, context: ctx, inserted: inserted, updated: updated)
         }
     }
 }
