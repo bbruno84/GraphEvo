@@ -120,9 +120,8 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
         }
 
         do {
-            let classSet = NSSet(array: Self.allowedTopLevelClasses) as! Set<AnyHashable>
-            let unarchived = try NSKeyedUnarchiver.unarchivedObject(ofClasses: classSet, from: data)
-            
+            let unarchived = try GraphArchiver.unarchive(data)
+
             if let anyCodable = unarchived as? AnyCodableObject {
                 print("✅ [GraphValueTransformer] Successfully decoded AnyCodableObject")
                 return anyCodable
@@ -136,9 +135,25 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
                 return dictAnyCodable
             }
             
+            if let data = unarchived as? Data, let image = UIImage(data: data) {
+                print("✅ [GraphValueTransformer] Successfully decoded UIimage")
+                return image
+            }
+
             return unarchived
         } catch {
             print("❌ [GraphValueTransformer] Errore durante l'unarchiviazione: \(error)")
+            return nil
+        }
+    }
+    
+    public override func transformedValue(_ value: Any?) -> Any? {
+        guard let value = value else { return nil }
+
+        do {
+            return try GraphArchiver.archive(value)
+        } catch {
+            print("❌ [GraphValueTransformer] Errore durante l'archiviazione: \(error)")
             return nil
         }
     }

@@ -26,7 +26,7 @@ final class CleanGraphStoreOpening: XCTestCase {
 
         // 3. Crea un nodo con una proprietà di tipo String
         let entity = Entity("TestEntity", graph: graph)
-        entity[dynamicMember: "myProperty"] = 2
+        entity[dynamicMember: "myProperty"] = "me cojoni"
         
         // 4. Forza sync
         graph.sync { success, error in

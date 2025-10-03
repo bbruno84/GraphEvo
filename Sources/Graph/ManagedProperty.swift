@@ -46,7 +46,7 @@ internal class ManagedProperty: NamedManagedObject {
   convenience init(name: String, object: Any, node: ManagedNode, managedObjectContext: NSManagedObjectContext) {
     self.init(name: name, node: node, managedObjectContext: managedObjectContext)
     do {
-        self.object = try GraphArchiver.archive(object)
+        self.object = object
         let moc = managedObjectContext
         if let route = GraphContextRegistry.managedObjectContexts.first(where: { $0.value == moc })?.key,
            let config = GraphContextRegistry.configurations[route] {
