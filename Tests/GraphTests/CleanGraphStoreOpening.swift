@@ -18,14 +18,20 @@ final class CleanGraphStoreOpening: XCTestCase {
         var config = GraphStoreConfiguration()
         config.name = "DebugGraph2"
         config.backend = .sqlite
-        //config.location = FileManager.default.temporaryDirectory.appendingPathComponent("DebugGraph")
+        
 
         // 2. Istanzia Graph
         let graph = Graph(configuration: config)
+        graph.clear()
 
         // 3. Crea un nodo con una proprietà di tipo String
         let entity = Entity("TestEntity", graph: graph)
         entity[dynamicMember: "myProperty"] = 2
+        
+        // 4. Forza sync
+        graph.sync { success, error in
+            print("🔎 sync result success=\(success) error=\(String(describing: error))")
+        }
         
         for obj in graph.managedObjectContext.insertedObjects {
             if obj.entity.attributesByName.keys.contains("object") {
@@ -50,14 +56,15 @@ final class CleanGraphStoreOpening: XCTestCase {
             }
         }
         
-        // 4. Forza sync
-        graph.sync { success, error in
-            print("🔎 sync result success=\(success) error=\(String(describing: error))")
-        }
+        
+        
+        let entities = Search<Entity>(graph: graph).where(.type("TestEntity")).sync().first!
+        print("Entity content: \(entities[dynamicMember: "myProperty"]!)")
+        
     }
     
     func testOpenGraphFromSQLiteFile() throws {
-        AppMigrations.registerAll()
+        
         GraphValueTransformer.register()
         // 1. Recupera Graph.sqlite legacy dal bundle
         let bundle = Bundle.module

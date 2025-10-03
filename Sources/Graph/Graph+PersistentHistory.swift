@@ -296,19 +296,19 @@ internal extension Graph {
                 var deletedIDs:  [NSManagedObjectID] = []
 
                 for tx in transactions {
-                    #if DEBUG
-                    let a = tx.author ?? "nil"
-                    let cn = tx.contextName ?? "nil"
-                    print("[PH] tx: author=\(a) contextName=\(cn) changes=\(tx.changes?.count ?? 0)")
-                    #endif
+//                    #if DEBUG
+//                    let a = tx.author ?? "nil"
+//                    let cn = tx.contextName ?? "nil"
+//                    print("[PH] tx: author=\(a) contextName=\(cn) changes=\(tx.changes?.count ?? 0)")
+//                    #endif
 
                     // 🔒 Hardening filtro autore: evita doppio callback sull’originatore
                     if _ph_filterLocalWrites {
                         if let author = tx.author {
                             if author == _ph_appAuthor {
-                                #if DEBUG
-                                print("[PH] skip self-authored transaction (author=\(author))")
-                                #endif
+//                                #if DEBUG
+//                                print("[PH] skip self-authored transaction (author=\(author))")
+//                                #endif
                                 continue
                             }
                         } else {
@@ -396,9 +396,9 @@ private extension Graph {
 
         // Se è davvero una cold start session, lasciamo il replay completo.
         guard _ph_isColdStartSession == false else {
-            #if DEBUG
-            print("[PH] cold start: history replay from beginning (forced, no bootstrap)")
-            #endif
+//            #if DEBUG
+//            print("[PH] cold start: history replay from beginning (forced, no bootstrap)")
+//            #endif
             return
         }
 

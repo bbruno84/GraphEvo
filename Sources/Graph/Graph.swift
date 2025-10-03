@@ -148,18 +148,23 @@ public class Graph: NSObject {
     }
     
     /// New initializer using GraphStoreConfiguration.
-    public init(configuration: GraphStoreConfiguration) {
+    public init(configuration: GraphStoreConfiguration, migrationEnabled: Bool = true) {
         self.configuration = configuration
         GraphValueTransformer.register()
         Graph.cloudKitContainerIdentifier = configuration.cloudKitContainerIdentifier
-        GraphMigrationManager.handlePhase(.preInit,configuration: configuration, graph: nil)
+        if migrationEnabled {
+            GraphMigrationManager.handlePhase(.preInit,configuration: configuration, graph: nil)
+        }
         super.init()
         observeRemoteStoreChanges()
         checkICloudAccountStatus()
         prepareGraphContextRegistry()
         prepareManagedObjectContext(configuration: configuration)
-        GraphMigrationManager.handlePhase(.postInit, configuration: nil, graph: self)
-        GraphMigrationManager.handlePhase(.ready, configuration: nil, graph: self)
+        if migrationEnabled {
+            GraphMigrationManager.handlePhase(.postInit, configuration: nil, graph: self)
+            GraphMigrationManager.handlePhase(.ready, configuration: nil, graph: self)
+        }
+        
     }
     
     
@@ -167,7 +172,7 @@ public class Graph: NSObject {
     /// If the URL points to a .sqlite file, the name is derived from the filename (without extension).
     /// If the URL points to a directory, the name is derived from the directory name
     /// and the store is expected to be `Graph.sqlite` inside it.
-    public convenience init(storeURL: URL, backend: GraphStoreBackend = .sqlite) {
+    public convenience init(storeURL: URL, backend: GraphStoreBackend = .sqlite, migrationEnabled: Bool = true) {
         let resolvedName: String
         let resolvedLocation: URL
         
@@ -186,7 +191,7 @@ public class Graph: NSObject {
         config.backend = backend
         config.location = resolvedLocation
         
-        self.init(configuration: config)
+        self.init(configuration: config, migrationEnabled: migrationEnabled)
     }
     
 //    @available(*, unavailable, message: "This initializer is no longer supported. Use init(configuration:) instead.")
