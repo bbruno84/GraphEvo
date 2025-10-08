@@ -180,51 +180,81 @@ public final class DedupTool {
     }
     
     private func mergeRelationships(from source: Entity, into target: Entity) {
+        // 1) Merge base metadata first
         mergeEntityMetadata(from: source, into: target)
-        
-        // Transfer relationships where source is subject
+
+        // 2) Ensure we always operate in the primary (target) context
+        guard let primaryContext = target.managedNode.managedObjectContext else { return }
+
+        // Cache: secondary entity.id -> primary cloned entity
+        var cloneCache: [String: Entity] = [:]
+
+        // ---- Relationships where source is SUBJECT ----
         for rel in source.relationshipsWhenSubject {
-            guard let object = rel.object else { continue }
-            if !hasSubjectRelation(target, type: rel.type, to: object) {
+            guard let obj = rel.object else { continue }
+            let objInPrimary = ensureEntityInPrimary(obj, cache: &cloneCache, context: primaryContext)
+            if !hasSubjectRelation(target, type: rel.type, to: objInPrimary) {
                 let newRel = target.is(relationship: rel.type)
-                newRel.object = object
+                newRel.object = objInPrimary
                 copyMetadata(from: rel, to: newRel)
             }
         }
-        
-        // Transfer relationships where source is object
+
+        // ---- Relationships where source is OBJECT ----
         for rel in source.relationshipsWhenObject {
-            guard let subject = rel.subject else { continue }
-            if !hasObjectRelation(target, type: rel.type, from: subject) {
-                let newRel = subject.is(relationship: rel.type)
+            guard let subj = rel.subject else { continue }
+            let subjInPrimary = ensureEntityInPrimary(subj, cache: &cloneCache, context: primaryContext)
+            if !hasObjectRelation(target, type: rel.type, from: subjInPrimary) {
+                let newRel = subjInPrimary.is(relationship: rel.type)
                 newRel.object = target
                 copyMetadata(from: rel, to: newRel)
             }
         }
-        
-        // Transfer actions where source is subject
+
+        // ---- Actions where source is SUBJECT ----
         for action in source.actionsWhenSubject {
             if !hasSubjectAction(target, type: action.type) {
                 let newAction = target.will(action: action.type)
                 copyMetadata(from: action, to: newAction)
                 for obj in action.objects {
-                    newAction.add(objects: obj)
+                    let objInPrimary = ensureEntityInPrimary(obj, cache: &cloneCache, context: primaryContext)
+                    newAction.add(objects: objInPrimary)
                 }
             }
         }
-        
-        // Transfer actions where source is object
+
+        // ---- Actions where source is OBJECT ----
         for action in source.actionsWhenObject {
             if !hasObjectAction(target, type: action.type) {
-                guard let context = target.managedNode.managedObjectContext else { continue }
-                let newAction = Action(managedNode: ManagedAction(action.type, managedObjectContext: context))
+                let newAction = Action(managedNode: ManagedAction(action.type, managedObjectContext: primaryContext))
                 newAction.add(objects: target)
                 for subj in action.subjects {
-                    newAction.add(subjects: subj)
+                    let subjInPrimary = ensureEntityInPrimary(subj, cache: &cloneCache, context: primaryContext)
+                    newAction.add(subjects: subjInPrimary)
                 }
                 copyMetadata(from: action, to: newAction)
             }
         }
+    }
+    
+    /// Returns an entity in the primary (target) context corresponding to `entity`.
+    /// If `entity` already belongs to the primary context it is returned as-is.
+    /// Otherwise a shallow clone is created (properties/tags/groups), memoized, and returned.
+    private func ensureEntityInPrimary(_ entity: Entity,
+                                       cache: inout [String: Entity],
+                                       context: NSManagedObjectContext) -> Entity {
+        if entity.managedNode.managedObjectContext === context {
+            return entity
+        }
+        if let cached = cache[entity.id] {
+            return cached
+        }
+        let managedClone = ManagedEntity(entity.type, managedObjectContext: context)
+        let clone = Entity(managedNode: managedClone)
+        // Copy metadata (properties/tags/groups); relationships/actions are linked by callers as needed.
+        copyMetadata(from: entity, to: clone, preferred: true)
+        cache[entity.id] = clone
+        return clone
     }
     
     private func hasSubjectRelation(_ entity: Entity, type: String, to object: Entity) -> Bool {

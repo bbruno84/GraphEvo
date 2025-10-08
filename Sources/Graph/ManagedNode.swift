@@ -286,34 +286,36 @@ extension ManagedNode {
      }*/
     
     @objc
-    func getProperty(named name: String) -> Any? {
-        return performAndWait { node in
-            node.propertySet.first(where: { $0.name == name })?.object
+        func getProperty(named name: String) -> Any? {
+            return performAndWait { node in
+                node.propertySet.first {
+                    $0.name == name
+                }?.object
+            }
         }
-    }
     
     @objc
-    func setProperty(named name: String, value: Any?) {
-        print("[GraphDebug] setProperty(\(name), \(String(describing: value))]")
-        performAndWait { action in
-            let property = action.propertySet.first {
-                Swift.type(of: self).asProperty($0)?.name == name
-            }
+        func setProperty(named name: String, value: Any?) {
+            performAndWait { action in
+                let property = action.propertySet.first {
+                    Swift.type(of: self).asProperty($0)?.name == name
+                }
 
-            guard let object = value else {
-                property?.delete()
-                return
-            }
-
-            guard let p = property else {
-                guard let moc = managedObjectContext else {
+                guard let object = value else {
+                    property?.delete()
                     return
                 }
-                Swift.type(of: self).createProperty(name: name, object: object, node: action, managedObjectContext: moc)
-                return
-            }
 
-            p.object = object
+                guard let p = property else {
+                    guard let moc = managedObjectContext else {
+                        return
+                    }
+
+                    Swift.type(of: self).createProperty(name: name, object: object, node: action, managedObjectContext: moc)
+                    return
+                }
+
+                p.object = object
+            }
         }
-    }
 }

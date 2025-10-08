@@ -234,7 +234,7 @@ public class Node: NSObject, Codable {
     }
     
     private func setProperty(named name: String, value: Any?) {
-        print("[Graph Debug] setProperty '\(name)' value=\(String(describing: value)) type=\(Swift.type(of: value))")
+       // print("[Graph Debug] setProperty '\(name)' value=\(String(describing: value)) type=\(Swift.type(of: value))")
         node.setProperty(named: name, value: value)
     }
   

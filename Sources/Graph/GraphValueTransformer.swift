@@ -23,6 +23,8 @@ enum GraphAllowedClasses {
         NSArray.self,
         NSDictionary.self,
         NSURL.self,
+        UIImage.self,
+        PDFDocument.self,
         AnyCodableObject.self,
         NSArrayOfAnyCodableObject.self,
         DictionaryOfAnyCodableObject.self
@@ -114,7 +116,7 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
         return GraphAllowedClasses.list
     }
     
-    public override func reverseTransformedValue(_ value: Any?) -> Any? {
+    public override func transformedValue(_ value: Any?) -> Any? {
         guard let data = value as? Data else {
             return nil
         }
@@ -135,10 +137,10 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
                 return dictAnyCodable
             }
             
-            if let data = unarchived as? Data, let image = UIImage(data: data) {
-                print("✅ [GraphValueTransformer] Successfully decoded UIimage")
-                return image
-            }
+//            if let data = unarchived as? Data, let image = UIImage(data: data) {
+//                print("✅ [GraphValueTransformer] Successfully decoded UIimage")
+//                return image
+//            }
 
             return unarchived
         } catch {
@@ -147,9 +149,9 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
         }
     }
     
-    public override func transformedValue(_ value: Any?) -> Any? {
+    public override func reverseTransformedValue(_ value: Any?) -> Any? {
         guard let value = value else { return nil }
-
+        
         do {
             return try GraphArchiver.archive(value)
         } catch {
