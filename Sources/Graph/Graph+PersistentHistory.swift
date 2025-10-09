@@ -88,36 +88,17 @@ private final class HistoryTokenStore {
             // ⚠️ Non impostare req.fetchRequest (niente sort/limit SQL su "timestamp")
 
             do {
-                guard let result = try context.execute(req) as? NSPersistentHistoryResult else {
-                    #if DEBUG
-                    print("[PH] bootstrapTokenToCurrentHead: unexpected result type")
-                    #endif
-                    return
-                }
+                guard let result = try context.execute(req) as? NSPersistentHistoryResult else {return}
 
                 // Può essere NSNull se non ci sono transazioni
-                guard let txs = result.result as? [NSPersistentHistoryTransaction], !txs.isEmpty else {
-                    #if DEBUG
-                    print("[PH] bootstrapTokenToCurrentHead: no transactions found → no token to save.")
-                    #endif
-                    return
-                }
+                guard let txs = result.result as? [NSPersistentHistoryTransaction], !txs.isEmpty else {return}
 
                 // Ordina in memoria per timestamp (o semplicemente prendi la max per data)
                 if let newest = txs.max(by: { lhs, rhs in lhs.timestamp < rhs.timestamp }) {
-                    #if DEBUG
-                    print("[PH] bootstrapTokenToCurrentHead: acquired token from most recent transaction, saving.")
-                    #endif
                     self.save(newest.token)
-                } else {
-                    #if DEBUG
-                    print("[PH] bootstrapTokenToCurrentHead: unable to determine newest transaction")
-                    #endif
                 }
             } catch {
-                #if DEBUG
                 print("[PH] bootstrapTokenToCurrentHead: error executing history request: \(error)")
-                #endif
             }
         }
     }
@@ -245,9 +226,6 @@ public extension Graph {
             let storeUUID = _ph_currentStoreUUID()
             if let backup = _ph_tokenStore.loadBackup(storeUUID: storeUUID) {
                 _ph_lastToken = backup
-                #if DEBUG
-                print("[PH] prepareOnLaunch: disk token missing, restored from UserDefaults backup (warm session)")
-                #endif
             }
         }
 
@@ -255,9 +233,6 @@ public extension Graph {
         // The first remote notification will replay history from the beginning once,
         // emit delegate callbacks, and advance the token.
         if _ph_lastToken == nil {
-            #if DEBUG
-            print("[PH] prepareOnLaunch: token missing → will replay from beginning on first remote change (no bootstrap)")
-            #endif
         }
     }
 }
@@ -423,14 +398,7 @@ private extension Graph {
 
             if let head = _ph_tokenStore.load() {
                 _ph_lastToken = head
-                _ph_isColdStartSession = false   // ✅ anche in questo caso non siamo più “cold”
-                #if DEBUG
-                print("[PH] warm start: no backup → bootstrapped token to current head")
-                #endif
-            } else {
-                #if DEBUG
-                print("[PH][warn] warm start: bootstrap to head failed (no token written)")
-                #endif
+                _ph_isColdStartSession = false
             }
         }
     }

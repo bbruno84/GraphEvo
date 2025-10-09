@@ -114,7 +114,6 @@ internal struct Context {
     let container = NSPersistentCloudKitContainer(name: name, managedObjectModel: Model.create())
     container.persistentStoreDescriptions = [storeDescription]
     //print("🔎 [GraphCK] (After load) Cloud container will use store at: \(storeURL)")
-    print("✅ [GraphCK] Cloud container created with store at: \(storeURL)")
     return container
   }
 }
@@ -185,9 +184,6 @@ internal extension Graph {
     if let _ = configuration.cloudKitContainerIdentifier {
       let container = Context.makeCloudContainer(name: name, storeURL: storeURL, configuration: configuration)
 
-      print("🛠 [GraphCK] Creating CloudKit container named: \(name)")
-      print("📦 [GraphCK] Loading persistent store configured at: \(storeURL)")
-
       container.loadPersistentStores { [unowned self] (desc, error) in
         if let error = error {
           print("⚠️ [GraphCK] Failed to load CloudKit store. Error: \(error)")
@@ -211,7 +207,6 @@ internal extension Graph {
             self.managedObjectContext.undoManager = nil
             self.managedObjectContext.automaticallyMergesChangesFromParent = true
             self.runtimeStoreURL = desc.url ?? storeURL
-            print("🔎 [GraphCK] (Resolved) runtimeStoreURL = \(String(describing: self.runtimeStoreURL))")
             GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
             GraphContextRegistry.configurations[self.route] = configuration
 
@@ -222,7 +217,6 @@ internal extension Graph {
                         try GraphStoreMetadata.write(configuration.requiredVersions,
                                                      using: plain.persistentStoreCoordinator,
                                                      for: store)
-                        print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(configuration.requiredVersions)")
                     }
                 } catch {
                     print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
@@ -240,7 +234,6 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = desc.url ?? storeURL
-        print("🔎 [GraphCK] (Resolved) runtimeStoreURL = \(String(describing: self.runtimeStoreURL))")
         GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
         GraphContextRegistry.configurations[self.route] = configuration
 
@@ -257,17 +250,12 @@ internal extension Graph {
                 print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
             }
         }
-
-        print("✅ [GraphCK] CloudKit persistent container loaded successfully.")
         if GraphContextRegistry.added[self.route] != true {
           NotificationCenter.default.addObserver(self,
                                                  selector: #selector(handlePersistentStoreRemoteChange(_:)),
                                                  name: .NSPersistentStoreRemoteChange,
                                                  object: container.persistentStoreCoordinator)
           GraphContextRegistry.added[self.route] = true
-          print("📡 [GraphCK] Registered for NSPersistentStoreRemoteChange notifications.")
-        } else {
-          print("📡 [GraphCK] Remote change observer already registered for route: \(self.route)")
         }
         // Prepare Persistent History bootstrap on launch (token restore / bootstrap-from-now).
         // This is safe to call multiple times; it will no-op if already initialized.
@@ -289,7 +277,6 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = desc.url ?? storeURL
-        print("🔎 [GraphCK] (Resolved) runtimeStoreURL = \(String(describing: self.runtimeStoreURL))")
         GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
         GraphContextRegistry.configurations[self.route] = configuration
 
