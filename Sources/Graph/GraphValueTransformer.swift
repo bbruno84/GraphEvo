@@ -92,8 +92,6 @@ public enum GraphArchiver {
         do {
             let classSet = NSSet(array: GraphAllowedClasses.list) as! Set<AnyHashable>
             let object = try NSKeyedUnarchiver.unarchivedObject(ofClasses: classSet, from: data)
-            // Debug log opzionale:
-            // print("✅ [GraphArchiver] Successfully unarchived object: \(String(describing: object))")
             return object as Any
         } catch {
             throw error
@@ -125,22 +123,14 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
             let unarchived = try GraphArchiver.unarchive(data)
 
             if let anyCodable = unarchived as? AnyCodableObject {
-                print("✅ [GraphValueTransformer] Successfully decoded AnyCodableObject")
                 return anyCodable
             }
             if let arrAnyCodable = unarchived as? NSArrayOfAnyCodableObject {
-                print("✅ [GraphValueTransformer] Successfully decoded NSArrayOfAnyCodableObject")
                 return arrAnyCodable
             }
             if let dictAnyCodable = unarchived as? DictionaryOfAnyCodableObject {
-                print("✅ [GraphValueTransformer] Successfully decoded DictionaryOfAnyCodableObject")
                 return dictAnyCodable
             }
-            
-//            if let data = unarchived as? Data, let image = UIImage(data: data) {
-//                print("✅ [GraphValueTransformer] Successfully decoded UIimage")
-//                return image
-//            }
 
             return unarchived
         } catch {

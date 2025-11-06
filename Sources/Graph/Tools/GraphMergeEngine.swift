@@ -42,7 +42,7 @@ public enum GraphMergeEngine {
             ])
         }
 
-        print("[GraphMergeEngine] 🚀 Avvio merge baseline → live")
+        print("[GraphMergeEngine] 🚀 Avvio merge secondary → primary")
         primaryContext.performAndWait {
             secondaryContext.performAndWait {
                 do {
