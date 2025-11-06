@@ -71,3 +71,103 @@ public enum GraphStoreMetadata {
         return (curGM < reqGM) || (curAV < reqAV)
     }
 }
+
+// MARK: - Generic key/value metadata API
+
+public extension GraphStoreMetadata {
+    /// Legge un valore PropertyList-safe opzionale dai metadata dello store.
+    /// - Parameters:
+    ///   - key: chiave del valore da leggere
+    ///   - configuration: configurazione completa dello store
+    ///   - at: URL opzionale dello store (default: configuration.resolvedStoreURL)
+    /// - Returns: valore opzionale di tipo T (PropertyList-safe), nil se assente o errore
+    static func readValue<T>(forKey key: String, from configuration: GraphStoreConfiguration, at: URL? = nil) -> T? {
+        do {
+            let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
+                ofType: NSSQLiteStoreType,
+                at: at ?? configuration.resolvedStoreURL
+            )
+            return metadata[key] as? T
+        } catch {
+            return nil
+        }
+    }
+
+    /// Scrive o rimuove un valore PropertyList-safe nei metadata dello store.
+    /// - Parameters:
+    ///   - value: valore opzionale da scrivere; se nil, la chiave viene rimossa
+    ///   - key: chiave del valore da scrivere
+    ///   - configuration: configurazione completa dello store
+    ///   - model: modello Core Data usato per aprire temporaneamente lo store
+    /// - Throws: errori di I/O o Core Data
+    static func writeValue<T>(_ value: T?, forKey key: String, to configuration: GraphStoreConfiguration, model: NSManagedObjectModel) throws {
+        let psc = NSPersistentStoreCoordinator(managedObjectModel: model)
+        let store = try psc.addPersistentStore(
+            ofType: NSSQLiteStoreType,
+            configurationName: nil,
+            at: configuration.resolvedStoreURL,
+            options: [
+                NSMigratePersistentStoresAutomaticallyOption: true,
+                NSInferMappingModelAutomaticallyOption: true
+            ]
+        )
+        var metadata = psc.metadata(for: store)
+        if let value = value {
+            metadata[key] = value
+        } else {
+            metadata.removeValue(forKey: key)
+        }
+        psc.setMetadata(metadata, for: store)
+        try psc.remove(store)
+    }
+
+    /// Helper per leggere flag booleani dai metadata dello store.
+    /// Ritorna false se assente o in caso di errore.
+    /// - Parameters:
+    ///   - key: chiave del flag booleano
+    ///   - configuration: configurazione completa dello store
+    /// - Returns: valore booleano (false se assente o errore)
+    static func boolValue(forKey key: String, from configuration: GraphStoreConfiguration) -> Bool {
+        (readValue(forKey: key, from: configuration) as Bool?) ?? false
+    }
+
+    /// Rimuove una chiave dai metadata dello store aprendo temporaneamente lo store.
+    /// - Parameters:
+    ///   - key: chiave da rimuovere
+    ///   - configuration: configurazione completa dello store
+    ///   - model: modello Core Data usato per aprire temporaneamente lo store
+    /// - Throws: errori di I/O o Core Data
+    static func removeValue(forKey key: String, to configuration: GraphStoreConfiguration, model: NSManagedObjectModel) throws {
+        let psc = NSPersistentStoreCoordinator(managedObjectModel: model)
+        let store = try psc.addPersistentStore(
+            ofType: NSSQLiteStoreType,
+            configurationName: nil,
+            at: configuration.resolvedStoreURL,
+            options: [
+                NSMigratePersistentStoresAutomaticallyOption: true,
+                NSInferMappingModelAutomaticallyOption: true
+            ]
+        )
+        var metadata = psc.metadata(for: store)
+        metadata.removeValue(forKey: key)
+        psc.setMetadata(metadata, for: store)
+        try psc.remove(store)
+    }
+
+    /// Restituisce tutte le chiavi presenti nei metadata dello store.
+    /// - Parameters:
+    ///   - configuration: configurazione completa dello store
+    ///   - at: URL opzionale dello store (default: configuration.resolvedStoreURL)
+    /// - Returns: array di stringhe con tutte le chiavi presenti nei metadata
+    static func listAllKeys(from configuration: GraphStoreConfiguration, at: URL? = nil) -> [String] {
+        do {
+            let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
+                ofType: NSSQLiteStoreType,
+                at: at ?? configuration.resolvedStoreURL
+            )
+            return Array(metadata.keys)
+        } catch {
+            return []
+        }
+    }
+}
