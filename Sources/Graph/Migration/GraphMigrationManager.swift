@@ -30,15 +30,31 @@ public enum GraphMigrationResult {
 
 public protocol GraphMigration {
     var id: String { get }
+    /// Default root folder for backups used by this migration.
+    /// Implementations can override to customize the backup location.
+    /// If `nil` is returned, a standard location derived from the
+    /// GraphStoreConfiguration will be used.
+    func backupRoot(for configuration: GraphStoreConfiguration?) -> URL?
     func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context:GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void)
     func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: inout GraphMigrationContext?) -> Bool
     /// Handle remote changes delivered from Persistent History.
     func handleRemoteChanges(configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID])
+    
+    func resetMigrationState(for configuration: GraphStoreConfiguration)
 }
 
 public extension GraphMigration {
+    /// Default implementation: uses GraphMigrationManager.defaultBackupRoot(for:)
+    /// if a configuration is available.
+    func backupRoot(for configuration: GraphStoreConfiguration?) -> URL? {
+        guard let config = configuration else { return nil }
+        return GraphMigrationManager.defaultBackupRoot(for: config)
+    }
     func handleRemoteChanges(configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID]) {
         // Default empty implementation
+    }
+    func resetMigrationState(for configuration: GraphStoreConfiguration) {
+            // no-op
     }
 }
 
@@ -51,6 +67,19 @@ public final class GraphMigrationManager {
         case postInit
         case postMigration
         case ready
+    }
+    
+    /// Default base folder where migrations can store their backups
+    /// (e.g. SQLite stores, baseline.zip, etc.).
+    ///
+    /// By convention this is:
+    ///   <storeDir>/../migrationBackups/
+    /// where `storeDir` is the directory that contains the resolved store URL.
+    public static func defaultBackupRoot(for configuration: GraphStoreConfiguration) -> URL {
+        let storeDir = configuration.resolvedStoreURL.deletingLastPathComponent()
+        return storeDir
+            .deletingLastPathComponent()
+            .appendingPathComponent("migrationBackups", isDirectory: true)
     }
     
     /// Stores lifecycle phase callbacks. The callback receives the store configuration and an optional Graph context.
