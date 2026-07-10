@@ -34,65 +34,155 @@ public enum GraphDedupEngine {
             ])
         }
 
-        print("[GraphDedupEngine] 🚀 Avvio deduplicazione in \(graph.configuration.name ?? "graph")")
-
+        var caughtError: Error?
         context.performAndWait {
             do {
                 // 1️⃣ Carica tutte le Entity
                 let allEntities = Search<Entity>(graph: graph).where(.type("*")).sync()
-                print("[GraphDedupEngine] 📦 \(allEntities.count) entità totali trovate")
 
                 // 2️⃣ Raggruppa per UUID logico
                 let grouped = groupEntitiesByUUID(allEntities, uuidFieldMap: uuidFieldMap)
                 var removed = 0
                 var merged = 0
+                var replacementByEntityID: [String: Entity] = [:]
+                var entitiesToDelete: [Entity] = []
 
-                // 3️⃣ Deduplica per gruppo
+                // 3️⃣ Scegli prima tutti i survivor, senza cancellare nodi.
+                // Le relazioni vengono riscritte dopo con una vista globale dei duplicati.
                 for (_, entities) in grouped where entities.count > 1 {
-                    var preferred = entities.first!
-                    for dup in entities.dropFirst() {
-                        let chosen = discriminator.choosePreferred(preferred, dup)
-                        if chosen === preferred {
-                            merge(from: dup, into: preferred)
-                            dup.delete()
-                            removed += 1
-                        } else {
-                            merge(from: preferred, into: dup)
-                            preferred.delete()
-                            preferred = dup
-                            removed += 1
-                        }
+                    let survivor = chooseSurvivor(from: entities, discriminator: discriminator)
+                    for duplicate in entities where duplicate.id != survivor.id {
+                        mergeMetadata(from: duplicate, into: survivor)
+                        replacementByEntityID[duplicate.id] = survivor
+                        entitiesToDelete.append(duplicate)
                         merged += 1
                     }
                 }
 
+                // 4️⃣ Riscrivi le relazioni prima di eliminare i duplicati.
+                // Questo evita relazioni verso endpoint che stanno per essere cancellati.
+                let allRelationships = Search<Relationship>(graph: graph).where(.type("*")).sync()
+                var rewiredRelationships = 0
+                for relationship in allRelationships {
+                    guard let subject = relationship.subject,
+                          let object = relationship.object else {
+                        continue
+                    }
+
+                    let canonicalSubject = replacementByEntityID[subject.id] ?? subject
+                    let canonicalObject = replacementByEntityID[object.id] ?? object
+
+                    guard canonicalSubject.id != subject.id || canonicalObject.id != object.id else {
+                        continue
+                    }
+
+                    if !relationshipExists(
+                        type: relationship.type,
+                        subject: canonicalSubject,
+                        object: canonicalObject
+                    ) {
+                        let newRelationship = canonicalSubject.is(relationship: relationship.type)
+                        newRelationship.object = canonicalObject
+                        copyMetadata(from: relationship, to: newRelationship)
+                        rewiredRelationships += 1
+                    }
+
+                    relationship.delete()
+                }
+
+                // 5️⃣ Deduplica eventuali relazioni identiche già presenti tra survivor.
+                let remainingRelationships = Search<Relationship>(graph: graph).where(.type("*")).sync()
+                var seenRelationships = Set<RelationshipKey>()
+                for relationship in remainingRelationships {
+                    guard let subject = relationship.subject,
+                          let object = relationship.object else {
+                        continue
+                    }
+
+                    let key = RelationshipKey(type: relationship.type, subjectID: subject.id, objectID: object.id)
+                    if seenRelationships.contains(key) {
+                        relationship.delete()
+                    } else {
+                        seenRelationships.insert(key)
+                    }
+                }
+
+                // 6️⃣ Ora è sicuro eliminare le entità duplicate.
+                for duplicate in entitiesToDelete {
+                    duplicate.delete()
+                    removed += 1
+                }
+
                 try context.save()
-                print("[GraphDedupEngine] ✅ Dedup completata — merged: \(merged), rimossi: \(removed)")
+                GraphMigrationLogger.log(
+                    migrationID: "GraphDedupEngine",
+                    phase: .ready,
+                    level: .info,
+                    event: "dedup_completed",
+                    message: "Graph dedup completed",
+                    metadata: [
+                        "merged": String(merged),
+                        "removed": String(removed),
+                        "rewiredRelationships": String(rewiredRelationships),
+                        "totalEntities": String(allEntities.count)
+                    ],
+                    configuration: graph.configuration
+                )
 
             } catch {
-                print("[GraphDedupEngine] ❌ Errore durante la deduplicazione: \(error)")
+                GraphMigrationLogger.log(
+                    migrationID: "GraphDedupEngine",
+                    phase: .ready,
+                    level: .error,
+                    event: "dedup_failed",
+                    message: error.localizedDescription,
+                    configuration: graph.configuration
+                )
+                caughtError = error
             }
+        }
+        if let caughtError {
+            throw caughtError
         }
     }
 
     // MARK: - Helpers
 
+    private struct EntityKey: Hashable {
+        let type: String
+        let uuid: String
+    }
+
+    private struct RelationshipKey: Hashable {
+        let type: String
+        let subjectID: String
+        let objectID: String
+    }
+
     /// Raggruppa le Entity per UUID logico (usando `uuidFieldMap`).
     private static func groupEntitiesByUUID(
         _ entities: [Entity],
         uuidFieldMap: [String: String]
-    ) -> [String: [Entity]] {
-        var dict = [String: [Entity]]()
+    ) -> [EntityKey: [Entity]] {
+        var dict = [EntityKey: [Entity]]()
         for entity in entities {
-            if let uuid = uuidValue(for: entity, using: uuidFieldMap) {
-                dict[uuid, default: []].append(entity)
+            if let key = entityKey(for: entity, using: uuidFieldMap) {
+                dict[key, default: []].append(entity)
             }
         }
         return dict
     }
 
-    /// Copia proprietà, tag, gruppi e relazioni (shallow merge).
-    private static func merge(from source: Entity, into target: Entity) {
+    private static func chooseSurvivor(from entities: [Entity], discriminator: DedupDiscriminator) -> Entity {
+        var survivor = entities.first!
+        for candidate in entities.dropFirst() {
+            survivor = discriminator.choosePreferred(survivor, candidate)
+        }
+        return survivor
+    }
+
+    /// Copia proprietà, tag e gruppi senza toccare le relazioni.
+    private static func mergeMetadata(from source: Entity, into target: Entity) {
         for (k, v) in source.properties {
             if target.properties[k] == nil {
                 target[dynamicMember: k] = v
@@ -106,52 +196,35 @@ public enum GraphDedupEngine {
         for group in source.groups where !target.groups.contains(group) {
             target.add(to: group)
         }
+    }
 
-        // Ricrea relazioni come soggetto
-        for rel in source.relationshipsWhenSubject {
-            guard let object = rel.object else { continue }
-            if !target.relationshipsWhenSubject.contains(where: {
-                $0.type == rel.type && $0.object === object
-            }) {
-                let newRel = target.is(relationship: rel.type)
-                newRel.object = object
-            }
+    private static func relationshipExists(type: String, subject: Entity, object: Entity) -> Bool {
+        subject.relationshipsWhenSubject.contains { relationship in
+            guard let existingObject = relationship.object else { return false }
+            return relationship.type == type && existingObject.id == object.id
+        }
+    }
+
+    private static func copyMetadata(from source: Relationship, to target: Relationship) {
+        for (key, value) in source.properties {
+            target[dynamicMember: key] = value
         }
 
-        // Ricrea relazioni come oggetto
-        for rel in source.relationshipsWhenObject {
-            guard let subject = rel.subject else { continue }
-            if !target.relationshipsWhenObject.contains(where: {
-                $0.type == rel.type && $0.subject === subject
-            }) {
-                let newRel = subject.is(relationship: rel.type)
-                newRel.object = target
-            }
+        for tag in source.tags where !target.tags.contains(tag) {
+            target.add(tags: tag)
         }
 
-        // Ricrea azioni dove source è soggetto
-        for action in source.actionsWhenSubject {
-            if !target.actionsWhenSubject.contains(where: { $0.type == action.type }) {
-                let newAction = target.will(action: action.type)
-                for obj in action.objects { newAction.add(objects: obj) }
-            }
-        }
-
-        // Ricrea azioni dove source è oggetto
-        for action in source.actionsWhenObject {
-            if !target.actionsWhenObject.contains(where: { $0.type == action.type }) {
-                let newAction = action.subjects.first?.will(action: action.type)
-                newAction?.add(objects: target)
-            }
+        for group in source.groups where !target.groups.contains(group) {
+            target.add(to: group)
         }
     }
 
     /// Estrae l’UUID logico dal payload.
-    private static func uuidValue(for entity: Entity, using uuidFieldMap: [String: String]) -> String? {
+    private static func entityKey(for entity: Entity, using uuidFieldMap: [String: String]) -> EntityKey? {
         guard let field = uuidFieldMap[entity.type],
               let value = entity[dynamicMember: field] as? String else {
             return nil
         }
-        return value
+        return EntityKey(type: entity.type, uuid: value)
     }
 }

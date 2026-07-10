@@ -33,6 +33,26 @@ extension GraphMigrationManager {
         public let status: String
     }
 
+    /// Chiavi standardizzate per userInfo della notifica di failure.
+    public enum FailureKey: String {
+        case migrationID
+        case phase
+        case storeURL
+        case graphID
+        case error
+        case errorDescription
+    }
+
+    /// Rappresenta un errore di migrazione emesso dal lifecycle manager.
+    public struct FailureInfo {
+        public let migrationID: String
+        public let phase: GraphLifecyclePhase
+        public let storeURL: URL?
+        public let graphID: String
+        public let error: Error
+        public let errorDescription: String
+    }
+
     /// Parser sicuro da Notification → ProgressInfo.
     public static func parseProgress(from notification: Notification) -> ProgressInfo? {
         guard notification.name == .GraphMigrationProgressDidChange,
@@ -51,6 +71,28 @@ extension GraphMigrationManager {
             progress: progress,
             stepDescription: stepDescription,
             status: status
+        )
+    }
+
+    /// Parser sicuro da Notification → FailureInfo.
+    public static func parseFailure(from notification: Notification) -> FailureInfo? {
+        guard notification.name == .graphMigrationDidFail,
+              let userInfo = notification.userInfo,
+              let migrationID = userInfo[FailureKey.migrationID.rawValue] as? String,
+              let phase = userInfo[FailureKey.phase.rawValue] as? GraphLifecyclePhase,
+              let graphID = userInfo[FailureKey.graphID.rawValue] as? String,
+              let error = userInfo[FailureKey.error.rawValue] as? Error,
+              let errorDescription = userInfo[FailureKey.errorDescription.rawValue] as? String else {
+            return nil
+        }
+
+        return FailureInfo(
+            migrationID: migrationID,
+            phase: phase,
+            storeURL: userInfo[FailureKey.storeURL.rawValue] as? URL,
+            graphID: graphID,
+            error: error,
+            errorDescription: errorDescription
         )
     }
     
@@ -98,6 +140,17 @@ extension GraphMigrationManager {
         return NotificationCenter.default.addObserver(forName: .GraphMigrationProgressDidChange, object: nil, queue: .main) { notification in
             if let progressInfo = parseProgress(from: notification) {
                 handler(progressInfo)
+            }
+        }
+    }
+
+    /// Aggiunge un observer per le notifiche di fallimento migrazione.
+    /// - Parameter handler: Closure chiamata con l'evento FailureInfo decodificato.
+    /// - Returns: Il token observer da utilizzare per la rimozione.
+    public static func observeMigrationFailure(using handler: @escaping (FailureInfo) -> Void) -> NSObjectProtocol {
+        return NotificationCenter.default.addObserver(forName: .graphMigrationDidFail, object: nil, queue: .main) { notification in
+            if let failureInfo = parseFailure(from: notification) {
+                handler(failureInfo)
             }
         }
     }

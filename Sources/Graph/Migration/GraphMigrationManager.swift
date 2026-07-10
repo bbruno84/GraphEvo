@@ -127,6 +127,15 @@ public final class GraphMigrationManager {
     public static func handlePhase(_ phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?) {
         // Post notification for phase change
         postPhaseNotification(phase: phase, configuration: configuration, graph: graph)
+        GraphMigrationLogger.log(
+            migrationID: "GraphMigrationManager",
+            phase: phase,
+            level: .info,
+            event: "phase_started",
+            message: "Migration phase started",
+            metadata: ["graphID": graph?.name ?? ""],
+            configuration: configuration
+        )
         // Fire callbacks
         callbacks[phase]?.forEach { $0(configuration, graph) }
         // Reset migration index for every phase
@@ -148,13 +157,13 @@ public final class GraphMigrationManager {
         let migration = migrations[currentMigrationIndex]
 
         let isActive = activeMigrations.contains(migration.id)
-        // Always pass the context to needsRun
         var mutableContext = context
         let needsRun = migration.needsRun(at: phase, configuration: configuration, graph: graph, context: &mutableContext)
+        currentContext = mutableContext
 
         if !isActive && !needsRun {
             currentMigrationIndex += 1
-            runNextMigration(for: phase, configuration: configuration, graph: graph, context: context)
+            runNextMigration(for: phase, configuration: configuration, graph: graph, context: mutableContext)
             return
         }
 
@@ -162,17 +171,35 @@ public final class GraphMigrationManager {
             activeMigrations.insert(migration.id)
         }
 
-        // Always pass the context to handlePhase
-        migration.handlePhase(phase, configuration: configuration, graph: graph, context: context) { result in
+        migration.handlePhase(phase, configuration: configuration, graph: graph, context: mutableContext) { result in
             switch result {
             case .done, .fallback:
                 currentMigrationIndex += 1
                 if currentMigrationIndex < migrations.count {
-                    runNextMigration(for: phase, configuration: configuration, graph: graph, context: context)
+                    runNextMigration(for: phase, configuration: configuration, graph: graph, context: mutableContext)
+                }
+                if phase == .ready {
+                    activeMigrations.remove(migration.id)
                 }
             case .error(let error):
                 // Log error and stop further migrations
-                print("GraphMigrationManager: Migration '\(migration.id)' failed with error: \(error)")
+                GraphMigrationLogger.log(
+                    migrationID: migration.id,
+                    phase: phase,
+                    level: .error,
+                    event: "migration_failed",
+                    message: error.localizedDescription,
+                    metadata: ["graphID": graph?.name ?? ""],
+                    configuration: configuration
+                )
+                postFailureNotification(
+                    migrationID: migration.id,
+                    phase: phase,
+                    configuration: configuration,
+                    graph: graph,
+                    error: error
+                )
+                activeMigrations.remove(migration.id)
             }
         }
     }
@@ -182,7 +209,8 @@ public final class GraphMigrationManager {
 public extension Notification.Name {
     /// Notification posted when a migration phase changes.
     static let migrationPhaseDidChange = Notification.Name("GraphMigrationManager.migrationPhaseDidChange")
-    
+    /// Notification posted when a migration fails.
+    static let graphMigrationDidFail = Notification.Name("GraphMigrationManager.graphMigrationDidFail")
     
 }
 
@@ -196,6 +224,28 @@ private extension GraphMigrationManager {
         ]
         NotificationCenter.default.post(
             name: .migrationPhaseDidChange,
+            object: nil,
+            userInfo: userInfo
+        )
+    }
+
+    static func postFailureNotification(
+        migrationID: String,
+        phase: GraphLifecyclePhase,
+        configuration: GraphStoreConfiguration?,
+        graph: Graph?,
+        error: Error
+    ) {
+        let userInfo: [String: Any] = [
+            "migrationID": migrationID,
+            "phase": phase,
+            "storeURL": configuration?.resolvedStoreURL as Any,
+            "graphID": graph?.name ?? "",
+            "error": error,
+            "errorDescription": error.localizedDescription
+        ]
+        NotificationCenter.default.post(
+            name: .graphMigrationDidFail,
             object: nil,
             userInfo: userInfo
         )

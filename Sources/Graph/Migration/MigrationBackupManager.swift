@@ -122,7 +122,16 @@ public enum MigrationBackupManager {
 
         try writeDescriptor(descriptor, in: backupFolderURL, fileManager: fm)
 
-        print("[MigrationBackupManager] 💾 Store backup creato in \(backupFolderURL.path)")
+        logBackup(
+            .info,
+            event: "backup_store_created",
+            message: "Store backup created",
+            metadata: [
+                "migrationID": migrationID,
+                "folder": backupFolderURL.lastPathComponent,
+                "files": String(copiedFiles.count)
+            ]
+        )
         return (descriptor, backupFolderURL)
     }
 
@@ -182,7 +191,16 @@ public enum MigrationBackupManager {
         )
 
         try writeDescriptor(descriptor, in: backupFolderURL, fileManager: fm)
-        print("[MigrationBackupManager] 💾 File backup creato in \(backupFolderURL.path)")
+        logBackup(
+            .info,
+            event: "backup_file_created",
+            message: "File backup created",
+            metadata: [
+                "migrationID": migrationID,
+                "folder": backupFolderURL.lastPathComponent,
+                "file": fileName
+            ]
+        )
         return (descriptor, backupFolderURL)
     }
 
@@ -273,7 +291,12 @@ public enum MigrationBackupManager {
                     results.append((descriptor, folder))
                 }
             } catch {
-                print("[MigrationBackupManager] ⚠️ Impossibile leggere descriptor in \(descriptorURL.path): \(error)")
+                logBackup(
+                    .warning,
+                    event: "backup_descriptor_read_failed",
+                    message: error.localizedDescription,
+                    metadata: ["descriptor": descriptorURL.lastPathComponent]
+                )
             }
         }
 
@@ -307,7 +330,12 @@ public enum MigrationBackupManager {
             let dest = originalDir.appendingPathComponent(fileName)
 
             guard fm.fileExists(atPath: src.path) else {
-                print("[MigrationBackupManager] ⚠️ File di backup mancante: \(src.path)")
+                logBackup(
+                    .warning,
+                    event: "backup_file_missing",
+                    message: "Backup file is missing",
+                    metadata: ["file": src.lastPathComponent]
+                )
                 continue
             }
 
@@ -315,14 +343,24 @@ public enum MigrationBackupManager {
                 if overwriteExisting {
                     try fm.removeItem(at: dest)
                 } else {
-                    print("[MigrationBackupManager] ⏭ Skip \(dest.lastPathComponent), esiste già e overwrite=false")
+                    logBackup(
+                        .info,
+                        event: "backup_restore_file_skipped",
+                        message: "Restore skipped because destination already exists",
+                        metadata: ["file": dest.lastPathComponent]
+                    )
                     continue
                 }
             }
             try fm.copyItem(at: src, to: dest)
         }
 
-        print("[MigrationBackupManager] 🔄 Ripristino completato verso \(originalDir.path)")
+        logBackup(
+            .info,
+            event: "backup_restore_completed",
+            message: "Backup restore completed",
+            metadata: ["folder": originalDir.lastPathComponent]
+        )
     }
 
     // MARK: - Helpers privati
@@ -336,10 +374,20 @@ public enum MigrationBackupManager {
         if conflictPolicy == .skip, fm.fileExists(atPath: baseFolderURL.path) {
             do {
                 let existingDescriptor = try loadDescriptor(in: baseFolderURL, fileManager: fm)
-                print("[MigrationBackupManager] ⚠️ Backup esistente trovato in \(baseFolderURL.path), riutilizzo backup esistente.")
+                logBackup(
+                    .info,
+                    event: "backup_existing_reused",
+                    message: "Existing backup reused",
+                    metadata: ["folder": baseFolderURL.lastPathComponent]
+                )
                 return (baseFolderURL, existingDescriptor)
             } catch {
-                print("[MigrationBackupManager] ⚠️ Impossibile leggere descriptor esistente in \(baseFolderURL.path): \(error). Procedo con la creazione di un nuovo backup.")
+                logBackup(
+                    .warning,
+                    event: "backup_existing_descriptor_read_failed",
+                    message: error.localizedDescription,
+                    metadata: ["folder": baseFolderURL.lastPathComponent]
+                )
                 // Se non riusciamo a leggere il descriptor, procediamo come se non esistesse
             }
         }
@@ -410,5 +458,20 @@ public enum MigrationBackupManager {
         let data = try Data(contentsOf: metaURL)
         let descriptor = try JSONDecoder().decode(BackupDescriptor.self, from: data)
         return descriptor
+    }
+
+    private static func logBackup(
+        _ level: GraphMigrationLogLevel,
+        event: String,
+        message: String,
+        metadata: [String: String] = [:]
+    ) {
+        GraphMigrationLogger.log(
+            migrationID: "MigrationBackupManager",
+            level: level,
+            event: event,
+            message: message,
+            metadata: metadata
+        )
     }
 }

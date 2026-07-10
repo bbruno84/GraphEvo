@@ -161,8 +161,8 @@ public class Graph: NSObject {
         prepareGraphContextRegistry()
         prepareManagedObjectContext(configuration: configuration)
         if migrationEnabled {
-            GraphMigrationManager.handlePhase(.postInit, configuration: nil, graph: self)
-            GraphMigrationManager.handlePhase(.ready, configuration: nil, graph: self)
+            GraphMigrationManager.handlePhase(.postInit, configuration: configuration, graph: self)
+            GraphMigrationManager.handlePhase(.ready, configuration: configuration, graph: self)
         }
         
     }
@@ -356,5 +356,4 @@ public class Graph: NSObject {
         }
     }
 }
-
 
