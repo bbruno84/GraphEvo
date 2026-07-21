@@ -73,11 +73,11 @@ final class StorePathResolutionTests: XCTestCase {
         GraphContextRegistry.shared.removeStore(forKey: configuration.storeIdentityKey)
     }
 
-    func testSameStoreNameInDifferentDirectoriesDoesNotReuseContext() {
+    func testSameStoreNameInDifferentDirectoriesDoesNotReuseContext() throws {
         let otherDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("GraphCK-Path-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: otherDirectory) }
-        try? FileManager.default.createDirectory(at: otherDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: otherDirectory, withIntermediateDirectories: true)
 
         var firstConfiguration = GraphStoreConfiguration()
         firstConfiguration.name = "same-name"
