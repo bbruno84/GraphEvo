@@ -40,8 +40,63 @@ final class StorePathResolutionTests: XCTestCase {
 
         // The production registry intentionally owns contexts for reuse. Remove
         // this test's entry before deleting the temporary SQLite sidecars.
-        GraphContextRegistry.managedObjectContexts.removeValue(forKey: storeKey)
-        GraphContextRegistry.configurations.removeValue(forKey: storeKey)
+        GraphContextRegistry.shared.removeStore(forKey: storeKey)
+    }
+
+    func testGraphsForTheSameStoreReuseTheRegisteredContext() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "shared-context"
+        configuration.location = directory
+
+        let first = Graph(configuration: configuration, migrationEnabled: false)
+        XCTAssertNotNil(first.managedObjectContext)
+
+        let second = Graph(configuration: configuration, migrationEnabled: false)
+
+        XCTAssertTrue(first.managedObjectContext === second.managedObjectContext)
+        XCTAssertTrue(first.persistentContainer === second.persistentContainer)
+
+        XCTAssertTrue(
+            GraphContextRegistry.shared.claimObserver(
+                graph: first,
+                key: configuration.storeIdentityKey
+            )
+        )
+        XCTAssertIdentical(
+            GraphContextRegistry.shared.release(
+                graph: first,
+                key: configuration.storeIdentityKey
+            ),
+            second
+        )
+
+        GraphContextRegistry.shared.removeStore(forKey: configuration.storeIdentityKey)
+    }
+
+    func testSameStoreNameInDifferentDirectoriesDoesNotReuseContext() {
+        let otherDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-Path-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: otherDirectory) }
+        try? FileManager.default.createDirectory(at: otherDirectory, withIntermediateDirectories: true)
+
+        var firstConfiguration = GraphStoreConfiguration()
+        firstConfiguration.name = "same-name"
+        firstConfiguration.location = directory
+
+        var secondConfiguration = GraphStoreConfiguration()
+        secondConfiguration.name = firstConfiguration.name
+        secondConfiguration.location = otherDirectory
+
+        let first = Graph(configuration: firstConfiguration, migrationEnabled: false)
+        let second = Graph(configuration: secondConfiguration, migrationEnabled: false)
+
+        XCTAssertNotNil(first.managedObjectContext)
+        XCTAssertNotNil(second.managedObjectContext)
+        XCTAssertFalse(first.managedObjectContext === second.managedObjectContext)
+        XCTAssertNotEqual(firstConfiguration.storeIdentityKey, secondConfiguration.storeIdentityKey)
+
+        GraphContextRegistry.shared.removeStore(forKey: firstConfiguration.storeIdentityKey)
+        GraphContextRegistry.shared.removeStore(forKey: secondConfiguration.storeIdentityKey)
     }
 
     func testExistingLegacyRouteStoreIsReused() throws {
