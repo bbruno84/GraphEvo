@@ -208,4 +208,44 @@ final class GraphMigrationManagerTests: XCTestCase {
         XCTAssertEqual(migration.insertedIDs, [objectID])
         XCTAssertTrue(migration.updatedIDs.isEmpty)
     }
+
+    func testDefaultMigrationHelpersAndLedgerReconciliation() throws {
+        let migrationID = "ManagerDefaults-\(UUID().uuidString)"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-ManagerDefaults-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ManagerDefaults"
+        configuration.location = directory
+        let migration = CompletingMigration(id: migrationID) { _ in false }
+        let record = try GraphMigrationLedger.markDone(
+            migrationID: migrationID,
+            version: migration.version,
+            synchronization: .local,
+            configuration: configuration
+        )
+
+        var context = GraphMigrationContext()
+        context.set("GraphMigration.previousRecord", value: record)
+        XCTAssertEqual(context.previousMigrationRecord, record)
+        XCTAssertEqual(
+            migration.backupRoot(for: configuration),
+            GraphMigrationManager.defaultBackupRoot(for: configuration)
+        )
+
+        let reconciled = GraphMigrationLedger.reconciledRecord(
+            migrationID: migrationID,
+            version: migration.version,
+            synchronization: .localAndICloudKeyValueStore,
+            configuration: configuration
+        )
+        XCTAssertEqual(reconciled?.migrationID, record.migrationID)
+        XCTAssertEqual(reconciled?.version, record.version)
+        XCTAssertEqual(reconciled?.state, .done)
+
+        migration.resetMigrationState(for: configuration)
+        XCTAssertNil(GraphMigrationManager.record(for: migration, configuration: configuration))
+    }
 }

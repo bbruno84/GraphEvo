@@ -55,6 +55,9 @@ final class UtilityFeatureTests: XCTestCase {
         XCTAssertNil(GraphJSON.serialize(Date()))
         XCTAssertEqual(GraphJSON.stringify(NSNull()), "null")
         XCTAssertEqual(GraphJSON.stringify(42), "42")
+        XCTAssertEqual(GraphJSON(1.5).asDouble, 1.5)
+        XCTAssertEqual(GraphJSON(Float(2.5)).asFloat, 2.5)
+        XCTAssertNotNil(GraphJSON(["value": 1]).asNSData)
     }
 
     func testAnyCodableObjectAndCollectionWrappersRoundTrip() throws {
@@ -88,10 +91,13 @@ final class UtilityFeatureTests: XCTestCase {
         XCTAssertEqual(decodedWrappedDictionary.items["date"]?.value as? Date, Date(timeIntervalSince1970: 123))
         XCTAssertEqual(decodedWrappedDictionary.items["data"]?.value as? Data, Data([1, 2, 3]))
         XCTAssertEqual(decodedWrappedDictionary.items["url"]?.value as? URL, URL(string: "https://example.com"))
+        XCTAssertEqual(Array(decodedWrappedDictionary).count, 3)
 
         let archived = try NSKeyedArchiver.archivedData(withRootObject: array, requiringSecureCoding: true)
         let unarchived = try XCTUnwrap(NSKeyedUnarchiver.unarchivedObject(ofClass: NSArrayOfAnyCodableObject.self, from: archived))
         XCTAssertEqual(unarchived.items.map { $0.value as? String }, ["first", nil, nil])
+        XCTAssertThrowsError(try JSONEncoder().encode(AnyCodableObject(NSUUID())))
+        XCTAssertThrowsError(try JSONDecoder().decode(AnyCodableObject.self, from: Data("null".utf8)))
     }
 
     func testStoreMetadataUpgradeRules() {
