@@ -110,7 +110,8 @@ internal extension Graph {
 
       container.loadPersistentStores { [unowned self] (desc, error) in
         if let error = error {
-          fatalError("[Graph Error] Failed to load in-memory store: \(error.localizedDescription)")
+          self.failStoreOpening(.failedToLoadStore(storeURL, underlying: error))
+          return
         }
         self.persistentContainer = container
         self.managedObjectContext = container.viewContext
@@ -129,6 +130,7 @@ internal extension Graph {
           container: container,
           configuration: configuration
         )
+        self.storeDidOpenSuccessfully()
       }
       return
     }
@@ -148,15 +150,19 @@ internal extension Graph {
       if persistentContainer != nil {
         installRemoteObserverIfNeeded()
       }
+      storeDidOpenSuccessfully()
       return
     }
 
     // Ensure parent directory exists, not the .sqlite file itself
     let dirURL = storeURL.deletingLastPathComponent()
+    var directoryCreationError: Error?
     File.createDirectoryAtPath(dirURL, withIntermediateDirectories: true, attributes: nil) { (success, error) in
-        if let e = error {
-            fatalError("[Graph Error: \(e.localizedDescription)]")
-        }
+      directoryCreationError = error
+    }
+    if let directoryCreationError {
+      failStoreOpening(.failedToLoadStore(storeURL, underlying: directoryCreationError))
+      return
     }
 
     if configuration.cloudKitContainerIdentifier != nil && !Graph.isRunningUnderTests {
@@ -207,6 +213,7 @@ internal extension Graph {
                     print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
                 }
             }
+            self.storeDidOpenSuccessfully()
           }
           return
         }
@@ -245,6 +252,7 @@ internal extension Graph {
         // Prepare Persistent History bootstrap on launch (token restore / bootstrap-from-now).
         // This is safe to call multiple times; it will no-op if already initialized.
         self.ph_prepareOnLaunchAfterContainerReady()
+        self.storeDidOpenSuccessfully()
       }
     } else {
       let container = GraphStoreContainerFactory.makeLocal(name: name, storeURL: storeURL, configuration: configuration)
@@ -285,6 +293,7 @@ internal extension Graph {
                 print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
             }
         }
+        self.storeDidOpenSuccessfully()
       }
     }
   }
@@ -313,7 +322,45 @@ internal extension Graph {
     storeOpeningError = error
     managedObjectContext = nil
     persistentContainer = nil
+    readiness = .failed(error)
+    let completions = readinessCompletions
+    readinessCompletions.removeAll()
+    completions.forEach { $0(.failure(error)) }
     print("⚠️ [GraphCK] Store opening refused: \(error.localizedDescription)")
+  }
+
+  /// Completes store setup and, when enabled, the migration lifecycle before
+  /// releasing the public readiness callbacks.
+  func storeDidOpenSuccessfully() {
+    guard case .initializing = readiness else { return }
+
+    guard migrationEnabled else {
+      completeReadiness()
+      return
+    }
+
+    GraphMigrationManager.handlePhase(
+      .postInit,
+      configuration: configuration,
+      graph: self
+    ) { [weak self] in
+      guard let self else { return }
+      GraphMigrationManager.handlePhase(
+        .ready,
+        configuration: self.configuration,
+        graph: self
+      ) { [weak self] in
+        self?.completeReadiness()
+      }
+    }
+  }
+
+  private func completeReadiness() {
+    guard case .initializing = readiness else { return }
+    readiness = .ready
+    let completions = readinessCompletions
+    readinessCompletions.removeAll()
+    completions.forEach { $0(.success(self)) }
   }
   
   /// Prepares the SQLite file if needed.

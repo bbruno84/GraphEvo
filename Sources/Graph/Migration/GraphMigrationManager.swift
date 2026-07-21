@@ -16,6 +16,7 @@ public final class GraphMigrationManager {
         let phase: GraphLifecyclePhase
         let configuration: GraphStoreConfiguration?
         let graph: Graph?
+        let completion: (() -> Void)?
     }
 
     private final class CompletionGate {
@@ -77,6 +78,7 @@ public final class GraphMigrationManager {
     /// Later phases are queued instead of overwriting the active index/context.
     private static var phaseInFlight = false
     private static var inFlightPhase: GraphLifecyclePhase?
+    private static var inFlightCompletion: (() -> Void)?
     private static var pendingPhases: [PendingPhase] = []
     private static var stateGeneration = 0
 
@@ -97,6 +99,7 @@ public final class GraphMigrationManager {
         currentContext = nil
         phaseInFlight = false
         inFlightPhase = nil
+        inFlightCompletion = nil
         pendingPhases.removeAll()
         stateGeneration &+= 1
     }
@@ -158,15 +161,34 @@ public final class GraphMigrationManager {
     ///   - configuration: The Core Data store configuration this phase refers to.
     ///   - graph: Optional Graph instance (may be nil in early phases).
     public static func handlePhase(_ phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?) {
+        handlePhase(phase, configuration: configuration, graph: graph, completion: nil)
+    }
+
+    /// Handles a lifecycle phase and invokes `completion` after every
+    /// migration in that phase has reached a terminal result. Existing callers
+    /// can keep using the synchronous-looking overload above; the completion
+    /// overload makes asynchronous lifecycle composition explicit.
+    public static func handlePhase(
+        _ phase: GraphLifecyclePhase,
+        configuration: GraphStoreConfiguration?,
+        graph: Graph?,
+        completion: (() -> Void)?
+    ) {
         stateLock.lock()
         defer { stateLock.unlock() }
 
         if phaseInFlight {
-            pendingPhases.append(PendingPhase(phase: phase, configuration: configuration, graph: graph))
+            pendingPhases.append(PendingPhase(
+                phase: phase,
+                configuration: configuration,
+                graph: graph,
+                completion: completion
+            ))
             return
         }
         phaseInFlight = true
         inFlightPhase = phase
+        inFlightCompletion = completion
         startPhase(phase, configuration: configuration, graph: graph)
     }
 
@@ -344,11 +366,18 @@ private extension GraphMigrationManager {
             currentContext = nil
         }
         inFlightPhase = nil
-        guard !pendingPhases.isEmpty else { return }
-        let next = pendingPhases.removeFirst()
-        phaseInFlight = true
-        inFlightPhase = next.phase
-        startPhase(next.phase, configuration: next.configuration, graph: next.graph)
+        let completion = inFlightCompletion
+        inFlightCompletion = nil
+        if !pendingPhases.isEmpty {
+            let next = pendingPhases.removeFirst()
+            phaseInFlight = true
+            inFlightPhase = next.phase
+            inFlightCompletion = next.completion
+            startPhase(next.phase, configuration: next.configuration, graph: next.graph)
+        }
+        // Invoke the completion after the next queued phase has been admitted,
+        // so a chained phase cannot overtake work already waiting in the queue.
+        completion?()
     }
 
     static func persistStarted(for migration: GraphMigration, configuration: GraphStoreConfiguration) {
