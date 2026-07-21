@@ -1,7 +1,32 @@
 import XCTest
+import CoreData
 @testable import Graph
 
 final class CoreGraphAPITests: XCTestCase {
+    func testInMemoryBackendAndBackgroundContext() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "InMemory-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        XCTAssertEqual(graph.type, NSInMemoryStoreType)
+        XCTAssertNotNil(graph.managedObjectContext)
+
+        let background = graph.newBackgroundContext()
+        XCTAssertNotNil(background)
+        XCTAssertEqual(background?.transactionAuthor, GraphDeviceAuthor.current())
+
+        let entity = Entity("Ephemeral", graph: graph)
+        entity[dynamicMember: "value"] = "memory"
+        var saveSuccess = false
+        graph.sync { success, _ in saveSuccess = success }
+        XCTAssertTrue(saveSuccess)
+        XCTAssertEqual(
+            Search<Entity>(graph: graph).where(.type("Ephemeral")).sync().first?[dynamicMember: "value"] as? String,
+            "memory"
+        )
+    }
+
     func testEntityRelationshipAndActionRoundTrip() {
         var configuration = GraphStoreConfiguration()
         configuration.name = "CoreAPI-\(UUID().uuidString)"
