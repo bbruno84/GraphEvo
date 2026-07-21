@@ -7,7 +7,7 @@
 
 
 import UIKit
-import GraphCK
+import Graph
 
 final class NotesViewController: UIViewController {
 

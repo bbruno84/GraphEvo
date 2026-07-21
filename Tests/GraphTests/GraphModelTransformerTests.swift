@@ -18,7 +18,7 @@ final class GraphModelTransformerTests: XCTestCase {
 
     func testStringPropertyRoundTrip() async throws {
         var config = GraphStoreConfiguration()
-        config.name = "ModelTransformerTests0"
+        config.name = "ModelTransformerTests0-\(UUID().uuidString)"
         let g = Graph(configuration: config)
         g.clear()
         g.sync()
@@ -27,14 +27,15 @@ final class GraphModelTransformerTests: XCTestCase {
 
         g.sync()
 
-        let fetched = Search<Entity>().where(.type("Note")).sync().first
+        let fetched = Search<Entity>(graph: g).where(.type("Note")).sync().first
         XCTAssertEqual(fetched?[dynamicMember: "title"] as? String, "Hello")
     }
 
     func testAllSupportedTypesRoundTrip() async throws {
         var config = GraphStoreConfiguration()
-        config.name = "ModelTransformerTests2"
+        config.name = "ModelTransformerTests2-\(UUID().uuidString)"
         let g = Graph(configuration: config)
+        g.clear()
         let e = Entity("Multi", graph: g)
 
         let now = Date()
@@ -53,7 +54,7 @@ final class GraphModelTransformerTests: XCTestCase {
 
         g.sync()
 
-        let fetched = Search<Entity>().where(.type("Multi")).sync().first
+        let fetched = Search<Entity>(graph: g).where(.type("Multi")).sync().first
         XCTAssertEqual(fetched?[dynamicMember: "string"] as? String, "Test")
         XCTAssertEqual(fetched?[dynamicMember: "int"] as? Int, 42)
         XCTAssertEqual(fetched?[dynamicMember: "double"] as? Double, 3.14)
@@ -69,6 +70,4 @@ final class GraphModelTransformerTests: XCTestCase {
         XCTAssertEqual(dct?["two"] as? String, "2")
     }
 }
-
-
 

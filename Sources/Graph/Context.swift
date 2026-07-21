@@ -301,8 +301,7 @@ internal extension Graph {
   /// Prepares the SQLite file if needed.
   func prepareSQLite() {
     if NSSQLiteStoreType == type {
-      // Append the fixed store filename (without GraphCK_ prefix)
-      runtimeStoreURL = (runtimeStoreURL ?? configuration.resolvedLocation).appendingPathComponent("Graph.sqlite")
+      runtimeStoreURL = (runtimeStoreURL ?? configuration.resolvedLocation).appendingPathComponent(configuration.storeFilename)
     }
   }
 }

@@ -397,11 +397,11 @@
 /* Begin XCSwiftPackageProductDependency section */
 		15620A0E2E6FFF1B00293C6E /* GraphCK */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = GraphCK;
+			productName = Graph;
 		};
 		15620A142E7000E900293C6E /* GraphCK */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = GraphCK;
+			productName = Graph;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

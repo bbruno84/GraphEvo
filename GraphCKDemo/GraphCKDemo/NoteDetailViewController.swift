@@ -6,7 +6,7 @@
 //
 
 import UIKit
-import GraphCK
+import Graph
 
 final class NoteDetailViewController: UIViewController {
     let graph: Graph = GraphProvider.shared.graph
@@ -30,7 +30,7 @@ final class NoteDetailViewController: UIViewController {
         label.translatesAutoresizingMaskIntoConstraints = false
         
         let attachment = Search<Relationship>(graph: GraphProvider.shared.graph).where(.type("NoteAttachment")).sync().first{ $0.object == note }
-        debugPrint("Attachment: \(attachment)")
+        debugPrint("Attachment: \(String(describing: attachment))")
         let attachLabel = UILabel()
         attachLabel.text = attachment != nil ? "🔗 Attachment: ✅" : "🔗 Attachment: ❌"
         attachLabel.translatesAutoresizingMaskIntoConstraints = false

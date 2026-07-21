@@ -7,7 +7,7 @@
 
 
 import Foundation
-import GraphCK
+import Graph
 
 final class GraphProvider {
     
@@ -19,7 +19,10 @@ final class GraphProvider {
         Graph.cloudKitContainerIdentifier = "iCloud.com.valerioburiani.GraphCKDemo"
         
         // Istanzia Graph (sincronizzato)
-        graph = Graph(name: "Main")
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "Main"
+        configuration.cloudKitContainerIdentifier = Graph.cloudKitContainerIdentifier
+        graph = Graph(configuration: configuration)
     }
 
     func configure() {

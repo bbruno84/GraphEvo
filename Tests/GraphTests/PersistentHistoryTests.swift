@@ -14,7 +14,62 @@ import XCTest
 import CoreData
 
 final class PersistentHistoryTests: XCTestCase {
+    private struct AppDataVersionMigration: GraphMigration {
+        let id = "PersistentHistoryTests.AppDataVersionMigration"
+        let version = 1
+
+        func handlePhase(
+            _ phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: GraphMigrationContext?,
+            completion: @escaping (GraphMigrationResult) -> Void
+        ) {
+            completion(.skipped)
+        }
+
+        func needsRun(
+            at phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: inout GraphMigrationContext?
+        ) -> Bool {
+            false
+        }
+
+        func recognizesLegacyCompletion(
+            at phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?
+        ) -> Bool {
+            false
+        }
+
+        func handleRemoteChanges(
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: GraphMigrationContext?,
+            inserted: [NSManagedObjectID],
+            updated: [NSManagedObjectID]
+        ) {
+            guard let graph, let moc = graph.managedObjectContext else { return }
+            let objectIDs = inserted + updated
+            moc.performAndWait {
+                for objectID in objectIDs {
+                    guard let object = try? moc.existingObject(with: objectID),
+                          object.entity.name == "ManagedEntityProperty" else { continue }
+                    object.setValue(configuration?.requiredAppDataVersion, forKey: "appDataVersion")
+                }
+                if moc.hasChanges {
+                    try? moc.save()
+                }
+            }
+        }
+    }
+
     func testSimulatedRemoteChangeTriggersMigration() throws {
+        GraphMigrationManager.registerMigration(AppDataVersionMigration())
+
         // 1. Create a fresh Graph with unique name
         var config = GraphStoreConfiguration()
         config.name = "TestGraph)"

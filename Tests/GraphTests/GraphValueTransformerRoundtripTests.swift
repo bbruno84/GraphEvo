@@ -52,7 +52,7 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
         for sample in samples {
             do {
                 let archived = try GraphArchiver.archive(sample)
-                let unarchived = GraphValueTransformer().reverseTransformedValue(archived)
+                let unarchived = GraphValueTransformer().transformedValue(archived)
                 
                 print("🔁 Roundtrip type=\(type(of: sample)) → \(String(describing: type(of: unarchived)))")
                 
