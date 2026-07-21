@@ -11,6 +11,25 @@ import CoreData
 /// Manages the migrations of the Graph store.
 /// This becomes the official system for all future migrations.
 public final class GraphMigrationManager {
+
+    private struct PendingPhase {
+        let phase: GraphLifecyclePhase
+        let configuration: GraphStoreConfiguration?
+        let graph: Graph?
+    }
+
+    private final class CompletionGate {
+        private let lock = NSLock()
+        private var consumed = false
+
+        func consume() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !consumed else { return false }
+            consumed = true
+            return true
+        }
+    }
     
     public enum GraphLifecyclePhase {
         case preInit
@@ -50,6 +69,17 @@ public final class GraphMigrationManager {
     /// Shared context for the entire migration cycle.
     private static var currentContext: GraphMigrationContext? = nil
 
+    /// Serializes the process-wide migration state. The public API predates
+    /// Swift concurrency, so a lock keeps registration and lifecycle calls
+    /// safe without forcing an async source-breaking API change.
+    private static let stateLock = NSRecursiveLock()
+    /// A phase remains in flight until its migration completion is received.
+    /// Later phases are queued instead of overwriting the active index/context.
+    private static var phaseInFlight = false
+    private static var inFlightPhase: GraphLifecyclePhase?
+    private static var pendingPhases: [PendingPhase] = []
+    private static var stateGeneration = 0
+
 #if DEBUG
     /// Resets process-wide migration state for isolated test cases.
     ///
@@ -57,12 +87,18 @@ public final class GraphMigrationManager {
     /// call this method. It is compiled only in debug builds so test isolation
     /// cannot become part of the production API surface.
     internal static func resetForTesting() {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         callbacks.removeAll()
         migrations.removeAll()
         currentMigrationIndex = 0
         activeMigrations.removeAll()
         loggedTerminalDecisions.removeAll()
         currentContext = nil
+        phaseInFlight = false
+        inFlightPhase = nil
+        pendingPhases.removeAll()
+        stateGeneration &+= 1
     }
 #endif
 
@@ -93,6 +129,8 @@ public final class GraphMigrationManager {
     /// Registers a callback to be executed during a given lifecycle phase.
     /// The callback receives the store configuration and an optional Graph context. Some phases may not provide a Graph instance.
     public static func registerCallback(for phase: GraphLifecyclePhase, _ callback: @escaping (GraphStoreConfiguration?, Graph?) -> Void) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         if callbacks[phase] != nil {
             callbacks[phase]?.append(callback)
         } else {
@@ -102,6 +140,8 @@ public final class GraphMigrationManager {
 
     /// Registers a migration to be executed at lifecycle phases.
     public static func registerMigration(_ migration: GraphMigration) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         // Ensure we do not register the same migration twice (by id).
         guard !migrations.contains(where: { $0.id == migration.id }) else { return }
         migrations.append(migration)
@@ -118,6 +158,22 @@ public final class GraphMigrationManager {
     ///   - configuration: The Core Data store configuration this phase refers to.
     ///   - graph: Optional Graph instance (may be nil in early phases).
     public static func handlePhase(_ phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
+        if phaseInFlight {
+            pendingPhases.append(PendingPhase(phase: phase, configuration: configuration, graph: graph))
+            return
+        }
+        phaseInFlight = true
+        inFlightPhase = phase
+        startPhase(phase, configuration: configuration, graph: graph)
+    }
+
+    /// Starts a phase while `stateLock` is held. The lock is recursive so
+    /// legacy callbacks can safely register more work or enqueue another
+    /// lifecycle phase synchronously.
+    private static func startPhase(_ phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?) {
         // Post notification for phase change
         postPhaseNotification(phase: phase, configuration: configuration, graph: graph)
         GraphMigrationLogger.log(
@@ -138,15 +194,14 @@ public final class GraphMigrationManager {
             currentContext = GraphMigrationContext()
         }
         runNextMigration(for: phase, configuration: configuration, graph: graph, context: currentContext)
-        // Reset context when phase is ready
-        if phase == .ready {
-            currentContext = nil
-        }
     }
 
     /// Runs the next migration in sequence for the given phase.
     private static func runNextMigration(for phase: GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext? = nil) {
-        guard currentMigrationIndex < migrations.count else { return }
+        guard currentMigrationIndex < migrations.count else {
+            finishPhaseIfNeeded()
+            return
+        }
         let migration = migrations[currentMigrationIndex]
 
         let isActive = activeMigrations.contains(migration.id)
@@ -203,7 +258,13 @@ public final class GraphMigrationManager {
             }
         }
 
+        let completionGate = CompletionGate()
+        let generation = stateGeneration
         migration.handlePhase(phase, configuration: configuration, graph: graph, context: mutableContext) { result in
+            guard completionGate.consume() else { return }
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            guard generation == stateGeneration else { return }
             switch result {
             case .done, .fallback:
                 let completesMigration = phase == .ready || !activeMigrations.contains(migration.id)
@@ -242,8 +303,13 @@ public final class GraphMigrationManager {
                     error: error
                 )
                 activeMigrations.remove(migration.id)
+                finishPhaseIfNeeded()
             }
         }
+
+        // A migration may complete synchronously, in which case the recursive
+        // calls above already advanced or finished the phase. An asynchronous
+        // migration leaves phaseInFlight set until its completion arrives.
     }
 }
 
@@ -266,7 +332,23 @@ private extension GraphMigrationManager {
         currentMigrationIndex += 1
         if currentMigrationIndex < migrations.count {
             runNextMigration(for: phase, configuration: configuration, graph: graph, context: context)
+        } else {
+            finishPhaseIfNeeded()
         }
+    }
+
+    static func finishPhaseIfNeeded() {
+        guard phaseInFlight else { return }
+        phaseInFlight = false
+        if inFlightPhase == .ready {
+            currentContext = nil
+        }
+        inFlightPhase = nil
+        guard !pendingPhases.isEmpty else { return }
+        let next = pendingPhases.removeFirst()
+        phaseInFlight = true
+        inFlightPhase = next.phase
+        startPhase(next.phase, configuration: next.configuration, graph: next.graph)
     }
 
     static func persistStarted(for migration: GraphMigration, configuration: GraphStoreConfiguration) {
@@ -431,6 +513,8 @@ private extension GraphMigrationManager {
 extension GraphMigrationManager {
     /// Handles remote entity changes from Persistent History by notifying all registered migrations.
     public static func handleRemoteEntityChanges(configuration: GraphStoreConfiguration?, graph: Graph?, inserted: [NSManagedObjectID], updated: [NSManagedObjectID], context: GraphMigrationContext? = nil) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         let ctx = context ?? currentContext ?? GraphMigrationContext()
         for migration in migrations {
             migration.handleRemoteChanges(configuration: configuration, graph: graph, context: ctx, inserted: inserted, updated: updated)

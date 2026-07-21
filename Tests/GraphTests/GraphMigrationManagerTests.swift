@@ -138,6 +138,94 @@ final class GraphMigrationManagerTests: XCTestCase {
         }
     }
 
+    private final class DelayedMigration: GraphMigration {
+        let id: String
+        private let lock = NSLock()
+        private(set) var handledPhases: [GraphMigrationManager.GraphLifecyclePhase] = []
+        let preInitDelay: TimeInterval
+
+        init(id: String, preInitDelay: TimeInterval = 0.05) {
+            self.id = id
+            self.preInitDelay = preInitDelay
+        }
+
+        func needsRun(
+            at phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: inout GraphMigrationContext?
+        ) -> Bool {
+            true
+        }
+
+        func handlePhase(
+            _ phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: GraphMigrationContext?,
+            completion: @escaping (GraphMigrationResult) -> Void
+        ) {
+            lock.lock()
+            handledPhases.append(phase)
+            lock.unlock()
+
+            let delay = phase == .preInit ? preInitDelay : 0
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                completion(.done)
+            }
+        }
+
+        var phases: [GraphMigrationManager.GraphLifecyclePhase] {
+            lock.lock()
+            defer { lock.unlock() }
+            return handledPhases
+        }
+    }
+
+    func testAsyncPhaseQueuesLaterLifecyclePhaseWithoutOverwritingState() throws {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ManagerAsync-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+
+        let migration = DelayedMigration(id: "ManagerAsync-\(UUID().uuidString)")
+        GraphMigrationManager.registerMigration(migration)
+
+        let readyExpectation = expectation(description: "ready phase completes")
+        let observer = NotificationCenter.default.addObserver(
+            forName: .migrationPhaseDidChange,
+            object: nil,
+            queue: nil
+        ) { notification in
+            guard let phase = notification.userInfo?["phase"] as? GraphMigrationManager.GraphLifecyclePhase,
+                  phase == .ready else { return }
+            readyExpectation.fulfill()
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        GraphMigrationManager.handlePhase(.preInit, configuration: configuration, graph: nil)
+        GraphMigrationManager.handlePhase(.ready, configuration: configuration, graph: nil)
+
+        wait(for: [readyExpectation], timeout: 2)
+        let phases = migration.phases
+        XCTAssertEqual(phases.count, 2)
+        if phases.count == 2 {
+            if case .preInit = phases[0] {
+                // Expected first phase.
+            } else {
+                XCTFail("The asynchronous preInit phase was not completed first")
+            }
+            if case .ready = phases[1] {
+                // Expected queued phase.
+            } else {
+                XCTFail("The queued ready phase was not started after preInit")
+            }
+        }
+        XCTAssertEqual(
+            GraphMigrationManager.record(for: migration, configuration: configuration)?.state,
+            .done
+        )
+    }
+
     func testRegisteredMigrationRunsOnceAndPersistsCompletion() throws {
         let migrationID = "ManagerTest-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
