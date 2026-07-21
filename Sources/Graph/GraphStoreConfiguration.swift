@@ -24,8 +24,14 @@ public struct GraphStoreConfiguration {
 
     // MARK: - Computed resolution
 
-    /// Path effettivo risolto, considerando AppGroup se presente.
+    /// Directory di default dello store, considerando App Group se presente.
+    ///
+    /// When `location` is an explicit SQLite file, the file itself always wins
+    /// over the App Group fallback. This keeps `Graph(storeURL:)` lossless.
     public var resolvedLocation: URL {
+        if isExplicitStoreFile {
+            return location.deletingLastPathComponent()
+        }
         if let id = appGroupIdentifier,
            let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id) {
             return base.appendingPathComponent("CosmicMind/Graph/")
@@ -36,9 +42,16 @@ public struct GraphStoreConfiguration {
     /// Nome file dello store.
     public var storeFilename: String { "GraphCK_\(name).sqlite" }
 
-    /// URL finale dello store (dir + filename).
+    /// Canonical URL of the store.
+    ///
+    /// A file passed in `location` is returned unchanged. Directory-based
+    /// configurations use one backend-independent filename; the backend must
+    /// not change the identity of the SQLite file.
     public var storeURL: URL {
-        resolvedLocation.appendingPathComponent(storeFilename)
+        if isExplicitStoreFile {
+            return location
+        }
+        return resolvedLocation.appendingPathComponent(storeFilename)
     }
 
     /// Route (Local vs Cloud) determinata dalla presenza del container CloudKit.
@@ -51,14 +64,56 @@ public struct GraphStoreConfiguration {
         Versions(graphModel: requiredGraphModelVersion, appData: requiredAppDataVersion)
     }
 
-    /// Resolved store URL that handles if location points directly to a file or a directory.
+    /// Candidate URLs for stores created by older GraphCK revisions.
+    ///
+    /// The route folders were an intermediate layout. They remain readable so
+    /// upgrading GraphCK does not silently create an empty store beside an
+    /// existing one.
+    public var legacyStoreURLs: [URL] {
+        guard !isExplicitStoreFile else { return [] }
+
+        let directLegacy = resolvedLocation.appendingPathComponent("Graph.sqlite")
+        let local = resolvedLocation
+            .appendingPathComponent("Local", isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+            .appendingPathComponent(storeFilename)
+        let cloud = resolvedLocation
+            .appendingPathComponent("Cloud", isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+            .appendingPathComponent(storeFilename)
+
+        // Prefer the currently configured route when both legacy variants
+        // exist, then inspect the other route for maximum compatibility.
+        let preferred = route.hasPrefix("Cloud/") ? cloud : local
+        let alternate = route.hasPrefix("Cloud/") ? local : cloud
+        return [preferred, directLegacy, alternate]
+    }
+
+    /// Resolved store URL used by Core Data.
+    ///
+    /// Explicit files are never rewritten. For directory configurations the
+    /// canonical location wins, followed by an existing legacy location.
     public var resolvedStoreURL: URL {
-        if location.pathExtension == "sqlite" {
-            // Already a full sqlite file path
-            return location
-        } else {
-            return resolvedLocation.appendingPathComponent(route).appendingPathComponent(storeFilename)
+        let canonical = storeURL
+        if isExplicitStoreFile || FileManager.default.fileExists(atPath: canonical.path) {
+            return canonical
         }
+        if let existingLegacy = legacyStoreURLs.first(where: {
+            FileManager.default.fileExists(atPath: $0.path)
+        }) {
+            return existingLegacy
+        }
+        return canonical
+    }
+
+    /// Stable key used by the in-process context registry.
+    /// It identifies the resolved store, not just its public route/name.
+    internal var storeIdentityKey: String {
+        resolvedStoreURL.standardizedFileURL.path
+    }
+
+    private var isExplicitStoreFile: Bool {
+        location.pathExtension.caseInsensitiveCompare("sqlite") == .orderedSame
     }
 
     public struct Versions: Equatable {

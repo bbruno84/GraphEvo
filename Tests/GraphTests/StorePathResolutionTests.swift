@@ -1,0 +1,93 @@
+import XCTest
+@testable import Graph
+
+final class StorePathResolutionTests: XCTestCase {
+    private var directory: URL!
+
+    override func setUpWithError() throws {
+        directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-Path-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        if let directory,
+           FileManager.default.fileExists(atPath: directory.path) {
+            try FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    func testDirectoryConfigurationUsesCanonicalBackendIndependentURL() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "primary"
+        configuration.location = directory
+
+        XCTAssertEqual(
+            configuration.storeURL,
+            directory.appendingPathComponent("GraphCK_primary.sqlite")
+        )
+        XCTAssertEqual(configuration.resolvedStoreURL, configuration.storeURL)
+    }
+
+    func testExplicitSQLiteFileIsPreservedExactly() {
+        let file = directory.appendingPathComponent("Existing.sqlite")
+        let graph = Graph(storeURL: file, migrationEnabled: false)
+        let storeKey = graph.configuration.storeIdentityKey
+
+        XCTAssertEqual(graph.configuration.storeURL, file)
+        XCTAssertEqual(graph.configuration.resolvedStoreURL, file)
+        XCTAssertEqual(graph.runtimeStoreURL, file)
+
+        // The production registry intentionally owns contexts for reuse. Remove
+        // this test's entry before deleting the temporary SQLite sidecars.
+        GraphContextRegistry.managedObjectContexts.removeValue(forKey: storeKey)
+        GraphContextRegistry.configurations.removeValue(forKey: storeKey)
+    }
+
+    func testExistingLegacyRouteStoreIsReused() throws {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "legacy"
+        configuration.location = directory
+        let legacy = directory
+            .appendingPathComponent("Local", isDirectory: true)
+            .appendingPathComponent("legacy", isDirectory: true)
+            .appendingPathComponent("GraphCK_legacy.sqlite")
+        try FileManager.default.createDirectory(
+            at: legacy.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data().write(to: legacy)
+
+        XCTAssertEqual(configuration.resolvedStoreURL, legacy)
+    }
+
+    func testConfiguredLegacyRouteWinsOverOlderDirectLegacyStore() throws {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "legacy-priority"
+        configuration.location = directory
+
+        let routeStore = directory
+            .appendingPathComponent("Local/legacy-priority", isDirectory: true)
+            .appendingPathComponent("GraphCK_legacy-priority.sqlite")
+        let directStore = directory.appendingPathComponent("Graph.sqlite")
+        try FileManager.default.createDirectory(
+            at: routeStore.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data().write(to: routeStore)
+        try Data().write(to: directStore)
+
+        XCTAssertEqual(configuration.resolvedStoreURL, routeStore)
+    }
+
+    func testTwoDirectoriesDoNotShareTheSameRegistryIdentity() {
+        var first = GraphStoreConfiguration()
+        first.name = "same-name"
+        first.location = directory.appendingPathComponent("one", isDirectory: true)
+
+        var second = first
+        second.location = directory.appendingPathComponent("two", isDirectory: true)
+
+        XCTAssertNotEqual(first.storeIdentityKey, second.storeIdentityKey)
+    }
+}
