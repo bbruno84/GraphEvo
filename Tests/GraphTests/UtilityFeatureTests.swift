@@ -38,6 +38,62 @@ final class UtilityFeatureTests: XCTestCase {
         XCTAssertNil(GraphJSON.parse("not-json"))
     }
 
+    func testGraphJSONLiteralsAccessorsAndIteratorBoundaries() throws {
+        let array: GraphJSON = [1, true, "third"]
+        XCTAssertEqual(array.asArray?.count, 3)
+        XCTAssertEqual(array[0].asInt, 1)
+        XCTAssertEqual(array[1].asBool, true)
+        XCTAssertEqual(array[2].asString, "third")
+        XCTAssertEqual(array[3], .isNil)
+        XCTAssertEqual(array[-1], .isNil)
+        XCTAssertEqual(Array(array).map(\.description), ["1", "true", "third"])
+
+        let dictionary: GraphJSON = ["count": 2, "enabled": false]
+        XCTAssertEqual(dictionary.asDictionary?["count"] as? Int, 2)
+        XCTAssertEqual(dictionary["enabled"].asBool, false)
+        XCTAssertEqual(dictionary["missing"], .isNil)
+        XCTAssertNil(GraphJSON.serialize(Date()))
+        XCTAssertEqual(GraphJSON.stringify(NSNull()), "null")
+        XCTAssertEqual(GraphJSON.stringify(42), "42")
+    }
+
+    func testAnyCodableObjectAndCollectionWrappersRoundTrip() throws {
+        let object = AnyCodableObject(["name": AnyCodableObject("GraphCK"), "count": AnyCodableObject(3)])
+        let array = NSArrayOfAnyCodableObject([
+            AnyCodableObject("first"),
+            AnyCodableObject(2),
+            AnyCodableObject(true)
+        ])
+        let dictionary = DictionaryOfAnyCodableObject([
+            "date": AnyCodableObject(Date(timeIntervalSince1970: 123)),
+            "data": AnyCodableObject(Data([1, 2, 3])),
+            "url": AnyCodableObject(URL(string: "https://example.com")!)
+        ])
+
+        let objectData = try JSONEncoder().encode(object)
+        let decodedObject = try JSONDecoder().decode(AnyCodableObject.self, from: objectData)
+        let decodedDictionary = try XCTUnwrap(decodedObject.value as? [String: AnyCodableObject])
+        XCTAssertEqual(decodedDictionary["name"]?.value as? String, "GraphCK")
+        XCTAssertEqual(decodedDictionary["count"]?.value as? Int, 3)
+
+        let arrayData = try JSONEncoder().encode(array)
+        let decodedArray = try JSONDecoder().decode(NSArrayOfAnyCodableObject.self, from: arrayData)
+        XCTAssertEqual(decodedArray.count, 3)
+        XCTAssertEqual(decodedArray[0].value as? String, "first")
+        XCTAssertEqual(decodedArray[1].value as? Int, 2)
+        XCTAssertEqual(decodedArray[2].value as? Bool, true)
+
+        let dictionaryData = try JSONEncoder().encode(dictionary)
+        let decodedWrappedDictionary = try JSONDecoder().decode(DictionaryOfAnyCodableObject.self, from: dictionaryData)
+        XCTAssertEqual(decodedWrappedDictionary.items["date"]?.value as? Date, Date(timeIntervalSince1970: 123))
+        XCTAssertEqual(decodedWrappedDictionary.items["data"]?.value as? Data, Data([1, 2, 3]))
+        XCTAssertEqual(decodedWrappedDictionary.items["url"]?.value as? URL, URL(string: "https://example.com"))
+
+        let archived = try NSKeyedArchiver.archivedData(withRootObject: array, requiringSecureCoding: true)
+        let unarchived = try XCTUnwrap(NSKeyedUnarchiver.unarchivedObject(ofClass: NSArrayOfAnyCodableObject.self, from: archived))
+        XCTAssertEqual(unarchived.items.map { $0.value as? String }, ["first", nil, nil])
+    }
+
     func testStoreMetadataUpgradeRules() {
         let current = GraphStoreConfiguration.Versions(graphModel: 2, appData: 3)
 

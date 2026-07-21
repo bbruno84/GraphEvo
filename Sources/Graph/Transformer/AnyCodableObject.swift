@@ -10,6 +10,9 @@ import Foundation
 
 @objc(AnyCodableObject)
 public final class AnyCodableObject: NSObject, NSSecureCoding, Codable {
+
+    private static let taggedTypeKey = "__graphck_codable_type"
+    private static let taggedValueKey = "value"
     
     public static var supportsSecureCoding: Bool = true
     
@@ -44,7 +47,37 @@ public final class AnyCodableObject: NSObject, NSSecureCoding, Codable {
     
     public required convenience init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        
+
+        if let tagged = try? container.decode([String: AnyCodableObject].self),
+           let type = tagged[AnyCodableObject.taggedTypeKey]?.value as? String,
+           let rawValue = tagged[AnyCodableObject.taggedValueKey]?.value {
+            switch type {
+            case "date":
+                if let value = rawValue as? Double {
+                    self.init(Date(timeIntervalSince1970: value))
+                    return
+                }
+                if let value = rawValue as? Int {
+                    self.init(Date(timeIntervalSince1970: TimeInterval(value)))
+                    return
+                }
+            case "data":
+                if let value = rawValue as? String,
+                   let data = Data(base64Encoded: value) {
+                    self.init(data)
+                    return
+                }
+            case "url":
+                if let value = rawValue as? String,
+                   let url = URL(string: value) {
+                    self.init(url)
+                    return
+                }
+            default:
+                break
+            }
+        }
+
         if let string = try? container.decode(String.self) {
             self.init(string)
         } else if let int = try? container.decode(Int.self) {
@@ -75,9 +108,21 @@ public final class AnyCodableObject: NSObject, NSSecureCoding, Codable {
         case let v as Int: try container.encode(v)
         case let v as Double: try container.encode(v)
         case let v as Bool: try container.encode(v)
-        case let v as Date: try container.encode(v)
-        case let v as Data: try container.encode(v)
-        case let v as URL: try container.encode(v)
+        case let v as Date:
+            try container.encode([
+                Self.taggedTypeKey: AnyCodableObject("date"),
+                Self.taggedValueKey: AnyCodableObject(v.timeIntervalSince1970)
+            ])
+        case let v as Data:
+            try container.encode([
+                Self.taggedTypeKey: AnyCodableObject("data"),
+                Self.taggedValueKey: AnyCodableObject(v.base64EncodedString())
+            ])
+        case let v as URL:
+            try container.encode([
+                Self.taggedTypeKey: AnyCodableObject("url"),
+                Self.taggedValueKey: AnyCodableObject(v.absoluteString)
+            ])
         case let v as [AnyCodableObject]: try container.encode(v)
         case let v as [String: AnyCodableObject]: try container.encode(v)
         default:
