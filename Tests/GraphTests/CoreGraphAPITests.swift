@@ -38,10 +38,15 @@ final class CoreGraphAPITests: XCTestCase {
         object[dynamicMember: "uuid"] = "object-1"
 
         let relationship = subject.is(relationship: "knows")
-        relationship.object = object
+        XCTAssertTrue(relationship.of(object) === relationship)
+        XCTAssertEqual([relationship].subject(types: "Person").map(\.id), [subject.id])
+        XCTAssertEqual([relationship].object(types: "Person").map(\.id), [object.id])
 
         let action = subject.will(action: "message")
-        action.add(objects: object)
+        XCTAssertTrue(action.what(objects: object) === action)
+        XCTAssertEqual(action.subject(types: "Person").map(\.id), [subject.id])
+        XCTAssertEqual(action.object(types: "Person").map(\.id), [object.id])
+        action.remove(objects: object).add(objects: object)
         graph.sync()
 
         let relationships = Search<Relationship>(graph: graph).where(.type("knows")).sync()
