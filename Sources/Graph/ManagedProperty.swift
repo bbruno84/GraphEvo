@@ -48,8 +48,7 @@ internal class ManagedProperty: NamedManagedObject {
     do {
         self.object = object
         let moc = managedObjectContext
-        if let route = GraphContextRegistry.managedObjectContexts.first(where: { $0.value == moc })?.key,
-           let config = GraphContextRegistry.configurations[route] {
+        if let config = GraphContextRegistry.shared.configuration(for: moc) {
             self.appDataVersionValue = config.requiredAppDataVersion
         }
     } catch {

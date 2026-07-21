@@ -37,11 +37,121 @@ enum GraphDeviceAuthor {
   }
 }
 
-internal struct GraphContextRegistry {
-  static var dispatchToken = false
-  static var added: [String: Bool]!
-  static var managedObjectContexts: [String: NSManagedObjectContext]!
-  static var configurations: [String: GraphStoreConfiguration]!
+internal final class GraphContextRegistry {
+  static let shared = GraphContextRegistry()
+
+  private final class WeakGraph {
+    weak var value: Graph?
+    init(_ value: Graph) { self.value = value }
+  }
+
+  private final class Entry {
+    let context: NSManagedObjectContext
+    let container: NSPersistentContainer?
+    var configuration: GraphStoreConfiguration
+    weak var observerOwner: Graph?
+    var graphs: [WeakGraph]
+
+    init(
+      context: NSManagedObjectContext,
+      container: NSPersistentContainer?,
+      configuration: GraphStoreConfiguration,
+      graph: Graph
+    ) {
+      self.context = context
+      self.container = container
+      self.configuration = configuration
+      self.observerOwner = nil
+      self.graphs = [WeakGraph(graph)]
+    }
+  }
+
+  private let lock = NSLock()
+  private var entries: [String: Entry] = [:]
+
+  private init() {}
+
+  func context(for key: String) -> NSManagedObjectContext? {
+    lock.lock()
+    defer { lock.unlock() }
+    return entries[key]?.context
+  }
+
+  func container(for key: String) -> NSPersistentContainer? {
+    lock.lock()
+    defer { lock.unlock() }
+    return entries[key]?.container
+  }
+
+  func configuration(for context: NSManagedObjectContext) -> GraphStoreConfiguration? {
+    lock.lock()
+    defer { lock.unlock() }
+    return entries.values.first(where: { $0.context === context })?.configuration
+  }
+
+  /// Registers a Graph for a store. The lock makes registration and lookup
+  /// atomic when several Graph instances are opened concurrently.
+  func register(
+    graph: Graph,
+    key: String,
+    context: NSManagedObjectContext,
+    container: NSPersistentContainer?,
+    configuration: GraphStoreConfiguration
+  ) {
+    lock.lock()
+    defer { lock.unlock() }
+
+    if let entry = entries[key] {
+      entry.configuration = configuration
+      if !entry.graphs.contains(where: { $0.value === graph }) {
+        entry.graphs.append(WeakGraph(graph))
+      }
+      return
+    }
+
+    entries[key] = Entry(
+      context: context,
+      container: container,
+      configuration: configuration,
+      graph: graph
+    )
+  }
+
+  /// Claims the single remote observer slot for a store.
+  func claimObserver(graph: Graph, key: String) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let entry = entries[key], entry.observerOwner == nil else { return false }
+    entry.observerOwner = graph
+    return true
+  }
+
+  /// Releases a Graph. Returns the next live Graph that should inherit the
+  /// remote observer, if the released Graph owned it.
+  func release(graph: Graph, key: String) -> Graph? {
+    lock.lock()
+    defer { lock.unlock() }
+
+    guard let entry = entries[key] else { return nil }
+    entry.graphs = entry.graphs.filter { $0.value != nil && $0.value !== graph }
+
+    let wasObserverOwner = entry.observerOwner === graph
+    if wasObserverOwner {
+      entry.observerOwner = nil
+    }
+    if let next = entry.graphs.first?.value {
+      return wasObserverOwner ? next : nil
+    }
+
+    entries.removeValue(forKey: key)
+    return nil
+  }
+
+  func removeStore(forKey key: String) {
+    lock.lock()
+    entries.removeValue(forKey: key)
+    lock.unlock()
+  }
 }
 
 internal struct Context {
@@ -123,14 +233,7 @@ internal struct Context {
 internal extension Graph {
   /// Prepares the registry.
   func prepareGraphContextRegistry() {
-    guard false == GraphContextRegistry.dispatchToken else {
-      return
-    }
-    
-    GraphContextRegistry.dispatchToken = true
-    GraphContextRegistry.added = [:]
-    GraphContextRegistry.managedObjectContexts = [String: NSManagedObjectContext]()
-    GraphContextRegistry.configurations = [String: GraphStoreConfiguration]()
+    _ = GraphContextRegistry.shared
   }
   
   /**
@@ -177,15 +280,33 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = storeURL
-        GraphContextRegistry.managedObjectContexts[storeKey] = self.managedObjectContext
-        GraphContextRegistry.configurations[storeKey] = configuration
+        self.contextRegistryKey = storeKey
+        GraphContextRegistry.shared.register(
+          graph: self,
+          key: storeKey,
+          context: self.managedObjectContext,
+          container: container,
+          configuration: configuration
+        )
       }
       return
     }
 
     // Reuse cached context if present
-    if let cached = GraphContextRegistry.managedObjectContexts[storeKey] {
+    if let cached = GraphContextRegistry.shared.context(for: storeKey) {
       managedObjectContext = cached
+      contextRegistryKey = storeKey
+      persistentContainer = GraphContextRegistry.shared.container(for: storeKey)
+      GraphContextRegistry.shared.register(
+        graph: self,
+        key: storeKey,
+        context: cached,
+        container: persistentContainer,
+        configuration: configuration
+      )
+      if persistentContainer != nil {
+        installRemoteObserverIfNeeded()
+      }
       return
     }
 
@@ -223,8 +344,15 @@ internal extension Graph {
             self.managedObjectContext.undoManager = nil
             self.managedObjectContext.automaticallyMergesChangesFromParent = true
             self.runtimeStoreURL = desc.url ?? storeURL
-            GraphContextRegistry.managedObjectContexts[storeKey] = self.managedObjectContext
-            GraphContextRegistry.configurations[storeKey] = configuration
+            self.contextRegistryKey = storeKey
+            GraphContextRegistry.shared.register(
+              graph: self,
+              key: storeKey,
+              context: self.managedObjectContext,
+              container: plain,
+              configuration: configuration
+            )
+            self.installRemoteObserverIfNeeded()
 
             if let store = plain.persistentStoreCoordinator.persistentStores.first {
                 do {
@@ -250,8 +378,14 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = desc.url ?? storeURL
-        GraphContextRegistry.managedObjectContexts[storeKey] = self.managedObjectContext
-        GraphContextRegistry.configurations[storeKey] = configuration
+        self.contextRegistryKey = storeKey
+        GraphContextRegistry.shared.register(
+          graph: self,
+          key: storeKey,
+          context: self.managedObjectContext,
+          container: container,
+          configuration: configuration
+        )
 
         if let store = container.persistentStoreCoordinator.persistentStores.first {
             do {
@@ -266,13 +400,7 @@ internal extension Graph {
                 print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
             }
         }
-        if GraphContextRegistry.added[storeKey] != true {
-          NotificationCenter.default.addObserver(self,
-                                                 selector: #selector(handlePersistentStoreRemoteChange(_:)),
-                                                 name: .NSPersistentStoreRemoteChange,
-                                                 object: container.persistentStoreCoordinator)
-          GraphContextRegistry.added[storeKey] = true
-        }
+        self.installRemoteObserverIfNeeded()
         // Prepare Persistent History bootstrap on launch (token restore / bootstrap-from-now).
         // This is safe to call multiple times; it will no-op if already initialized.
         self.ph_prepareOnLaunchAfterContainerReady()
@@ -294,13 +422,19 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = desc.url ?? storeURL
-        GraphContextRegistry.managedObjectContexts[storeKey] = self.managedObjectContext
-        GraphContextRegistry.configurations[storeKey] = configuration
+        self.contextRegistryKey = storeKey
+        GraphContextRegistry.shared.register(
+          graph: self,
+          key: storeKey,
+          context: self.managedObjectContext,
+          container: container,
+          configuration: configuration
+        )
 
         if let store = container.persistentStoreCoordinator.persistentStores.first {
             do {
                 let current = try GraphStoreMetadata.read(from: configuration, at: runtimeStoreURL)
-                if current.graphModel == nil || current.appData == nil {
+                if !storeExistedBeforeOpen && (current.graphModel == nil || current.appData == nil) {
                     try GraphStoreMetadata.write(configuration.requiredVersions,
                                                  using: container.persistentStoreCoordinator,
                                                  for: store)
@@ -312,6 +446,23 @@ internal extension Graph {
         }
       }
     }
+  }
+
+  /// Installs at most one remote-history observer for the store.
+  func installRemoteObserverIfNeeded() {
+    guard let container = persistentContainer,
+          container is NSPersistentCloudKitContainer,
+          configuration.cloudKitContainerIdentifier != nil,
+          !Graph.isRunningUnderTests,
+          let key = contextRegistryKey,
+          GraphContextRegistry.shared.claimObserver(graph: self, key: key) else { return }
+
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handlePersistentStoreRemoteChange(_:)),
+      name: .NSPersistentStoreRemoteChange,
+      object: container.persistentStoreCoordinator
+    )
   }
 
   /// Records an opening failure without moving, replacing or recreating the

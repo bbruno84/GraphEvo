@@ -186,6 +186,9 @@ public class Graph: NSObject {
     /// Keep a reference to the persistent container so background contexts can
     /// be created for both CloudKit and local stores.
     internal var persistentContainer: NSPersistentContainer?
+
+    /// Stable registry key captured when the store is opened.
+    internal var contextRegistryKey: String?
     
     /**
      A reference to the graph completion handler.
@@ -196,6 +199,10 @@ public class Graph: NSObject {
     
     /// Deinitializer that removes the Graph from NSNotificationCenter.
     deinit {
+        if let key = contextRegistryKey,
+           let promoted = GraphContextRegistry.shared.release(graph: self, key: key) {
+            promoted.installRemoteObserverIfNeeded()
+        }
         NotificationCenter.default.removeObserver(self)
     }
     
