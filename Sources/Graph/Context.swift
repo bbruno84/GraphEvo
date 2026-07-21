@@ -24,7 +24,6 @@
  */
 
 import CoreData
-import CloudKit
 
 // Unique author per device for filtering local writes in Persistent History
 enum GraphDeviceAuthor {
@@ -34,134 +33,6 @@ enum GraphDeviceAuthor {
     let s = UUID().uuidString
     UserDefaults.standard.set(s, forKey: key)
     return s
-  }
-}
-
-internal final class GraphContextRegistry {
-  static let shared = GraphContextRegistry()
-
-  private final class WeakGraph {
-    weak var value: Graph?
-    init(_ value: Graph) { self.value = value }
-  }
-
-  private final class Entry {
-    let context: NSManagedObjectContext
-    let container: NSPersistentContainer?
-    var configuration: GraphStoreConfiguration
-    weak var observerOwner: Graph?
-    var graphs: [WeakGraph]
-
-    init(
-      context: NSManagedObjectContext,
-      container: NSPersistentContainer?,
-      configuration: GraphStoreConfiguration,
-      graph: Graph
-    ) {
-      self.context = context
-      self.container = container
-      self.configuration = configuration
-      self.observerOwner = nil
-      self.graphs = [WeakGraph(graph)]
-    }
-  }
-
-  private let lock = NSLock()
-  private let storeOpenLock = NSLock()
-  private var entries: [String: Entry] = [:]
-
-  private init() {}
-
-  /// Core Data must not initialize two persistent containers for the same
-  /// SQLite URL concurrently. Registry lookup/registration is locked, but
-  /// the actual store load happens outside that critical section, so opening
-  /// is serialized separately.
-  func withStoreOpenLock<T>(_ body: () throws -> T) rethrows -> T {
-    storeOpenLock.lock()
-    defer { storeOpenLock.unlock() }
-    return try body()
-  }
-
-  func context(for key: String) -> NSManagedObjectContext? {
-    lock.lock()
-    defer { lock.unlock() }
-    return entries[key]?.context
-  }
-
-  func container(for key: String) -> NSPersistentContainer? {
-    lock.lock()
-    defer { lock.unlock() }
-    return entries[key]?.container
-  }
-
-  func configuration(for context: NSManagedObjectContext) -> GraphStoreConfiguration? {
-    lock.lock()
-    defer { lock.unlock() }
-    return entries.values.first(where: { $0.context === context })?.configuration
-  }
-
-  /// Registers a Graph for a store. The lock makes registration and lookup
-  /// atomic when several Graph instances are opened concurrently.
-  func register(
-    graph: Graph,
-    key: String,
-    context: NSManagedObjectContext,
-    container: NSPersistentContainer?,
-    configuration: GraphStoreConfiguration
-  ) {
-    lock.lock()
-    defer { lock.unlock() }
-
-    if let entry = entries[key] {
-      entry.configuration = configuration
-      if !entry.graphs.contains(where: { $0.value === graph }) {
-        entry.graphs.append(WeakGraph(graph))
-      }
-      return
-    }
-
-    entries[key] = Entry(
-      context: context,
-      container: container,
-      configuration: configuration,
-      graph: graph
-    )
-  }
-
-  /// Claims the single remote observer slot for a store.
-  func claimObserver(graph: Graph, key: String) -> Bool {
-    lock.lock()
-    defer { lock.unlock() }
-    guard let entry = entries[key], entry.observerOwner == nil else { return false }
-    entry.observerOwner = graph
-    return true
-  }
-
-  /// Releases a Graph. Returns the next live Graph that should inherit the
-  /// remote observer, if the released Graph owned it.
-  func release(graph: Graph, key: String) -> Graph? {
-    lock.lock()
-    defer { lock.unlock() }
-
-    guard let entry = entries[key] else { return nil }
-    entry.graphs = entry.graphs.filter { $0.value != nil && $0.value !== graph }
-
-    let wasObserverOwner = entry.observerOwner === graph
-    if wasObserverOwner {
-      entry.observerOwner = nil
-    }
-    if let next = entry.graphs.first?.value {
-      return wasObserverOwner ? next : nil
-    }
-
-    entries.removeValue(forKey: key)
-    return nil
-  }
-
-  func removeStore(forKey key: String) {
-    lock.lock()
-    entries.removeValue(forKey: key)
-    lock.unlock()
   }
 }
 
@@ -197,47 +68,6 @@ internal struct Context {
     return moc
   }
 
-  internal static func makeLocalContainer(name: String, storeURL: URL, configuration: GraphStoreConfiguration) -> NSPersistentContainer {
-    print("🛠 [GraphCK] Preparing LOCAL container at: \(storeURL)")
-    //print("🔎 [GraphCK] (Theory) Local storeURL should be: \(storeURL)")
-    let storeDescription = NSPersistentStoreDescription(url: storeURL)
-    storeDescription.type = NSSQLiteStoreType
-    storeDescription.shouldAddStoreAsynchronously = false
-    // Schema migration belongs to the host application. GraphCK only opens
-    // stores already compatible with its current model.
-    storeDescription.shouldMigrateStoreAutomatically = false
-    storeDescription.shouldInferMappingModelAutomatically = false
-    storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-    
-    let container = NSPersistentContainer(name: name, managedObjectModel: Model.create())
-    container.persistentStoreDescriptions = [storeDescription]
-    //print("🔎 [GraphCK] (After load) Local container will use store at: \(storeURL)")
-    print("✅ [GraphCK] Local container created with store at: \(storeURL)")
-    return container
-  }
-  
-  internal static func makeCloudContainer(name: String, storeURL: URL, configuration: GraphStoreConfiguration) -> NSPersistentCloudKitContainer {
-    print("🛠 [GraphCK] Preparing CLOUD container at: \(storeURL)")
-    //print("🔎 [GraphCK] (Theory) Cloud storeURL should be: \(storeURL)")
-    let storeDescription = NSPersistentStoreDescription(url: storeURL)
-    storeDescription.type = NSSQLiteStoreType
-    storeDescription.shouldAddStoreAsynchronously = false
-    // Schema migration belongs to the host application. GraphCK only opens
-    // stores already compatible with its current model.
-    storeDescription.shouldMigrateStoreAutomatically = false
-    storeDescription.shouldInferMappingModelAutomatically = false
-    storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-    storeDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-
-    if let containerID = configuration.cloudKitContainerIdentifier {
-      storeDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: containerID)
-    }
-    
-    let container = NSPersistentCloudKitContainer(name: name, managedObjectModel: Model.create())
-    container.persistentStoreDescriptions = [storeDescription]
-    //print("🔎 [GraphCK] (After load) Cloud container will use store at: \(storeURL)")
-    return container
-  }
 }
 
 /// NSManagedObjectContext extension.
@@ -330,13 +160,13 @@ internal extension Graph {
     }
 
     if configuration.cloudKitContainerIdentifier != nil && !Graph.isRunningUnderTests {
-      let container = Context.makeCloudContainer(name: name, storeURL: storeURL, configuration: configuration)
+      let container = GraphStoreContainerFactory.makeCloud(name: name, storeURL: storeURL, configuration: configuration)
 
       container.loadPersistentStores { [unowned self] (desc, error) in
         if let error = error {
           print("⚠️ [GraphCK] Failed to load CloudKit store. Error: \(error)")
           // Fallback: try a plain local NSPersistentContainer (no CloudKit) instead of crashing.
-          let plain = Context.makeLocalContainer(name: name, storeURL: storeURL, configuration: configuration)
+          let plain = GraphStoreContainerFactory.makeLocal(name: name, storeURL: storeURL, configuration: configuration)
           
           plain.loadPersistentStores { [unowned self] (desc, plainError) in
             if let plainError = plainError {
@@ -417,7 +247,7 @@ internal extension Graph {
         self.ph_prepareOnLaunchAfterContainerReady()
       }
     } else {
-      let container = Context.makeLocalContainer(name: name, storeURL: storeURL, configuration: configuration)
+      let container = GraphStoreContainerFactory.makeLocal(name: name, storeURL: storeURL, configuration: configuration)
 
       container.loadPersistentStores { [unowned self] (desc, error) in
         if let error = error {

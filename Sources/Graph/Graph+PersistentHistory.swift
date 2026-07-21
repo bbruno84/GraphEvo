@@ -142,51 +142,6 @@ private final class HistoryTokenStore {
 #endif
 }
 
-// MARK: - Remote change coordination
-
-/// Serializes remote history processing and guarantees that the observed
-/// context is merged before existing Watch callbacks are delivered.
-private final class RemoteChangeCoordinator {
-    private weak var graph: Graph?
-    private let queue: DispatchQueue
-    private var pending = false
-    private var processing = false
-
-    init(graph: Graph) {
-        self.graph = graph
-        self.queue = DispatchQueue(label: "GraphCK.RemoteChangeCoordinator.\(graph.route)")
-    }
-
-    func enqueue() {
-        queue.async { [weak self] in
-            guard let self else { return }
-            self.pending = true
-            self.startIfNeeded()
-        }
-    }
-
-    private func startIfNeeded() {
-        guard !processing, pending, let graph else { return }
-        processing = true
-        pending = false
-
-        graph.processPersistentHistoryBatch { [weak self] processed in
-            guard let self else { return }
-            self.queue.async {
-                self.processing = false
-
-                // Always perform one empty pass after a successful batch. It
-                // closes the race where another transaction is committed after
-                // the initial history fetch but before the remote notification.
-                if processed {
-                    self.pending = true
-                }
-                self.startIfNeeded()
-            }
-        }
-    }
-}
-
 // MARK: - Associated storage per Graph (no stored properties nelle extension)
 
 private enum _GraphPHKeys {
@@ -325,7 +280,7 @@ internal extension Graph {
 
     /// Processes one history snapshot. The completion is called after the
     /// merged notification has been delivered to existing Watch observers.
-    fileprivate func processPersistentHistoryBatch(completion: @escaping (Bool) -> Void) {
+    func processPersistentHistoryBatch(completion: @escaping (Bool) -> Void) {
         guard let container = persistentContainer else { completion(false); return }
         let psc = container.persistentStoreCoordinator
         guard !psc.persistentStores.isEmpty else { completion(false); return }
