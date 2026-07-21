@@ -3,6 +3,11 @@ import CoreData
 @testable import Graph
 
 final class GraphMigrationManagerTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        GraphMigrationManager.resetForTesting()
+    }
+
     private struct CompletingMigration: GraphMigration {
         let id: String
         let version = 1
@@ -89,6 +94,47 @@ final class GraphMigrationManagerTests: XCTestCase {
         ) {
             insertedIDs = inserted
             updatedIDs = updated
+        }
+    }
+
+    private final class LifecycleMigration: GraphMigration {
+        let id: String
+        let result: GraphMigrationResult
+        let adoptsLegacyCompletion: Bool
+        private(set) var handleCount = 0
+
+        init(id: String, result: GraphMigrationResult = .done, adoptsLegacyCompletion: Bool = false) {
+            self.id = id
+            self.result = result
+            self.adoptsLegacyCompletion = adoptsLegacyCompletion
+        }
+
+        func needsRun(
+            at phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: inout GraphMigrationContext?
+        ) -> Bool {
+            true
+        }
+
+        func handlePhase(
+            _ phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: GraphMigrationContext?,
+            completion: @escaping (GraphMigrationResult) -> Void
+        ) {
+            handleCount += 1
+            completion(result)
+        }
+
+        func recognizesLegacyCompletion(
+            at phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?
+        ) -> Bool {
+            adoptsLegacyCompletion
         }
     }
 
@@ -247,5 +293,68 @@ final class GraphMigrationManagerTests: XCTestCase {
 
         migration.resetMigrationState(for: configuration)
         XCTAssertNil(GraphMigrationManager.record(for: migration, configuration: configuration))
+    }
+
+    func testAlreadyCompletedMigrationIsNotExecutedAgain() throws {
+        let migrationID = "ManagerAlreadyDone-\(UUID().uuidString)"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-ManagerAlreadyDone-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ManagerAlreadyDone"
+        configuration.location = directory
+        let migration = LifecycleMigration(id: migrationID)
+        _ = try GraphMigrationLedger.markDone(
+            migrationID: migrationID,
+            version: migration.version,
+            synchronization: .local,
+            configuration: configuration
+        )
+        GraphMigrationManager.registerMigration(migration)
+
+        GraphMigrationManager.handlePhase(.postInit, configuration: configuration, graph: nil)
+
+        XCTAssertEqual(migration.handleCount, 0)
+        XCTAssertEqual(GraphMigrationManager.record(for: migration, configuration: configuration)?.state, .done)
+    }
+
+    func testLegacyCompletionIsAdoptedWithoutCallingMigrationHandler() throws {
+        let migrationID = "ManagerLegacyDone-\(UUID().uuidString)"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-ManagerLegacyDone-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ManagerLegacyDone"
+        configuration.location = directory
+        let migration = LifecycleMigration(id: migrationID, adoptsLegacyCompletion: true)
+        GraphMigrationManager.registerMigration(migration)
+
+        GraphMigrationManager.handlePhase(.postInit, configuration: configuration, graph: nil)
+
+        XCTAssertEqual(migration.handleCount, 0)
+        XCTAssertEqual(GraphMigrationManager.record(for: migration, configuration: configuration)?.state, .done)
+    }
+
+    func testFallbackResultIsPersistedAsDone() throws {
+        let migrationID = "ManagerFallback-\(UUID().uuidString)"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-ManagerFallback-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ManagerFallback"
+        configuration.location = directory
+        let migration = LifecycleMigration(id: migrationID, result: .fallback)
+        GraphMigrationManager.registerMigration(migration)
+
+        GraphMigrationManager.handlePhase(.postInit, configuration: configuration, graph: nil)
+
+        XCTAssertEqual(migration.handleCount, 1)
+        XCTAssertEqual(GraphMigrationManager.record(for: migration, configuration: configuration)?.state, .done)
     }
 }
