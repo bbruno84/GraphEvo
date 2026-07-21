@@ -11,6 +11,7 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 - Store SQLite rinominato automaticamente in `GraphCK_<name>.sqlite`
 - La configurazione a directory usa un percorso canonico indipendente dal backend; i vecchi percorsi `Local/...` e `Cloud/...` vengono riutilizzati automaticamente
 - `Graph(storeURL:)` accetta sia una directory sia un file SQLite esistente, mantenendo invariato il percorso del file esplicito
+- GraphCK non esegue migrazioni automatiche tra modelli incompatibili: l’app deve migrare il proprio store e poi riaprirlo sul percorso originale
 - Opzioni abilitate: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
 - Delegate `GraphCloudStatusDelegate` per notificare disponibilità iCloud (fallback locale se non disponibile)
 - Integrazione Watchers con supporto a notifiche locali e remote via **Persistent History Tracking**
@@ -49,6 +50,10 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 ---
 
 ## 📌 Note operative
+
+### Migrazione applicativa dello store
+
+GraphCK verifica la compatibilità del file SQLite prima di aprirlo. Se il modello non è compatibile, espone `GraphStoreOpeningError.incompatibleStore` e lascia invariati percorso, nome e contenuto dello store. La migrazione tra il modello CosmicMind/Graph e quello GraphCK deve essere eseguita dall’applicazione, che conosce il significato dei propri dati.
 
 - In produzione verificare il comportamento delle notifiche con CloudKit:
   - Possibili **doppie callback** del delegato (locale + remoto) da analizzare.

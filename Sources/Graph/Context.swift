@@ -82,8 +82,10 @@ internal struct Context {
     let storeDescription = NSPersistentStoreDescription(url: storeURL)
     storeDescription.type = NSSQLiteStoreType
     storeDescription.shouldAddStoreAsynchronously = false
-    storeDescription.shouldMigrateStoreAutomatically = true
-    storeDescription.shouldInferMappingModelAutomatically = true
+    // Schema migration belongs to the host application. GraphCK only opens
+    // stores already compatible with its current model.
+    storeDescription.shouldMigrateStoreAutomatically = false
+    storeDescription.shouldInferMappingModelAutomatically = false
     storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
     
     let container = NSPersistentContainer(name: name, managedObjectModel: Model.create())
@@ -99,8 +101,10 @@ internal struct Context {
     let storeDescription = NSPersistentStoreDescription(url: storeURL)
     storeDescription.type = NSSQLiteStoreType
     storeDescription.shouldAddStoreAsynchronously = false
-    storeDescription.shouldMigrateStoreAutomatically = true
-    storeDescription.shouldInferMappingModelAutomatically = true
+    // Schema migration belongs to the host application. GraphCK only opens
+    // stores already compatible with its current model.
+    storeDescription.shouldMigrateStoreAutomatically = false
+    storeDescription.shouldInferMappingModelAutomatically = false
     storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
     storeDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
 
@@ -136,7 +140,21 @@ internal extension Graph {
   func prepareManagedObjectContext(configuration: GraphStoreConfiguration) {
     let storeURL = configuration.resolvedStoreURL
     let storeKey = configuration.storeIdentityKey
+    let storeExistedBeforeOpen = FileManager.default.fileExists(atPath: storeURL.path)
     runtimeStoreURL = storeURL
+
+    if type == NSSQLiteStoreType,
+       storeExistedBeforeOpen {
+      do {
+        guard try GraphStoreMetadata.isCompatible(at: storeURL) else {
+          failStoreOpening(.incompatibleStore(storeURL))
+          return
+        }
+      } catch {
+        failStoreOpening(.unreadableStore(storeURL, underlying: error))
+        return
+      }
+    }
 
     if type == NSInMemoryStoreType {
       // In-memory store configuration
@@ -190,8 +208,8 @@ internal extension Graph {
           
           plain.loadPersistentStores { [unowned self] (desc, plainError) in
             if let plainError = plainError {
-              // Do not crash during tests: log both errors and leave MOC unset.
               debugPrint("[Graph Error] CloudKit container failed: \(error.localizedDescription); fallback also failed: \(plainError.localizedDescription)")
+              self.failStoreOpening(.failedToLoadStore(storeURL, underlying: plainError))
               return
             }
             // Success with plain container: proceed with local-only context.
@@ -211,7 +229,7 @@ internal extension Graph {
             if let store = plain.persistentStoreCoordinator.persistentStores.first {
                 do {
                     let current = try GraphStoreMetadata.read(from: configuration, at: runtimeStoreURL)
-                    if current.graphModel == nil || current.appData == nil {
+                    if !storeExistedBeforeOpen && (current.graphModel == nil || current.appData == nil) {
                         try GraphStoreMetadata.write(configuration.requiredVersions,
                                                      using: plain.persistentStoreCoordinator,
                                                      for: store)
@@ -238,7 +256,7 @@ internal extension Graph {
         if let store = container.persistentStoreCoordinator.persistentStores.first {
             do {
                 let current = try GraphStoreMetadata.read(from: configuration, at: runtimeStoreURL)
-                if current.graphModel == nil || current.appData == nil {
+                if !storeExistedBeforeOpen && (current.graphModel == nil || current.appData == nil) {
                     try GraphStoreMetadata.write(configuration.requiredVersions,
                                                  using: container.persistentStoreCoordinator,
                                                  for: store)
@@ -264,7 +282,8 @@ internal extension Graph {
 
       container.loadPersistentStores { [unowned self] (desc, error) in
         if let error = error {
-          fatalError("[Graph Error] Failed to load local store: \(error.localizedDescription)")
+          self.failStoreOpening(.failedToLoadStore(storeURL, underlying: error))
+          return
         }
         self.persistentContainer = container
         self.managedObjectContext = container.viewContext
@@ -293,6 +312,16 @@ internal extension Graph {
         }
       }
     }
+  }
+
+  /// Records an opening failure without moving, replacing or recreating the
+  /// existing store. The application can inspect the error and migrate the
+  /// exact `runtimeStoreURL` itself before trying again.
+  private func failStoreOpening(_ error: GraphStoreOpeningError) {
+    storeOpeningError = error
+    managedObjectContext = nil
+    persistentContainer = nil
+    print("⚠️ [GraphCK] Store opening refused: \(error.localizedDescription)")
   }
   
   /// Prepares the SQLite file if needed.
