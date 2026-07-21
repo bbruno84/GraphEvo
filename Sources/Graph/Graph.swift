@@ -36,51 +36,6 @@ extension Notification.Name {
 // behavior.
 internal let GraphCKRemoteChangeAlreadyMergedKey = "GraphCK.remoteChangeAlreadyMerged"
 
-@objc(GraphDelegate)
-public protocol GraphDelegate {
-    /**
-     A delegation method that is executed when a graph instance
-     will prepare cloud storage.
-     - Parameter graph: A Graph instance.
-     - Parameter transition: A GraphCloudStorageTransition value.
-     */
-    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
-    @objc
-    optional func graphWillPrepareCloudStorage(graph: Graph, transition: GraphCloudStorageTransition)
-    
-    /**
-     A delegation method that is executed when a graph instance
-     did prepare cloud storage.
-     - Parameter graph: A Graph instance.
-     */
-    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
-    @objc
-    optional func graphDidPrepareCloudStorage(graph: Graph)
-    
-    /**
-     A delegation method that is executed when a graph instance
-     will update from cloud storage.
-     - Parameter graph: A Graph instance.
-     */
-    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
-    @objc
-    optional func graphWillUpdateFromCloudStorage(graph: Graph)
-    
-    /**
-     A delegation method that is executed when a graph instance
-     did update from cloud storage.
-     - Parameter graph: A Graph instance.
-     */
-    @available(*, deprecated, message: "iCloud Ubiquitous Store is no longer supported.")
-    @objc
-    optional func graphDidUpdateFromCloudStorage(graph: Graph)
-}
-
-public enum GraphCloudStatus {
-    case available
-    case unavailable
-}
-
 /// Errors reported when Graph refuses to open a persistent store.
 /// GraphCK never migrates or moves an incompatible existing store.
 public enum GraphStoreOpeningError: LocalizedError {
@@ -98,11 +53,6 @@ public enum GraphStoreOpeningError: LocalizedError {
             return "The store at \(url.path) could not be opened: \(error.localizedDescription)"
         }
     }
-}
-
-public protocol GraphCloudStatusDelegate: AnyObject {
-    /// Called when iCloud availability changes (or is first determined).
-    func graph(_ graph: Graph, iCloudStatusChanged status: GraphCloudStatus)
 }
 
 @objc(Graph)
