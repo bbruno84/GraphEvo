@@ -42,7 +42,7 @@ final class CleanGraphStoreOpening: XCTestCase {
     }
 
     func testOpenGraphFromSQLiteFile() throws {
-        let bundle = Bundle.module
+        let bundle = Bundle.graphTests
         guard let legacySQLiteURL = bundle.url(forResource: "Graph", withExtension: "sqlite") else {
             XCTFail("Graph.sqlite non trovato nel bundle")
             return
