@@ -63,7 +63,7 @@ final class StoreMigrationBoundaryTests: XCTestCase {
             XCTFail("Expected an unreadable-store error")
             return
         }
-        XCTAssertEqual(reportedURL, storeURL)
+        XCTAssertEqual(reportedURL.standardizedFileURL.path, storeURL.standardizedFileURL.path)
         XCTAssertTrue(FileManager.default.fileExists(atPath: storeURL.path))
         XCTAssertNil(graph.managedObjectContext)
     }
