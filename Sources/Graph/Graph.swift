@@ -136,6 +136,29 @@ public class Graph: NSObject {
     /// M2: Optional override for the CloudKit container identifier.
     /// If set, this takes precedence over Info.plist and enables CloudKit sync without relying on plist UX.
     public static var cloudKitContainerIdentifier: String?
+
+    /// Resolves CloudKit configuration once for a Graph instance.
+    /// Explicit configuration wins over the runtime override, which wins over
+    /// the application fallback in Info.plist.
+    internal static func resolvedCloudKitContainerIdentifier(
+        configuration: GraphStoreConfiguration,
+        runtimeOverride: String?,
+        infoPlistValue: String? = Bundle.main.object(forInfoDictionaryKey: "GraphCloudKitContainerIdentifier") as? String
+    ) -> String? {
+        [configuration.cloudKitContainerIdentifier, runtimeOverride, infoPlistValue]
+            .compactMap { value in
+                guard let value else { return nil }
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+            .first
+    }
+
+    internal static var isRunningUnderTests: Bool {
+        NSClassFromString("XCTestCase") != nil
+            || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+    }
     
     /// Keep a reference to the persistent container so background contexts can
     /// be created for both CloudKit and local stores.
@@ -155,20 +178,24 @@ public class Graph: NSObject {
     
     /// New initializer using GraphStoreConfiguration.
     public init(configuration: GraphStoreConfiguration, migrationEnabled: Bool = true) {
-        self.configuration = configuration
+        var resolvedConfiguration = configuration
+        resolvedConfiguration.cloudKitContainerIdentifier = Self.resolvedCloudKitContainerIdentifier(
+            configuration: configuration,
+            runtimeOverride: Self.cloudKitContainerIdentifier
+        )
+        self.configuration = resolvedConfiguration
         GraphValueTransformer.register()
-        Graph.cloudKitContainerIdentifier = configuration.cloudKitContainerIdentifier
         if migrationEnabled {
-            GraphMigrationManager.handlePhase(.preInit,configuration: configuration, graph: nil)
+            GraphMigrationManager.handlePhase(.preInit, configuration: resolvedConfiguration, graph: nil)
         }
         super.init()
         observeRemoteStoreChanges()
         checkICloudAccountStatus()
         prepareGraphContextRegistry()
-        prepareManagedObjectContext(configuration: configuration)
+        prepareManagedObjectContext(configuration: resolvedConfiguration)
         if migrationEnabled {
-            GraphMigrationManager.handlePhase(.postInit, configuration: configuration, graph: self)
-            GraphMigrationManager.handlePhase(.ready, configuration: configuration, graph: self)
+            GraphMigrationManager.handlePhase(.postInit, configuration: resolvedConfiguration, graph: self)
+            GraphMigrationManager.handlePhase(.ready, configuration: resolvedConfiguration, graph: self)
         }
         
     }
@@ -332,8 +359,9 @@ public class Graph: NSObject {
     
     /// Check iCloud account status and notify the optional cloudStatusDelegate.
     private func checkICloudAccountStatus() {
-        // If we're under unit tests, avoid touching CloudKit and synchronously report unavailable.
-        if NSClassFromString("XCTestCase") != nil {
+        // Unit-test bundles do not have CloudKit entitlements. Avoid touching
+        // CloudKit there and report the deterministic local status instead.
+        if Self.isRunningUnderTests {
             self.lastCloudStatus = .unavailable
             if let delegate = self.cloudStatusDelegate {
                 delegate.graph(self, iCloudStatusChanged: .unavailable)
@@ -341,14 +369,8 @@ public class Graph: NSObject {
             return
         }
         
-        // Resolve a container identifier: runtime override first, then optional Info.plist fallback.
-        var resolvedID: String? = Graph.cloudKitContainerIdentifier
-        if resolvedID == nil || resolvedID?.isEmpty == true {
-            resolvedID = Bundle.main.object(forInfoDictionaryKey: "GraphCloudKitContainerIdentifier") as? String
-        }
-        
         // If no identifier is configured (SPM / no capabilities), don't touch CloudKit APIs.
-        guard let containerID = resolvedID, !containerID.isEmpty else {
+        guard let containerID = configuration.cloudKitContainerIdentifier else {
             self.lastCloudStatus = .unavailable
             if let delegate = self.cloudStatusDelegate {
                 delegate.graph(self, iCloudStatusChanged: .unavailable)

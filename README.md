@@ -16,6 +16,7 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 - Integrazione Watchers con supporto a notifiche locali e remote via **Persistent History Tracking**
 - Notifica custom `GraphCKSimulatedRemoteChange` usata nei test per simulare cambiamenti da remoto
 - **Configurazione CloudKit**: override runtime dell’identifier (`Graph.cloudKitContainerIdentifier`) o fallback Info.plist
+- La precedenza CloudKit è: configurazione esplicita, override runtime, quindi `Info.plist`
 
 ---
 
