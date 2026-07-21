@@ -177,17 +177,17 @@ public class Graph: NSObject {
     /// Initialize a Graph directly from a store URL.
     /// If the URL points to a .sqlite file, the name is derived from the filename (without extension).
     /// If the URL points to a directory, the name is derived from the directory name
-    /// and the store is expected to be `Graph.sqlite` inside it.
+    /// and GraphCK resolves the canonical filename inside that directory. Existing
+    /// legacy route-based stores are reused automatically.
     public convenience init(storeURL: URL, backend: GraphStoreBackend = .sqlite, migrationEnabled: Bool = true) {
         let resolvedName: String
         let resolvedLocation: URL
         
-        if storeURL.pathExtension == "sqlite" {
-            // If a .sqlite file is passed, use its filename as name, and keep the full file URL as location
+        if storeURL.pathExtension.caseInsensitiveCompare("sqlite") == .orderedSame {
+            // An explicit file is authoritative: preserve its complete URL.
             resolvedName = storeURL.deletingPathExtension().lastPathComponent
-            resolvedLocation = storeURL // keep full file URL, not just directory
+            resolvedLocation = storeURL
         } else {
-            // If a directory is passed, expect Graph.sqlite inside
             resolvedName = storeURL.lastPathComponent
             resolvedLocation = storeURL
         }

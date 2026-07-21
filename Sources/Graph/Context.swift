@@ -139,6 +139,7 @@ internal extension Graph {
    */
   func prepareManagedObjectContext(configuration: GraphStoreConfiguration) {
     let storeURL = configuration.resolvedStoreURL
+    let storeKey = configuration.storeIdentityKey
     runtimeStoreURL = storeURL
 
     if type == NSInMemoryStoreType {
@@ -162,14 +163,14 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = storeURL
-        GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
-        GraphContextRegistry.configurations[self.route] = configuration
+        GraphContextRegistry.managedObjectContexts[storeKey] = self.managedObjectContext
+        GraphContextRegistry.configurations[storeKey] = configuration
       }
       return
     }
 
     // Reuse cached context if present
-    if let cached = GraphContextRegistry.managedObjectContexts[route] {
+    if let cached = GraphContextRegistry.managedObjectContexts[storeKey] {
       managedObjectContext = cached
       return
     }
@@ -208,8 +209,8 @@ internal extension Graph {
             self.managedObjectContext.undoManager = nil
             self.managedObjectContext.automaticallyMergesChangesFromParent = true
             self.runtimeStoreURL = desc.url ?? storeURL
-            GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
-            GraphContextRegistry.configurations[self.route] = configuration
+            GraphContextRegistry.managedObjectContexts[storeKey] = self.managedObjectContext
+            GraphContextRegistry.configurations[storeKey] = configuration
 
             if let store = plain.persistentStoreCoordinator.persistentStores.first {
                 do {
@@ -235,8 +236,8 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = desc.url ?? storeURL
-        GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
-        GraphContextRegistry.configurations[self.route] = configuration
+        GraphContextRegistry.managedObjectContexts[storeKey] = self.managedObjectContext
+        GraphContextRegistry.configurations[storeKey] = configuration
 
         if let store = container.persistentStoreCoordinator.persistentStores.first {
             do {
@@ -251,12 +252,12 @@ internal extension Graph {
                 print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
             }
         }
-        if GraphContextRegistry.added[self.route] != true {
+        if GraphContextRegistry.added[storeKey] != true {
           NotificationCenter.default.addObserver(self,
                                                  selector: #selector(handlePersistentStoreRemoteChange(_:)),
                                                  name: .NSPersistentStoreRemoteChange,
                                                  object: container.persistentStoreCoordinator)
-          GraphContextRegistry.added[self.route] = true
+          GraphContextRegistry.added[storeKey] = true
         }
         // Prepare Persistent History bootstrap on launch (token restore / bootstrap-from-now).
         // This is safe to call multiple times; it will no-op if already initialized.
@@ -278,8 +279,8 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = desc.url ?? storeURL
-        GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
-        GraphContextRegistry.configurations[self.route] = configuration
+        GraphContextRegistry.managedObjectContexts[storeKey] = self.managedObjectContext
+        GraphContextRegistry.configurations[storeKey] = configuration
 
         if let store = container.persistentStoreCoordinator.persistentStores.first {
             do {
@@ -301,7 +302,7 @@ internal extension Graph {
   /// Prepares the SQLite file if needed.
   func prepareSQLite() {
     if NSSQLiteStoreType == type {
-      runtimeStoreURL = (runtimeStoreURL ?? configuration.resolvedLocation).appendingPathComponent(configuration.storeFilename)
+      runtimeStoreURL = runtimeStoreURL ?? configuration.resolvedStoreURL
     }
   }
 }
