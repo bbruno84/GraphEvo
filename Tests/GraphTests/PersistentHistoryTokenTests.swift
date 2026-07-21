@@ -26,6 +26,14 @@ final class PersistentHistoryTokenTests: XCTestCase {
         return Graph(configuration: config)
     }
 
+    private func waitForHistoryProcessingToSettle() {
+        let expectation = expectation(description: "persistent history processing settles")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 2.0)
+    }
+
     // MARK: - Tests
 
     func test_Bootstrap_NoToken_NoCrash_NoPost() {
@@ -36,6 +44,7 @@ final class PersistentHistoryTokenTests: XCTestCase {
         // Simula l’arrivo della notifica remota chiamando direttamente l’handler:
         // in assenza di transazioni di PH, non deve crashare né creare token.
         g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        waitForHistoryProcessingToSettle()
 
         XCTAssertFalse(g.ph_debug_lastTokenExists(),
                        "Without PH transactions, token must remain absent")
@@ -50,6 +59,7 @@ final class PersistentHistoryTokenTests: XCTestCase {
         for _ in 0..<3 {
             g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
         }
+        waitForHistoryProcessingToSettle()
         XCTAssertFalse(g.ph_debug_lastTokenExists(),
                        "Handler is idempotent when there are no PH transactions")
     }
@@ -64,6 +74,7 @@ final class PersistentHistoryTokenTests: XCTestCase {
         // non deve apparire alcun token.
         g.ph_debug_corruptTokenOnDisk()
         g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        waitForHistoryProcessingToSettle()
 
         XCTAssertFalse(g.ph_debug_lastTokenExists(),
                        "Corrupted token should not resurrect into a valid token without PH transactions")
@@ -73,6 +84,7 @@ final class PersistentHistoryTokenTests: XCTestCase {
         let g = makeGraph(named: "PH-Filter-\(UUID().uuidString)")
         g.ph_debug_clearToken()
         g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        waitForHistoryProcessingToSettle()
 
         XCTAssertFalse(
             g.ph_debug_lastTokenExists(),
