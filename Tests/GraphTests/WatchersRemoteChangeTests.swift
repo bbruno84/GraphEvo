@@ -369,6 +369,54 @@ final class WatchersRemoteChangeTests: XCTestCase {
 
         wait(for: [expInsert, expUpdate, expDelete, expSave], timeout: 3.0)
     }
+
+    func testAlreadyMergedRemotePayloadKeepsLegacyWatcherCallback() {
+        let expectation = expectation(description: "Already-merged remote update")
+
+        final class Delegate: NSObject, GraphEntityDelegate {
+            var onUpdate: ((Entity, String, Any, GraphSource) -> Void)?
+
+            func graph(_ graph: Graph, entity: Entity, updated property: String, with value: Any, source: GraphSource) {
+                onUpdate?(entity, property, value, source)
+            }
+        }
+
+        let (graph, watcher) = makeGraphAndWatcher(named: "WatchersAlreadyMerged", watchingType: "RemoteNote")
+        let delegate = Delegate()
+        watcher.delegate = delegate
+        self.strongDelegate = delegate
+
+        let entity = Entity("RemoteNote", graph: graph)
+        entity[dynamicMember: "title"] = "v1"
+        graph.sync()
+
+        entity[dynamicMember: "title"] = "v2"
+        guard let updatedProperty = managedProperty(from: entity, named: "title") else {
+            return XCTFail("Missing ManagedEntityProperty 'title'")
+        }
+
+        delegate.onUpdate = { _, property, value, source in
+            XCTAssertEqual(property, "title")
+            XCTAssertEqual(value as? String, "v2")
+            XCTAssertEqual(source, .cloud)
+            expectation.fulfill()
+        }
+
+        var userInfo: [AnyHashable: Any] = [
+            NSInsertedObjectsKey: NSSet(),
+            NSUpdatedObjectsKey: NSSet(array: [updatedProperty]),
+            NSDeletedObjectsKey: NSSet()
+        ]
+        userInfo[GraphCKRemoteChangeAlreadyMergedKey] = true
+
+        NotificationCenter.default.post(
+            name: .GraphCKSimulatedRemoteChange,
+            object: graph.managedObjectContext,
+            userInfo: userInfo
+        )
+
+        wait(for: [expectation], timeout: 2.0)
+    }
     
     override func tearDown() {
         strongWatcher = nil

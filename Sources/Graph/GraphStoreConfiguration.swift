@@ -34,7 +34,7 @@ public struct GraphStoreConfiguration {
     }
 
     /// Nome file dello store.
-    public var storeFilename: String { "Graph.sqlite" }
+    public var storeFilename: String { "GraphCK_\(name).sqlite" }
 
     /// URL finale dello store (dir + filename).
     public var storeURL: URL {

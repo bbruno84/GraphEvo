@@ -31,6 +31,11 @@ extension Notification.Name {
     static let GraphCKSimulatedRemoteChange = Notification.Name("GraphCK.SimulatedRemoteChange")
 }
 
+// Internal marker used by RemoteChangeCoordinator. Existing callers that post
+// GraphCKSimulatedRemoteChange do not provide it and retain the legacy merge
+// behavior.
+internal let GraphCKRemoteChangeAlreadyMergedKey = "GraphCK.remoteChangeAlreadyMerged"
+
 @objc(GraphDelegate)
 public protocol GraphDelegate {
     /**
@@ -132,8 +137,9 @@ public class Graph: NSObject {
     /// If set, this takes precedence over Info.plist and enables CloudKit sync without relying on plist UX.
     public static var cloudKitContainerIdentifier: String?
     
-    /// M2: Keep a reference to the CloudKit container so we can spawn background contexts, etc.
-    internal var persistentContainer: NSPersistentCloudKitContainer?
+    /// Keep a reference to the persistent container so background contexts can
+    /// be created for both CloudKit and local stores.
+    internal var persistentContainer: NSPersistentContainer?
     
     /**
      A reference to the graph completion handler.
@@ -310,9 +316,14 @@ public class Graph: NSObject {
     
     @objc
     private func handleRemoteStoreChange(_ notification: Notification) {
-        // Only merge; Watchers observe and dispatch separately.
+        // RemoteChangeCoordinator merges the context before publishing the
+        // notification. Keep the old behavior for direct/test callers that
+        // post GraphCKSimulatedRemoteChange themselves.
         guard notification.name == .GraphCKSimulatedRemoteChange else { return }
         guard let moc = managedObjectContext else { return }
+        if (notification.userInfo?[GraphCKRemoteChangeAlreadyMergedKey] as? Bool) == true {
+            return
+        }
         moc.perform { [weak moc] in
             guard let moc = moc else { return }
             moc.mergeChanges(fromContextDidSave: notification)
@@ -356,4 +367,3 @@ public class Graph: NSObject {
         }
     }
 }
-

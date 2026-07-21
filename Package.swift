@@ -9,7 +9,10 @@ let package = Package(
         .iOS(.v16), .macOS(.v12) // opzionale macOS se ti serve
     ],
     products: [
-        .library(name: "Graph", targets: ["Graph"])
+        // Keep the original product name for source compatibility and expose
+        // the GraphCK name used by the demo and the fork's documentation.
+        .library(name: "Graph", targets: ["Graph"]),
+        .library(name: "GraphCK", targets: ["Graph"])
         // .library(name: "GraphCKMigration", targets: ["GraphCKMigration"]) // se lo separi
     ], dependencies: [
         .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.0")

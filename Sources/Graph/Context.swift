@@ -84,6 +84,7 @@ internal struct Context {
     storeDescription.shouldAddStoreAsynchronously = false
     storeDescription.shouldMigrateStoreAutomatically = true
     storeDescription.shouldInferMappingModelAutomatically = true
+    storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
     
     let container = NSPersistentContainer(name: name, managedObjectModel: Model.create())
     container.persistentStoreDescriptions = [storeDescription]
@@ -152,7 +153,7 @@ internal extension Graph {
         if let error = error {
           fatalError("[Graph Error] Failed to load in-memory store: \(error.localizedDescription)")
         }
-        self.persistentContainer = nil
+        self.persistentContainer = container
         self.managedObjectContext = container.viewContext
         // Mark per-device author for potential filtering in Persistent History
         self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
@@ -198,7 +199,7 @@ internal extension Graph {
             }
             // Success with plain container: proceed with local-only context.
             print("✅ [GraphCK] Fallback local store loaded successfully at: \(storeURL.lastPathComponent)")
-            self.persistentContainer = nil
+            self.persistentContainer = plain
             self.managedObjectContext = plain.viewContext
             // Mark per-device author for potential filtering in Persistent History
             self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
@@ -268,7 +269,7 @@ internal extension Graph {
         if let error = error {
           fatalError("[Graph Error] Failed to load local store: \(error.localizedDescription)")
         }
-        self.persistentContainer = nil
+        self.persistentContainer = container
         self.managedObjectContext = container.viewContext
         // Mark per-device author for potential filtering in Persistent History
         self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
@@ -300,8 +301,7 @@ internal extension Graph {
   /// Prepares the SQLite file if needed.
   func prepareSQLite() {
     if NSSQLiteStoreType == type {
-      // Append the fixed store filename (without GraphCK_ prefix)
-      runtimeStoreURL = (runtimeStoreURL ?? configuration.resolvedLocation).appendingPathComponent("Graph.sqlite")
+      runtimeStoreURL = (runtimeStoreURL ?? configuration.resolvedLocation).appendingPathComponent(configuration.storeFilename)
     }
   }
 }

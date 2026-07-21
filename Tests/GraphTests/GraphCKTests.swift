@@ -16,7 +16,7 @@ final class GraphCKTests: XCTestCase {
     /// - Ensures the viewContext is available
     /// - (If available) Persists and fetches a simple Entity
     func test_M2_Smoke_SaveFetch_FileNaming() throws {
-        let name = "M2Smoke"
+        let name = "M2Smoke-\(UUID().uuidString)"
 
         // Optional: set CloudKit identifier at runtime (comment out if not configured)
         // Graph.cloudKitContainerIdentifier = "iCloud.com.yourdomain.yourapp"
@@ -25,10 +25,14 @@ final class GraphCKTests: XCTestCase {
         var config = GraphStoreConfiguration()
         config.name = name
         let g = Graph(configuration: config)
+        g.clear()
         
 
         // 2) Check file naming
-        guard let storeURL = g.runtimeStoreURL else {XCTIssue(type: .assertionFailure, compactDescription: "No Store URL available"); return}
+        guard let storeURL = g.runtimeStoreURL else {
+            XCTFail("No Store URL available")
+            return
+        }
         XCTAssertEqual(storeURL.lastPathComponent, "GraphCK_\(name).sqlite", "Store file should be renamed to GraphCK_<name>.sqlite")
 
         // 3) Context should be ready
@@ -45,7 +49,7 @@ final class GraphCKTests: XCTestCase {
 
             // Fetch back (adjust if your Search API differs)
             //let results = Search<Entity>(types: ["note"]).sync()
-            let results = Search<Entity>().where(.type("note")).sync()
+            let results = Search<Entity>(graph: g).where(.type("note")).sync()
             debugPrint("Results: \(results.count)")
             let titles = results.compactMap { $0[dynamicMember: "title"] as? String }
             XCTAssertTrue(titles.contains("Hello M2"), "Expected to find the saved entity by title")
