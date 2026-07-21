@@ -116,6 +116,22 @@ public final class GraphMigrationManager {
     /// Shared context for the entire migration cycle.
     private static var currentContext: GraphMigrationContext? = nil
 
+#if DEBUG
+    /// Resets process-wide migration state for isolated test cases.
+    ///
+    /// Applications should register migrations once during startup and must not
+    /// call this method. It is compiled only in debug builds so test isolation
+    /// cannot become part of the production API surface.
+    internal static func resetForTesting() {
+        callbacks.removeAll()
+        migrations.removeAll()
+        currentMigrationIndex = 0
+        activeMigrations.removeAll()
+        loggedTerminalDecisions.removeAll()
+        currentContext = nil
+    }
+#endif
+
     public static func record(
         for migration: GraphMigration,
         configuration: GraphStoreConfiguration

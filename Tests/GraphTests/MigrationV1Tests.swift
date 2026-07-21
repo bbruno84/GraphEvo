@@ -2,61 +2,46 @@
 //  MigrationV1Tests.swift
 //  GraphCK
 //
-//  Created by Valerio Buriani on 15/09/25.
-//
-
 
 import XCTest
 import CoreData
 @testable import Graph
 
 final class MigrationV1Tests: XCTestCase {
-    private func shouldRunLegacyMigrationFixture() -> Bool { false }
-    
-    func testLegacyStoreMigratesToCurrentModel() throws {
-        guard shouldRunLegacyMigrationFixture() else {
-            throw XCTSkip("Legacy store migration requires an explicit mapping model; automatic in-place migration is not supported by this fixture yet.")
-        }
-
-        // 1. Path dello store legacy incluso nei test bundle
+    func testLegacyStoreRequiresApplicationMigration() throws {
         let bundle = Bundle.module
         guard let legacyURL = bundle.url(forResource: "Graph", withExtension: "sqlite") else {
             XCTFail("Legacy store not found in test bundle")
             return
         }
-        
-        // 2. Copia in temp directory (Core Data deve avere permessi di scrittura)
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
+
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-LegacyMigration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let tempURL = temporaryDirectory.appendingPathComponent("Graph.sqlite")
         try Data(contentsOf: legacyURL).write(to: tempURL, options: .atomic)
-        
-        // 3. Verifica metadata -> non compatibile
+        let originalBytes = try Data(contentsOf: tempURL)
+
         let legacyMetadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
             ofType: NSSQLiteStoreType,
             at: tempURL
         )
-        XCTAssertFalse(Model.create().isConfiguration(withName: nil, compatibleWithStoreMetadata: legacyMetadata),
-                       "Legacy store unexpectedly already compatible with new model")
-        
-        // 4. Forza la migrazione: apriamo con il nuovo modello
-        let container = NSPersistentContainer(name: "GraphCK", managedObjectModel: Model.create())
-        let storeDesc = NSPersistentStoreDescription(url: tempURL)
-        storeDesc.shouldAddStoreAsynchronously = false
-        storeDesc.shouldMigrateStoreAutomatically = true
-        storeDesc.shouldInferMappingModelAutomatically = true
-        container.persistentStoreDescriptions = [storeDesc]
-        
-        var loadError: Error?
-        container.loadPersistentStores { _, error in
-            loadError = error
-        }
-        XCTAssertNil(loadError, "Migration failed: \(String(describing: loadError))")
-        
-        // 5. Verifica metadata post-migrazione -> compatibile
-        let migratedMetadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
-            ofType: NSSQLiteStoreType,
-            at: tempURL
+        XCTAssertFalse(
+            Model.create().isConfiguration(withName: nil, compatibleWithStoreMetadata: legacyMetadata),
+            "Legacy store unexpectedly already compatible with the GraphCK model"
         )
-        XCTAssertTrue(Model.create().isConfiguration(withName: nil, compatibleWithStoreMetadata: migratedMetadata),
-                      "Migrated store is not compatible with new model")
+
+        let graph = Graph(storeURL: tempURL, backend: .sqlite, migrationEnabled: false)
+
+        guard case .incompatibleStore(let reportedURL)? = graph.storeOpeningError else {
+            XCTFail("GraphCK must leave migration of the legacy store to the application")
+            return
+        }
+        XCTAssertEqual(reportedURL, tempURL)
+        XCTAssertNil(graph.managedObjectContext)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tempURL.path))
+        XCTAssertEqual(try Data(contentsOf: tempURL), originalBytes)
     }
 }

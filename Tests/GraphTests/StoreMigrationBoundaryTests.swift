@@ -50,6 +50,24 @@ final class StoreMigrationBoundaryTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: storeURL.path))
     }
 
+    func testUnreadableStoreReportsErrorWithoutReplacingThePath() throws {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "UnreadableBoundary"
+        configuration.location = directory
+        let storeURL = configuration.storeURL
+        try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
+
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+
+        guard case .unreadableStore(let reportedURL, _)? = graph.storeOpeningError else {
+            XCTFail("Expected an unreadable-store error")
+            return
+        }
+        XCTAssertEqual(reportedURL.standardizedFileURL.path, storeURL.standardizedFileURL.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storeURL.path))
+        XCTAssertNil(graph.managedObjectContext)
+    }
+
     private func createLegacyStore(at url: URL) throws {
         let model = NSManagedObjectModel()
         let entity = NSEntityDescription()

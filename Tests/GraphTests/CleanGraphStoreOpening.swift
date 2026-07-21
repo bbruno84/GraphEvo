@@ -7,72 +7,41 @@
 
 
 import XCTest
-import UIKit
-import PDFKit
-@testable import Graph // o il nome del package/libreria
+@testable import Graph
 
 final class CleanGraphStoreOpening: XCTestCase {
-    private func shouldRunLegacyStoreFixture() -> Bool { false }
-
     func testSaveStringProperty() throws {
-        // 1. Configurazione pulita
-        GraphValueTransformer.register()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-Clean-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
         var config = GraphStoreConfiguration()
-        config.name = "DebugGraph2"
+        config.name = "StringRoundTrip"
         config.backend = .sqlite
-        
+        config.location = directory
 
-        // 2. Istanzia Graph
         let graph = Graph(configuration: config)
-        graph.clear()
+        XCTAssertNil(graph.storeOpeningError)
+        XCTAssertNotNil(graph.managedObjectContext)
 
-        // 3. Crea un nodo con una proprietà di tipo String
         let entity = Entity("TestEntity", graph: graph)
-        entity[dynamicMember: "myProperty"] = "me cojoni"
-        
-        // 4. Forza sync
-        graph.sync { success, error in
-            print("🔎 sync result success=\(success) error=\(String(describing: error))")
-        }
-        
-        for obj in graph.managedObjectContext.insertedObjects {
-            if obj.entity.attributesByName.keys.contains("object") {
-                let raw = obj.primitiveValue(forKey: "object")
-                print("🔍 Primitive object stored = \(String(describing: raw)) type=\(type(of: raw))")
-            }
-        }
-        
-        for obj in graph.managedObjectContext.insertedObjects {
-            if obj.entity.attributesByName.keys.contains("object") {
-                let v = obj.value(forKey: "object")
-                print("🔎 Inserted object entity=\(obj.entity.name ?? "?") type=\(type(of: v)) value=\(String(describing: v))")
-            } else {
-                print("ℹ️ Inserted object entity=\(obj.entity.name ?? "?") has no 'object' field")
-            }
-        }
-        
-        for obj in graph.managedObjectContext.insertedObjects {
-            if obj.entity.attributesByName.keys.contains("appDataVersion") {
-                let v = obj.value(forKey: "appDataVersion")
-                print("🆕 Inserted object entity=\(obj.entity.name ?? "?") appDataVersion=\(String(describing: v))")
-            }
-        }
-        
-        
-        
-        let entities = Search<Entity>(graph: graph).where(.type("TestEntity")).sync().first!
-        print("Entity content: \(entities[dynamicMember: "myProperty"]!)")
-        
-    }
-    
-    func testOpenGraphFromSQLiteFile() throws {
-        guard shouldRunLegacyStoreFixture() else {
-            throw XCTSkip("Legacy SQLite opening requires the explicit migration path; this fixture is not compatible with automatic in-place migration yet.")
-        }
+        entity[dynamicMember: "myProperty"] = "expected-value"
 
-        
-        GraphValueTransformer.register()
-        // 1. Recupera Graph.sqlite legacy dal bundle
+        var saveSuccess = false
+        var saveError: Error?
+        graph.sync { success, error in
+            saveSuccess = success
+            saveError = error
+        }
+        XCTAssertTrue(saveSuccess, "Graph.sync failed: \(String(describing: saveError))")
+
+        let results = Search<Entity>(graph: graph).where(.type("TestEntity")).sync()
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results.first?[dynamicMember: "myProperty"] as? String, "expected-value")
+    }
+
+    func testOpenGraphFromSQLiteFile() throws {
         let bundle = Bundle.module
         guard let legacySQLiteURL = bundle.url(forResource: "Graph", withExtension: "sqlite") else {
             XCTFail("Graph.sqlite non trovato nel bundle")
@@ -97,96 +66,18 @@ final class CleanGraphStoreOpening: XCTestCase {
             try Data(contentsOf: legacyWalURL).write(to: tempWalURL, options: .atomic)
         }
 
-        // 3. Debug: stampa contenuti della directory
-        let contents = try FileManager.default.contentsOfDirectory(atPath: tempDir.path)
-        print("📂 Contenuti tempDir: \(contents)")
-        print("📍 Path sqlite: \(tempSQLiteURL.path)")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        // 4. Tenta di aprire l'istanza Graph
-        let graph = Graph(storeURL: tempSQLiteURL, backend: .sqlite)
-                
-        // 5. Query semplice per verificare che funzioni
-        graph.dbdump()
-            
-        
-        
-        // 6. Assert: il file è stato aperto correttamente
-        XCTAssertNotNil(graph.managedObjectContext, "Il database è stato aperto correttamente")
-    }
-    
-    
-}
+        let originalBytes = try Data(contentsOf: tempSQLiteURL)
+        let graph = Graph(storeURL: tempSQLiteURL, backend: .sqlite, migrationEnabled: false)
 
-
-
-extension Graph {
-    func dbdump() {
-        let allEntities = Search<Entity>(graph: self).where(.type("*")).sync()
-        print("🔎 Entity count: \(allEntities.count)")
-
-        var expectedPDF = 0
-        var expectedImage = 0
-        var PDFcount = 0
-        var imageCount = 0
-        var dataCount = 0
-        var otherCount = 0
-        var categorieCount = 0
-        var categorieCustom = 0
-        
-        var entityTypeCounts: [String: Int] = [:]
-        
-        for entitiy in allEntities {
-            entityTypeCounts[entitiy.type, default: 0] += 1
+        guard case .incompatibleStore(let reportedURL)? = graph.storeOpeningError else {
+            XCTFail("GraphCK must reject the incompatible legacy store without migrating it")
+            return
         }
-        
-        print("📊 Entities trovate:")
-        for (type, count) in entityTypeCounts.sorted(by: { $0.value > $1.value }) {
-            print("   • \(type): \(count)")
-            switch type {
-                case "MediaBollette":
-                let mediaEntities = Search<Entity>(graph: self).where(.type("MediaBollette")).sync()
-                for entity in mediaEntities {
-                    if entity[dynamicMember: "media_type"] as? String == "pdf" {
-                        expectedPDF += 1
-                    } else if entity[dynamicMember: "media_type"] as? String == "img" {
-                        expectedImage += 1
-                    }
-                    if let value = entity[dynamicMember: "media"] {
-                        if value is UIImage {
-                            
-                            imageCount += 1
-                        } else if let data = value as? Data {
-                            if PDFDocument(data: data) != nil {
-                                PDFcount += 1
-                                //saveDocumentToDisk(document, named: UUID().uuidString)
-                            } else if UIImage(data: data) != nil {
-                                imageCount += 1
-                            } else {
-                                dataCount += 1
-                            }
-                        } else {
-                            otherCount += 1
-                        }
-                    }
-                }
-                print("     • Expected images: \(expectedImage)")
-                print("     • 🖼️ UIImage: \(imageCount)")
-                print("     • Expected PDFs: \(expectedPDF)")
-                print("     • 📄 PDFDocument: \(PDFcount)")
-            case "Categoria":
-                let categorie = Search<Entity>(graph: self).where(.type("Categoria")).sync()
-                for categoria in categorie {
-                    if categoria[dynamicMember: "tipo"] as? String == "custom" {
-                        categorieCustom += 1
-                    } else {
-                        categorieCount += 1
-                    }
-                }
-                print("     • di cui custom: \(categorieCustom)")
-            default:
-                continue
-            }
-        }
+        XCTAssertEqual(reportedURL, tempSQLiteURL)
+        XCTAssertNil(graph.managedObjectContext)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tempSQLiteURL.path))
+        XCTAssertEqual(try Data(contentsOf: tempSQLiteURL), originalBytes)
     }
-
 }

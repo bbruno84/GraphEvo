@@ -32,11 +32,11 @@ public struct AnyCodable: Codable {
   /// Codable types.
   public static var codables: [Codable.Type] = [
     String.self,
-    Double.self,
+    Int.self,
     Bool.self,
     Date.self,
     Data.self,
-    Int.self,
+    Double.self,
     URL.self
   ]
   

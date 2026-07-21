@@ -169,8 +169,6 @@ public class Node: NSObject, Codable {
   // public convenience init(_ type: String) {
   //   self.init(type, graph: GraphStoreDescription.name)
   // }
-  #warning("⚠️ init(_ type: String) is commented out for verification. Refactor call sites to use init(type:graph:) instead.")
-  
   /// Generic creation of the managed node type.
   class func createNode(_ type: String, in context: NSManagedObjectContext) -> ManagedNode {
     fatalError("Must be implemented by subclasses")
@@ -465,4 +463,3 @@ extension Node : Comparable {
     return left.id < right.id
   }
 }
-

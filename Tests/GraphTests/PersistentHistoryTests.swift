@@ -82,6 +82,7 @@ final class PersistentHistoryTests: XCTestCase {
             return
         }
         var objectID: NSManagedObjectID!
+        var backgroundSaveError: Error?
         bg.performAndWait {
             // Mark this write as coming from a different author to simulate a *remote* change
             // so that Persistent History processing does not skip it as self-authored.
@@ -91,9 +92,15 @@ final class PersistentHistoryTests: XCTestCase {
                 into: bg
             )
             obj.setValue("testProp", forKey: "name")
-            try? bg.save()
+            do {
+                try bg.save()
+            } catch {
+                backgroundSaveError = error
+            }
             objectID = obj.objectID
         }
+        XCTAssertNil(backgroundSaveError, "The simulated remote transaction must be saved")
+        XCTAssertFalse(objectID.isTemporaryID, "The simulated remote transaction must produce a permanent object ID")
 
         // 3. Simulate remote change notification
         graph.processPersistentHistoryForRemoteChange()
@@ -102,6 +109,11 @@ final class PersistentHistoryTests: XCTestCase {
         let exp = expectation(description: "wait for PH")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { exp.fulfill() }
         wait(for: [exp], timeout: 2.0)
+
+        XCTAssertTrue(
+            graph.ph_debug_lastTokenExists(),
+            "Processing a real local persistent-history transaction must advance and persist the token"
+        )
 
         // 5. Reload object and check appDataVersion updated
         let refreshed = try graph.managedObjectContext?.existingObject(with: objectID)

@@ -73,11 +73,69 @@ final class StorePathResolutionTests: XCTestCase {
         GraphContextRegistry.shared.removeStore(forKey: configuration.storeIdentityKey)
     }
 
-    func testSameStoreNameInDifferentDirectoriesDoesNotReuseContext() {
+    func testConcurrentRegistryRegistrationRemainsAtomic() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ConcurrentRegistry"
+        configuration.backend = .inMemory
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        let context = graph.managedObjectContext!
+        let container = graph.persistentContainer
+        let key = configuration.storeIdentityKey
+
+        DispatchQueue.concurrentPerform(iterations: 32) { _ in
+            GraphContextRegistry.shared.register(
+                graph: graph,
+                key: key,
+                context: context,
+                container: container,
+                configuration: configuration
+            )
+        }
+
+        XCTAssertTrue(GraphContextRegistry.shared.context(for: key) === context)
+        XCTAssertTrue(GraphContextRegistry.shared.container(for: key) === container)
+        XCTAssertEqual(GraphContextRegistry.shared.configuration(for: context)?.name, configuration.name)
+        GraphContextRegistry.shared.removeStore(forKey: key)
+    }
+
+    func testConcurrentOpenOfSameStoreConvergesOnOneRegisteredContext() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ConcurrentShared"
+        configuration.location = directory
+        let graphCount = 2
+        var graphs = Array<Graph?>(repeating: nil, count: graphCount)
+        let lock = NSLock()
+
+        let openExpectation = expectation(description: "concurrent store opens complete")
+        DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.concurrentPerform(iterations: graphCount) { index in
+                let graph = Graph(configuration: configuration, migrationEnabled: false)
+                lock.lock()
+                graphs[index] = graph
+                lock.unlock()
+            }
+            DispatchQueue.main.async { openExpectation.fulfill() }
+        }
+        wait(for: [openExpectation], timeout: 10)
+
+        let openedGraphs = graphs.compactMap { $0 }
+        XCTAssertEqual(openedGraphs.count, graphCount)
+        XCTAssertTrue(openedGraphs.allSatisfy { $0.storeOpeningError == nil })
+        let contexts = openedGraphs.compactMap(\.managedObjectContext)
+        let containers = openedGraphs.compactMap(\.persistentContainer)
+        XCTAssertEqual(contexts.count, graphCount)
+        XCTAssertEqual(containers.count, graphCount)
+        XCTAssertTrue(contexts.dropFirst().allSatisfy { $0 === contexts.first })
+        XCTAssertTrue(containers.dropFirst().allSatisfy { $0 === containers.first })
+
+        GraphContextRegistry.shared.removeStore(forKey: configuration.storeIdentityKey)
+    }
+
+    func testSameStoreNameInDifferentDirectoriesDoesNotReuseContext() throws {
         let otherDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("GraphCK-Path-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: otherDirectory) }
-        try? FileManager.default.createDirectory(at: otherDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: otherDirectory, withIntermediateDirectories: true)
 
         var firstConfiguration = GraphStoreConfiguration()
         firstConfiguration.name = "same-name"

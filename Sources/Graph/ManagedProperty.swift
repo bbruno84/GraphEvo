@@ -45,15 +45,10 @@ internal class ManagedProperty: NamedManagedObject {
    */
   convenience init(name: String, object: Any, node: ManagedNode, managedObjectContext: NSManagedObjectContext) {
     self.init(name: name, node: node, managedObjectContext: managedObjectContext)
-    do {
-        self.object = object
-        let moc = managedObjectContext
-        if let config = GraphContextRegistry.shared.configuration(for: moc) {
-            self.appDataVersionValue = config.requiredAppDataVersion
-        }
-    } catch {
-        print("[Graph Error] Failed to archive object '\(name)' of type \(type(of: object)): \(error)")
-        self.object = Data() // fallback to empty Data
+    self.object = object
+    let moc = managedObjectContext
+    if let config = GraphContextRegistry.shared.configuration(for: moc) {
+      self.appDataVersionValue = config.requiredAppDataVersion
     }
   }
   
