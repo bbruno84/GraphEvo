@@ -35,7 +35,10 @@ extension NSPersistentContainer {
    */
   convenience init(name: String, storeDescription: NSPersistentStoreDescription, completion: ((NSPersistentStoreDescription, Error?) -> Void)? = nil) {
     self.init(name: name, managedObjectModel: Model.create())
-    persistentStoreDescriptions.append(storeDescription)
+    // The designated initializer already installs a default description.
+    // Replace it instead of appending a second store to avoid duplicate loads
+    // and duplicate completion callbacks.
+    persistentStoreDescriptions = [storeDescription]
     completion.map {
       loadPersistentStores(completionHandler: $0)
     }
