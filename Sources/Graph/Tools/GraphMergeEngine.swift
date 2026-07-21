@@ -58,7 +58,6 @@ public enum GraphMergeEngine {
             ])
         }
 
-        var caughtError: Error?
         var report = GraphMergeReport(
             importedEntities: 0,
             mappedEntities: 0,
@@ -70,8 +69,7 @@ public enum GraphMergeEngine {
         )
         primaryContext.performAndWait {
             secondaryContext.performAndWait {
-                do {
-                    let secondaryEntities = Search<Entity>(graph: secondaryGraph)
+                let secondaryEntities = Search<Entity>(graph: secondaryGraph)
                         .where(.type("*"))
                         .sync()
 
@@ -146,24 +144,17 @@ public enum GraphMergeEngine {
                         }
                     }
 
-                    primaryGraph.sync()
-                    report = GraphMergeReport(
-                        importedEntities: importedEntities,
-                        mappedEntities: importMap.count,
-                        unmappedEntities: unmappedEntities,
-                        recreatedRelationships: relCount,
-                        skippedRelationships: skippedRelCount,
-                        recreatedActions: actCount,
-                        skippedActions: skippedActCount
-                    )
-
-                } catch {
-                    caughtError = error
-                }
+                primaryGraph.sync()
+                report = GraphMergeReport(
+                    importedEntities: importedEntities,
+                    mappedEntities: importMap.count,
+                    unmappedEntities: unmappedEntities,
+                    recreatedRelationships: relCount,
+                    skippedRelationships: skippedRelCount,
+                    recreatedActions: actCount,
+                    skippedActions: skippedActCount
+                )
             }
-        }
-        if let caughtError {
-            throw caughtError
         }
 
         GraphMigrationLogger.log(
