@@ -67,9 +67,20 @@ internal final class GraphContextRegistry {
   }
 
   private let lock = NSLock()
+  private let storeOpenLock = NSLock()
   private var entries: [String: Entry] = [:]
 
   private init() {}
+
+  /// Core Data must not initialize two persistent containers for the same
+  /// SQLite URL concurrently. Registry lookup/registration is locked, but
+  /// the actual store load happens outside that critical section, so opening
+  /// is serialized separately.
+  func withStoreOpenLock<T>(_ body: () throws -> T) rethrows -> T {
+    storeOpenLock.lock()
+    defer { storeOpenLock.unlock() }
+    return try body()
+  }
 
   func context(for key: String) -> NSManagedObjectContext? {
     lock.lock()

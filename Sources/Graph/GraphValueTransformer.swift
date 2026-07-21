@@ -104,6 +104,8 @@ public enum GraphArchiver {
 /// Ensures compatibility with `NSPersistentCloudKitContainer` by enforcing a strict class whitelist.
 @objc(GraphValueTransformer)
 public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
+
+    private static let registrationLock = NSLock()
     
     /// The name used to register the transformer.
     static let name = NSValueTransformerName("GraphValueTransformer")
@@ -152,6 +154,8 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
     
     /// Registers the transformer globally.
     public static func register() {
+        registrationLock.lock()
+        defer { registrationLock.unlock() }
         let transformer = GraphValueTransformer()
         ValueTransformer.setValueTransformer(transformer, forName: GraphValueTransformer.name)
     }

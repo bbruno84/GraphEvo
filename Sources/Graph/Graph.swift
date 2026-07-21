@@ -222,7 +222,9 @@ public class Graph: NSObject {
         observeRemoteStoreChanges()
         checkICloudAccountStatus()
         prepareGraphContextRegistry()
-        prepareManagedObjectContext(configuration: resolvedConfiguration)
+        GraphContextRegistry.shared.withStoreOpenLock {
+            prepareManagedObjectContext(configuration: resolvedConfiguration)
+        }
         if migrationEnabled {
             GraphMigrationManager.handlePhase(.postInit, configuration: resolvedConfiguration, graph: self)
             GraphMigrationManager.handlePhase(.ready, configuration: resolvedConfiguration, graph: self)
