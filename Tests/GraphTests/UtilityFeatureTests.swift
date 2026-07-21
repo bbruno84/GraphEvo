@@ -60,6 +60,20 @@ final class UtilityFeatureTests: XCTestCase {
         XCTAssertNotNil(GraphJSON(["value": 1]).asNSData)
     }
 
+    func testGraphJSONInvalidMutationsAreIgnored() {
+        var array: GraphJSON = [1]
+        array[4] = GraphJSON(2)
+        array["unexpected"] = GraphJSON(3)
+        XCTAssertEqual(array[0].asInt, 1)
+        XCTAssertEqual(array.asArray?.count, 1)
+
+        var scalar = GraphJSON(1)
+        scalar[0] = GraphJSON(2)
+        scalar["unexpected"] = GraphJSON(3)
+        XCTAssertEqual(scalar.asInt, 1)
+        XCTAssertNil(GraphJSON.stringify(UUID()))
+    }
+
     func testAnyCodableObjectAndCollectionWrappersRoundTrip() throws {
         let object = AnyCodableObject(["name": AnyCodableObject("GraphCK"), "count": AnyCodableObject(3)])
         let array = NSArrayOfAnyCodableObject([
