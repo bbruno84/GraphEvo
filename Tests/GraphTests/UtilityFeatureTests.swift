@@ -181,4 +181,36 @@ final class UtilityFeatureTests: XCTestCase {
         XCTAssertEqual(overwritten.folderURL, first.folderURL)
         XCTAssertEqual(try Data(contentsOf: first.folderURL.appendingPathComponent("baseline.zip")), Data("v3".utf8))
     }
+
+    func testMigrationBackupMissingSourceFailsAndRestoreCanSkipExistingFiles() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-BackupErrors-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let missing = root.appendingPathComponent("missing.zip")
+        XCTAssertThrowsError(
+            try MigrationBackupManager.backupFile(
+                at: missing,
+                migrationID: "MissingSource",
+                rootOverride: root.appendingPathComponent("backups", isDirectory: true)
+            )
+        )
+
+        let source = root.appendingPathComponent("source.sqlite")
+        try Data("backup".utf8).write(to: source)
+        let result = try MigrationBackupManager.backupFile(
+            at: source,
+            migrationID: "RestoreSkip",
+            rootOverride: root.appendingPathComponent("backups", isDirectory: true)
+        )
+        try Data("current".utf8).write(to: source)
+
+        try MigrationBackupManager.restoreToOriginalLocation(
+            descriptor: result.descriptor,
+            from: result.folderURL,
+            overwriteExisting: false
+        )
+        XCTAssertEqual(try Data(contentsOf: source), Data("current".utf8))
+    }
 }
