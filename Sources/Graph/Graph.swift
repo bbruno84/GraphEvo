@@ -137,8 +137,9 @@ public class Graph: NSObject {
     /// If set, this takes precedence over Info.plist and enables CloudKit sync without relying on plist UX.
     public static var cloudKitContainerIdentifier: String?
     
-    /// M2: Keep a reference to the CloudKit container so we can spawn background contexts, etc.
-    internal var persistentContainer: NSPersistentCloudKitContainer?
+    /// Keep a reference to the persistent container so background contexts can
+    /// be created for both CloudKit and local stores.
+    internal var persistentContainer: NSPersistentContainer?
     
     /**
      A reference to the graph completion handler.
