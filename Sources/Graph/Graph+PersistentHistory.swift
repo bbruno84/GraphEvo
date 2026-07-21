@@ -118,6 +118,51 @@ private final class HistoryTokenStore {
 #endif
 }
 
+// MARK: - Remote change coordination
+
+/// Serializes remote history processing and guarantees that the observed
+/// context is merged before existing Watch callbacks are delivered.
+private final class RemoteChangeCoordinator {
+    private weak var graph: Graph?
+    private let queue: DispatchQueue
+    private var pending = false
+    private var processing = false
+
+    init(graph: Graph) {
+        self.graph = graph
+        self.queue = DispatchQueue(label: "GraphCK.RemoteChangeCoordinator.\(graph.route)")
+    }
+
+    func enqueue() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.pending = true
+            self.startIfNeeded()
+        }
+    }
+
+    private func startIfNeeded() {
+        guard !processing, pending, let graph else { return }
+        processing = true
+        pending = false
+
+        graph.processPersistentHistoryBatch { [weak self] processed in
+            guard let self else { return }
+            self.queue.async {
+                self.processing = false
+
+                // Always perform one empty pass after a successful batch. It
+                // closes the race where another transaction is committed after
+                // the initial history fetch but before the remote notification.
+                if processed {
+                    self.pending = true
+                }
+                self.startIfNeeded()
+            }
+        }
+    }
+}
+
 // MARK: - Associated storage per Graph (no stored properties nelle extension)
 
 private enum _GraphPHKeys {
@@ -126,6 +171,7 @@ private enum _GraphPHKeys {
     static var tokenStoreKey: UInt8 = 0
     static var bootstrapFlagKey: UInt8 = 0
     static var coldStartFlagKey: UInt8 = 0
+    static var coordinatorKey: UInt8 = 0
 }
 
 private extension Graph {
@@ -142,6 +188,15 @@ private extension Graph {
         let store = HistoryTokenStore(appGroup: nil)
         objc_setAssociatedObject(self, &_GraphPHKeys.tokenStoreKey, store, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return store
+    }
+
+    var _ph_remoteChangeCoordinator: RemoteChangeCoordinator {
+        if let coordinator = objc_getAssociatedObject(self, &_GraphPHKeys.coordinatorKey) as? RemoteChangeCoordinator {
+            return coordinator
+        }
+        let coordinator = RemoteChangeCoordinator(graph: self)
+        objc_setAssociatedObject(self, &_GraphPHKeys.coordinatorKey, coordinator, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        return coordinator
     }
 
     /// If true, when no token is found (fresh install / cold start), we bootstrap the token to the current head
@@ -205,8 +260,8 @@ internal extension Graph {
             // Se invece è cold start, l’helper non fa nulla e lasciamo il replay completo
         }
 
-        // Procedi con l’elaborazione della history (userInfo + post notifica custom)
-        processPersistentHistoryForRemoteChange()
+        // The coordinator owns ordering, coalescing and delivery.
+        _ph_remoteChangeCoordinator.enqueue()
     }
 }
 
@@ -239,17 +294,21 @@ public extension Graph {
 
 internal extension Graph {
     func processPersistentHistoryForRemoteChange() {
-        
-        guard let container = persistentContainer else {return}
+        _ph_remoteChangeCoordinator.enqueue()
+    }
+
+    /// Processes one history snapshot. The completion is called after the
+    /// merged notification has been delivered to existing Watch observers.
+    fileprivate func processPersistentHistoryBatch(completion: @escaping (Bool) -> Void) {
+        guard let container = persistentContainer else { completion(false); return }
         let psc = container.persistentStoreCoordinator
-        guard !psc.persistentStores.isEmpty else {return}
-        guard !psc.persistentStores.isEmpty else {return}
+        guard !psc.persistentStores.isEmpty else { completion(false); return }
 
         let bg = container.newBackgroundContext()
         bg.transactionAuthor = GraphDeviceAuthor.current()
         bg.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         bg.perform { [weak self] in
-            guard let self = self else {return }
+            guard let self = self else { completion(false); return }
 
             // Richiesta: tutte le transazioni dopo l’ultimo token noto
             let token: NSPersistentHistoryToken? = self._ph_lastToken
@@ -262,7 +321,12 @@ internal extension Graph {
             do {
                 guard let result = try bg.execute(request) as? NSPersistentHistoryResult,
                       let transactions = result.result as? [NSPersistentHistoryTransaction],
-                      !transactions.isEmpty else {return}
+                      !transactions.isEmpty else {
+                    completion(false)
+                    return
+                }
+
+                let orderedTransactions = transactions.sorted { $0.timestamp < $1.timestamp }
 
 
                 // Raccogliamo gli ObjectID per tipo di change
@@ -270,7 +334,7 @@ internal extension Graph {
                 var updatedIDs:  [NSManagedObjectID] = []
                 var deletedIDs:  [NSManagedObjectID] = []
 
-                for tx in transactions {
+                for tx in orderedTransactions {
 //                    #if DEBUG
 //                    let a = tx.author ?? "nil"
 //                    let cn = tx.contextName ?? "nil"
@@ -305,18 +369,12 @@ internal extension Graph {
                     }
                 }
 
-                // Aggiorna e persisti il token
-                if let last = transactions.last?.token {
-                    self._ph_lastToken = last
-                    self._ph_tokenStore.save(last)
-                    // Mantieni in sync anche il backup (namespacizzato per store)
-                    let storeUUID = self._ph_currentStoreUUID()
-                    self._ph_tokenStore.saveBackup(last, storeUUID: storeUUID)
-                    self._ph_isColdStartSession = false
-                }
-
                 // Se non c'è nulla, esci
-                if insertedIDs.isEmpty, updatedIDs.isEmpty, deletedIDs.isEmpty { return }
+                if insertedIDs.isEmpty, updatedIDs.isEmpty, deletedIDs.isEmpty {
+                    self.persistPersistentHistoryToken(orderedTransactions.last?.token)
+                    completion(true)
+                    return
+                }
 
                 // Costruisci userInfo nel formato atteso dai Watch:
                 // NSSet di NSManagedObjectID (i Watch sanno convertirli in NSManagedObject col moc)
@@ -326,6 +384,15 @@ internal extension Graph {
                     NSDeletedObjectsKey:  NSSet(array: deletedIDs)
                 ]
 
+                // Core Data's merge API expects object-ID keys, while the
+                // legacy Watch API expects the historical object keys. Keep
+                // those payloads separate so neither contract is changed.
+                let mergeUserInfo: [AnyHashable: Any] = [
+                    NSInsertedObjectIDsKey: NSSet(array: insertedIDs),
+                    NSUpdatedObjectIDsKey:  NSSet(array: updatedIDs),
+                    NSDeletedObjectIDsKey:  NSSet(array: deletedIDs)
+                ]
+
                 // Prima di postare la notifica, chiama GraphMigrationManager.handleRemoteEntityChanges
                 GraphMigrationManager.handleRemoteEntityChanges(
                     configuration: self.configuration,
@@ -333,14 +400,35 @@ internal extension Graph {
                     inserted: insertedIDs,
                     updated: updatedIDs
                 )
-                // Post sul main (i watcher sono tipicamente agganciati sul main runloop)
+                // Merge synchronously on the context's queue before posting to
+                // Watch observers. This is the consistency barrier missing from
+                // the previous implementation.
+                let targetMOC = self.managedObjectContext ?? container.viewContext
+                targetMOC.performAndWait {
+                    let mergedNotification = Notification(
+                        name: .GraphCKSimulatedRemoteChange,
+                        object: targetMOC,
+                        userInfo: mergeUserInfo
+                    )
+                    targetMOC.mergeChanges(fromContextDidSave: mergedNotification)
+                }
+
+                // Persist the token only after the observed context has been
+                // merged successfully. This prevents losing a batch when the
+                // merge path fails before delivery.
+                self.persistPersistentHistoryToken(orderedTransactions.last?.token)
+
+                // Post on main (watchers are generally connected to UI-owned
+                // contexts and existing clients expect main-thread delivery).
                 DispatchQueue.main.async {
-                    let targetMOC = self.managedObjectContext ?? container.viewContext
+                    var deliveredUserInfo = userInfo
+                    deliveredUserInfo[GraphCKRemoteChangeAlreadyMergedKey] = true
                     NotificationCenter.default.post(
                         name: .GraphCKSimulatedRemoteChange,
                         object: targetMOC,
-                        userInfo: userInfo
+                        userInfo: deliveredUserInfo
                     )
+                    completion(true)
                 }
             } catch {
                 // Expand error handling for persistent history token store mismatch (error code 134501)
@@ -352,12 +440,12 @@ internal extension Graph {
                     self._ph_tokenStore.clear()
                     let storeUUID = self._ph_currentStoreUUID()
                     self._ph_tokenStore.clearBackup(storeUUID: storeUUID)
+                    completion(false)
                     return
                 }
                 debugPrint("[PH][DEBUG] Error processing remote change: \(error)")
+                completion(false)
                 }
-                
-            
         }
     }
 }
@@ -401,6 +489,15 @@ private extension Graph {
                 _ph_isColdStartSession = false
             }
         }
+    }
+
+    func persistPersistentHistoryToken(_ token: NSPersistentHistoryToken?) {
+        guard let token else { return }
+        _ph_lastToken = token
+        _ph_tokenStore.save(token)
+        let storeUUID = _ph_currentStoreUUID()
+        _ph_tokenStore.saveBackup(token, storeUUID: storeUUID)
+        _ph_isColdStartSession = false
     }
 }
 
