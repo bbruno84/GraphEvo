@@ -60,20 +60,46 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
                     XCTAssertEqual(str as String, unarchived as? String, "String mismatch")
                 } else if let num = sample as? NSNumber {
                     XCTAssertEqual(num, unarchived as? NSNumber, "NSNumber mismatch")
-                } else if sample is Date {
-                    XCTAssertNotNil(unarchived as? Date, "Date roundtrip failed")
-                } else if sample is Data {
-                    XCTAssertNotNil(unarchived as? Data, "Data roundtrip failed")
-                } else if sample is UIImage {
-                    XCTAssertTrue(unarchived is Data || unarchived is UIImage, "UIImage roundtrip unexpected type")
-                } else if sample is PDFDocument {
-                    XCTAssertTrue(unarchived is Data || unarchived is PDFDocument, "PDF roundtrip unexpected type")
+                } else if let date = sample as? Date {
+                    XCTAssertEqual(unarchived as? Date, date, "Date roundtrip failed")
+                } else if let data = sample as? Data {
+                    XCTAssertEqual(unarchived as? Data, data, "Data roundtrip failed")
+                } else if let image = sample as? UIImage {
+                    XCTAssertEqual(
+                        unarchived as? Data,
+                        image.pngData(),
+                        "UIImage must round-trip to its PNG representation"
+                    )
+                } else if let pdf = sample as? PDFDocument {
+                    guard let data = unarchived as? Data,
+                          let roundtrippedPDF = PDFDocument(data: data) else {
+                        XCTFail("PDFDocument roundtrip did not produce readable PDF data")
+                        continue
+                    }
+                    XCTAssertEqual(roundtrippedPDF.pageCount, pdf.pageCount)
+                    for pageIndex in 0..<pdf.pageCount {
+                        XCTAssertEqual(
+                            roundtrippedPDF.page(at: pageIndex)?.string,
+                            pdf.page(at: pageIndex)?.string,
+                            "PDF page \(pageIndex) content mismatch"
+                        )
+                    }
                 } else if sample is NSNull {
                     XCTAssertTrue(unarchived is NSNull, "NSNull roundtrip failed")
                 } else if let array = sample as? NSArray {
                     XCTAssertEqual(array.count, (unarchived as? NSArray)?.count, "NSArray roundtrip count mismatch")
+                    XCTAssertEqual(
+                        array.compactMap { $0 as? String },
+                        (unarchived as? NSArray)?.compactMap { $0 as? String },
+                        "NSArray contents mismatch"
+                    )
                 } else if let dict = sample as? NSDictionary {
                     XCTAssertEqual(dict.count, (unarchived as? NSDictionary)?.count, "NSDictionary roundtrip count mismatch")
+                    XCTAssertEqual(
+                        dict as? [String: String],
+                        unarchived as? [String: String],
+                        "NSDictionary contents mismatch"
+                    )
                 } else if let obj = sample as? AnyCodableObject {
                     if let unarchivedObj = unarchived as? AnyCodableObject {
                         XCTAssertEqual(String(describing: obj.value),

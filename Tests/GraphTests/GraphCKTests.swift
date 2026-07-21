@@ -36,7 +36,7 @@ final class GraphCKTests: XCTestCase {
         XCTAssertEqual(storeURL.lastPathComponent, "GraphCK_\(name).sqlite", "Store file should be renamed to GraphCK_<name>.sqlite")
 
         // 3) Context should be ready
-        XCTAssertNotNil(g.managedObjectContext, "Managed object context should be initialized by NSPersistentCloudKitContainer")
+        XCTAssertNotNil(g.managedObjectContext, "Managed object context should be initialized")
 
         // 4) Save / Fetch roundtrip (uses original Graph APIs if present)
         //    If your project uses a different API to persist entities, adjust this block accordingly.
@@ -109,9 +109,11 @@ final class GraphCKTests: XCTestCase {
         waitForExpectations(timeout: 4.0)
         
         XCTAssertFalse(stub.statuses.isEmpty, "Delegate should be called when identifier is set")
-        // Typically .unavailable on simulator/no account; allow either for portability.
-        XCTAssertTrue(stub.statuses.last == .available || stub.statuses.last == .unavailable,
-                      "Expected a valid status callback")
+        XCTAssertEqual(
+            g.configuration.cloudKitContainerIdentifier,
+            "iCloud.com.example.dummy",
+            "The runtime CloudKit identifier must be retained by the resolved configuration"
+        )
         
         // Restore previous override
         Graph.cloudKitContainerIdentifier = old

@@ -70,13 +70,14 @@ final class PersistentHistoryTokenTests: XCTestCase {
     }
 
     func test_FilterLocalWrites_Wiring_OK() {
-        // Sanity check: l’handler deve poter essere chiamato con filtro autore attivo.
-        // (il comportamento “no doppio scatto” lo validiamo in integrazione reale)
         let g = makeGraph(named: "PH-Filter-\(UUID().uuidString)")
-        g.ph_debug_printAuthorAndContext()   // giusto per visibilità nei log
+        g.ph_debug_clearToken()
         g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
-        // Nessuna asserzione specifica: verifichiamo solo che non ci siano crash.
-        XCTAssertTrue(true)
+
+        XCTAssertFalse(
+            g.ph_debug_lastTokenExists(),
+            "A local-only notification without persistent-history transactions must not create a token"
+        )
     }
 
     func test_TokenStorageIsolatedPerStore() {
