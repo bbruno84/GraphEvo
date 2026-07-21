@@ -32,11 +32,22 @@ final class NotesViewController: UIViewController {
         }
         view.backgroundColor = .systemBackground
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(graphStateChanged),
+            name: .graphProviderStateDidChange,
+            object: GraphProvider.shared
+        )
+
         configureTableView()
         configureNavBar()
         loadNotes()
         setupWatcher()
         print("🧩 NotesViewController viewDidLoad completed. Frame: \(view.frame)")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - UI Setup
@@ -62,7 +73,8 @@ final class NotesViewController: UIViewController {
     // MARK: - Data
 
     private func loadNotes() {
-        notes = Search<Entity>(graph: GraphProvider.shared.graph)
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
+        notes = Search<Entity>(graph: graph)
             .where(.type("Note"))
             .sync()
         
@@ -74,7 +86,7 @@ final class NotesViewController: UIViewController {
     }
 
     @objc private func addNote() {
-        let graph = GraphProvider.shared.graph
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
         let note = Entity("Note", graph: graph)
         note[dynamicMember: "title"] = "Note at \(Date())"
         note[dynamicMember: "createdAt"] = Date()
@@ -83,7 +95,7 @@ final class NotesViewController: UIViewController {
     }
 
     private func deleteNote(at index: Int) {
-        let graph = GraphProvider.shared.graph
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
         let note = notes[index]
         note.delete()
         graph.sync()
@@ -95,18 +107,27 @@ final class NotesViewController: UIViewController {
         } else {
             note.add(tags: "favorite")
         }
-        GraphProvider.shared.graph.sync()
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
+        graph.sync()
     }
 
     // MARK: - Watchers
 
     private func setupWatcher() {
-        let graph = GraphProvider.shared.graph
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
         let watcher = Watch<Entity>(graph: graph).where(.type("Note"))
         watcher.delegate = self
         self.watcher = watcher
         self.strongWatcher = watcher  // 👈 mantiene la reference forte
         print("👀 Watcher setup completed")
+    }
+
+    @objc private func graphStateChanged() {
+        guard GraphProvider.shared.isReady else { return }
+        loadNotes()
+        if watcher == nil {
+            setupWatcher()
+        }
     }
 }
 

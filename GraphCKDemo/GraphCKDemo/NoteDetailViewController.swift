@@ -29,7 +29,7 @@ final class NoteDetailViewController: UIViewController {
         label.text = "Title: \(note[dynamicMember: "title"] as? String ?? "—")"
         label.translatesAutoresizingMaskIntoConstraints = false
         
-        let attachment = Search<Relationship>(graph: GraphProvider.shared.graph).where(.type("NoteAttachment")).sync().first{ $0.object == note }
+        let attachment = Search<Relationship>(graph: graph).where(.type("NoteAttachment")).sync().first{ $0.object == note }
         debugPrint("Attachment: \(String(describing: attachment))")
         let attachLabel = UILabel()
         attachLabel.text = attachment != nil ? "🔗 Attachment: ✅" : "🔗 Attachment: ❌"
@@ -84,7 +84,7 @@ final class NoteDetailViewController: UIViewController {
         rel.object = note
         rel.subject = attachment
 
-        GraphProvider.shared.graph.sync()
+        graph.sync()
         dismiss(animated: true)
     }
 
@@ -101,6 +101,6 @@ final class NoteDetailViewController: UIViewController {
         } else {
             note.add(tags: "favorite")
         }
-        GraphProvider.shared.graph.sync()
+        graph.sync()
     }
 }
