@@ -1,4 +1,5 @@
 import XCTest
+import CoreData
 @testable import Graph
 
 final class UtilityFeatureTests: XCTestCase {
@@ -55,6 +56,37 @@ final class UtilityFeatureTests: XCTestCase {
         )
     }
 
+    func testStoreMetadataRoundTripAndGenericValues() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-Metadata-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "MetadataRoundTrip"
+        configuration.location = directory
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: Model.create())
+        let store = try coordinator.addPersistentStore(
+            ofType: NSSQLiteStoreType,
+            configurationName: nil,
+            at: configuration.resolvedStoreURL,
+            options: [:]
+        )
+        try coordinator.remove(store)
+
+        let versions = GraphStoreConfiguration.Versions(graphModel: 7, appData: 11)
+        try GraphStoreMetadata.write(versions, to: configuration, model: Model.create())
+
+        XCTAssertEqual(try GraphStoreMetadata.read(from: configuration), versions)
+        try GraphStoreMetadata.writeValue(true, forKey: "GraphCK.TestFlag", to: configuration, model: Model.create())
+        XCTAssertTrue(GraphStoreMetadata.boolValue(forKey: "GraphCK.TestFlag", from: configuration))
+        XCTAssertTrue(GraphStoreMetadata.listAllKeys(from: configuration).contains("GraphCK.TestFlag"))
+
+        try GraphStoreMetadata.removeValue(forKey: "GraphCK.TestFlag", to: configuration, model: Model.create())
+        XCTAssertNil(GraphStoreMetadata.readValue(forKey: "GraphCK.TestFlag", from: configuration) as Bool?)
+        XCTAssertFalse(GraphStoreMetadata.boolValue(forKey: "GraphCK.TestFlag", from: configuration))
+    }
+
     func testMigrationBackupStoreFindAndRestore() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("GraphCK-Backup-\(UUID().uuidString)", isDirectory: true)
@@ -101,5 +133,52 @@ final class UtilityFeatureTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: storeURL), Data("store".utf8))
         XCTAssertEqual(try Data(contentsOf: walURL), Data("wal".utf8))
         XCTAssertEqual(try Data(contentsOf: shmURL), Data("shm".utf8))
+    }
+
+    func testMigrationBackupFileConflictPolicies() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-BackupFile-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = root.appendingPathComponent("baseline.zip")
+        let backupRoot = root.appendingPathComponent("backups", isDirectory: true)
+        try Data("v1".utf8).write(to: source)
+
+        let first = try MigrationBackupManager.backupFile(
+            at: source,
+            migrationID: "FileMigration",
+            conflictPolicy: .duplicate,
+            rootOverride: backupRoot
+        )
+        try Data("v2".utf8).write(to: source)
+
+        let skipped = try MigrationBackupManager.backupFile(
+            at: source,
+            migrationID: "FileMigration",
+            conflictPolicy: .skip,
+            rootOverride: backupRoot
+        )
+        XCTAssertEqual(skipped.folderURL, first.folderURL)
+        XCTAssertEqual(try Data(contentsOf: first.folderURL.appendingPathComponent("baseline.zip")), Data("v1".utf8))
+
+        let duplicated = try MigrationBackupManager.backupFile(
+            at: source,
+            migrationID: "FileMigration",
+            conflictPolicy: .duplicate,
+            rootOverride: backupRoot
+        )
+        XCTAssertNotEqual(duplicated.folderURL, first.folderURL)
+        XCTAssertEqual(try Data(contentsOf: duplicated.folderURL.appendingPathComponent("baseline.zip")), Data("v2".utf8))
+
+        try Data("v3".utf8).write(to: source)
+        let overwritten = try MigrationBackupManager.backupFile(
+            at: source,
+            migrationID: "FileMigration",
+            conflictPolicy: .overwrite,
+            rootOverride: backupRoot
+        )
+        XCTAssertEqual(overwritten.folderURL, first.folderURL)
+        XCTAssertEqual(try Data(contentsOf: first.folderURL.appendingPathComponent("baseline.zip")), Data("v3".utf8))
     }
 }

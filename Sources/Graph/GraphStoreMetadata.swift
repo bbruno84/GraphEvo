@@ -48,9 +48,23 @@ public enum GraphStoreMetadata {
         for store: NSPersistentStore
     ) throws {
         var md = coordinator.metadata(for: store)
-        md[graphModelVersionKey] = versions.graphModel
-        md[appDataVersionKey]    = versions.appData
+        if let graphModel = versions.graphModel {
+            md[graphModelVersionKey] = graphModel
+        } else {
+            md.removeValue(forKey: graphModelVersionKey)
+        }
+        if let appData = versions.appData {
+            md[appDataVersionKey] = appData
+        } else {
+            md.removeValue(forKey: appDataVersionKey)
+        }
         coordinator.setMetadata(md, for: store)
+        try NSPersistentStoreCoordinator.setMetadata(
+            md,
+            forPersistentStoreOfType: store.type,
+            at: try storeURL(for: store),
+            options: nil
+        )
     }
 
     /// Comodo helper: apre temporaneamente lo store, scrive i metadata e chiude.
@@ -131,6 +145,12 @@ public extension GraphStoreMetadata {
             metadata.removeValue(forKey: key)
         }
         psc.setMetadata(metadata, for: store)
+        try NSPersistentStoreCoordinator.setMetadata(
+            metadata,
+            forPersistentStoreOfType: store.type,
+            at: try storeURL(for: store),
+            options: nil
+        )
         try psc.remove(store)
     }
 
@@ -164,6 +184,12 @@ public extension GraphStoreMetadata {
         var metadata = psc.metadata(for: store)
         metadata.removeValue(forKey: key)
         psc.setMetadata(metadata, for: store)
+        try NSPersistentStoreCoordinator.setMetadata(
+            metadata,
+            forPersistentStoreOfType: store.type,
+            at: try storeURL(for: store),
+            options: nil
+        )
         try psc.remove(store)
     }
 
@@ -183,4 +209,11 @@ public extension GraphStoreMetadata {
             return []
         }
     }
+}
+
+private func storeURL(for store: NSPersistentStore) throws -> URL {
+    guard let url = store.url else {
+        throw CocoaError(.fileNoSuchFile)
+    }
+    return url
 }
