@@ -36,4 +36,19 @@ final class CompatibilityTests: XCTestCase {
         XCTAssertEqual(GraphCloudStorageTransition(type: 0).debugDescription, "unknown")
         XCTAssertEqual(GraphCloudStorageTransition(type: 99).debugDescription, "unknown")
     }
+
+    func testPersistentContainerCompatibilityInitializerCanDeferStoreLoading() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-ContainerDeferred-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let storeURL = directory.appendingPathComponent("Deferred.sqlite")
+        let description = NSPersistentStoreDescription(url: storeURL)
+        let container = NSPersistentContainer(name: "Deferred", storeDescription: description)
+
+        XCTAssertEqual(container.persistentStoreDescriptions.count, 1)
+        XCTAssertEqual(container.persistentStoreDescriptions.first?.url, storeURL)
+        XCTAssertTrue(container.persistentStoreCoordinator.persistentStores.isEmpty)
+    }
 }
