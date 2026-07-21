@@ -13,6 +13,19 @@ public enum GraphStoreMetadata {
     private static let graphModelVersionKey = "GraphModelVersion"
     private static let appDataVersionKey    = "AppDataVersion"
 
+    /// Checks compatibility without opening or modifying the store.
+    /// Applications can use this before running their own migration.
+    public static func isCompatible(
+        at storeURL: URL,
+        with model: NSManagedObjectModel = Model.create()
+    ) throws -> Bool {
+        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
+            ofType: NSSQLiteStoreType,
+            at: storeURL
+        )
+        return model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata)
+    }
+
     /// Legge le versioni correnti dai metadata dello store.
     /// - Parameter configuration: configurazione completa dello store.
     /// - Returns: GraphStoreConfiguration.Versions (nil = legacy/non presente)
@@ -52,8 +65,8 @@ public enum GraphStoreMetadata {
             configurationName: nil,
             at: configuration.resolvedStoreURL,
             options: [
-                NSMigratePersistentStoresAutomaticallyOption: true,
-                NSInferMappingModelAutomaticallyOption: true
+                NSMigratePersistentStoresAutomaticallyOption: false,
+                NSInferMappingModelAutomaticallyOption: false
             ]
         )
         try write(versions, using: psc, for: store)
@@ -107,8 +120,8 @@ public extension GraphStoreMetadata {
             configurationName: nil,
             at: configuration.resolvedStoreURL,
             options: [
-                NSMigratePersistentStoresAutomaticallyOption: true,
-                NSInferMappingModelAutomaticallyOption: true
+                NSMigratePersistentStoresAutomaticallyOption: false,
+                NSInferMappingModelAutomaticallyOption: false
             ]
         )
         var metadata = psc.metadata(for: store)
@@ -144,8 +157,8 @@ public extension GraphStoreMetadata {
             configurationName: nil,
             at: configuration.resolvedStoreURL,
             options: [
-                NSMigratePersistentStoresAutomaticallyOption: true,
-                NSInferMappingModelAutomaticallyOption: true
+                NSMigratePersistentStoresAutomaticallyOption: false,
+                NSInferMappingModelAutomaticallyOption: false
             ]
         )
         var metadata = psc.metadata(for: store)

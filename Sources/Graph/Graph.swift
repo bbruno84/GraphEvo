@@ -81,6 +81,25 @@ public enum GraphCloudStatus {
     case unavailable
 }
 
+/// Errors reported when Graph refuses to open a persistent store.
+/// GraphCK never migrates or moves an incompatible existing store.
+public enum GraphStoreOpeningError: LocalizedError {
+    case incompatibleStore(URL)
+    case unreadableStore(URL, underlying: Error)
+    case failedToLoadStore(URL, underlying: Error)
+
+    public var errorDescription: String? {
+        switch self {
+        case .incompatibleStore(let url):
+            return "The store at \(url.path) is incompatible with the GraphCK model. Migrate it in the application before opening GraphCK."
+        case .unreadableStore(let url, let error):
+            return "The store at \(url.path) could not be inspected: \(error.localizedDescription)"
+        case .failedToLoadStore(let url, let error):
+            return "The store at \(url.path) could not be opened: \(error.localizedDescription)"
+        }
+    }
+}
+
 public protocol GraphCloudStatusDelegate: AnyObject {
     /// Called when iCloud availability changes (or is first determined).
     func graph(_ graph: Graph, iCloudStatusChanged status: GraphCloudStatus)
@@ -109,6 +128,10 @@ public class Graph: NSObject {
     
     /// Worker managedObjectContext.
     public internal(set) var managedObjectContext: NSManagedObjectContext!
+
+    /// Non-nil when GraphCK refused or failed to open the configured store.
+    /// In that case the existing store remains at its original URL untouched.
+    public internal(set) var storeOpeningError: GraphStoreOpeningError?
     
     /// Number of items to return.
     public var batchSize = 0 // 0 == no limit
