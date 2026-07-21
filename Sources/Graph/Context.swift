@@ -104,11 +104,7 @@ internal struct Context {
     storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
     storeDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
 
-    var resolvedContainerID: String? = configuration.cloudKitContainerIdentifier
-    if resolvedContainerID == nil || resolvedContainerID?.isEmpty == true {
-      resolvedContainerID = Bundle.main.object(forInfoDictionaryKey: "GraphCloudKitContainerIdentifier") as? String
-    }
-    if let containerID = resolvedContainerID, !containerID.isEmpty {
+    if let containerID = configuration.cloudKitContainerIdentifier {
       storeDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: containerID)
     }
     
@@ -183,7 +179,7 @@ internal extension Graph {
         }
     }
 
-    if let _ = configuration.cloudKitContainerIdentifier {
+    if configuration.cloudKitContainerIdentifier != nil && !Graph.isRunningUnderTests {
       let container = Context.makeCloudContainer(name: name, storeURL: storeURL, configuration: configuration)
 
       container.loadPersistentStores { [unowned self] (desc, error) in
