@@ -2,6 +2,25 @@ import XCTest
 @testable import Graph
 
 final class UtilityFeatureTests: XCTestCase {
+    func testAnyCodableNestedJSONRoundTripAndUnsupportedValue() throws {
+        let original: [String: Any] = [
+            "name": "GraphCK",
+            "count": 3,
+            "enabled": true,
+            "items": ["a", "b"]
+        ]
+        let codable = try XCTUnwrap(AnyCodable(original))
+        let encoded = try JSONEncoder().encode(codable)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: encoded)
+        let unwrapped = try XCTUnwrap(decoded.unwrap() as? [String: Any])
+
+        XCTAssertEqual(unwrapped["name"] as? String, "GraphCK")
+        XCTAssertEqual(unwrapped["count"] as? Int, 3)
+        XCTAssertEqual(unwrapped["enabled"] as? Bool, true)
+        XCTAssertEqual(unwrapped["items"] as? [String], ["a", "b"])
+        XCTAssertNil(AnyCodable(NSUUID()))
+    }
+
     func testGraphJSONRoundTripAndMutation() throws {
         let original = "{\"name\":\"GraphCK\",\"items\":[1,2,3]}"
         guard var json = GraphJSON.parse(original) else {
