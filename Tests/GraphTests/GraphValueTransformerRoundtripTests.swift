@@ -46,7 +46,7 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
         ]
         
         // PDF sample
-        if let pdfURL = Bundle.module.url(forResource: "sample", withExtension: "pdf"),
+        if let pdfURL = Bundle.graphTests.url(forResource: "sample", withExtension: "pdf"),
            let pdf = PDFDocument(url: pdfURL) {
             samples.append(pdf)
         } else {

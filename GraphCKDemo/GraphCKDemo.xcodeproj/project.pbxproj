@@ -9,10 +9,12 @@
 /* Begin PBXBuildFile section */
 		15620A0F2E6FFF1B00293C6E /* GraphCK in Frameworks */ = {isa = PBXBuildFile; productRef = 15620A0E2E6FFF1B00293C6E /* GraphCK */; };
 		15620A152E7000E900293C6E /* GraphCK in Frameworks */ = {isa = PBXBuildFile; productRef = 15620A142E7000E900293C6E /* GraphCK */; };
+		A90000012E7A000100293C6E /* Graph in Frameworks */ = {isa = PBXBuildFile; productRef = A90000022E7A000100293C6E /* Graph */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		156209FE2E6FFCF400293C6E /* GraphCKDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GraphCKDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A90000032E7A000100293C6E /* GraphTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GraphTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -34,6 +36,11 @@
 			path = GraphCKDemo;
 			sourceTree = "<group>";
 		};
+		A90000042E7A000100293C6E /* GraphTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ../Tests/GraphTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,6 +53,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A90000052E7A000100293C6E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A90000012E7A000100293C6E /* Graph in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -53,6 +68,7 @@
 			isa = PBXGroup;
 			children = (
 				15620A002E6FFCF400293C6E /* GraphCKDemo */,
+				A90000042E7A000100293C6E /* GraphTests */,
 				156209FF2E6FFCF400293C6E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,6 +77,7 @@
 			isa = PBXGroup;
 			children = (
 				156209FE2E6FFCF400293C6E /* GraphCKDemo.app */,
+				A90000032E7A000100293C6E /* GraphTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -92,6 +109,29 @@
 			productReference = 156209FE2E6FFCF400293C6E /* GraphCKDemo.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A90000062E7A000100293C6E /* GraphTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A900000B2E7A000100293C6E /* Build configuration list for PBXNativeTarget "GraphTests" */;
+			buildPhases = (
+				A90000072E7A000100293C6E /* Sources */,
+				A90000052E7A000100293C6E /* Frameworks */,
+				A90000082E7A000100293C6E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A90000042E7A000100293C6E /* GraphTests */,
+			);
+			name = GraphTests;
+			packageProductDependencies = (
+				A90000022E7A000100293C6E /* Graph */,
+			);
+			productName = GraphTests;
+			productReference = A90000032E7A000100293C6E /* GraphTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -105,6 +145,10 @@
 					156209FD2E6FFCF400293C6E = {
 						CreatedOnToolsVersion = 26.0;
 						LastSwiftMigration = 2600;
+					};
+					A90000062E7A000100293C6E = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 156209FD2E6FFCF400293C6E;
 					};
 				};
 			};
@@ -126,6 +170,7 @@
 			projectRoot = "";
 			targets = (
 				156209FD2E6FFCF400293C6E /* GraphCKDemo */,
+				A90000062E7A000100293C6E /* GraphTests */,
 			);
 		};
 /* End PBXProject section */
@@ -138,10 +183,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A90000082E7A000100293C6E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		156209FA2E6FFCF400293C6E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A90000072E7A000100293C6E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -364,6 +423,34 @@
 			};
 			name = Release;
 		};
+		A90000092E7A000100293C6E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.valerioburiani.GraphTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A900000A2E7A000100293C6E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.valerioburiani.GraphTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -385,6 +472,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A900000B2E7A000100293C6E /* Build configuration list for PBXNativeTarget "GraphTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A90000092E7A000100293C6E /* Debug */,
+				A900000A2E7A000100293C6E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -400,6 +496,10 @@
 			productName = Graph;
 		};
 		15620A142E7000E900293C6E /* GraphCK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Graph;
+		};
+		A90000022E7A000100293C6E /* Graph */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Graph;
 		};

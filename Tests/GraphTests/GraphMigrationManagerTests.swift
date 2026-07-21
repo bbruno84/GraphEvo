@@ -143,10 +143,16 @@ final class GraphMigrationManagerTests: XCTestCase {
         private let lock = NSLock()
         private(set) var handledPhases: [GraphMigrationManager.GraphLifecyclePhase] = []
         let preInitDelay: TimeInterval
+        let onCompleted: ((GraphMigrationManager.GraphLifecyclePhase) -> Void)?
 
-        init(id: String, preInitDelay: TimeInterval = 0.05) {
+        init(
+            id: String,
+            preInitDelay: TimeInterval = 0.05,
+            onCompleted: ((GraphMigrationManager.GraphLifecyclePhase) -> Void)? = nil
+        ) {
             self.id = id
             self.preInitDelay = preInitDelay
+            self.onCompleted = onCompleted
         }
 
         func needsRun(
@@ -172,6 +178,7 @@ final class GraphMigrationManagerTests: XCTestCase {
             let delay = phase == .preInit ? preInitDelay : 0
             DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
                 completion(.done)
+                self.onCompleted?(phase)
             }
         }
 
@@ -187,20 +194,16 @@ final class GraphMigrationManagerTests: XCTestCase {
         configuration.name = "ManagerAsync-\(UUID().uuidString)"
         configuration.backend = .inMemory
 
-        let migration = DelayedMigration(id: "ManagerAsync-\(UUID().uuidString)")
+        let readyExpectation = expectation(description: "ready migration completes")
+        let migration = DelayedMigration(
+            id: "ManagerAsync-\(UUID().uuidString)",
+            onCompleted: { phase in
+                if case .ready = phase {
+                    readyExpectation.fulfill()
+                }
+            }
+        )
         GraphMigrationManager.registerMigration(migration)
-
-        let readyExpectation = expectation(description: "ready phase completes")
-        let observer = NotificationCenter.default.addObserver(
-            forName: .migrationPhaseDidChange,
-            object: nil,
-            queue: nil
-        ) { notification in
-            guard let phase = notification.userInfo?["phase"] as? GraphMigrationManager.GraphLifecyclePhase,
-                  phase == .ready else { return }
-            readyExpectation.fulfill()
-        }
-        defer { NotificationCenter.default.removeObserver(observer) }
 
         GraphMigrationManager.handlePhase(.preInit, configuration: configuration, graph: nil)
         GraphMigrationManager.handlePhase(.ready, configuration: configuration, graph: nil)
