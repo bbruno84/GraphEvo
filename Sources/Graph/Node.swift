@@ -162,13 +162,6 @@ public class Node: NSObject, Codable {
     self.init(managedNode: node)
   }
   
-  /**
-   Initializer that accepts a type value.
-   - Parameter _ type: A reference to a type.
-   */
-  // public convenience init(_ type: String) {
-  //   self.init(type, graph: GraphStoreDescription.name)
-  // }
   /// Generic creation of the managed node type.
   class func createNode(_ type: String, in context: NSManagedObjectContext) -> ManagedNode {
     fatalError("Must be implemented by subclasses")
