@@ -57,6 +57,7 @@ public final class DedupTool {
         }
         
         let tool = DedupTool(graph: primaryGraph, discriminator: discriminator)
+        var cloneCache: [String: Entity] = [:]
         
         var totalMerged = 0
         var totalCreated = 0
@@ -73,19 +74,25 @@ public final class DedupTool {
                     print("[DedupTool] ERROR: Primary graph has no managed object context, cannot create entity for ID \(id)")
                     continue
                 }
-                let newManagedEntity = ManagedEntity(secondaryEntity.type, managedObjectContext: context)
-                let newEntity = Entity(managedNode: newManagedEntity)
-                // NOTE: Entity.id is read-only; cannot force to match the secondary's id here.
+                let newEntity: Entity
+                if let cached = cloneCache[secondaryEntity.id] {
+                    newEntity = cached
+                } else {
+                    let newManagedEntity = ManagedEntity(secondaryEntity.type, managedObjectContext: context)
+                    newEntity = Entity(managedNode: newManagedEntity)
+                    // NOTE: Entity.id is read-only; cannot force to match the secondary's id here.
+                    cloneCache[secondaryEntity.id] = newEntity
+                    totalCreated += 1
+                }
                 tool.copyMetadata(from: secondaryEntity, to: newEntity)
-                tool.mergeRelationships(from: secondaryEntity, into: newEntity)
-                totalCreated += 1
+                tool.mergeRelationships(from: secondaryEntity, into: newEntity, cache: &cloneCache)
             } else if let primaryEntity = primaryEntity, let secondaryEntity = secondaryEntity {
                 // Both exist, call discriminator
                 let preferred = discriminator.choosePreferred(primaryEntity, secondaryEntity)
                 if preferred === primaryEntity {
                 } else {
                     tool.copyMetadata(from: secondaryEntity, to: primaryEntity, preferred: true)
-                    tool.mergeRelationships(from: secondaryEntity, into: primaryEntity)
+                    tool.mergeRelationships(from: secondaryEntity, into: primaryEntity, cache: &cloneCache)
                     totalMerged += 1
                 }
             }
@@ -101,6 +108,7 @@ public final class DedupTool {
         let allEntities = Search<Entity>(graph: graph).where(.type("*")).sync()
         
         let grouped = groupEntitiesByUUID(allEntities, uuidFieldMap: uuidFieldMap)
+        var cloneCache: [String: Entity] = [:]
         
         for (_, entities) in grouped {
             if entities.count > 1 {
@@ -111,8 +119,8 @@ public final class DedupTool {
                 
                 for entity in entities {
                     if entity !== preferred {
-                        mergeRelationships(from: entity, into: preferred)
-                        copyMetadata(from: entity, to: preferred, preferred: true)
+                        mergeRelationships(from: entity, into: preferred, cache: &cloneCache)
+                        copyMetadata(from: entity, to: preferred)
                         deleteEntity(entity)
                     }
                 }
@@ -142,10 +150,11 @@ public final class DedupTool {
             preferred = discriminator.choosePreferred(preferred, dup)
         }
         
+        var cloneCache: [String: Entity] = [:]
         for dup in duplicates {
             if dup !== preferred {
-                mergeRelationships(from: dup, into: preferred)
-                copyMetadata(from: dup, to: preferred, preferred: true)
+                mergeRelationships(from: dup, into: preferred, cache: &cloneCache)
+                copyMetadata(from: dup, to: preferred)
                 deleteEntity(dup)
             }
         }
@@ -179,15 +188,16 @@ public final class DedupTool {
         }
     }
     
-    private func mergeRelationships(from source: Entity, into target: Entity) {
+    private func mergeRelationships(
+        from source: Entity,
+        into target: Entity,
+        cache cloneCache: inout [String: Entity]
+    ) {
         // 1) Merge base metadata first
         mergeEntityMetadata(from: source, into: target)
 
         // 2) Ensure we always operate in the primary (target) context
         guard let primaryContext = target.managedNode.managedObjectContext else { return }
-
-        // Cache: secondary entity.id -> primary cloned entity
-        var cloneCache: [String: Entity] = [:]
 
         // ---- Relationships where source is SUBJECT ----
         for rel in source.relationshipsWhenSubject {
