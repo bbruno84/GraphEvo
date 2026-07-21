@@ -79,6 +79,18 @@ final class PersistentHistoryTokenTests: XCTestCase {
         XCTAssertTrue(true)
     }
 
+    func test_TokenStorageIsolatedPerStore() {
+        let first = makeGraph(named: "PH-Isolation-A-\(UUID().uuidString)")
+        let second = makeGraph(named: "PH-Isolation-B-\(UUID().uuidString)")
+
+        let firstURL = first.ph_debug_tokenStorageURL()
+        let secondURL = second.ph_debug_tokenStorageURL()
+
+        XCTAssertNotEqual(firstURL, secondURL)
+        XCTAssertTrue(firstURL.path.contains("PersistentHistory"))
+        XCTAssertTrue(secondURL.path.contains("PersistentHistory"))
+    }
+
     // MARK: - (Facoltativo) Segnaposto per integrazione reale con CloudKit
     // Abilitare solo quando si eseguono test strumentali su device:
     //

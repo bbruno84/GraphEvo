@@ -13,47 +13,71 @@ import ObjectiveC.runtime
 
 private final class HistoryTokenStore {
     private let url: URL
+    private let backupKeyPrefix: String
 
     // MARK: - Local shadow backup (UserDefaults) per la *stessa installazione*
-    private let backupDefaults = UserDefaults.standard
+    private let backupDefaults: UserDefaults
 
-    private func backupKey(for storeUUID: String?) -> String {
-        let suffix = storeUUID ?? "fallback"
-        return "GraphCK.historyToken.backup.\(suffix)"
+    fileprivate init(storeURL: URL, storeUUID: String?, configuration: GraphStoreConfiguration) {
+        let storeKey = Self.stableStoreKey(storeURL: storeURL, storeUUID: storeUUID)
+        let baseURL: URL
+        let defaults: UserDefaults
+
+        if let group = configuration.appGroupIdentifier,
+           let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) {
+            baseURL = containerURL
+                .appendingPathComponent("CosmicMind/Graph/PersistentHistory", isDirectory: true)
+            defaults = UserDefaults(suiteName: group) ?? .standard
+        } else {
+            baseURL = storeURL.deletingLastPathComponent()
+                .appendingPathComponent(".GraphCK/PersistentHistory", isDirectory: true)
+            defaults = .standard
+        }
+
+        self.url = baseURL.appendingPathComponent("history-\(storeKey).token", isDirectory: false)
+        self.backupKeyPrefix = "GraphCK.historyToken.backup.\(storeKey)"
+        self.backupDefaults = defaults
+        try? FileManager.default.createDirectory(
+            at: baseURL,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+    }
+
+    fileprivate var tokenURL: URL { url }
+
+    private static func stableStoreKey(storeURL: URL, storeUUID: String?) -> String {
+        let source = storeUUID ?? storeURL.standardizedFileURL.path
+        // FNV-1a provides a short deterministic filename without exposing the
+        // full path and without introducing a cryptography dependency.
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in source.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1_099_511_628_211
+        }
+        return String(format: "%016llx", hash)
+    }
+
+    private func backupKey() -> String {
+        backupKeyPrefix
     }
 
     /// Carica il token dal backup in UserDefaults (stessa installazione)
-    func loadBackup(storeUUID: String?) -> NSPersistentHistoryToken? {
-        let key = backupKey(for: storeUUID)
-        guard let data = backupDefaults.data(forKey: key) else { return nil }
+    func loadBackup() -> NSPersistentHistoryToken? {
+        guard let data = backupDefaults.data(forKey: backupKey()) else { return nil }
         return try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: data)
     }
 
     /// Salva il token anche nel backup (UserDefaults)
-    func saveBackup(_ token: NSPersistentHistoryToken, storeUUID: String?) {
-        let key = backupKey(for: storeUUID)
+    func saveBackup(_ token: NSPersistentHistoryToken) {
         if let data = try? NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true) {
-            backupDefaults.set(data, forKey: key)
+            backupDefaults.set(data, forKey: backupKey())
         }
     }
 
     /// Pulisce il backup (UserDefaults)
-    func clearBackup(storeUUID: String?) {
-        backupDefaults.removeObject(forKey: backupKey(for: storeUUID))
-    }
-
-    init(appGroup: String? = nil) {
-        if let group = appGroup,
-           let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) {
-            self.url = containerURL.appendingPathComponent("GraphCK.historyToken", isDirectory: false)
-        } else {
-            let base = (try? FileManager.default.url(for: .applicationSupportDirectory,
-                                                     in: .userDomainMask,
-                                                     appropriateFor: nil,
-                                                     create: true))
-                        ?? FileManager.default.temporaryDirectory
-            self.url = base.appendingPathComponent("GraphCK.historyToken", isDirectory: false)
-        }
+    func clearBackup() {
+        backupDefaults.removeObject(forKey: backupKey())
     }
 
     func load() -> NSPersistentHistoryToken? {
@@ -68,7 +92,7 @@ private final class HistoryTokenStore {
             let data = try NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true)
             try data.write(to: url, options: [.atomic])
             // Mantieni anche un backup locale (fallback namespace)
-            self.saveBackup(token, storeUUID: nil)
+            self.saveBackup(token)
         } catch {
             // Silenzioso: non blocchiamo il flusso in caso di I/O error
         }
@@ -77,7 +101,7 @@ private final class HistoryTokenStore {
     func clear() {
         try? FileManager.default.removeItem(at: url)
         // Pulisci anche il backup di fallback
-        self.clearBackup(storeUUID: nil)
+        self.clearBackup()
     }
 
     func bootstrapTokenToCurrentHead(using context: NSManagedObjectContext) {
@@ -184,8 +208,11 @@ private extension Graph {
         if let store = objc_getAssociatedObject(self, &_GraphPHKeys.tokenStoreKey) as? HistoryTokenStore {
             return store
         }
-        // Se in futuro vuoi un App Group, passalo qui.
-        let store = HistoryTokenStore(appGroup: nil)
+        let store = HistoryTokenStore(
+            storeURL: runtimeStoreURL ?? configuration.resolvedStoreURL,
+            storeUUID: _ph_currentStoreUUID(),
+            configuration: configuration
+        )
         objc_setAssociatedObject(self, &_GraphPHKeys.tokenStoreKey, store, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return store
     }
@@ -278,8 +305,7 @@ public extension Graph {
         }
         // Warm session & token mancante → prova il backup locale (UserDefaults)
         if _ph_lastToken == nil, _ph_isColdStartSession == false {
-            let storeUUID = _ph_currentStoreUUID()
-            if let backup = _ph_tokenStore.loadBackup(storeUUID: storeUUID) {
+            if let backup = _ph_tokenStore.loadBackup() {
                 _ph_lastToken = backup
             }
         }
@@ -438,8 +464,7 @@ internal extension Graph {
                    nsError.code == 134501 {
                     self._ph_lastToken = nil
                     self._ph_tokenStore.clear()
-                    let storeUUID = self._ph_currentStoreUUID()
-                    self._ph_tokenStore.clearBackup(storeUUID: storeUUID)
+                    self._ph_tokenStore.clearBackup()
                     completion(false)
                     return
                 }
@@ -466,8 +491,7 @@ private extension Graph {
         }
 
         // 1) Prova prima il backup su UserDefaults (stessa installazione / warm session)
-        let storeUUID = _ph_currentStoreUUID()
-        if let backup = _ph_tokenStore.loadBackup(storeUUID: storeUUID) {
+        if let backup = _ph_tokenStore.loadBackup() {
             _ph_lastToken = backup
             _ph_isColdStartSession = false   // ✅ segna esplicitamente “non più cold” perché abbiamo un token valido
             #if DEBUG
@@ -495,8 +519,7 @@ private extension Graph {
         guard let token else { return }
         _ph_lastToken = token
         _ph_tokenStore.save(token)
-        let storeUUID = _ph_currentStoreUUID()
-        _ph_tokenStore.saveBackup(token, storeUUID: storeUUID)
+        _ph_tokenStore.saveBackup(token)
         _ph_isColdStartSession = false
     }
 }
@@ -508,9 +531,6 @@ public extension Graph {
     func ph_debug_clearToken() {
         _ph_lastToken = nil
         _ph_tokenStore.clear()
-        // Pulisci anche il backup per lo store corrente
-        //let storeUUID = _ph_currentStoreUUID()
-        //_ph_tokenStore.clearBackup(storeUUID: storeUUID)
         print("[PH][DEBUG] Token cleared")
     }
 
@@ -529,6 +549,11 @@ public extension Graph {
     func ph_debug_corruptTokenOnDisk() {
         _ph_tokenStore.debugCorruptOnDisk()
         print("[PH][DEBUG] Token file corrupted on disk")
+    }
+
+    /// Returns the per-store token URL for diagnostics and tests.
+    func ph_debug_tokenStorageURL() -> URL {
+        _ph_tokenStore.tokenURL
     }
 
     /// Stampa autore configurato e nome del contesto attuale
