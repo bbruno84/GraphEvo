@@ -60,6 +60,42 @@ final class CoreGraphAPITests: XCTestCase {
         XCTAssertEqual(actions.first?.objects.map(\.id), [object.id])
     }
 
+    func testRelationshipReplacementClearingAndActionCollectionOverloads() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "CoreCollectionAPI-\(UUID().uuidString)"
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+
+        let firstSubject = Entity("Person", graph: graph)
+        let secondSubject = Entity("Company", graph: graph)
+        let firstObject = Entity("Person", graph: graph)
+        let secondObject = Entity("Company", graph: graph)
+
+        let relationship = firstSubject.is(relationship: "worksWith")
+        relationship.subject = secondSubject
+        relationship.object = firstObject
+        XCTAssertEqual(relationship.subject?.id, secondSubject.id)
+        XCTAssertEqual(relationship.object?.id, firstObject.id)
+        relationship.subject = nil
+        relationship.object = secondObject
+        XCTAssertNil(relationship.subject)
+        XCTAssertEqual(relationship.object?.id, secondObject.id)
+
+        let action = firstSubject.will(action: "notify")
+        XCTAssertTrue(action.add(subjects: [firstSubject, secondSubject]) === action)
+        XCTAssertTrue(action.add(objects: [firstObject, secondObject]) === action)
+        XCTAssertEqual(action.subject(types: ["Person", "Company"]).count, 2)
+        XCTAssertEqual(action.object(types: ["Person", "Company"]).count, 2)
+        XCTAssertTrue(action.remove(subjects: [secondSubject]) === action)
+        XCTAssertTrue(action.remove(objects: [secondObject]) === action)
+        XCTAssertTrue(action.what(objects: [secondObject]) === action)
+
+        let actions = [action]
+        XCTAssertEqual(actions.subject(types: ["Person", "Company"]).count, 1)
+        XCTAssertEqual(actions.object(types: ["Person", "Company"]).count, 2)
+        XCTAssertTrue(actions.subject(types: "Missing").isEmpty)
+        XCTAssertTrue(actions.object(types: "Missing").isEmpty)
+    }
+
     func testTagsGroupsAndCompoundSearchPredicates() {
         var configuration = GraphStoreConfiguration()
         configuration.name = "Predicates-\(UUID().uuidString)"
