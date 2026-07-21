@@ -110,6 +110,11 @@ final class PersistentHistoryTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { exp.fulfill() }
         wait(for: [exp], timeout: 2.0)
 
+        XCTAssertTrue(
+            graph.ph_debug_lastTokenExists(),
+            "Processing a real local persistent-history transaction must advance and persist the token"
+        )
+
         // 5. Reload object and check appDataVersion updated
         let refreshed = try graph.managedObjectContext?.existingObject(with: objectID)
         graph.managedObjectContext?.refreshAllObjects()
