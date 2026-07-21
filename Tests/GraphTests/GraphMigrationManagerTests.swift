@@ -1,4 +1,5 @@
 import XCTest
+import CoreData
 @testable import Graph
 
 final class GraphMigrationManagerTests: XCTestCase {
@@ -24,6 +25,70 @@ final class GraphMigrationManagerTests: XCTestCase {
             completion: @escaping (GraphMigrationResult) -> Void
         ) {
             completion(.done)
+        }
+    }
+
+    private struct ResultMigration: GraphMigration {
+        let id: String
+        let result: GraphMigrationResult
+
+        func needsRun(
+            at phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: inout GraphMigrationContext?
+        ) -> Bool {
+            phase == .postInit
+        }
+
+        func handlePhase(
+            _ phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: GraphMigrationContext?,
+            completion: @escaping (GraphMigrationResult) -> Void
+        ) {
+            completion(result)
+        }
+    }
+
+    private final class RemoteTrackingMigration: GraphMigration {
+        let id: String
+        private(set) var insertedIDs: [NSManagedObjectID] = []
+        private(set) var updatedIDs: [NSManagedObjectID] = []
+
+        init(id: String) {
+            self.id = id
+        }
+
+        func needsRun(
+            at phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: inout GraphMigrationContext?
+        ) -> Bool {
+            false
+        }
+
+        func handlePhase(
+            _ phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: GraphMigrationContext?,
+            completion: @escaping (GraphMigrationResult) -> Void
+        ) {
+            completion(.skipped)
+        }
+
+        func handleRemoteChanges(
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: GraphMigrationContext?,
+            inserted: [NSManagedObjectID],
+            updated: [NSManagedObjectID]
+        ) {
+            insertedIDs = inserted
+            updatedIDs = updated
         }
     }
 
@@ -62,5 +127,85 @@ final class GraphMigrationManagerTests: XCTestCase {
         XCTAssertEqual(context["count"] as Int?, 3)
         XCTAssertEqual(context["name"] as String?, "migration")
         XCTAssertNil(context["missing"] as String?)
+    }
+
+    func testFailedMigrationPersistsErrorAndPostsFailureNotification() throws {
+        struct ExpectedError: LocalizedError {
+            var errorDescription: String? { "Manager test failed" }
+        }
+
+        let migrationID = "ManagerFailure-\(UUID().uuidString)"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-ManagerFailure-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ManagerFailure"
+        configuration.location = directory
+
+        let migration = ResultMigration(id: migrationID, result: .error(ExpectedError()))
+        GraphMigrationManager.registerMigration(migration)
+        let notificationExpectation = expectation(description: "failure notification")
+        var failureInfo: GraphMigrationManager.FailureInfo?
+        let observer = GraphMigrationManager.observeMigrationFailure { info in
+            guard info.migrationID == migrationID else { return }
+            failureInfo = info
+            notificationExpectation.fulfill()
+        }
+        defer { GraphMigrationManager.removeProgressObserver(observer) }
+
+        GraphMigrationManager.handlePhase(.postInit, configuration: configuration, graph: nil)
+        wait(for: [notificationExpectation], timeout: 1)
+
+        let record = try XCTUnwrap(GraphMigrationManager.record(for: migration, configuration: configuration))
+        XCTAssertEqual(record.state, .failed)
+        XCTAssertEqual(record.errorDescription, "Manager test failed")
+        XCTAssertEqual(failureInfo?.migrationID, migrationID)
+        XCTAssertEqual(failureInfo?.errorDescription, "Manager test failed")
+        if case .postInit? = failureInfo?.phase {
+            // Expected lifecycle phase.
+        } else {
+            XCTFail("Failure notification reported the wrong phase")
+        }
+    }
+
+    func testSkippedMigrationClearsStartedRecord() throws {
+        let migrationID = "ManagerSkipped-\(UUID().uuidString)"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-ManagerSkipped-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ManagerSkipped"
+        configuration.location = directory
+
+        let migration = ResultMigration(id: migrationID, result: .skipped)
+        GraphMigrationManager.registerMigration(migration)
+        GraphMigrationManager.handlePhase(.postInit, configuration: configuration, graph: nil)
+
+        XCTAssertNil(GraphMigrationManager.record(for: migration, configuration: configuration))
+    }
+
+    func testRemoteEntityChangesAreForwardedToRegisteredMigrations() throws {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ManagerRemote-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        let entity = Entity("RemoteEntity", graph: graph)
+        let objectID = entity.managedNode.objectID
+        let migration = RemoteTrackingMigration(id: "ManagerRemote-\(UUID().uuidString)")
+        GraphMigrationManager.registerMigration(migration)
+
+        GraphMigrationManager.handleRemoteEntityChanges(
+            configuration: configuration,
+            graph: graph,
+            inserted: [objectID],
+            updated: []
+        )
+
+        XCTAssertEqual(migration.insertedIDs, [objectID])
+        XCTAssertTrue(migration.updatedIDs.isEmpty)
     }
 }
