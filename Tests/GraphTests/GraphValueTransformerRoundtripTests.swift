@@ -19,6 +19,17 @@ import PDFKit
 
 final class GraphValueTransformerRoundtripTests: XCTestCase {
 
+    func testTransformerRejectsUnsupportedAndMalformedValues() {
+        let transformer = GraphValueTransformer()
+
+        XCTAssertThrowsError(try GraphArchiver.archive(UUID()))
+        XCTAssertNil(transformer.transformedValue(Data([0x00, 0x01, 0x02])))
+        XCTAssertNil(transformer.transformedValue("not archived data"))
+        XCTAssertNil(transformer.reverseTransformedValue(nil))
+        GraphValueTransformer.register()
+        XCTAssertNotNil(ValueTransformer(forName: GraphValueTransformer.name))
+    }
+
     func testRoundtrip() throws {
         var samples: [Any] = [
             "ciao" as NSString,
