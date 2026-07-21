@@ -124,5 +124,10 @@ final class CoreGraphAPITests: XCTestCase {
             .where(.type("Tagged") && !.exists("missing-property"))
             .sync()
         XCTAssertEqual(nonMatchingResults.count, 1)
+
+        let compoundTypeResults = Search<Entity>(graph: graph)
+            .where(.type("Tagged" && !"Other"))
+            .sync()
+        XCTAssertEqual(compoundTypeResults.map(\.id), [tagged.id])
     }
 }
