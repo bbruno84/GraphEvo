@@ -54,4 +54,34 @@ final class CoreGraphAPITests: XCTestCase {
         XCTAssertEqual(actions.first?.subjects.map(\.id), [subject.id])
         XCTAssertEqual(actions.first?.objects.map(\.id), [object.id])
     }
+
+    func testTagsGroupsAndCompoundSearchPredicates() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "Predicates-\(UUID().uuidString)"
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+
+        let tagged = Entity("Tagged", graph: graph)
+        tagged[dynamicMember: "name"] = "target"
+        tagged.add(tags: ["red", "important"])
+        tagged.add(to: "inbox")
+
+        let other = Entity("Other", graph: graph)
+        other[dynamicMember: "name"] = "other"
+        other.add(tags: ["blue"])
+        graph.sync()
+
+        XCTAssertTrue(tagged.has(tags: "red", "important"))
+        XCTAssertTrue(tagged.member(of: "inbox"))
+        XCTAssertFalse(other.has(tags: "red"))
+
+        let taggedResults = Search<Entity>(graph: graph)
+            .where(.type("Tagged") && .has(tags: "red"))
+            .sync()
+        XCTAssertEqual(taggedResults.map(\.id), [tagged.id])
+
+        let nonMatchingResults = Search<Entity>(graph: graph)
+            .where(.type("Tagged") && !.exists("missing-property"))
+            .sync()
+        XCTAssertEqual(nonMatchingResults.count, 1)
+    }
 }
