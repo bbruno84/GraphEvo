@@ -55,11 +55,27 @@ public enum GraphStoreOpeningError: LocalizedError {
     }
 }
 
+/// Availability state of a Graph instance.
+public enum GraphReadiness {
+    case initializing
+    case ready
+    case failed(GraphStoreOpeningError)
+}
+
 @objc(Graph)
 public class Graph: NSObject {
     
     /// The configuration used to initialize this Graph.
     public private(set) var configuration: GraphStoreConfiguration
+
+    /// Current availability of the persistent store and lifecycle setup.
+    public internal(set) var readiness: GraphReadiness = .initializing
+
+    /// Convenience check for callers that do not need the failure detail.
+    public var isReady: Bool {
+        if case .ready = readiness { return true }
+        return false
+    }
     
     /// Graph name.
     public var name: String { configuration.name }
@@ -146,6 +162,9 @@ public class Graph: NSObject {
      is possible or not.
      */
     internal var completion: ((Bool, Error?) -> Void)?
+
+    internal let migrationEnabled: Bool
+    internal var readinessCompletions: [(Result<Graph, GraphStoreOpeningError>) -> Void] = []
     
     /// Deinitializer that removes the Graph from NSNotificationCenter.
     deinit {
@@ -164,6 +183,7 @@ public class Graph: NSObject {
             runtimeOverride: Self.cloudKitContainerIdentifier
         )
         self.configuration = resolvedConfiguration
+        self.migrationEnabled = migrationEnabled
         GraphValueTransformer.register()
         if migrationEnabled {
             GraphMigrationManager.handlePhase(.preInit, configuration: resolvedConfiguration, graph: nil)
@@ -175,11 +195,31 @@ public class Graph: NSObject {
         GraphContextRegistry.shared.withStoreOpenLock {
             prepareManagedObjectContext(configuration: resolvedConfiguration)
         }
-        if migrationEnabled {
-            GraphMigrationManager.handlePhase(.postInit, configuration: resolvedConfiguration, graph: self)
-            GraphMigrationManager.handlePhase(.ready, configuration: resolvedConfiguration, graph: self)
+    }
+
+    /// Initializes a Graph and reports when its store and lifecycle are ready.
+    /// The legacy initializer remains available, but callers that need a
+    /// deterministic readiness contract should use this overload.
+    public convenience init(
+        configuration: GraphStoreConfiguration,
+        migrationEnabled: Bool = true,
+        onReady completion: @escaping (Result<Graph, GraphStoreOpeningError>) -> Void
+    ) {
+        self.init(configuration: configuration, migrationEnabled: migrationEnabled)
+        whenReady(completion)
+    }
+
+    /// Registers a callback for the first terminal readiness result.
+    /// If initialization already finished, the callback is invoked immediately.
+    public func whenReady(_ completion: @escaping (Result<Graph, GraphStoreOpeningError>) -> Void) {
+        switch readiness {
+        case .ready:
+            completion(.success(self))
+        case .failed(let error):
+            completion(.failure(error))
+        case .initializing:
+            readinessCompletions.append(completion)
         }
-        
     }
     
     
