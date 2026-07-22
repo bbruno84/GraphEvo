@@ -14,6 +14,7 @@ final class NotesViewController: UIViewController {
     private var notes: [Entity] = []
     private var tableView: UITableView!
     private let reuseIdentifier = "NoteCell"
+    private let refreshControl = UIRefreshControl()
     
     private var watcher: Watch<Entity>?
     private var strongWatcher: AnyObject?
@@ -23,13 +24,6 @@ final class NotesViewController: UIViewController {
                 
         
         title = "Notes"
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            navigationController?.navigationBar.prefersLargeTitles = true
-            navigationItem.largeTitleDisplayMode = .always
-        } else {
-            navigationController?.navigationBar.prefersLargeTitles = false
-            navigationItem.largeTitleDisplayMode = .never
-        }
         view.backgroundColor = .systemBackground
 
         NotificationCenter.default.addObserver(
@@ -37,6 +31,12 @@ final class NotesViewController: UIViewController {
             selector: #selector(graphStateChanged),
             name: .graphProviderStateDidChange,
             object: GraphProvider.shared
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
         )
 
         configureTableView()
@@ -50,6 +50,20 @@ final class NotesViewController: UIViewController {
         NotificationCenter.default.removeObserver(self)
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            navigationController?.navigationBar.prefersLargeTitles = true
+            navigationItem.largeTitleDisplayMode = .always
+        } else {
+            navigationController?.navigationBar.prefersLargeTitles = false
+            navigationItem.largeTitleDisplayMode = .never
+        }
+
+        loadNotes()
+    }
+
     // MARK: - UI Setup
 
     private func configureTableView() {
@@ -58,6 +72,8 @@ final class NotesViewController: UIViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: reuseIdentifier)
         tableView.dataSource = self
         tableView.delegate = self
+        refreshControl.addTarget(self, action: #selector(refreshNotes), for: .valueChanged)
+        tableView.refreshControl = refreshControl
         view.addSubview(tableView)
         print("🪑 TableView added to view with frame: \(tableView.frame)")
     }
@@ -73,6 +89,13 @@ final class NotesViewController: UIViewController {
     // MARK: - Data
 
     private func loadNotes() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.loadNotes()
+            }
+            return
+        }
+
         guard let graph = GraphProvider.shared.graphIfReady() else { return }
         notes = Search<Entity>(graph: graph)
             .where(.type("Note"))
@@ -83,6 +106,11 @@ final class NotesViewController: UIViewController {
                 > ($1[dynamicMember: "createdAt"] as? Date ?? .distantPast)
         }
         tableView.reloadData()
+    }
+
+    @objc private func refreshNotes() {
+        loadNotes()
+        refreshControl.endRefreshing()
     }
 
     @objc private func addNote() {
@@ -96,9 +124,11 @@ final class NotesViewController: UIViewController {
 
     private func deleteNote(at index: Int) {
         guard let graph = GraphProvider.shared.graphIfReady() else { return }
+        guard notes.indices.contains(index) else { return }
         let note = notes[index]
         note.delete()
         graph.sync()
+        loadNotes()
     }
 
     private func toggleFavorite(_ note: Entity) {
@@ -128,6 +158,10 @@ final class NotesViewController: UIViewController {
         if watcher == nil {
             setupWatcher()
         }
+    }
+
+    @objc private func applicationDidBecomeActive() {
+        loadNotes()
     }
 }
 
