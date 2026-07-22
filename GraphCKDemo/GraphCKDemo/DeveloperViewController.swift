@@ -11,14 +11,26 @@ import Graph
 
 final class DeveloperViewController: UIViewController {
     
-    let graph = GraphProvider.shared.graph
+    private let readinessLabel = UILabel()
+    private let cloudStatusLabel = UILabel()
     
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Developer"
         tabBarItem = UITabBarItem(title: "Dev", image: UIImage(systemName: "gearshape"), selectedImage: UIImage(systemName: "gearshape.fill"))
         view.backgroundColor = .white
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(updateProviderStatus),
+            name: .graphProviderStateDidChange,
+            object: GraphProvider.shared
+        )
         setupButtons()
+        updateProviderStatus()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -30,7 +42,9 @@ final class DeveloperViewController: UIViewController {
         let actions: [(String, Selector)] = [
             ("Clear Token", #selector(clearToken)),
             ("Print Token Status", #selector(printTokenStatus)),
-            ("Print Author & Context", #selector(printAuthorAndContext))
+            ("Print Author & Context", #selector(printAuthorAndContext)),
+            ("Refresh CloudKit State", #selector(refreshCloudKitState)),
+            ("Create CloudKit Probe", #selector(createCloudKitProbe))
         ]
 
         let stack = UIStackView()
@@ -40,6 +54,15 @@ final class DeveloperViewController: UIViewController {
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.layoutMargins = UIEdgeInsets(top: 20, left: 0, bottom: 20, right: 0)
         stack.isLayoutMarginsRelativeArrangement = true
+
+        readinessLabel.font = .preferredFont(forTextStyle: .subheadline)
+        readinessLabel.textColor = .secondaryLabel
+        readinessLabel.numberOfLines = 0
+        cloudStatusLabel.font = .preferredFont(forTextStyle: .subheadline)
+        cloudStatusLabel.textColor = .secondaryLabel
+        cloudStatusLabel.numberOfLines = 0
+        stack.addArrangedSubview(readinessLabel)
+        stack.addArrangedSubview(cloudStatusLabel)
 
         actions.forEach { title, selector in
             let button = UIButton(type: .system)
@@ -90,37 +113,75 @@ final class DeveloperViewController: UIViewController {
 
     @objc private func clearToken() {
         print("🧹 Developer Action: Clear Token")
-        GraphProvider.shared.graph.ph_debug_clearToken()
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
+        graph.ph_debug_clearToken()
     }
 
     @objc private func printTokenStatus() {
         print("📄 Developer Action: Print Token Status")
-        GraphProvider.shared.graph.ph_debug_printTokenStatus()
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
+        graph.ph_debug_printTokenStatus()
     }
 
     @objc private func printAuthorAndContext() {
         print("👤 Developer Action: Print Author & Context")
-        GraphProvider.shared.graph.ph_debug_printAuthorAndContext()
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
+        graph.ph_debug_printAuthorAndContext()
+    }
+
+    @objc private func updateProviderStatus() {
+        let provider = GraphProvider.shared
+        readinessLabel.text = provider.readinessDescription()
+        cloudStatusLabel.text = provider.cloudStatusDescription()
+        readinessLabel.textColor = provider.isReady ? .systemGreen : .systemOrange
+    }
+
+    @objc private func refreshCloudKitState() {
+        let provider = GraphProvider.shared
+        guard let graph = provider.graphIfReady() else {
+            updateProviderStatus()
+            return
+        }
+        graph.cloudStatusDelegate = provider
+        graph.ph_debug_printAuthorAndContext()
+        graph.ph_debug_printTokenStatus()
+    }
+
+    @objc private func createCloudKitProbe() {
+        guard let graph = GraphProvider.shared.graphIfReady() else {
+            updateProviderStatus()
+            return
+        }
+        let probe = Entity("Note", graph: graph)
+        probe[dynamicMember: "title"] = "CloudKit Probe \(ISO8601DateFormatter().string(from: Date()))"
+        probe[dynamicMember: "createdAt"] = Date()
+        graph.sync { success, error in
+            print(success
+                  ? "☁️ CloudKit probe salvata localmente e inviata a sync"
+                  : "❌ CloudKit probe fallita: \(error?.localizedDescription ?? "errore sconosciuto")")
+        }
     }
     
     @objc private func createLargeAttachment() {
         print("📎 Create Attachment (1.5MB)")
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
         let entity = Entity("Attachment", graph: graph)
         entity[dynamicMember: "title"] = "Large Attachment"
         entity[dynamicMember: "object"] = Data(repeating: 0xAA, count: 1_500_000) // ~1.5 MB
-        GraphProvider.shared.graph.sync()
+        graph.sync()
     }
 
     @objc private func clearAllTestData() {
         
         print("🧽 Clear Notes, Attachments, Relationships")
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
         graph.clear()
     }
     
     @objc private func stressTest() {
         print("🚀 Inizio stress test...")
 
-        let graph = GraphProvider.shared.graph
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
         clearAllTestData()
 
         var createdNotes: [Entity] = []
@@ -172,7 +233,7 @@ final class DeveloperViewController: UIViewController {
     }
     
     @objc private func dumpTestSummary() {
-        let graph = GraphProvider.shared.graph
+        guard let graph = GraphProvider.shared.graphIfReady() else { return }
 
         let notes = Search<Entity>(graph: graph).where(.type("Note")).sync()
         let attachments = Search<Entity>(graph: graph).where(.type("Attachment")).sync()
