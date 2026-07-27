@@ -27,7 +27,7 @@ import CoreData
 
 // Unique author per device for filtering local writes in Persistent History
 enum GraphDeviceAuthor {
-  private static let key = "GraphCK.deviceAuthor"
+  private static let key = "GraphEvo.deviceAuthor"
   static func current() -> String {
     if let s = UserDefaults.standard.string(forKey: key) { return s }
     let s = UUID().uuidString

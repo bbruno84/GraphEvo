@@ -7,7 +7,7 @@ final class StoreMigrationBoundaryTests: XCTestCase {
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-MigrationBoundary-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-MigrationBoundary-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -29,7 +29,7 @@ final class StoreMigrationBoundaryTests: XCTestCase {
         let graph = Graph(configuration: configuration, migrationEnabled: false)
 
         guard case .incompatibleStore(let reportedURL)? = graph.storeOpeningError else {
-            XCTFail("Expected GraphCK to reject the incompatible store")
+            XCTFail("Expected GraphEvo to reject the incompatible store")
             return
         }
         XCTAssertEqual(reportedURL, storeURL)

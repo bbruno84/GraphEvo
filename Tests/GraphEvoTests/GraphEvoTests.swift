@@ -1,6 +1,6 @@
 //
-//  GraphCKTests.swift
-//  GraphCK
+//  GraphEvoTests.swift
+//  GraphEvo
 //
 //  Created by Valerio Buriani on 04/09/25.
 //
@@ -12,7 +12,7 @@ import XCTest
 final class GraphEvoTests: XCTestCase {
 
     /// Minimal smoke test for M2:
-    /// - Ensures the SQLite filename is `GraphCK_<name>.sqlite`
+    /// - Ensures the SQLite filename is `GraphEvo_<name>.sqlite`
     /// - Ensures the viewContext is available
     /// - (If available) Persists and fetches a simple Entity
     func test_M2_Smoke_SaveFetch_FileNaming() throws {
@@ -33,7 +33,7 @@ final class GraphEvoTests: XCTestCase {
             XCTFail("No Store URL available")
             return
         }
-        XCTAssertEqual(storeURL.lastPathComponent, "GraphCK_\(name).sqlite", "Store file should be renamed to GraphCK_<name>.sqlite")
+        XCTAssertEqual(storeURL.lastPathComponent, "GraphEvo_\(name).sqlite", "Store file should be renamed to GraphEvo_<name>.sqlite")
 
         // 3) Context should be ready
         XCTAssertNotNil(g.managedObjectContext, "Managed object context should be initialized")

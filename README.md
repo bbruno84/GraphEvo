@@ -8,7 +8,7 @@ GraphEvo è una libreria indipendente evoluta dalla libreria [CosmicMind/Graph](
 
 - Refactor modello (M1) completato: rimosso `Transformable` generico, introdotto `ValueTransformer` sicuro
 - Supporto `NSPersistentCloudKitContainer` (M2)
-- Store SQLite compatibile con i percorsi esistenti `GraphCK_<name>.sqlite`
+- Store SQLite compatibile con i percorsi esistenti `GraphEvo_<name>.sqlite`
 - La configurazione a directory usa un percorso canonico indipendente dal backend; i vecchi percorsi `Local/...` e `Cloud/...` vengono riutilizzati automaticamente
 - `Graph(storeURL:)` accetta sia una directory sia un file SQLite esistente, mantenendo invariato il percorso del file esplicito
 - GraphEvo non esegue migrazioni automatiche tra modelli incompatibili: l’app deve migrare il proprio store e poi riaprirlo sul percorso originale
@@ -38,10 +38,9 @@ let graph = Graph(configuration: configuration)
 Il nome `Graph` resta quello della classe principale e dei concetti di dominio
 dell'API.
 
-Il prefisso `GraphCK_` e alcuni percorsi o chiavi interni persistenti restano
-invariati per compatibilità con gli store e i dati creati dalle versioni
-precedenti. Non sono alias pubblici del modulo: sono identificatori di
-persistenza che non devono essere rinominati automaticamente.
+Il prefisso `GraphEvo_` e i relativi percorsi e chiavi interni persistenti sono
+quelli canonici della nuova release. Gli store creati dalle versioni di test
+precedenti con prefisso `GraphCK_` non vengono migrati automaticamente.
 
 GraphEvo non impone flag `-Xfrontend` o impostazioni di strict concurrency al
 progetto che la integra. Questa scelta mantiene il prodotto consumabile anche

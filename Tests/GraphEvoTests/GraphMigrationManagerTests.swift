@@ -232,7 +232,7 @@ final class GraphMigrationManagerTests: XCTestCase {
     func testRegisteredMigrationRunsOnceAndPersistsCompletion() throws {
         let migrationID = "ManagerTest-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Manager-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Manager-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -273,7 +273,7 @@ final class GraphMigrationManagerTests: XCTestCase {
 
         let migrationID = "ManagerFailure-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-ManagerFailure-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-ManagerFailure-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -310,7 +310,7 @@ final class GraphMigrationManagerTests: XCTestCase {
     func testSkippedMigrationClearsStartedRecord() throws {
         let migrationID = "ManagerSkipped-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-ManagerSkipped-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-ManagerSkipped-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -349,7 +349,7 @@ final class GraphMigrationManagerTests: XCTestCase {
     func testDefaultMigrationHelpersAndLedgerReconciliation() throws {
         let migrationID = "ManagerDefaults-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-ManagerDefaults-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-ManagerDefaults-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -389,7 +389,7 @@ final class GraphMigrationManagerTests: XCTestCase {
     func testAlreadyCompletedMigrationIsNotExecutedAgain() throws {
         let migrationID = "ManagerAlreadyDone-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-ManagerAlreadyDone-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-ManagerAlreadyDone-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -414,7 +414,7 @@ final class GraphMigrationManagerTests: XCTestCase {
     func testLegacyCompletionIsAdoptedWithoutCallingMigrationHandler() throws {
         let migrationID = "ManagerLegacyDone-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-ManagerLegacyDone-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-ManagerLegacyDone-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -433,7 +433,7 @@ final class GraphMigrationManagerTests: XCTestCase {
     func testFallbackResultIsPersistedAsDone() throws {
         let migrationID = "ManagerFallback-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-ManagerFallback-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-ManagerFallback-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 

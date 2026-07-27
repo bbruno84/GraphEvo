@@ -12,7 +12,7 @@ import XCTest
 final class CleanGraphStoreOpening: XCTestCase {
     func testSaveStringProperty() throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Clean-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Clean-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -72,7 +72,7 @@ final class CleanGraphStoreOpening: XCTestCase {
         let graph = Graph(storeURL: tempSQLiteURL, backend: .sqlite, migrationEnabled: false)
 
         guard case .incompatibleStore(let reportedURL)? = graph.storeOpeningError else {
-            XCTFail("GraphCK must reject the incompatible legacy store without migrating it")
+            XCTFail("GraphEvo must reject the incompatible legacy store without migrating it")
             return
         }
         XCTAssertEqual(reportedURL, tempSQLiteURL)

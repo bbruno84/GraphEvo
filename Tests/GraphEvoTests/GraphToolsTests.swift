@@ -15,7 +15,7 @@ final class GraphToolsTests: XCTestCase {
 
     func testExportAndDiagnosticHelpersPreserveLocalFiles() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Tools-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Tools-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -27,7 +27,7 @@ final class GraphToolsTests: XCTestCase {
         try Data("shm".utf8).write(to: shmURL)
 
         let export = try XCTUnwrap(GraphTools.exportMigratedDB(
-            to: "GraphCK-Export-\(UUID().uuidString)",
+            to: "GraphEvo-Export-\(UUID().uuidString)",
             sqliteURL: sqliteURL
         ))
         defer { try? FileManager.default.removeItem(at: export) }
@@ -40,14 +40,14 @@ final class GraphToolsTests: XCTestCase {
             UIColor.systemBlue.setFill()
             renderer.fill(CGRect(origin: .zero, size: CGSize(width: 2, height: 2)))
         }
-        let imageName = "GraphCK-Image-\(UUID().uuidString)"
+        let imageName = "GraphEvo-Image-\(UUID().uuidString)"
         let imageURL = try XCTUnwrap(GraphTools.saveUIImageToDisk(image, named: imageName))
         defer { try? FileManager.default.removeItem(at: imageURL) }
         XCTAssertEqual(try Data(contentsOf: imageURL), try XCTUnwrap(image.pngData()))
 
         let document = PDFDocument()
         document.insert(try XCTUnwrap(PDFPage(image: image)), at: 0)
-        let documentName = "GraphCK-PDF-\(UUID().uuidString)"
+        let documentName = "GraphEvo-PDF-\(UUID().uuidString)"
         let documentURL = try XCTUnwrap(GraphTools.saveDocumentToDisk(document, named: documentName))
         defer { try? FileManager.default.removeItem(at: documentURL) }
         let reopenedDocument = try XCTUnwrap(PDFDocument(url: documentURL))

@@ -1,6 +1,6 @@
 //
 //  MigrationV1Tests.swift
-//  GraphCK
+//  GraphEvo
 //
 
 import XCTest
@@ -16,7 +16,7 @@ final class MigrationV1Tests: XCTestCase {
         }
 
         let temporaryDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-LegacyMigration-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-LegacyMigration-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
@@ -30,13 +30,13 @@ final class MigrationV1Tests: XCTestCase {
         )
         XCTAssertFalse(
             Model.create().isConfiguration(withName: nil, compatibleWithStoreMetadata: legacyMetadata),
-            "Legacy store unexpectedly already compatible with the GraphCK model"
+            "Legacy store unexpectedly already compatible with the GraphEvo model"
         )
 
         let graph = Graph(storeURL: tempURL, backend: .sqlite, migrationEnabled: false)
 
         guard case .incompatibleStore(let reportedURL)? = graph.storeOpeningError else {
-            XCTFail("GraphCK must leave migration of the legacy store to the application")
+            XCTFail("GraphEvo must leave migration of the legacy store to the application")
             return
         }
         XCTAssertEqual(reportedURL, tempURL)

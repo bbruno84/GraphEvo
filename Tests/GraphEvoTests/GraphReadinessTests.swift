@@ -67,7 +67,7 @@ final class GraphReadinessTests: XCTestCase {
 
     func testAsyncInitializerReportsExistingStoreFailureWithoutReplacingIt() throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-ReadinessFailure-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-ReadinessFailure-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -166,7 +166,7 @@ final class GraphReadinessTests: XCTestCase {
 
     func testEventDelegateReceivesStoreOpeningFailure() throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-EventFailure-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-EventFailure-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 

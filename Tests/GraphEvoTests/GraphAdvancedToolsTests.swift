@@ -11,7 +11,7 @@ final class GraphAdvancedToolsTests: XCTestCase {
 
     func testGraphMergeCopiesEntitiesRelationshipsActionsAndSource() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Merge-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Merge-\(UUID().uuidString)", isDirectory: true)
         let primaryDirectory = root.appendingPathComponent("primary", isDirectory: true)
         let secondaryDirectory = root.appendingPathComponent("secondary", isDirectory: true)
         try FileManager.default.createDirectory(at: primaryDirectory, withIntermediateDirectories: true)

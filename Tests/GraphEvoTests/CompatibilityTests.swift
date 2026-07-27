@@ -5,7 +5,7 @@ import CoreData
 final class CompatibilityTests: XCTestCase {
     func testPersistentContainerCompatibilityInitializerLoadsConfiguredStore() throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Container-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Container-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -39,7 +39,7 @@ final class CompatibilityTests: XCTestCase {
 
     func testPersistentContainerCompatibilityInitializerCanDeferStoreLoading() throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-ContainerDeferred-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-ContainerDeferred-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 

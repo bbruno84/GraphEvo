@@ -40,7 +40,7 @@ public struct GraphStoreConfiguration {
     }
 
     /// Nome file dello store.
-    public var storeFilename: String { "GraphCK_\(name).sqlite" }
+    public var storeFilename: String { "GraphEvo_\(name).sqlite" }
 
     /// Canonical URL of the store.
     ///
@@ -64,7 +64,7 @@ public struct GraphStoreConfiguration {
         Versions(graphModel: requiredGraphModelVersion, appData: requiredAppDataVersion)
     }
 
-    /// Candidate URLs for stores created by earlier GraphEvo/GraphCK revisions.
+    /// Candidate URLs for stores created by earlier GraphEvo revisions.
     ///
     /// The route folders were an intermediate layout. They remain readable so
     /// upgrading GraphEvo does not silently create an empty store beside an

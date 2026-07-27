@@ -4,7 +4,7 @@ import XCTest
 final class MigrationUITests: XCTestCase {
     func testProgressNotificationIsParsedAndDelivered() {
         let expectation = expectation(description: "migration progress")
-        let storeURL = URL(fileURLWithPath: "/tmp/GraphCK-progress.sqlite")
+        let storeURL = URL(fileURLWithPath: "/tmp/GraphEvo-progress.sqlite")
         var received: GraphMigrationManager.ProgressInfo?
         let observer = GraphMigrationManager.observeMigrationProgress { info in
             received = info

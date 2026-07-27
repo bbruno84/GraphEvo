@@ -5,7 +5,7 @@ import CoreData
 final class UtilityFeatureTests: XCTestCase {
     func testAnyCodableNestedJSONRoundTripAndUnsupportedValue() throws {
         let original: [String: Any] = [
-            "name": "GraphCK",
+            "name": "GraphEvo",
             "count": 3,
             "enabled": true,
             "items": ["a", "b"]
@@ -15,7 +15,7 @@ final class UtilityFeatureTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AnyCodable.self, from: encoded)
         let unwrapped = try XCTUnwrap(decoded.unwrap() as? [String: Any])
 
-        XCTAssertEqual(unwrapped["name"] as? String, "GraphCK")
+        XCTAssertEqual(unwrapped["name"] as? String, "GraphEvo")
         XCTAssertEqual(unwrapped["count"] as? Int, 3)
         XCTAssertEqual(unwrapped["enabled"] as? Bool, true)
         XCTAssertEqual(unwrapped["items"] as? [String], ["a", "b"])
@@ -23,17 +23,17 @@ final class UtilityFeatureTests: XCTestCase {
     }
 
     func testGraphJSONRoundTripAndMutation() throws {
-        let original = "{\"name\":\"GraphCK\",\"items\":[1,2,3]}"
+        let original = "{\"name\":\"GraphEvo\",\"items\":[1,2,3]}"
         guard var json = GraphJSON.parse(original) else {
             return XCTFail("Valid JSON must be parsed")
         }
 
-        XCTAssertEqual(json["name"].asString, "GraphCK")
+        XCTAssertEqual(json["name"].asString, "GraphEvo")
         XCTAssertEqual(json["items"].asArray?.count, 3)
         XCTAssertEqual(json["items"][1].asInt, 2)
 
-        json["name"] = GraphJSON("GraphCK-v1")
-        XCTAssertEqual(json["name"].asString, "GraphCK-v1")
+        json["name"] = GraphJSON("GraphEvo-v1")
+        XCTAssertEqual(json["name"].asString, "GraphEvo-v1")
         XCTAssertEqual(GraphJSON.parse(json.description), json)
         XCTAssertNil(GraphJSON.parse("not-json"))
     }
@@ -75,7 +75,7 @@ final class UtilityFeatureTests: XCTestCase {
     }
 
     func testAnyCodableObjectAndCollectionWrappersRoundTrip() throws {
-        let object = AnyCodableObject(["name": AnyCodableObject("GraphCK"), "count": AnyCodableObject(3)])
+        let object = AnyCodableObject(["name": AnyCodableObject("GraphEvo"), "count": AnyCodableObject(3)])
         let array = NSArrayOfAnyCodableObject([
             AnyCodableObject("first"),
             AnyCodableObject(2),
@@ -90,7 +90,7 @@ final class UtilityFeatureTests: XCTestCase {
         let objectData = try JSONEncoder().encode(object)
         let decodedObject = try JSONDecoder().decode(AnyCodableObject.self, from: objectData)
         let decodedDictionary = try XCTUnwrap(decodedObject.value as? [String: AnyCodableObject])
-        XCTAssertEqual(decodedDictionary["name"]?.value as? String, "GraphCK")
+        XCTAssertEqual(decodedDictionary["name"]?.value as? String, "GraphEvo")
         XCTAssertEqual(decodedDictionary["count"]?.value as? Int, 3)
 
         let arrayData = try JSONEncoder().encode(array)
@@ -134,7 +134,7 @@ final class UtilityFeatureTests: XCTestCase {
 
     func testStoreMetadataRoundTripAndGenericValues() throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Metadata-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Metadata-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -154,23 +154,23 @@ final class UtilityFeatureTests: XCTestCase {
         try GraphStoreMetadata.write(versions, to: configuration, model: Model.create())
 
         XCTAssertEqual(try GraphStoreMetadata.read(from: configuration), versions)
-        try GraphStoreMetadata.writeValue(true, forKey: "GraphCK.TestFlag", to: configuration, model: Model.create())
-        XCTAssertTrue(GraphStoreMetadata.boolValue(forKey: "GraphCK.TestFlag", from: configuration))
-        XCTAssertTrue(GraphStoreMetadata.listAllKeys(from: configuration).contains("GraphCK.TestFlag"))
+        try GraphStoreMetadata.writeValue(true, forKey: "GraphEvo.TestFlag", to: configuration, model: Model.create())
+        XCTAssertTrue(GraphStoreMetadata.boolValue(forKey: "GraphEvo.TestFlag", from: configuration))
+        XCTAssertTrue(GraphStoreMetadata.listAllKeys(from: configuration).contains("GraphEvo.TestFlag"))
 
-        try GraphStoreMetadata.removeValue(forKey: "GraphCK.TestFlag", to: configuration, model: Model.create())
-        XCTAssertNil(GraphStoreMetadata.readValue(forKey: "GraphCK.TestFlag", from: configuration) as Bool?)
-        XCTAssertFalse(GraphStoreMetadata.boolValue(forKey: "GraphCK.TestFlag", from: configuration))
+        try GraphStoreMetadata.removeValue(forKey: "GraphEvo.TestFlag", to: configuration, model: Model.create())
+        XCTAssertNil(GraphStoreMetadata.readValue(forKey: "GraphEvo.TestFlag", from: configuration) as Bool?)
+        XCTAssertFalse(GraphStoreMetadata.boolValue(forKey: "GraphEvo.TestFlag", from: configuration))
     }
 
     func testMigrationBackupStoreFindAndRestore() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Backup-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Backup-\(UUID().uuidString)", isDirectory: true)
         let sourceDirectory = root.appendingPathComponent("source", isDirectory: true)
         try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let storeURL = sourceDirectory.appendingPathComponent("GraphCK.sqlite")
+        let storeURL = sourceDirectory.appendingPathComponent("GraphEvo.sqlite")
         let walURL = URL(fileURLWithPath: storeURL.path + "-wal")
         let shmURL = URL(fileURLWithPath: storeURL.path + "-shm")
         try Data("store".utf8).write(to: storeURL)
@@ -213,7 +213,7 @@ final class UtilityFeatureTests: XCTestCase {
 
     func testMigrationBackupFileConflictPolicies() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-BackupFile-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-BackupFile-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -260,7 +260,7 @@ final class UtilityFeatureTests: XCTestCase {
 
     func testMigrationBackupMissingSourceFailsAndRestoreCanSkipExistingFiles() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-BackupErrors-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-BackupErrors-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 

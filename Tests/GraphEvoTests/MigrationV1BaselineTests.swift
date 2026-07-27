@@ -1,6 +1,6 @@
 ////
 ////  MigrationV1BaselineTests.swift
-////  GraphCK
+////  GraphEvo
 ////
 ////  Created by Valerio Buriani on 15/09/25.
 ////
@@ -31,7 +31,7 @@
 //        let migratedURL = try MigrationV1.migrateBaseline(baselineURL: tempZipURL)
 //
 //        // 4. Apri con NSPersistentContainer e il nuovo modello
-//        let container = NSPersistentContainer(name: "GraphCK", managedObjectModel: Model.create())
+//        let container = NSPersistentContainer(name: "GraphEvo", managedObjectModel: Model.create())
 //        container.persistentStoreDescriptions = [NSPersistentStoreDescription(url: migratedURL)]
 //
 //        var loadError: Error?

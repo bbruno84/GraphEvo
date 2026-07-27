@@ -6,7 +6,7 @@ final class StorePathResolutionTests: XCTestCase {
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Path-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Path-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -24,7 +24,7 @@ final class StorePathResolutionTests: XCTestCase {
 
         XCTAssertEqual(
             configuration.storeURL,
-            directory.appendingPathComponent("GraphCK_primary.sqlite")
+            directory.appendingPathComponent("GraphEvo_primary.sqlite")
         )
         XCTAssertEqual(configuration.resolvedStoreURL, configuration.storeURL)
     }
@@ -133,7 +133,7 @@ final class StorePathResolutionTests: XCTestCase {
 
     func testSameStoreNameInDifferentDirectoriesDoesNotReuseContext() throws {
         let otherDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Path-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Path-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: otherDirectory) }
         try FileManager.default.createDirectory(at: otherDirectory, withIntermediateDirectories: true)
 
@@ -164,7 +164,7 @@ final class StorePathResolutionTests: XCTestCase {
         let legacy = directory
             .appendingPathComponent("Local", isDirectory: true)
             .appendingPathComponent("legacy", isDirectory: true)
-            .appendingPathComponent("GraphCK_legacy.sqlite")
+            .appendingPathComponent("GraphEvo_legacy.sqlite")
         try FileManager.default.createDirectory(
             at: legacy.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -181,7 +181,7 @@ final class StorePathResolutionTests: XCTestCase {
 
         let routeStore = directory
             .appendingPathComponent("Local/legacy-priority", isDirectory: true)
-            .appendingPathComponent("GraphCK_legacy-priority.sqlite")
+            .appendingPathComponent("GraphEvo_legacy-priority.sqlite")
         let directStore = directory.appendingPathComponent("Graph.sqlite")
         try FileManager.default.createDirectory(
             at: routeStore.deletingLastPathComponent(),

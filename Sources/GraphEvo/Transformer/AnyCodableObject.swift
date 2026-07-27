@@ -11,7 +11,7 @@ import Foundation
 @objc(AnyCodableObject)
 public final class AnyCodableObject: NSObject, NSSecureCoding, Codable {
 
-    private static let taggedTypeKey = "__graphck_codable_type"
+    private static let taggedTypeKey = "__graphevo_codable_type"
     private static let taggedValueKey = "value"
     
     public static var supportsSecureCoding: Bool = true

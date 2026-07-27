@@ -37,12 +37,12 @@ private final class HistoryTokenStore {
             defaults = UserDefaults(suiteName: group) ?? .standard
         } else {
             baseURL = storeURL.deletingLastPathComponent()
-                .appendingPathComponent(".GraphCK/PersistentHistory", isDirectory: true)
+                .appendingPathComponent(".GraphEvo/PersistentHistory", isDirectory: true)
             defaults = .standard
         }
 
         self.url = baseURL.appendingPathComponent("history-\(storeKey).token", isDirectory: false)
-        self.backupKeyPrefix = "GraphCK.historyToken.backup.\(storeKey)"
+        self.backupKeyPrefix = "GraphEvo.historyToken.backup.\(storeKey)"
         self.backupDefaults = defaults
         try? FileManager.default.createDirectory(
             at: baseURL,
@@ -232,7 +232,7 @@ private extension Graph {
     /// Marca l'avvio e determina se è una cold-start session (solo per questa installazione).
     func _ph_markLaunchAndDetectColdStart() {
         let defaults = UserDefaults.standard
-        let key = "GraphCK.hasLaunchedOnce"
+        let key = "GraphEvo.hasLaunchedOnce"
         let hasLaunched = defaults.bool(forKey: key)
         _ph_isColdStartSession = !hasLaunched
         if !hasLaunched {

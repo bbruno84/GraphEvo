@@ -4,7 +4,7 @@ import XCTest
 final class FileUtilityTests: XCTestCase {
     func testFileUtilityRoundTripClassificationAndDirectoryListing() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-File-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-File-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
         var createResult: (Bool, Error?)?
@@ -58,7 +58,7 @@ final class FileUtilityTests: XCTestCase {
 
     func testFileUtilityReportsFailures() {
         let missing = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Missing-\(UUID().uuidString).txt")
+            .appendingPathComponent("GraphEvo-Missing-\(UUID().uuidString).txt")
         var readError: Error?
         File.readFromPath(missing) { value, error in
             XCTAssertNil(value)
@@ -95,7 +95,7 @@ final class FileUtilityTests: XCTestCase {
         XCTAssertEqual(SQLiteExtensionToString(.sqLiteSHM), "sqlite-shm")
 
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GraphCK-Classification-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("GraphEvo-Classification-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
@@ -111,9 +111,9 @@ final class FileUtilityTests: XCTestCase {
         XCTAssertEqual(File.fileType(root.appendingPathComponent("store.sqlite")), .sqLite)
         XCTAssertEqual(File.fileType(root.appendingPathComponent("store.sqlite-shm")), .sqLite)
         XCTAssertEqual(File.fileType(root.appendingPathComponent("unknown.bin")), .unknown)
-        XCTAssertEqual(File.path(.documentDirectory, path: "GraphCK"), File.documentDirectoryPath?.appendingPathComponent("GraphCK"))
-        XCTAssertEqual(File.path(.libraryDirectory, path: "GraphCK"), File.libraryDirectoryPath?.appendingPathComponent("GraphCK"))
-        XCTAssertEqual(File.path(.cachesDirectory, path: "GraphCK"), File.cachesDirectoryPath?.appendingPathComponent("GraphCK"))
-        XCTAssertEqual(File.path(.applicationSupportDirectory, path: "GraphCK"), File.applicationSupportDirectoryPath?.appendingPathComponent("GraphCK"))
+        XCTAssertEqual(File.path(.documentDirectory, path: "GraphEvo"), File.documentDirectoryPath?.appendingPathComponent("GraphEvo"))
+        XCTAssertEqual(File.path(.libraryDirectory, path: "GraphEvo"), File.libraryDirectoryPath?.appendingPathComponent("GraphEvo"))
+        XCTAssertEqual(File.path(.cachesDirectory, path: "GraphEvo"), File.cachesDirectoryPath?.appendingPathComponent("GraphEvo"))
+        XCTAssertEqual(File.path(.applicationSupportDirectory, path: "GraphEvo"), File.applicationSupportDirectoryPath?.appendingPathComponent("GraphEvo"))
     }
 }
