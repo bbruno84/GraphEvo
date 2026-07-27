@@ -7,14 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		15620A0F2E6FFF1B00293C6E /* GraphCK in Frameworks */ = {isa = PBXBuildFile; productRef = 15620A0E2E6FFF1B00293C6E /* GraphCK */; };
-		15620A152E7000E900293C6E /* GraphCK in Frameworks */ = {isa = PBXBuildFile; productRef = 15620A142E7000E900293C6E /* GraphCK */; };
-		A90000012E7A000100293C6E /* Graph in Frameworks */ = {isa = PBXBuildFile; productRef = A90000022E7A000100293C6E /* Graph */; };
+		15620A0F2E6FFF1B00293C6E /* GraphEvo in Frameworks */ = {isa = PBXBuildFile; productRef = 15620A0E2E6FFF1B00293C6E /* GraphEvo */; };
+		15620A152E7000E900293C6E /* GraphEvo in Frameworks */ = {isa = PBXBuildFile; productRef = 15620A142E7000E900293C6E /* GraphEvo */; };
+		A90000012E7A000100293C6E /* GraphEvo in Frameworks */ = {isa = PBXBuildFile; productRef = A90000022E7A000100293C6E /* GraphEvo */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		156209FE2E6FFCF400293C6E /* GraphCKDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GraphCKDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A90000032E7A000100293C6E /* GraphTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GraphTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A90000032E7A000100293C6E /* GraphEvoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GraphEvoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -36,9 +36,9 @@
 			path = GraphCKDemo;
 			sourceTree = "<group>";
 		};
-		A90000042E7A000100293C6E /* GraphTests */ = {
+		A90000042E7A000100293C6E /* GraphEvoTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ../Tests/GraphTests;
+			path = ../Tests/GraphEvoTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -48,8 +48,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				15620A0F2E6FFF1B00293C6E /* GraphCK in Frameworks */,
-				15620A152E7000E900293C6E /* GraphCK in Frameworks */,
+				15620A0F2E6FFF1B00293C6E /* GraphEvo in Frameworks */,
+				15620A152E7000E900293C6E /* GraphEvo in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -57,7 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A90000012E7A000100293C6E /* Graph in Frameworks */,
+				A90000012E7A000100293C6E /* GraphEvo in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,7 +68,7 @@
 			isa = PBXGroup;
 			children = (
 				15620A002E6FFCF400293C6E /* GraphCKDemo */,
-				A90000042E7A000100293C6E /* GraphTests */,
+				A90000042E7A000100293C6E /* GraphEvoTests */,
 				156209FF2E6FFCF400293C6E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -77,7 +77,7 @@
 			isa = PBXGroup;
 			children = (
 				156209FE2E6FFCF400293C6E /* GraphCKDemo.app */,
-				A90000032E7A000100293C6E /* GraphTests.xctest */,
+				A90000032E7A000100293C6E /* GraphEvoTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,16 +102,16 @@
 			);
 			name = GraphCKDemo;
 			packageProductDependencies = (
-				15620A0E2E6FFF1B00293C6E /* GraphCK */,
-				15620A142E7000E900293C6E /* GraphCK */,
+				15620A0E2E6FFF1B00293C6E /* GraphEvo */,
+				15620A142E7000E900293C6E /* GraphEvo */,
 			);
 			productName = GraphCKDemo;
 			productReference = 156209FE2E6FFCF400293C6E /* GraphCKDemo.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A90000062E7A000100293C6E /* GraphTests */ = {
+		A90000062E7A000100293C6E /* GraphEvoTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A900000B2E7A000100293C6E /* Build configuration list for PBXNativeTarget "GraphTests" */;
+			buildConfigurationList = A900000B2E7A000100293C6E /* Build configuration list for PBXNativeTarget "GraphEvoTests" */;
 			buildPhases = (
 				A90000072E7A000100293C6E /* Sources */,
 				A90000052E7A000100293C6E /* Frameworks */,
@@ -122,14 +122,14 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				A90000042E7A000100293C6E /* GraphTests */,
+				A90000042E7A000100293C6E /* GraphEvoTests */,
 			);
-			name = GraphTests;
+			name = GraphEvoTests;
 			packageProductDependencies = (
-				A90000022E7A000100293C6E /* Graph */,
+				A90000022E7A000100293C6E /* GraphEvo */,
 			);
-			productName = GraphTests;
-			productReference = A90000032E7A000100293C6E /* GraphTests.xctest */;
+			productName = GraphEvoTests;
+			productReference = A90000032E7A000100293C6E /* GraphEvoTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -170,7 +170,7 @@
 			projectRoot = "";
 			targets = (
 				156209FD2E6FFCF400293C6E /* GraphCKDemo */,
-				A90000062E7A000100293C6E /* GraphTests */,
+				A90000062E7A000100293C6E /* GraphEvoTests */,
 			);
 		};
 /* End PBXProject section */
@@ -429,7 +429,7 @@
 				CODE_SIGNING_ALLOWED = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.valerioburiani.GraphTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.valerioburiani.GraphEvoTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
@@ -443,7 +443,7 @@
 				CODE_SIGNING_ALLOWED = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.valerioburiani.GraphTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.valerioburiani.GraphEvoTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
@@ -472,7 +472,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A900000B2E7A000100293C6E /* Build configuration list for PBXNativeTarget "GraphTests" */ = {
+		A900000B2E7A000100293C6E /* Build configuration list for PBXNativeTarget "GraphEvoTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A90000092E7A000100293C6E /* Debug */,
@@ -491,17 +491,17 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		15620A0E2E6FFF1B00293C6E /* GraphCK */ = {
+		15620A0E2E6FFF1B00293C6E /* GraphEvo */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = Graph;
+			productName = GraphEvo;
 		};
-		15620A142E7000E900293C6E /* GraphCK */ = {
+		15620A142E7000E900293C6E /* GraphEvo */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = Graph;
+			productName = GraphEvo;
 		};
-		A90000022E7A000100293C6E /* Graph */ = {
+		A90000022E7A000100293C6E /* GraphEvo */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = Graph;
+			productName = GraphEvo;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

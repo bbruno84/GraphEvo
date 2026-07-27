@@ -35,8 +35,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A90000062E7A000100293C6E"
-               BuildableName = "GraphTests.xctest"
-               BlueprintName = "GraphTests"
+               BuildableName = "GraphEvoTests.xctest"
+               BlueprintName = "GraphEvoTests"
                ReferencedContainer = "container:GraphCKDemo.xcodeproj">
             </BuildableReference>
          </TestableReference>

@@ -7,7 +7,7 @@
 
 
 import UIKit
-import Graph
+import GraphEvo
 
 final class NotesViewController: UIViewController {
 
