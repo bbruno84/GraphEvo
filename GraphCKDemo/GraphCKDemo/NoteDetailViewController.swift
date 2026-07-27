@@ -6,7 +6,7 @@
 //
 
 import UIKit
-import Graph
+import GraphEvo
 
 final class NoteDetailViewController: UIViewController {
     let graph: Graph = GraphProvider.shared.graph

@@ -1,6 +1,6 @@
-# GraphCK
+# GraphEvo
 
-GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https://github.com/CosmicMind/Graph), pensato per supportare Core Data in modo modulare e aprire la strada alla sincronizzazione via CloudKit.
+GraphEvo è una libreria indipendente evoluta dalla libreria [CosmicMind/Graph](https://github.com/CosmicMind/Graph), pensata per supportare Core Data in modo modulare e la sincronizzazione via CloudKit.
 
 ---
 
@@ -8,14 +8,14 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 
 - Refactor modello (M1) completato: rimosso `Transformable` generico, introdotto `ValueTransformer` sicuro
 - Supporto `NSPersistentCloudKitContainer` (M2)
-- Store SQLite rinominato automaticamente in `GraphCK_<name>.sqlite`
+- Store SQLite compatibile con i percorsi esistenti `GraphCK_<name>.sqlite`
 - La configurazione a directory usa un percorso canonico indipendente dal backend; i vecchi percorsi `Local/...` e `Cloud/...` vengono riutilizzati automaticamente
 - `Graph(storeURL:)` accetta sia una directory sia un file SQLite esistente, mantenendo invariato il percorso del file esplicito
-- GraphCK non esegue migrazioni automatiche tra modelli incompatibili: l’app deve migrare il proprio store e poi riaprirlo sul percorso originale
+- GraphEvo non esegue migrazioni automatiche tra modelli incompatibili: l’app deve migrare il proprio store e poi riaprirlo sul percorso originale
 - Opzioni abilitate: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
 - Delegate `GraphCloudStatusDelegate` per notificare disponibilità iCloud (fallback locale se non disponibile)
 - Integrazione Watchers con supporto a notifiche locali e remote via **Persistent History Tracking**
-- Notifica custom `GraphCKSimulatedRemoteChange` usata nei test per simulare cambiamenti da remoto
+- Notifica custom `GraphEvoSimulatedRemoteChange` usata nei test per simulare cambiamenti da remoto
 - **Configurazione CloudKit**: override runtime dell’identifier (`Graph.cloudKitContainerIdentifier`) o fallback Info.plist
 - La precedenza CloudKit è: configurazione esplicita, override runtime, quindi `Info.plist`
 
@@ -27,7 +27,23 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 - Xcode 15.4+
 - Swift Package Manager
 
-GraphCK non impone flag `-Xfrontend` o impostazioni di strict concurrency al
+Il modulo pubblico è `GraphEvo`:
+
+```swift
+import GraphEvo
+
+let graph = Graph(configuration: configuration)
+```
+
+Il nome `Graph` resta quello della classe principale e dei concetti di dominio
+dell'API.
+
+Il prefisso `GraphCK_` e alcuni percorsi o chiavi interni persistenti restano
+invariati per compatibilità con gli store e i dati creati dalle versioni
+precedenti. Non sono alias pubblici del modulo: sono identificatori di
+persistenza che non devono essere rinominati automaticamente.
+
+GraphEvo non impone flag `-Xfrontend` o impostazioni di strict concurrency al
 progetto che la integra. Questa scelta mantiene il prodotto consumabile anche
 da target che usano CocoaPods o altre dipendenze SwiftPM con impostazioni
 diverse. Se l'applicazione desidera abilitare il controllo di concorrenza,
@@ -59,7 +75,7 @@ può impostare `SWIFT_STRICT_CONCURRENCY` direttamente sui propri target.
 
 ### Migrazione applicativa dello store
 
-GraphCK verifica la compatibilità del file SQLite prima di aprirlo. Se il modello non è compatibile, espone `GraphStoreOpeningError.incompatibleStore` e lascia invariati percorso, nome e contenuto dello store. La migrazione tra il modello CosmicMind/Graph e quello GraphCK deve essere eseguita dall’applicazione, che conosce il significato dei propri dati.
+GraphEvo verifica la compatibilità del file SQLite prima di aprirlo. Se il modello non è compatibile, espone `GraphStoreOpeningError.incompatibleStore` e lascia invariati percorso, nome e contenuto dello store. La migrazione tra il modello CosmicMind/Graph e quello GraphEvo deve essere eseguita dall’applicazione, che conosce il significato dei propri dati.
 
 - In produzione verificare il comportamento delle notifiche con CloudKit:
   - Possibili **doppie callback** del delegato (locale + remoto) da analizzare.
@@ -87,7 +103,7 @@ Se non viene specificato alcun identifier, lo store funziona comunque in modalit
 
 ## 📣 Stati, warning ed errori
 
-GraphCK non dipende da una piattaforma di logging dell'applicazione. Per
+GraphEvo non dipende da una piattaforma di logging dell'applicazione. Per
 ricevere gli eventi importanti e gestirli con il logger dell'app, assegnare un
 `GraphEventDelegate`:
 
@@ -96,7 +112,7 @@ final class GraphEvents: GraphEventDelegate {
     func graph(_ graph: Graph, didReceive event: GraphEvent) {
         switch event {
         case .stateChanged(let state):
-            appLogger.info("GraphCK state: \(state)")
+            appLogger.info("GraphEvo state: \(state)")
         case .warning(let warning):
             appLogger.warning(warning.localizedDescription)
         case .error(let error):

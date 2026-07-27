@@ -7,7 +7,7 @@
 
 
 import Foundation
-import Graph
+import GraphEvo
 
 extension Notification.Name {
     static let graphProviderStateDidChange = Notification.Name("GraphCKDemo.graphProviderStateDidChange")

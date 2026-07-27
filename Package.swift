@@ -4,43 +4,40 @@
 import PackageDescription
 
 let package = Package(
-    name: "Graph",
+    name: "GraphEvo",
     platforms: [
         .iOS(.v16), .macOS(.v12) // opzionale macOS se ti serve
     ],
     products: [
-        // Keep the original product name for source compatibility and expose
-        // the GraphCK name used by the demo and the fork's documentation.
-        .library(name: "Graph", targets: ["Graph"]),
-        .library(name: "GraphCK", targets: ["Graph"])
-        // .library(name: "GraphCKMigration", targets: ["GraphCKMigration"]) // se lo separi
+        .library(name: "GraphEvo", targets: ["GraphEvo"])
+        // .library(name: "GraphEvoMigration", targets: ["GraphEvoMigration"]) // se lo separi
     ], dependencies: [
         .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.0")
     ],
     targets: [
         .target(
-            name: "Graph",
+            name: "GraphEvo",
             dependencies: ["ZIPFoundation"],
-            path: "Sources/Graph",
+            path: "Sources/GraphEvo",
             swiftSettings: [
-                .define("GRAPHCK_IOS16")
+                .define("GRAPHEVO_IOS16")
             ]
         ),
         // .target(
-        //     name: "GraphCKMigration",
-        //     dependencies: ["GraphCK"],
-        //     path: "Sources/GraphCKMigration"
+        //     name: "GraphEvoMigration",
+        //     dependencies: ["GraphEvo"],
+        //     path: "Sources/GraphEvoMigration"
         // ),
         .testTarget(
-            name: "GraphTests",
-            dependencies: ["Graph", "ZIPFoundation"],
-            path: "Tests/GraphTests",
+            name: "GraphEvoTests",
+            dependencies: ["GraphEvo", "ZIPFoundation"],
+            path: "Tests/GraphEvoTests",
             resources: [.process("Resources")]
         )
         // .testTarget(
-        //     name: "GraphCKMigrationTests",
-        //     dependencies: ["GraphCK", "GraphCKMigration"],
-        //     path: "Tests/GraphCKMigrationTests"
+        //     name: "GraphEvoMigrationTests",
+        //     dependencies: ["GraphEvo", "GraphEvoMigration"],
+        //     path: "Tests/GraphEvoMigrationTests"
         // )
     ]
 )
