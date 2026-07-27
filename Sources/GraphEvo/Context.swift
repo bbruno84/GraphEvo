@@ -338,7 +338,8 @@ internal extension Graph {
   }
 
   /// Completes store setup and, when enabled, the migration lifecycle before
-  /// releasing the public readiness callbacks.
+  /// releasing the public readiness callbacks. Migration failures are emitted
+  /// as diagnostics, while readiness continues to describe store usability.
   func storeDidOpenSuccessfully() {
     guard case .initializing = readiness else { return }
 
