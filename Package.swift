@@ -23,8 +23,7 @@ let package = Package(
             dependencies: ["ZIPFoundation"],
             path: "Sources/Graph",
             swiftSettings: [
-                .define("GRAPHCK_IOS16"),
-                .unsafeFlags(["-Xfrontend", "-strict-concurrency=targeted"])// se vuoi eventuali #if
+                .define("GRAPHCK_IOS16")
             ]
         ),
         // .target(

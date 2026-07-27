@@ -24,8 +24,14 @@ GraphCK è un fork moderno e aggiornato della libreria [CosmicMind/Graph](https:
 ## 📦 Requisiti
 
 - iOS 16+
-- Xcode 15.4+ (supportato anche Xcode 16 beta con `-strict-concurrency=minimal`)
+- Xcode 15.4+
 - Swift Package Manager
+
+GraphCK non impone flag `-Xfrontend` o impostazioni di strict concurrency al
+progetto che la integra. Questa scelta mantiene il prodotto consumabile anche
+da target che usano CocoaPods o altre dipendenze SwiftPM con impostazioni
+diverse. Se l'applicazione desidera abilitare il controllo di concorrenza,
+può impostare `SWIFT_STRICT_CONCURRENCY` direttamente sui propri target.
 
 ---
 
