@@ -125,6 +125,11 @@ let graphEvents = GraphEvents()
 graph.eventDelegate = graphEvents
 ```
 
+`GraphReadiness` descrive esclusivamente l'utilizzabilità tecnica dello store
+e del relativo contesto Core Data. Un errore di una migrazione applicativa viene
+inviato come `GraphFailure.migration`, ma non porta automaticamente la
+readiness a `.failed` se lo store è comunque utilizzabile.
+
 Gli eventi vengono consegnati sul main thread. Gli stati e gli errori emessi
 durante l'apertura dello store vengono accodati fino all'assegnazione del
 delegate. Le API esistenti (`whenReady`, `GraphCloudStatusDelegate` e le

@@ -37,6 +37,34 @@ final class GraphReadinessTests: XCTestCase {
         }
     }
 
+    private struct FailingMigration: GraphMigration {
+        struct ExpectedError: LocalizedError {
+            var errorDescription: String? { "Readiness migration failed" }
+        }
+
+        let id: String
+        let version = 1
+
+        func needsRun(
+            at phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: inout GraphMigrationContext?
+        ) -> Bool {
+            phase == .postInit
+        }
+
+        func handlePhase(
+            _ phase: GraphMigrationManager.GraphLifecyclePhase,
+            configuration: GraphStoreConfiguration?,
+            graph: Graph?,
+            context: GraphMigrationContext?,
+            completion: @escaping (GraphMigrationResult) -> Void
+        ) {
+            completion(.error(ExpectedError()))
+        }
+    }
+
     func testAsyncInitializerReportsReadyAfterStoreIsUsable() {
         var configuration = GraphStoreConfiguration()
         configuration.name = "Readiness-\(UUID().uuidString)"
@@ -133,6 +161,48 @@ final class GraphReadinessTests: XCTestCase {
 
         wait(for: [expectation], timeout: 2)
         XCTAssertTrue(graph.isReady)
+    }
+
+    func testFailedMigrationDoesNotMaskUsableStoreReadiness() {
+        GraphMigrationManager.resetForTesting()
+        defer { GraphMigrationManager.resetForTesting() }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ReadinessMigrationFailure-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+        let migrationID = "ReadinessMigrationFailure-\(UUID().uuidString)"
+        GraphMigrationManager.registerMigration(FailingMigration(id: migrationID))
+
+        let graph = Graph(configuration: configuration, migrationEnabled: true)
+        let collector = EventCollector()
+        graph.eventDelegate = collector
+
+        let expectation = expectation(description: "Graph remains ready after migration failure")
+        graph.whenReady { result in
+            guard case .success(let readyGraph) = result else {
+                XCTFail("A migration failure must not be reported as store opening failure")
+                expectation.fulfill()
+                return
+            }
+            XCTAssertTrue(readyGraph.isReady)
+            XCTAssertNotNil(readyGraph.managedObjectContext)
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 2)
+        XCTAssertTrue(graph.isReady)
+        XCTAssertTrue(collector.events.contains { event in
+            guard case .error(.migration(let id, _, _)) = event else { return false }
+            return id == migrationID
+        })
+        XCTAssertTrue(collector.events.contains { event in
+            if case .stateChanged(.readiness(.ready)) = event { return true }
+            return false
+        })
+        XCTAssertFalse(collector.events.contains { event in
+            if case .stateChanged(.readiness(.failed)) = event { return true }
+            return false
+        })
     }
 
     func testEventDelegateReceivesPersistenceAndReadinessStates() {

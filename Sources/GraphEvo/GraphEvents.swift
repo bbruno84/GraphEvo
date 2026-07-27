@@ -40,6 +40,10 @@ public enum GraphWarning: LocalizedError {
 }
 
 /// Non-recoverable or operation-level failures emitted by GraphEvo.
+///
+/// A migration failure is intentionally reported here, separately from
+/// `GraphReadiness`: the store may still be open and usable even when an
+/// application-defined migration did not complete.
 public enum GraphFailure: LocalizedError {
     case storeOpening(GraphStoreOpeningError)
     case migration(migrationID: String, phase: String, underlying: Error)

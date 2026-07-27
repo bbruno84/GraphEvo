@@ -55,7 +55,11 @@ public enum GraphStoreOpeningError: LocalizedError {
     }
 }
 
-/// Availability state of a Graph instance.
+/// Availability state of a Graph instance's persistent store.
+///
+/// This state describes whether Core Data opened a usable store and context.
+/// Migration outcomes are reported independently through `GraphEvent`; a
+/// failed application migration does not make the store technically unusable.
 public enum GraphReadiness {
     case initializing
     case ready
