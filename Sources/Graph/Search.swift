@@ -151,7 +151,9 @@ private extension Search {
         } else {
           result = try moc.fetch(request)
         }
-      } catch {}
+      } catch {
+        graph.emit(.error(.query(underlying: error)))
+      }
     }
     
     var array: [T] = []

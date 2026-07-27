@@ -14,12 +14,19 @@ import ObjectiveC.runtime
 private final class HistoryTokenStore {
     private let url: URL
     private let backupKeyPrefix: String
+    private let reportError: (Error) -> Void
 
     // MARK: - Local shadow backup (UserDefaults) per la *stessa installazione*
     private let backupDefaults: UserDefaults
 
-    fileprivate init(storeURL: URL, storeUUID: String?, configuration: GraphStoreConfiguration) {
+    fileprivate init(
+        storeURL: URL,
+        storeUUID: String?,
+        configuration: GraphStoreConfiguration,
+        reportError: @escaping (Error) -> Void
+    ) {
         let storeKey = Self.stableStoreKey(storeURL: storeURL, storeUUID: storeUUID)
+        self.reportError = reportError
         let baseURL: URL
         let defaults: UserDefaults
 
@@ -65,7 +72,12 @@ private final class HistoryTokenStore {
     /// Carica il token dal backup in UserDefaults (stessa installazione)
     func loadBackup() -> NSPersistentHistoryToken? {
         guard let data = backupDefaults.data(forKey: backupKey()) else { return nil }
-        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: data)
+        do {
+            return try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: data)
+        } catch {
+            reportError(error)
+            return nil
+        }
     }
 
     /// Salva il token anche nel backup (UserDefaults)
@@ -81,10 +93,14 @@ private final class HistoryTokenStore {
     }
 
     func load() -> NSPersistentHistoryToken? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {
+            let data = try Data(contentsOf: url)
             return try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: data)
-        } catch { return nil }
+        } catch {
+            reportError(error)
+            return nil
+        }
     }
 
     func save(_ token: NSPersistentHistoryToken) {
@@ -94,12 +110,18 @@ private final class HistoryTokenStore {
             // Mantieni anche un backup locale (fallback namespace)
             self.saveBackup(token)
         } catch {
-            // Silenzioso: non blocchiamo il flusso in caso di I/O error
+            reportError(error)
         }
     }
 
     func clear() {
-        try? FileManager.default.removeItem(at: url)
+        do {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        } catch {
+            reportError(error)
+        }
         // Pulisci anche il backup di fallback
         self.clearBackup()
     }
@@ -122,7 +144,7 @@ private final class HistoryTokenStore {
                     self.save(newest.token)
                 }
             } catch {
-                print("[PH] bootstrapTokenToCurrentHead: error executing history request: \(error)")
+            self.reportError(error)
             }
         }
     }
@@ -166,7 +188,8 @@ private extension Graph {
         let store = HistoryTokenStore(
             storeURL: runtimeStoreURL ?? configuration.resolvedStoreURL,
             storeUUID: _ph_currentStoreUUID(),
-            configuration: configuration
+            configuration: configuration,
+            reportError: { [weak self] error in self?.emit(.warning(.persistentHistoryTokenStore(underlying: error))) }
         )
         objc_setAssociatedObject(self, &_GraphPHKeys.tokenStoreKey, store, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return store

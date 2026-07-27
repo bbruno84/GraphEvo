@@ -26,6 +26,10 @@ public struct GraphMigrationLogEntry: Codable {
 public enum GraphMigrationLogger {
     public static let logDidAppendNotification = Notification.Name("GraphMigrationLogger.logDidAppend")
 
+    /// File logging is opt-in. Applications can consume the notification or
+    /// forward GraphEvent values to their own logging system instead.
+    public static var fileLoggingEnabled = false
+
     @discardableResult
     public static func log(
         migrationID: String,
@@ -47,7 +51,9 @@ public enum GraphMigrationLogger {
         )
 
         print(formatForConsole(entry))
-        append(entry, configuration: configuration)
+        if fileLoggingEnabled {
+            append(entry, configuration: configuration)
+        }
         NotificationCenter.default.post(
             name: logDidAppendNotification,
             object: nil,

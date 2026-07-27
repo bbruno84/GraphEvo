@@ -25,6 +25,7 @@ public enum GraphState {
 public enum GraphWarning: LocalizedError {
     case cloudStoreFallback(underlying: Error)
     case metadataPersistence(underlying: Error)
+    case persistentHistoryTokenStore(underlying: Error)
 
     public var errorDescription: String? {
         switch self {
@@ -32,6 +33,8 @@ public enum GraphWarning: LocalizedError {
             return "CloudKit store unavailable; GraphCK fell back to local persistence: \(error.localizedDescription)"
         case .metadataPersistence(let error):
             return "GraphCK could not read or write store metadata: \(error.localizedDescription)"
+        case .persistentHistoryTokenStore(let error):
+            return "GraphCK could not persist the Persistent History token: \(error.localizedDescription)"
         }
     }
 }
@@ -41,6 +44,7 @@ public enum GraphFailure: LocalizedError {
     case storeOpening(GraphStoreOpeningError)
     case migration(migrationID: String, phase: String, underlying: Error)
     case persistentHistory(underlying: Error)
+    case query(underlying: Error)
 
     public var errorDescription: String? {
         switch self {
@@ -50,6 +54,8 @@ public enum GraphFailure: LocalizedError {
             return "Migration '\(migrationID)' failed during \(phase): \(error.localizedDescription)"
         case .persistentHistory(let error):
             return "Persistent History processing failed: \(error.localizedDescription)"
+        case .query(let error):
+            return "Graph query failed: \(error.localizedDescription)"
         }
     }
 }

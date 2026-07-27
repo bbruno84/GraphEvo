@@ -114,3 +114,7 @@ Gli eventi vengono consegnati sul main thread. Gli stati e gli errori emessi
 durante l'apertura dello store vengono accodati fino all'assegnazione del
 delegate. Le API esistenti (`whenReady`, `GraphCloudStatusDelegate` e le
 completion di `sync`) restano disponibili per compatibilità.
+
+La scrittura del file JSONL delle migrazioni è disabilitata per default. Se
+necessario per un caso di diagnostica, l'app può abilitarla esplicitamente con
+`GraphMigrationLogger.fileLoggingEnabled = true`.
