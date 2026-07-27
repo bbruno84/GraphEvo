@@ -324,6 +324,11 @@ public final class GraphMigrationManager {
                     graph: graph,
                     error: error
                 )
+                graph?.emit(.error(.migration(
+                    migrationID: migration.id,
+                    phase: String(describing: phase),
+                    underlying: error
+                )))
                 activeMigrations.remove(migration.id)
                 finishPhaseIfNeeded()
             }

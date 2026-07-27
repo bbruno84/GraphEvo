@@ -84,3 +84,33 @@ Per abilitare la sincronizzazione con il database privato CloudKit, è necessari
    - Aggiungere una chiave `GraphCloudKitContainerIdentifier` di tipo `String` con valore `iCloud.com.tuodominio.laTuaApp`.
 
 Se non viene specificato alcun identifier, lo store funziona comunque in modalità **locale** senza sincronizzazione.
+
+## 📣 Stati, warning ed errori
+
+GraphCK non dipende da una piattaforma di logging dell'applicazione. Per
+ricevere gli eventi importanti e gestirli con il logger dell'app, assegnare un
+`GraphEventDelegate`:
+
+```swift
+final class GraphEvents: GraphEventDelegate {
+    func graph(_ graph: Graph, didReceive event: GraphEvent) {
+        switch event {
+        case .stateChanged(let state):
+            appLogger.info("GraphCK state: \(state)")
+        case .warning(let warning):
+            appLogger.warning(warning.localizedDescription)
+        case .error(let error):
+            appLogger.error(error.localizedDescription)
+        }
+    }
+}
+
+let graph = Graph(configuration: configuration)
+let graphEvents = GraphEvents()
+graph.eventDelegate = graphEvents
+```
+
+Gli eventi vengono consegnati sul main thread. Gli stati e gli errori emessi
+durante l'apertura dello store vengono accodati fino all'assegnazione del
+delegate. Le API esistenti (`whenReady`, `GraphCloudStatusDelegate` e le
+completion di `sync`) restano disponibili per compatibilità.

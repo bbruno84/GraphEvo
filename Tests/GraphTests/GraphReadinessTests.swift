@@ -3,6 +3,16 @@ import CoreData
 @testable import Graph
 
 final class GraphReadinessTests: XCTestCase {
+    private final class EventCollector: GraphEventDelegate {
+        var events: [GraphEvent] = []
+        var onEvent: ((GraphEvent) -> Void)?
+
+        func graph(_ graph: Graph, didReceive event: GraphEvent) {
+            events.append(event)
+            onEvent?(event)
+        }
+    }
+
     private struct LifecycleMigration: GraphMigration {
         let id: String
         let version = 1
@@ -123,6 +133,60 @@ final class GraphReadinessTests: XCTestCase {
 
         wait(for: [expectation], timeout: 2)
         XCTAssertTrue(graph.isReady)
+    }
+
+    func testEventDelegateReceivesPersistenceAndReadinessStates() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "Events-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+
+        let readyExpectation = expectation(description: "Ready event delivered")
+        let localModeExpectation = expectation(description: "Local persistence event delivered")
+        let collector = EventCollector()
+        collector.onEvent = { event in
+            switch event {
+            case .stateChanged(.readiness(.ready)):
+                readyExpectation.fulfill()
+            case .stateChanged(.persistenceMode(.local)):
+                localModeExpectation.fulfill()
+            default:
+                break
+            }
+        }
+
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        graph.eventDelegate = collector
+
+        wait(for: [readyExpectation, localModeExpectation], timeout: 2)
+        XCTAssertTrue(collector.events.contains {
+            if case .stateChanged(.readiness(.ready)) = $0 { return true }
+            return false
+        })
+    }
+
+    func testEventDelegateReceivesStoreOpeningFailure() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GraphCK-EventFailure-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "EventFailure"
+        configuration.location = directory
+        try createIncompatibleStore(at: configuration.storeURL)
+
+        let failureExpectation = expectation(description: "Opening error delivered")
+        let collector = EventCollector()
+        collector.onEvent = { event in
+            guard case .error(.storeOpening(.incompatibleStore)) = event else { return }
+            failureExpectation.fulfill()
+        }
+
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        graph.eventDelegate = collector
+
+        wait(for: [failureExpectation], timeout: 2)
+        XCTAssertFalse(graph.isReady)
     }
 
     private func createIncompatibleStore(at url: URL) throws {

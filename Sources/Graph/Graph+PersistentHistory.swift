@@ -420,10 +420,12 @@ internal extension Graph {
                     self._ph_lastToken = nil
                     self._ph_tokenStore.clear()
                     self._ph_tokenStore.clearBackup()
+                    self.emit(.error(.persistentHistory(underlying: error)))
                     completion(false)
                     return
                 }
                 debugPrint("[PH][DEBUG] Error processing remote change: \(error)")
+                self.emit(.error(.persistentHistory(underlying: error)))
                 completion(false)
                 }
         }

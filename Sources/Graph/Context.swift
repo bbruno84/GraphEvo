@@ -100,7 +100,7 @@ internal extension Graph {
       }
     }
 
-    if type == NSInMemoryStoreType {
+        if type == NSInMemoryStoreType {
       // In-memory store configuration
       let storeDescription = NSPersistentStoreDescription()
       storeDescription.type = NSInMemoryStoreType
@@ -122,6 +122,7 @@ internal extension Graph {
         self.managedObjectContext.undoManager = nil
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = storeURL
+        self.emit(.stateChanged(.persistenceMode(.local)))
         self.contextRegistryKey = storeKey
         GraphContextRegistry.shared.register(
           graph: self,
@@ -136,7 +137,7 @@ internal extension Graph {
     }
 
     // Reuse cached context if present
-    if let cached = GraphContextRegistry.shared.context(for: storeKey) {
+        if let cached = GraphContextRegistry.shared.context(for: storeKey) {
       managedObjectContext = cached
       contextRegistryKey = storeKey
       persistentContainer = GraphContextRegistry.shared.container(for: storeKey)
@@ -147,10 +148,13 @@ internal extension Graph {
         container: persistentContainer,
         configuration: configuration
       )
-      if persistentContainer != nil {
-        installRemoteObserverIfNeeded()
-      }
-      storeDidOpenSuccessfully()
+            if persistentContainer != nil {
+                installRemoteObserverIfNeeded()
+            }
+            emit(.stateChanged(.persistenceMode(
+                persistentContainer is NSPersistentCloudKitContainer ? .cloud : .local
+            )))
+            storeDidOpenSuccessfully()
       return
     }
 
@@ -168,9 +172,9 @@ internal extension Graph {
     if configuration.cloudKitContainerIdentifier != nil && !Graph.isRunningUnderTests {
       let container = GraphStoreContainerFactory.makeCloud(name: name, storeURL: storeURL, configuration: configuration)
 
-      container.loadPersistentStores { [unowned self] (desc, error) in
-        if let error = error {
-          print("⚠️ [GraphCK] Failed to load CloudKit store. Error: \(error)")
+        container.loadPersistentStores { [unowned self] (desc, error) in
+          if let error = error {
+          emit(.warning(.cloudStoreFallback(underlying: error)))
           // Fallback: try a plain local NSPersistentContainer (no CloudKit) instead of crashing.
           let plain = GraphStoreContainerFactory.makeLocal(name: name, storeURL: storeURL, configuration: configuration)
           
@@ -181,7 +185,7 @@ internal extension Graph {
               return
             }
             // Success with plain container: proceed with local-only context.
-            print("✅ [GraphCK] Fallback local store loaded successfully at: \(storeURL.lastPathComponent)")
+            emit(.stateChanged(.persistenceMode(.localFallback)))
             self.persistentContainer = plain
             self.managedObjectContext = plain.viewContext
             // Mark per-device author for potential filtering in Persistent History
@@ -210,7 +214,7 @@ internal extension Graph {
                                                      for: store)
                     }
                 } catch {
-                    print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
+                    emit(.warning(.metadataPersistence(underlying: error)))
                 }
             }
             self.storeDidOpenSuccessfully()
@@ -234,6 +238,7 @@ internal extension Graph {
           container: container,
           configuration: configuration
         )
+        self.emit(.stateChanged(.persistenceMode(.cloud)))
 
         if let store = container.persistentStoreCoordinator.persistentStores.first {
             do {
@@ -245,7 +250,7 @@ internal extension Graph {
                     print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(configuration.requiredVersions)")
                 }
             } catch {
-                print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
+                self.emit(.warning(.metadataPersistence(underlying: error)))
             }
         }
         self.installRemoteObserverIfNeeded()
@@ -279,6 +284,7 @@ internal extension Graph {
           container: container,
           configuration: configuration
         )
+        self.emit(.stateChanged(.persistenceMode(.local)))
 
         if let store = container.persistentStoreCoordinator.persistentStores.first {
             do {
@@ -290,7 +296,7 @@ internal extension Graph {
                     print("📝 [GraphCK] Metadata inizializzati con versioni correnti \(configuration.requiredVersions)")
                 }
             } catch {
-                print("⚠️ [GraphCK] Impossibile leggere/scrivere i metadata: \(error)")
+                self.emit(.warning(.metadataPersistence(underlying: error)))
             }
         }
         self.storeDidOpenSuccessfully()
@@ -326,6 +332,8 @@ internal extension Graph {
     let completions = readinessCompletions
     readinessCompletions.removeAll()
     completions.forEach { $0(.failure(error)) }
+    emit(.error(.storeOpening(error)))
+    emit(.stateChanged(.readiness(.failed(error))))
     print("⚠️ [GraphCK] Store opening refused: \(error.localizedDescription)")
   }
 
@@ -358,6 +366,7 @@ internal extension Graph {
   private func completeReadiness() {
     guard case .initializing = readiness else { return }
     readiness = .ready
+    emit(.stateChanged(.readiness(.ready)))
     let completions = readinessCompletions
     readinessCompletions.removeAll()
     completions.forEach { $0(.success(self)) }

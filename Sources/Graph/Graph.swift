@@ -121,6 +121,17 @@ public class Graph: NSObject {
     private var lastCloudStatus: GraphCloudStatus?
     
     public weak var delegate: GraphDelegate?
+
+    /// Receives GraphCK state, warning and error events.
+    /// Events are delivered on the main thread. Events emitted before a
+    /// delegate is attached are retained and delivered when it is attached.
+    public weak var eventDelegate: GraphEventDelegate? {
+        didSet {
+            flushPendingEvents()
+        }
+    }
+
+    private var pendingEvents: [GraphEvent] = []
     
     /// M2: Optional override for the CloudKit container identifier.
     /// If set, this takes precedence over Info.plist and enables CloudKit sync without relying on plist UX.
@@ -207,6 +218,38 @@ public class Graph: NSObject {
     ) {
         self.init(configuration: configuration, migrationEnabled: migrationEnabled)
         whenReady(completion)
+    }
+
+    /// Emits a diagnostic event to the application delegate.
+    internal func emit(_ event: GraphEvent) {
+        if Thread.isMainThread {
+            deliver(event)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.deliver(event)
+            }
+        }
+    }
+
+    private func deliver(_ event: GraphEvent) {
+        guard let eventDelegate else {
+            pendingEvents.append(event)
+            return
+        }
+        eventDelegate.graph(self, didReceive: event)
+    }
+
+    private func flushPendingEvents() {
+        guard eventDelegate != nil else { return }
+        if Thread.isMainThread {
+            let events = pendingEvents
+            pendingEvents.removeAll()
+            events.forEach(deliver)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.flushPendingEvents()
+            }
+        }
     }
 
     /// Registers a callback for the first terminal readiness result.
@@ -297,6 +340,7 @@ public class Graph: NSObject {
         // CloudKit there and report the deterministic local status instead.
         if Self.isRunningUnderTests {
             self.lastCloudStatus = .unavailable
+            self.emit(.stateChanged(.cloudStatus(.unavailable)))
             if let delegate = self.cloudStatusDelegate {
                 delegate.graph(self, iCloudStatusChanged: .unavailable)
             }
@@ -306,6 +350,7 @@ public class Graph: NSObject {
         // If no identifier is configured (SPM / no capabilities), don't touch CloudKit APIs.
         guard let containerID = configuration.cloudKitContainerIdentifier else {
             self.lastCloudStatus = .unavailable
+            self.emit(.stateChanged(.cloudStatus(.unavailable)))
             if let delegate = self.cloudStatusDelegate {
                 delegate.graph(self, iCloudStatusChanged: .unavailable)
             }
@@ -317,6 +362,7 @@ public class Graph: NSObject {
             guard let self = self else { return }
             let mapped: GraphCloudStatus = (status == .available) ? .available : .unavailable
             self.lastCloudStatus = mapped
+            self.emit(.stateChanged(.cloudStatus(mapped)))
             DispatchQueue.main.async {
                 self.cloudStatusDelegate?.graph(self, iCloudStatusChanged: mapped)
             }
