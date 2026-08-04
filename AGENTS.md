@@ -175,6 +175,77 @@ store include `.sqlite` e, se presenti, i file `.sqlite-wal` e `.sqlite-shm`.
 6. Eseguire `git diff --check` e i test disponibili.
 7. Riassumere chiaramente file modificati, test eseguiti e limitazioni ambientali.
 
+## Workflow Git e pull request
+
+Ogni modifica deve rimanere tracciata, descritta e facilmente reversibile. Non
+lavorare direttamente sui branch condivisi o sui branch di release, salvo una
+richiesta esplicita.
+
+1. Partire dal branch corretto e verificare che il working tree sia pulito:
+
+   ```bash
+   git status --short --branch
+   git fetch --prune
+   ```
+
+2. Creare un branch dedicato per la modifica. Usare un nome descrittivo, ad
+   esempio `codex/docs-agents-workflow` o `codex/fix-store-resolution`.
+
+   ```bash
+   git switch -c codex/<descrizione-breve>
+   ```
+
+3. Tenere la modifica concentrata sullo scopo del branch. Non includere file
+   estranei, formattazioni casuali o cambiamenti non spiegati.
+
+4. Aggiornare codice, test e documentazione insieme quando fanno parte dello
+   stesso comportamento. Il messaggio dei commit deve spiegare l’intento, non
+   solo elencare i file, per esempio:
+
+   ```text
+   docs: document GraphStoreConfiguration URL resolution
+   fix: preserve explicit SQLite store URLs
+   test: cover legacy store fallback
+   ```
+
+5. Prima di creare la PR controllare sempre:
+
+   ```bash
+   git diff --check
+   git status --short --branch
+   git diff --stat
+   swift package dump-package
+   swift test
+   ```
+
+   Se una verifica non può essere eseguita, descrivere il motivo nella PR e nel
+   riepilogo del lavoro. Non nascondere un test fallito né alterare il codice
+   solo per aggirare una limitazione dell’ambiente.
+
+6. Pubblicare il branch e aprire una pull request verso il branch previsto. La
+   PR deve contenere:
+
+   - obiettivo e contesto della modifica;
+   - comportamento precedente e comportamento nuovo;
+   - elenco dei file o moduli coinvolti;
+   - test eseguiti e relativi risultati;
+   - eventuali rischi, limitazioni o attività successive;
+   - indicazione della documentazione aggiornata.
+
+7. Attendere la revisione e i controlli automatici prima del merge. Il merge
+   deve avvenire tramite PR, così codice, discussione, verifiche e decisioni
+   restano associati allo stesso cambiamento.
+
+8. Per correggere una modifica già tracciata, aggiungere un nuovo commit o
+   aggiornare la PR. Evitare di riscrivere la storia dei branch condivisi.
+   Per annullare una modifica già mergiata, preferire un commit di revert: il
+   cambiamento originale e la sua inversione restano entrambi visibili.
+
+9. Non usare comandi distruttivi come `git reset --hard` o `git checkout --`
+   senza una richiesta esplicita e senza aver verificato cosa verrebbe perso.
+   Prima di ogni operazione potenzialmente distruttiva controllare il target
+   esatto e creare, se necessario, una copia o un commit di salvataggio.
+
 ## Verifiche consigliate
 
 ```bash
