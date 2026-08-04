@@ -50,7 +50,12 @@ public enum GraphMigrationLogger {
             metadata: metadata
         )
 
-        print(formatForConsole(entry))
+        // Info and warning entries are already available through the
+        // notification and, where enabled, the JSONL file. Printing them here
+        // would duplicate the application's GraphEvent/logging pipeline.
+        if level == .error {
+            print(formatForConsole(entry))
+        }
         if fileLoggingEnabled {
             append(entry, configuration: configuration)
         }

@@ -247,7 +247,6 @@ internal extension Graph {
                     try GraphStoreMetadata.write(configuration.requiredVersions,
                                                  using: container.persistentStoreCoordinator,
                                                  for: store)
-                    print("📝 [GraphEvo] Metadata inizializzati con versioni correnti \(configuration.requiredVersions)")
                 }
             } catch {
                 self.emit(.warning(.metadataPersistence(underlying: error)))
@@ -293,7 +292,6 @@ internal extension Graph {
                     try GraphStoreMetadata.write(configuration.requiredVersions,
                                                  using: container.persistentStoreCoordinator,
                                                  for: store)
-                    print("📝 [GraphEvo] Metadata inizializzati con versioni correnti \(configuration.requiredVersions)")
                 }
             } catch {
                 self.emit(.warning(.metadataPersistence(underlying: error)))

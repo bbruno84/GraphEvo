@@ -560,6 +560,7 @@ public enum GraphWarning: LocalizedError {
     case cloudStoreFallback(underlying: Error)
     case metadataPersistence(underlying: Error)
     case persistentHistoryTokenStore(underlying: Error)
+    case persistentHistoryMissingTransactionAuthor
 }
 public enum GraphFailure: LocalizedError {
     case storeOpening(GraphStoreOpeningError)
@@ -580,6 +581,10 @@ public protocol GraphEventDelegate: AnyObject {
 Gli eventi sono consegnati sul main thread. `GraphReadiness` descrive solo la
 disponibilità tecnica dello store: un errore di migrazione applicativa è un
 `GraphFailure.migration`, ma non implica necessariamente `.failed`.
+
+Gli stati, i warning e gli aggiornamenti di avanzamento non vengono stampati
+automaticamente su stdout; l’applicazione decide come registrarli. Gli errori
+non recuperabili restano stampati come diagnostica minima.
 
 API legacy:
 
@@ -714,7 +719,10 @@ public enum GraphMigrationLogger {
 ```
 
 Il logging su file è disabilitato di default; abilitarlo solo quando serve
-diagnostica (`GraphMigrationLogger.fileLoggingEnabled = true`).
+diagnostica (`GraphMigrationLogger.fileLoggingEnabled = true`). Le entry di
+livello `info` e `warning` non vengono stampate automaticamente su stdout:
+restano disponibili tramite notifica e, se abilitato, nel file JSONL. Gli
+errori vengono mantenuti su stdout come diagnostica minima.
 
 ### UI migrazioni
 

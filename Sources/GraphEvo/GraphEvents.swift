@@ -26,6 +26,7 @@ public enum GraphWarning: LocalizedError {
     case cloudStoreFallback(underlying: Error)
     case metadataPersistence(underlying: Error)
     case persistentHistoryTokenStore(underlying: Error)
+    case persistentHistoryMissingTransactionAuthor
 
     public var errorDescription: String? {
         switch self {
@@ -35,6 +36,8 @@ public enum GraphWarning: LocalizedError {
             return "GraphEvo could not read or write store metadata: \(error.localizedDescription)"
         case .persistentHistoryTokenStore(let error):
             return "GraphEvo could not persist the Persistent History token: \(error.localizedDescription)"
+        case .persistentHistoryMissingTransactionAuthor:
+            return "GraphEvo received a Persistent History transaction without an author; local-change filtering may be incomplete."
         }
     }
 }

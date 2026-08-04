@@ -357,9 +357,7 @@ internal extension Graph {
                         } else {
                             // author == nil → probabile salvataggio da un contesto senza transactionAuthor
                             // Questo può causare il doppio scatto su A dopo bootstrap del token.
-                            #if DEBUG
-                            print("[PH][warn] tx.author == nil (imposta context.transactionAuthor = \( _ph_appAuthor )) su TUTTI i contesti che salvano")
-                            #endif
+                            self.emit(.warning(.persistentHistoryMissingTransactionAuthor))
                         }
                     }
 
