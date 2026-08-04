@@ -12,7 +12,12 @@ predicati leggibili e reagire ai cambiamenti attraverso watcher e notifiche.
 
 - [Reference completa delle API pubbliche](docs/api/public-api.md)
 - [Istruzioni operative per agenti IA](AGENTS.md)
-- Guide tematiche in preparazione in [`docs/`](docs/)
+- [Indice della documentazione](docs/README.md)
+- [Guida introduttiva](docs/guides/getting-started.md)
+- [Modello a grafo](docs/concepts/graph-model.md)
+- [Persistenza](docs/concepts/persistence.md)
+- [CloudKit](docs/concepts/cloudkit.md)
+- [Migrazioni](docs/migrations/overview.md)
 
 ---
 
