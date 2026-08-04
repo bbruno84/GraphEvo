@@ -472,9 +472,6 @@ private extension Graph {
         if let backup = _ph_tokenStore.loadBackup() {
             _ph_lastToken = backup
             _ph_isColdStartSession = false   // ✅ segna esplicitamente “non più cold” perché abbiamo un token valido
-            #if DEBUG
-            print("[PH] warm start: token restored from UserDefaults backup")
-            #endif
             return
         }
 
@@ -509,24 +506,19 @@ public extension Graph {
     func ph_debug_clearToken() {
         _ph_lastToken = nil
         _ph_tokenStore.clear()
-        print("[PH][DEBUG] Token cleared")
     }
 
     /// True se esiste un token in memoria o su disco
     func ph_debug_lastTokenExists() -> Bool {
         if _ph_lastToken != nil {
-            print("[PH][DEBUG] lastTokenExists = true (memory)")
             return true
         }
-        let exists = _ph_tokenStore.load() != nil
-        print("[PH][DEBUG] lastTokenExists = \(exists) (disk)")
-        return exists
+        return _ph_tokenStore.load() != nil
     }
 
     /// Corrompe intenzionalmente il token su disco (per testare il recovery)
     func ph_debug_corruptTokenOnDisk() {
         _ph_tokenStore.debugCorruptOnDisk()
-        print("[PH][DEBUG] Token file corrupted on disk")
     }
 
     /// Returns the per-store token URL for diagnostics and tests.
@@ -551,7 +543,6 @@ public extension Graph {
     /// DEBUG: abilita/disabilita il bootstrap del token alla head su cold start
     @objc func ph_debug_setBootstrapOnColdStart(_ enabled: Bool) {
         _ph_bootstrapToHeadOnColdStart = enabled
-        print("[PH][DEBUG] bootstrapToHeadOnColdStart = \(enabled)")
     }
 }
 #endif

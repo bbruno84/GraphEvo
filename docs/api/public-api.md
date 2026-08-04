@@ -619,7 +619,9 @@ solo dopo la consegna coerente degli oggetti osservati.
 Sono presenti anche helper `ph_debug_*` pubblici per test/debug (`ph_debug_clearToken`,
 `ph_debug_lastTokenExists`, `ph_debug_corruptTokenOnDisk`, `ph_debug_tokenStorageURL`,
 `ph_debug_printAuthorAndContext`, `ph_debug_printTokenStatus`). Non usarli come
-contratto applicativo di produzione.
+contratto applicativo di produzione. Gli helper diagnostici non stampanti modificano
+o restituiscono lo stato senza produrre output implicito; stampano solo gli helper
+con nome `ph_debug_print...`, quando invocati esplicitamente.
 
 ## 9. Migrazioni
 
