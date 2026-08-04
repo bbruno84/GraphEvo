@@ -1,6 +1,18 @@
 # GraphEvo
 
-GraphEvo è una libreria indipendente evoluta dalla libreria [CosmicMind/Graph](https://github.com/CosmicMind/Graph), pensata per supportare Core Data in modo modulare e la sincronizzazione via CloudKit.
+GraphEvo è una libreria Swift indipendente, evoluta dalla libreria
+[CosmicMind/Graph](https://github.com/CosmicMind/Graph), che offre un modello a
+grafo basato su Core Data con supporto alla persistenza locale e alla
+sincronizzazione tramite CloudKit.
+
+La libreria permette di modellare entità, relazioni e azioni, cercare i dati con
+predicati leggibili e reagire ai cambiamenti attraverso watcher e notifiche.
+
+## 📚 Documentazione
+
+- [Reference completa delle API pubbliche](docs/api/public-api.md)
+- [Istruzioni operative per agenti IA](AGENTS.md)
+- Guide tematiche in preparazione in [`docs/`](docs/)
 
 ---
 
@@ -92,7 +104,9 @@ Per abilitare la sincronizzazione con il database privato CloudKit, è necessari
 1. **Override a runtime** (consigliato):
    ```swift
    Graph.cloudKitContainerIdentifier = "iCloud.com.tuodominio.laTuaApp"
-   let graph = Graph(name: "Main")
+   var configuration = GraphStoreConfiguration()
+   configuration.name = "Main"
+   let graph = Graph(configuration: configuration)
    ```
 
 2. **Info.plist fallback** (opzionale):
