@@ -304,6 +304,10 @@ internal extension Graph {
     /// Processes one history snapshot. The completion is called after the
     /// merged notification has been delivered to existing Watch observers.
     func processPersistentHistoryBatch(completion: @escaping (Bool) -> Void) {
+        // A remote purge invalidates the local object graph and history token.
+        // The application is responsible for reopening the store afterwards;
+        // do not publish the purge's remote notification as normal data.
+        guard !isCloudPurgeInProgress else { completion(false); return }
         guard let container = persistentContainer else { completion(false); return }
         let psc = container.persistentStoreCoordinator
         guard !psc.persistentStores.isEmpty else { completion(false); return }
@@ -395,6 +399,11 @@ internal extension Graph {
                     NSDeletedObjectIDsKey:  NSSet(array: deletedIDs)
                 ]
 
+                guard !self.isCloudPurgeInProgress else {
+                    completion(false)
+                    return
+                }
+
                 // Prima di postare la notifica, chiama GraphMigrationManager.handleRemoteEntityChanges
                 GraphMigrationManager.handleRemoteEntityChanges(
                     configuration: self.configuration,
@@ -423,6 +432,10 @@ internal extension Graph {
                 // Post on main (watchers are generally connected to UI-owned
                 // contexts and existing clients expect main-thread delivery).
                 DispatchQueue.main.async {
+                    guard !self.isCloudPurgeInProgress else {
+                        completion(false)
+                        return
+                    }
                     var deliveredUserInfo = userInfo
                     deliveredUserInfo[GraphEvoRemoteChangeAlreadyMergedKey] = true
                     NotificationCenter.default.post(

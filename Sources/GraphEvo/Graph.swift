@@ -168,6 +168,34 @@ public class Graph: NSObject {
     /// be created for both CloudKit and local stores.
     internal var persistentContainer: NSPersistentContainer?
 
+    /// Serializes saves with administrative CloudKit operations such as purge.
+    /// The lock is intentionally internal: the public API remains the only
+    /// supported entry point for purging a store.
+    internal let persistenceOperationLock = NSRecursiveLock()
+
+    private let cloudPurgeStateLock = NSLock()
+    private var cloudPurgeInProgress = false
+
+    internal func beginCloudPurge() -> Bool {
+        cloudPurgeStateLock.lock()
+        defer { cloudPurgeStateLock.unlock() }
+        guard !cloudPurgeInProgress else { return false }
+        cloudPurgeInProgress = true
+        return true
+    }
+
+    internal func endCloudPurge() {
+        cloudPurgeStateLock.lock()
+        cloudPurgeInProgress = false
+        cloudPurgeStateLock.unlock()
+    }
+
+    internal var isCloudPurgeInProgress: Bool {
+        cloudPurgeStateLock.lock()
+        defer { cloudPurgeStateLock.unlock() }
+        return cloudPurgeInProgress
+    }
+
     /// Stable registry key captured when the store is opened.
     internal var contextRegistryKey: String?
     
@@ -328,6 +356,7 @@ public class Graph: NSObject {
         // notification. Keep the old behavior for direct/test callers that
         // post GraphEvoSimulatedRemoteChange themselves.
         guard notification.name == .GraphEvoSimulatedRemoteChange else { return }
+        guard !isCloudPurgeInProgress else { return }
         guard let moc = managedObjectContext else { return }
         if (notification.userInfo?[GraphEvoRemoteChangeAlreadyMergedKey] as? Bool) == true {
             return

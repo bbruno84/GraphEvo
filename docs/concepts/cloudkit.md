@@ -33,6 +33,29 @@ durante il fallback non sono necessariamente sincronizzati.
 Per osservare gli stati usare `GraphEventDelegate` e, se serve il contratto
 legacy, `GraphCloudStatusDelegate`.
 
+## Purge remoto dello store
+
+Per gli strumenti amministrativi l’app può chiedere a GraphEvo di eliminare
+la zona Core Data dal database CloudKit privato:
+
+```swift
+graph.purgeCloudStore { result in
+    switch result {
+    case .success:
+        // L'app deve riaprire o ricreare lo store locale e
+        // azzerare token e persistent history locali.
+        break
+    case .failure(let error):
+        print(error.localizedDescription)
+    }
+}
+```
+
+L’API opera solo su un `NSPersistentCloudKitContainer` realmente caricato con
+uno store configurato per CloudKit. Non cancella file SQLite, non ricrea lo
+store e non esegue il purge durante i test o su un fallback locale. Il reset
+locale e la gestione dei token/history restano responsabilità dell’app.
+
 ## Requisiti applicativi
 
 L’app che integra GraphEvo deve configurare in Xcode:
