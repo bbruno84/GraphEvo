@@ -148,6 +148,10 @@ internal extension Graph {
         container: persistentContainer,
         configuration: configuration
       )
+      if let cloudContainer = persistentContainer as? NSPersistentCloudKitContainer {
+        installCloudSyncEventObserverIfNeeded(for: cloudContainer)
+        prepareCloudSyncTracking(for: cloudContainer)
+      }
             if persistentContainer != nil {
                 installRemoteObserverIfNeeded()
             }
@@ -171,9 +175,12 @@ internal extension Graph {
 
     if configuration.cloudKitContainerIdentifier != nil && !Graph.isRunningUnderTests {
       let container = GraphStoreContainerFactory.makeCloud(name: name, storeURL: storeURL, configuration: configuration)
+      self.persistentContainer = container
+      self.installCloudSyncEventObserverIfNeeded(for: container)
 
         container.loadPersistentStores { [unowned self] (desc, error) in
           if let error = error {
+          self.removeCloudSyncEventObserver()
           emit(.warning(.cloudStoreFallback(underlying: error)))
           // Fallback: try a plain local NSPersistentContainer (no CloudKit) instead of crashing.
           let plain = GraphStoreContainerFactory.makeLocal(name: name, storeURL: storeURL, configuration: configuration)
@@ -187,6 +194,7 @@ internal extension Graph {
             // Success with plain container: proceed with local-only context.
             emit(.stateChanged(.persistenceMode(.localFallback)))
             self.persistentContainer = plain
+            self.removeCloudSyncEventObserver()
             self.managedObjectContext = plain.viewContext
             // Mark per-device author for potential filtering in Persistent History
             self.managedObjectContext.transactionAuthor = GraphDeviceAuthor.current()
@@ -231,6 +239,7 @@ internal extension Graph {
         self.managedObjectContext.automaticallyMergesChangesFromParent = true
         self.runtimeStoreURL = desc.url ?? storeURL
         self.contextRegistryKey = storeKey
+        self.prepareCloudSyncTracking(for: container)
         GraphContextRegistry.shared.register(
           graph: self,
           key: storeKey,

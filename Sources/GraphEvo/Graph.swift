@@ -120,6 +120,14 @@ public class Graph: NSObject {
             }
         }
     }
+
+    /// Receives completed CloudKit import events. Delivery occurs on the main
+    /// queue. This callback does not imply that no later imports will occur.
+    public weak var cloudSyncDelegate: GraphCloudSyncDelegate? {
+        didSet {
+            flushPendingCloudImportEvents()
+        }
+    }
     
     /// M2: cache last known iCloud availability to notify late-bound delegates.
     private var lastCloudStatus: GraphCloudStatus?
@@ -136,6 +144,14 @@ public class Graph: NSObject {
     }
 
     private var pendingEvents: [GraphEvent] = []
+
+    internal var cloudSyncEventObserver: NSObjectProtocol?
+    internal var cloudSyncStoreIdentifier: String?
+    internal var cloudSyncInitialImportPending = false
+    internal var pendingCloudKitEvents: [GraphCloudKitEventSnapshot] = []
+    internal var pendingCloudImportEvents: [GraphCloudImportEvent] = []
+    internal var processedCloudImportEventIdentifiers = Set<UUID>()
+    internal let cloudSyncStateLock = NSLock()
     
     /// M2: Optional override for the CloudKit container identifier.
     /// If set, this takes precedence over Info.plist and enables CloudKit sync without relying on plist UX.
@@ -211,6 +227,7 @@ public class Graph: NSObject {
     
     /// Deinitializer that removes the Graph from NSNotificationCenter.
     deinit {
+        removeCloudSyncEventObserver()
         if let key = contextRegistryKey,
            let promoted = GraphContextRegistry.shared.release(graph: self, key: key) {
             promoted.installRemoteObserverIfNeeded()

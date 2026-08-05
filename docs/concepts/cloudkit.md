@@ -56,6 +56,37 @@ uno store configurato per CloudKit. Non cancella file SQLite, non ricrea lo
 store e non esegue il purge durante i test o su un fallback locale. Il reset
 locale e la gestione dei token/history restano responsabilità dell’app.
 
+## Completamento degli import CloudKit
+
+L’app può osservare gli import completati tramite `GraphCloudSyncDelegate`:
+
+```swift
+final class SyncDelegate: GraphCloudSyncDelegate {
+    func graph(_ graph: Graph, didCompleteCloudImport event: GraphCloudImportEvent) {
+        guard event.succeeded else {
+            // Gestire event.error senza considerare l'import riuscito.
+            return
+        }
+        if event.isInitialImport {
+            // Eventuale operazione post-import dell'app.
+        }
+    }
+}
+
+let syncDelegate = SyncDelegate()
+graph.cloudSyncDelegate = syncDelegate
+```
+
+`NSPersistentCloudKitContainer` non espone un evento nativo distinto per il
+primo sync. GraphEvo identifica il primo import combinando lo stato iniziale
+della replica locale (store vuoto e senza oggetti locali) con il primo evento
+`.import` completato per quello store. Sono considerati solo eventi terminati;
+`.setup` ed `.export` non generano callback. Il callback è consegnato sulla
+coda principale, viene deduplicato per `event.identifier` e non garantisce che
+non arrivino ulteriori import successivi. L’app può usare questo segnale per
+avviare operazioni post-import, come una deduplicazione esplicitamente
+controllata, ma GraphEvo non esegue alcuna deduplicazione automatica.
+
 ## Requisiti applicativi
 
 L’app che integra GraphEvo deve configurare in Xcode:

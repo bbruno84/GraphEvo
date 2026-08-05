@@ -261,6 +261,29 @@ public func purgeCloudStore(completion: @escaping (Result<Void, Error>) -> Void)
 
 Gli errori di validazione sono esposti come `GraphCloudPurgeError`.
 
+```swift
+public weak var cloudSyncDelegate: GraphCloudSyncDelegate?
+
+public protocol GraphCloudSyncDelegate: AnyObject {
+    func graph(_ graph: Graph, didCompleteCloudImport event: GraphCloudImportEvent)
+}
+
+public struct GraphCloudImportEvent {
+    public let storeIdentifier: String
+    public let isInitialImport: Bool
+    public let succeeded: Bool
+    public let startDate: Date?
+    public let endDate: Date?
+    public let error: Error?
+}
+```
+
+Per gli import CloudKit, assegnare `cloudSyncDelegate` a un oggetto conforme a
+`GraphCloudSyncDelegate`. `GraphCloudImportEvent.isInitialImport` è `true` solo
+per l’import iniziale rilevato su una replica locale vuota; gli import falliti
+mantengono lo stato di attesa per un eventuale retry. Il callback è consegnato
+sulla coda principale e ulteriori import possono seguire quello iniziale.
+
 Per CloudKit, GraphEvo cerca l’identificatore prima nella configurazione, poi
 nell’override runtime `Graph.cloudKitContainerIdentifier` e infine in
 `GraphCloudKitContainerIdentifier` dentro Info.plist. Se non trova nulla,
