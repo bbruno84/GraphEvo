@@ -256,7 +256,10 @@ public func sync(_ completion: ((Bool, Error?) -> Void)? = nil)
 public func async(_ completion: ((Bool, Error?) -> Void)? = nil)
 public func clear(_ completion: ((Bool, Error?) -> Void)? = nil)
 public func reset()
+public func purgeCloudStore(completion: @escaping (Result<Void, Error>) -> Void)
 ```
+
+Gli errori di validazione sono esposti come `GraphCloudPurgeError`.
 
 Per CloudKit, GraphEvo cerca l’identificatore prima nella configurazione, poi
 nell’override runtime `Graph.cloudKitContainerIdentifier` e infine in
@@ -267,6 +270,16 @@ continua a funzionare normalmente in modalità locale.
 `GraphStoreOpeningError`. `newBackgroundContext()` restituisce `nil` prima che il
 container sia disponibile; il contesto creato usa transaction author GraphEvo e
 merge policy `NSMergeByPropertyObjectTrumpMergePolicy`.
+
+`purgeCloudStore` elimina la zona Core Data CloudKit
+(`com.apple.coredata.cloudkit.zone`) dal database remoto tramite
+`NSPersistentCloudKitContainer`. Richiede un container CloudKit effettivamente
+caricato con almeno uno store CloudKit; rifiuta configurazioni locali, fallback
+locali, container non pronti e l’esecuzione durante i test. La completion
+arriva solo dopo il completamento Core Data: gli errori CloudKit/Core Data sono
+propagati e una risposta priva della zona purgata non è considerata successo.
+GraphEvo non cancella né ricrea lo store locale. Dopo un successo l’app deve
+riaprire o ricreare lo store e azzerare i token di Persistent History locali.
 
 ### Stato ed errori di apertura
 

@@ -75,6 +75,8 @@ extension Graph {
     }
     
     moc.perform { [weak moc] in
+      self.persistenceOperationLock.lock()
+      defer { self.persistenceOperationLock.unlock() }
       do {
         try moc?.save()
         GraphCompletionCallback(success: true, error: nil, completion: completion)
@@ -98,6 +100,8 @@ extension Graph {
       return
     }
     
+    persistenceOperationLock.lock()
+    defer { persistenceOperationLock.unlock() }
     moc.performAndWait { [unowned moc] in
       do {
         try moc.save()
