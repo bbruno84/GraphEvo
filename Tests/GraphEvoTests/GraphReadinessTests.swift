@@ -259,6 +259,23 @@ final class GraphReadinessTests: XCTestCase {
         XCTAssertFalse(graph.isReady)
     }
 
+    func testPersistentHistoryAuthorWarningUsesEventChannel() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "MissingAuthorWarning-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        let collector = EventCollector()
+        graph.eventDelegate = collector
+
+        graph.emit(.warning(.persistentHistoryMissingTransactionAuthor))
+
+        XCTAssertTrue(collector.events.contains { event in
+            if case .warning(.persistentHistoryMissingTransactionAuthor) = event { return true }
+            return false
+        })
+    }
+
     private func createIncompatibleStore(at url: URL) throws {
         let model = NSManagedObjectModel()
         let entity = NSEntityDescription()

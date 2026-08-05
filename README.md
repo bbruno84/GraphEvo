@@ -154,6 +154,11 @@ durante l'apertura dello store vengono accodati fino all'assegnazione del
 delegate. Le API esistenti (`whenReady`, `GraphCloudStatusDelegate` e le
 completion di `sync`) restano disponibili per compatibilità.
 
+Gli stati, i warning e gli aggiornamenti di avanzamento non vengono stampati
+automaticamente su stdout: l'applicazione è responsabile del loro logging.
+Gli errori non recuperabili restano disponibili anche su stdout come supporto
+diagnostico minimo.
+
 La scrittura del file JSONL delle migrazioni è disabilitata per default. Se
 necessario per un caso di diagnostica, l'app può abilitarla esplicitamente con
 `GraphMigrationLogger.fileLoggingEnabled = true`.

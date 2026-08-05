@@ -14,7 +14,6 @@ internal enum GraphStoreContainerFactory {
         storeURL: URL,
         configuration: GraphStoreConfiguration
     ) -> NSPersistentContainer {
-        print("🛠 [GraphEvo] Preparing LOCAL container at: \(storeURL)")
         let storeDescription = NSPersistentStoreDescription(url: storeURL)
         storeDescription.type = NSSQLiteStoreType
         storeDescription.shouldAddStoreAsynchronously = false
@@ -24,7 +23,6 @@ internal enum GraphStoreContainerFactory {
 
         let container = NSPersistentContainer(name: name, managedObjectModel: Model.create())
         container.persistentStoreDescriptions = [storeDescription]
-        print("✅ [GraphEvo] Local container created with store at: \(storeURL)")
         return container
     }
 
@@ -33,7 +31,6 @@ internal enum GraphStoreContainerFactory {
         storeURL: URL,
         configuration: GraphStoreConfiguration
     ) -> NSPersistentCloudKitContainer {
-        print("🛠 [GraphEvo] Preparing CLOUD container at: \(storeURL)")
         let storeDescription = NSPersistentStoreDescription(url: storeURL)
         storeDescription.type = NSSQLiteStoreType
         storeDescription.shouldAddStoreAsynchronously = false

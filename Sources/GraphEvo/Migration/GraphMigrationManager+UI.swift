@@ -160,7 +160,8 @@ extension GraphMigrationManager {
 
     // Registrazione dell'observer
     let observer = GraphMigrationManager.observeMigrationProgress { progressInfo in
-        print("Migrazione avanzata: \(progressInfo.progress * 100)% - \(progressInfo.stepDescription)")
+        // Progress is delivered through the notification; the application
+        // decides whether and where to log it.
     }
 
     // Quando non serve più, rimuovere l'observer

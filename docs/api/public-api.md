@@ -560,6 +560,7 @@ public enum GraphWarning: LocalizedError {
     case cloudStoreFallback(underlying: Error)
     case metadataPersistence(underlying: Error)
     case persistentHistoryTokenStore(underlying: Error)
+    case persistentHistoryMissingTransactionAuthor
 }
 public enum GraphFailure: LocalizedError {
     case storeOpening(GraphStoreOpeningError)
@@ -580,6 +581,10 @@ public protocol GraphEventDelegate: AnyObject {
 Gli eventi sono consegnati sul main thread. `GraphReadiness` descrive solo la
 disponibilità tecnica dello store: un errore di migrazione applicativa è un
 `GraphFailure.migration`, ma non implica necessariamente `.failed`.
+
+Gli stati, i warning e gli aggiornamenti di avanzamento non vengono stampati
+automaticamente su stdout; l’applicazione decide come registrarli. Gli errori
+non recuperabili restano stampati come diagnostica minima.
 
 API legacy:
 
@@ -614,7 +619,9 @@ solo dopo la consegna coerente degli oggetti osservati.
 Sono presenti anche helper `ph_debug_*` pubblici per test/debug (`ph_debug_clearToken`,
 `ph_debug_lastTokenExists`, `ph_debug_corruptTokenOnDisk`, `ph_debug_tokenStorageURL`,
 `ph_debug_printAuthorAndContext`, `ph_debug_printTokenStatus`). Non usarli come
-contratto applicativo di produzione.
+contratto applicativo di produzione. Gli helper diagnostici non stampanti modificano
+o restituiscono lo stato senza produrre output implicito; stampano solo gli helper
+con nome `ph_debug_print...`, quando invocati esplicitamente.
 
 ## 9. Migrazioni
 
@@ -714,7 +721,10 @@ public enum GraphMigrationLogger {
 ```
 
 Il logging su file è disabilitato di default; abilitarlo solo quando serve
-diagnostica (`GraphMigrationLogger.fileLoggingEnabled = true`).
+diagnostica (`GraphMigrationLogger.fileLoggingEnabled = true`). Le entry di
+livello `info` e `warning` non vengono stampate automaticamente su stdout:
+restano disponibili tramite notifica e, se abilitato, nel file JSONL. Gli
+errori vengono mantenuti su stdout come diagnostica minima.
 
 ### UI migrazioni
 

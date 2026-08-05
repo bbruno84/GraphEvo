@@ -54,9 +54,13 @@ quando Core Data, CloudKit e UI lavorano su contesti diversi.
 
 ## Eventi ed errori
 
-Gli errori del token producono `GraphWarning.persistentHistoryTokenStore`;
+Gli errori del token producono `GraphWarning.persistentHistoryTokenStore`; una
+transazione senza autore produce
+`GraphWarning.persistentHistoryMissingTransactionAuthor`;
 gli errori di elaborazione producono `GraphFailure.persistentHistory`.
 Usare `GraphEventDelegate` per registrarli.
 
 Gli helper `ph_debug_*` sono destinati a test e diagnostica, non al normale
-flusso applicativo.
+flusso applicativo. Le varianti che non hanno `print` nel nome non producono
+output implicito; le varianti `ph_debug_print...` stampano solo quando chiamate
+esplicitamente.
