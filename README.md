@@ -21,19 +21,19 @@ predicati leggibili e reagire ai cambiamenti attraverso watcher e notifiche.
 
 ---
 
-## ✅ Milestone M3 – Watchers & Remote Change
+## ✨ Funzionalità principali
 
-- Refactor modello (M1) completato: rimosso `Transformable` generico, introdotto `ValueTransformer` sicuro
-- Supporto `NSPersistentCloudKitContainer` (M2)
+- Modello a grafo basato su Core Data con `Entity`, `Relationship` e `Action`
+- Supporto a `NSPersistentCloudKitContainer` e fallback locale
 - Store SQLite compatibile con i percorsi esistenti `GraphEvo_<name>.sqlite`
 - La configurazione a directory usa un percorso canonico indipendente dal backend; i vecchi percorsi `Local/...` e `Cloud/...` vengono riutilizzati automaticamente
 - `Graph(storeURL:)` accetta sia una directory sia un file SQLite esistente, mantenendo invariato il percorso del file esplicito
 - GraphEvo non esegue migrazioni automatiche tra modelli incompatibili: l’app deve migrare il proprio store e poi riaprirlo sul percorso originale
+- Codifica sicura di valori eterogenei tramite `ValueTransformer`
 - Opzioni abilitate: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
 - Delegate `GraphCloudStatusDelegate` per notificare disponibilità iCloud (fallback locale se non disponibile)
-- Integrazione Watchers con supporto a notifiche locali e remote via **Persistent History Tracking**
-- Notifica custom `GraphEvoSimulatedRemoteChange` usata nei test per simulare cambiamenti da remoto
-- **Configurazione CloudKit**: override runtime dell’identifier (`Graph.cloudKitContainerIdentifier`) o fallback Info.plist
+- Watcher e notifiche locali/remoto tramite **Persistent History Tracking**
+- Configurazione CloudKit tramite override runtime o fallback Info.plist
 - La precedenza CloudKit è: configurazione esplicita, override runtime, quindi `Info.plist`
 
 ---
@@ -67,18 +67,6 @@ può impostare `SWIFT_STRICT_CONCURRENCY` direttamente sui propri target.
 
 ---
 
-## 🚧 Roadmap
-
-| Milestone | Descrizione | Stato |
-|----------|-----------------------------------------------|-------|
-| **M0**   | Pulizia codice, rimozione iCloud classico     | ✅ Completato |
-| **M1**   | Refactor model, preparazione per CloudKit     | ✅ Completato |
-| **M2**   | Supporto a CloudKit (sincronizzazione)        | ✅ Completato |
-| **M3**   | Supporto Watchers con notifiche remote        | ✅ Completato |
-| **M4**   | Supporto sharing multi-account (CloudKit sharing) | 🔜 |
-
----
-
 ## 🧪 Test
 
 - Il progetto builda correttamente su iOS 16+
@@ -92,11 +80,6 @@ può impostare `SWIFT_STRICT_CONCURRENCY` direttamente sui propri target.
 ### Migrazione applicativa dello store
 
 GraphEvo verifica la compatibilità del file SQLite prima di aprirlo. Se il modello non è compatibile, espone `GraphStoreOpeningError.incompatibleStore` e lascia invariati percorso, nome e contenuto dello store. La migrazione tra il modello CosmicMind/Graph e quello GraphEvo deve essere eseguita dall’applicazione, che conosce il significato dei propri dati.
-
-- In produzione verificare il comportamento delle notifiche con CloudKit:
-  - Possibili **doppie callback** del delegato (locale + remoto) da analizzare.
-  - Necessario investigare l'**autore delle modifiche** (transaction author) per discriminare le modifiche provenienti da CloudKit rispetto a quelle locali.
-- Questi aspetti sono monitorati e verranno documentati in modo esteso quando emergeranno in scenari reali.
 
 ---
 
