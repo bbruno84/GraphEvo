@@ -652,6 +652,14 @@ processamento legge le transazioni dopo l’ultimo token, filtra le transazioni
 autoriali locali per evitare doppie callback, esegue il merge e avanza il token
 solo dopo la consegna coerente degli oggetti osservati.
 
+Se il token è corrotto, scaduto (`NSCocoaErrorDomain` 134301) o riferisce uno
+store inesistente (134501), GraphEvo invalida in modo atomico il token in
+memoria, il file e il backup UserDefaults, quindi esegue il bootstrap della
+history head corrente. Il recovery emette `GraphWarning.persistentHistoryRecovery`
+e non ripete il token invalido alle notifiche successive. Dopo una
+ricostruzione, la namespace del token viene verificata usando URL e
+`NSStoreUUID`, evitando il riuso di un token appartenente a un altro store.
+
 Sono presenti anche helper `ph_debug_*` pubblici per test/debug (`ph_debug_clearToken`,
 `ph_debug_lastTokenExists`, `ph_debug_corruptTokenOnDisk`, `ph_debug_tokenStorageURL`,
 `ph_debug_printAuthorAndContext`, `ph_debug_printTokenStatus`). Non usarli come

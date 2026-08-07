@@ -17,6 +17,14 @@ import XCTest
 
 final class PersistentHistoryTokenTests: XCTestCase {
 
+    private final class EventCollector: GraphEventDelegate {
+        var events: [GraphEvent] = []
+
+        func graph(_ graph: Graph, didReceive event: GraphEvent) {
+            events.append(event)
+        }
+    }
+
     // MARK: - Helpers
 
     /// Crea un `Graph` col nome richiesto (nuovo store per test), matching lo stile dei vostri test.
@@ -66,6 +74,8 @@ final class PersistentHistoryTokenTests: XCTestCase {
 
     func test_CorruptedToken_Fallback_NoCrash() {
         let g = makeGraph(named: "PH-Corruption-\(UUID().uuidString)")
+        let collector = EventCollector()
+        g.eventDelegate = collector
         g.ph_debug_clearToken()
         XCTAssertFalse(g.ph_debug_lastTokenExists())
 
@@ -78,6 +88,90 @@ final class PersistentHistoryTokenTests: XCTestCase {
 
         XCTAssertFalse(g.ph_debug_lastTokenExists(),
                        "Corrupted token should not resurrect into a valid token without PH transactions")
+        XCTAssertTrue(collector.events.contains { event in
+            guard case .warning(.persistentHistoryRecovery(let reason, _)) = event else { return false }
+            if case .corruptedToken = reason { return true }
+            return false
+        })
+    }
+
+    func test_ExpiredToken_IsInvalidatedAndBootstrapsHead() {
+        let g = makeGraph(named: "PH-Expired-\(UUID().uuidString)")
+        let collector = EventCollector()
+        g.eventDelegate = collector
+        g.ph_debug_clearToken()
+
+        let error = NSError(domain: NSCocoaErrorDomain, code: 134301)
+        XCTAssertTrue(g.ph_debug_recoverFromPersistentHistoryError(error))
+
+        XCTAssertFalse(g.ph_debug_lastTokenExists(),
+                       "An empty history must not create a fabricated token")
+        XCTAssertTrue(collector.events.contains { event in
+            guard case .warning(.persistentHistoryRecovery(let reason, _)) = event else { return false }
+            if case .expiredToken = reason { return true }
+            return false
+        })
+        XCTAssertFalse(g.ph_debug_recoverFromPersistentHistoryError(NSError(domain: NSCocoaErrorDomain, code: 134500)),
+                       "Unrelated errors must not enter token recovery")
+    }
+
+    func test_ExpiredToken_WithExistingHistoryPersistsCurrentHead() {
+        let g = makeGraph(named: "PH-ExpiredHead-\(UUID().uuidString)")
+        g.ph_debug_clearToken()
+        let context = try! XCTUnwrap(g.newBackgroundContext())
+        context.performAndWait {
+            context.transactionAuthor = "REMOTE-TEST-AUTHOR"
+            let object = NSEntityDescription.insertNewObject(
+                forEntityName: "ManagedEntityProperty",
+                into: context
+            )
+            object.setValue("recovery", forKey: "name")
+            try! context.save()
+        }
+
+        XCTAssertTrue(g.ph_debug_recoverFromPersistentHistoryError(
+            NSError(domain: NSCocoaErrorDomain, code: 134301)
+        ))
+        XCTAssertTrue(g.ph_debug_lastTokenExists(),
+                      "Recovery must advance to the current retained history head")
+    }
+
+    func test_MissingStoreToken_IsInvalidatedAndBootstrapsHead() {
+        let g = makeGraph(named: "PH-MissingStore-\(UUID().uuidString)")
+        let collector = EventCollector()
+        g.eventDelegate = collector
+        g.ph_debug_clearToken()
+
+        let error = NSError(domain: NSCocoaErrorDomain, code: 134501)
+        XCTAssertTrue(g.ph_debug_recoverFromPersistentHistoryError(error))
+        XCTAssertFalse(g.ph_debug_lastTokenExists())
+        XCTAssertTrue(collector.events.contains { event in
+            guard case .warning(.persistentHistoryRecovery(let reason, _)) = event else { return false }
+            if case .storeUnavailable = reason { return true }
+            return false
+        })
+    }
+
+    func test_RecoveryFollowedByRemoteBurstDoesNotRetryInvalidToken() {
+        let g = makeGraph(named: "PH-RecoveryBurst-\(UUID().uuidString)")
+        let collector = EventCollector()
+        g.eventDelegate = collector
+        g.ph_debug_clearToken()
+        XCTAssertTrue(g.ph_debug_recoverFromPersistentHistoryError(
+            NSError(domain: NSCocoaErrorDomain, code: 134301)
+        ))
+
+        for _ in 0..<8 {
+            g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        }
+        waitForHistoryProcessingToSettle()
+
+        let persistentHistoryFailures = collector.events.filter { event in
+            if case .error(.persistentHistory) = event { return true }
+            return false
+        }
+        XCTAssertTrue(persistentHistoryFailures.isEmpty,
+                      "The coordinator must not retry the discarded token after recovery")
     }
 
     func test_FilterLocalWrites_Wiring_OK() {

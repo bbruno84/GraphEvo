@@ -12,7 +12,14 @@ import ObjectiveC.runtime
 // MARK: - Token store su disco (Application Support o App Group opzionale)
 
 private final class HistoryTokenStore {
+    fileprivate enum LoadResult {
+        case missing
+        case loaded(NSPersistentHistoryToken)
+        case invalid(Error)
+    }
+
     private let url: URL
+    private let storeKey: String
     private let backupKeyPrefix: String
     private let reportError: (Error) -> Void
 
@@ -26,6 +33,7 @@ private final class HistoryTokenStore {
         reportError: @escaping (Error) -> Void
     ) {
         let storeKey = Self.stableStoreKey(storeURL: storeURL, storeUUID: storeUUID)
+        self.storeKey = storeKey
         self.reportError = reportError
         let baseURL: URL
         let defaults: UserDefaults
@@ -53,7 +61,11 @@ private final class HistoryTokenStore {
 
     fileprivate var tokenURL: URL { url }
 
-    private static func stableStoreKey(storeURL: URL, storeUUID: String?) -> String {
+    fileprivate func matches(storeURL: URL, storeUUID: String?) -> Bool {
+        storeKey == Self.stableStoreKey(storeURL: storeURL, storeUUID: storeUUID)
+    }
+
+    fileprivate static func stableStoreKey(storeURL: URL, storeUUID: String?) -> String {
         let source = storeUUID ?? storeURL.standardizedFileURL.path
         // FNV-1a provides a short deterministic filename without exposing the
         // full path and without introducing a cryptography dependency.
@@ -71,12 +83,21 @@ private final class HistoryTokenStore {
 
     /// Carica il token dal backup in UserDefaults (stessa installazione)
     func loadBackup() -> NSPersistentHistoryToken? {
-        guard let data = backupDefaults.data(forKey: backupKey()) else { return nil }
+        switch loadBackupResult() {
+        case .loaded(let token): return token
+        case .missing, .invalid: return nil
+        }
+    }
+
+    fileprivate func loadBackupResult() -> LoadResult {
+        guard let data = backupDefaults.data(forKey: backupKey()) else { return .missing }
         do {
-            return try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: data)
+            guard let token = try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: data) else {
+                return .invalid(NSError(domain: "GraphEvo.PersistentHistory", code: 1, userInfo: [NSLocalizedDescriptionKey: "Persistent History backup contained no token."]))
+            }
+            return .loaded(token)
         } catch {
-            reportError(error)
-            return nil
+            return .invalid(error)
         }
     }
 
@@ -93,13 +114,22 @@ private final class HistoryTokenStore {
     }
 
     func load() -> NSPersistentHistoryToken? {
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        switch loadResult() {
+        case .loaded(let token): return token
+        case .missing, .invalid: return nil
+        }
+    }
+
+    fileprivate func loadResult() -> LoadResult {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
         do {
             let data = try Data(contentsOf: url)
-            return try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: data)
+            guard let token = try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: data) else {
+                return .invalid(NSError(domain: "GraphEvo.PersistentHistory", code: 1, userInfo: [NSLocalizedDescriptionKey: "Persistent History file contained no token."]))
+            }
+            return .loaded(token)
         } catch {
-            reportError(error)
-            return nil
+            return .invalid(error)
         }
     }
 
@@ -182,12 +212,19 @@ private extension Graph {
     }
 
     var _ph_tokenStore: HistoryTokenStore {
-        if let store = objc_getAssociatedObject(self, &_GraphPHKeys.tokenStoreKey) as? HistoryTokenStore {
-            return store
+        let storeURL = runtimeStoreURL ?? configuration.resolvedStoreURL
+        let storeUUID = _ph_currentStoreUUID()
+        if let existing = objc_getAssociatedObject(self, &_GraphPHKeys.tokenStoreKey) as? HistoryTokenStore {
+            if existing.matches(storeURL: storeURL, storeUUID: storeUUID) {
+                return existing
+            }
+            // The Graph instance was rebound to a different store identity.
+            // Never carry the in-memory token across that boundary.
+            _ph_lastToken = nil
         }
         let store = HistoryTokenStore(
-            storeURL: runtimeStoreURL ?? configuration.resolvedStoreURL,
-            storeUUID: _ph_currentStoreUUID(),
+            storeURL: storeURL,
+            storeUUID: storeUUID,
             configuration: configuration,
             reportError: { [weak self] error in self?.emit(.warning(.persistentHistoryTokenStore(underlying: error))) }
         )
@@ -254,9 +291,7 @@ internal extension Graph {
     /// Chiamato dall'observer registrato in Context.swift
     func handlePersistentStoreRemoteChange(_ notification: Notification) {
         // Lazy load dal disco alla primissima occorrenza
-        if _ph_lastToken == nil {
-            _ph_lastToken = _ph_tokenStore.load()
-        }
+        _ph_loadPersistedTokenIfNeeded()
 
         // Se il token è ancora nil, scegli la strategia corretta in base alla sessione
         if _ph_lastToken == nil {
@@ -278,14 +313,10 @@ public extension Graph {
     func ph_prepareOnLaunchAfterContainerReady() {
         _ph_markLaunchAndDetectColdStart()
         // Load token from disk (if any)
-        if _ph_lastToken == nil {
-            _ph_lastToken = _ph_tokenStore.load()
-        }
+        _ph_loadPersistedTokenIfNeeded()
         // Warm session & token mancante → prova il backup locale (UserDefaults)
         if _ph_lastToken == nil, _ph_isColdStartSession == false {
-            if let backup = _ph_tokenStore.loadBackup() {
-                _ph_lastToken = backup
-            }
+            _ph_restoreFromBackupOrBootstrapIfWarmSession()
         }
 
         // If there is no token we purposefully avoid bootstrapping here.
@@ -446,15 +477,24 @@ internal extension Graph {
                     completion(true)
                 }
             } catch {
-                // Expand error handling for persistent history token store mismatch (error code 134501)
                 let nsError = error as NSError
-                // 134501: "Unable to find stores referenced in History Token" (NSCocoaErrorDomain)
-                if nsError.domain == NSCocoaErrorDomain,
-                   nsError.code == 134501 {
-                    self._ph_lastToken = nil
-                    self._ph_tokenStore.clear()
-                    self._ph_tokenStore.clearBackup()
-                    self.emit(.error(.persistentHistory(underlying: error)))
+                // 134501: token references a store that no longer exists.
+                if self._ph_isPersistentHistoryError(134501, in: nsError) {
+                    self._ph_recoverPersistentHistoryToken(
+                        reason: .storeUnavailable,
+                        underlying: error,
+                        using: nil
+                    )
+                    completion(false)
+                    return
+                }
+                // 134301: the token is older than the retained history window.
+                if self._ph_isPersistentHistoryError(134301, in: nsError) {
+                    self._ph_recoverPersistentHistoryToken(
+                        reason: .expiredToken,
+                        underlying: error,
+                        using: nil
+                    )
                     completion(false)
                     return
                 }
@@ -467,6 +507,58 @@ internal extension Graph {
 }
 
 private extension Graph {
+    func _ph_loadPersistedTokenIfNeeded() {
+        let tokenStore = _ph_tokenStore
+        guard _ph_lastToken == nil else { return }
+        switch tokenStore.loadResult() {
+        case .missing:
+            return
+        case .loaded(let token):
+            _ph_lastToken = token
+        case .invalid(let error):
+            _ph_recoverPersistentHistoryToken(
+                reason: .corruptedToken,
+                underlying: error,
+                using: nil
+            )
+        }
+    }
+
+    /// Invalidates every local representation of the token before selecting
+    /// a new recovery point. Bootstrapping the current history head is safe
+    /// after a rebuilt store and prevents the coordinator from retrying the
+    /// invalid token on every remote-change notification.
+    func _ph_recoverPersistentHistoryToken(
+        reason: GraphPersistentHistoryRecoveryReason,
+        underlying: Error?,
+        using context: NSManagedObjectContext?
+    ) {
+        _ph_lastToken = nil
+        _ph_tokenStore.clear()
+        emit(.warning(.persistentHistoryRecovery(reason: reason, underlying: underlying)))
+
+        let recoveryContext: NSManagedObjectContext
+        if let context {
+            recoveryContext = context
+        } else if let container = persistentContainer {
+            recoveryContext = container.newBackgroundContext()
+        } else {
+            return
+        }
+
+        _ph_tokenStore.bootstrapTokenToCurrentHead(using: recoveryContext)
+        _ph_lastToken = _ph_tokenStore.load()
+        _ph_isColdStartSession = false
+    }
+
+    func _ph_isPersistentHistoryError(_ code: Int, in error: NSError) -> Bool {
+        if error.domain == NSCocoaErrorDomain, error.code == code { return true }
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return _ph_isPersistentHistoryError(code, in: underlying)
+        }
+        return false
+    }
+
     /// Se il token è mancante *in una sessione calda*, prova a ripristinarlo dal backup.
     /// Se non esiste un backup, fai bootstrap alla head per evitare replay e doppi callback.
     func _ph_restoreFromBackupOrBootstrapIfWarmSession() {
@@ -482,10 +574,20 @@ private extension Graph {
         }
 
         // 1) Prova prima il backup su UserDefaults (stessa installazione / warm session)
-        if let backup = _ph_tokenStore.loadBackup() {
+        switch _ph_tokenStore.loadBackupResult() {
+        case .loaded(let backup):
             _ph_lastToken = backup
-            _ph_isColdStartSession = false   // ✅ segna esplicitamente “non più cold” perché abbiamo un token valido
+            _ph_isColdStartSession = false
             return
+        case .invalid(let error):
+            _ph_recoverPersistentHistoryToken(
+                reason: .corruptedToken,
+                underlying: error,
+                using: nil
+            )
+            return
+        case .missing:
+            break
         }
 
         // 2) Nessun backup disponibile → bootstrap alla head per evitare replay integrale
@@ -556,6 +658,20 @@ public extension Graph {
     /// DEBUG: abilita/disabilita il bootstrap del token alla head su cold start
     @objc func ph_debug_setBootstrapOnColdStart(_ enabled: Bool) {
         _ph_bootstrapToHeadOnColdStart = enabled
+    }
+
+    /// DEBUG/test seam for exercising token-error classification without
+    /// manufacturing a private Core Data token or contacting CloudKit.
+    @objc func ph_debug_recoverFromPersistentHistoryError(_ error: NSError) -> Bool {
+        if _ph_isPersistentHistoryError(134301, in: error) {
+            _ph_recoverPersistentHistoryToken(reason: .expiredToken, underlying: error, using: nil)
+            return true
+        }
+        if _ph_isPersistentHistoryError(134501, in: error) {
+            _ph_recoverPersistentHistoryToken(reason: .storeUnavailable, underlying: error, using: nil)
+            return true
+        }
+        return false
     }
 }
 #endif

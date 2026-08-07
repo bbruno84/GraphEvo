@@ -21,12 +21,24 @@ public enum GraphState {
     case persistenceMode(GraphPersistenceMode)
 }
 
+/// Reason why GraphEvo discarded a Persistent History token and rebuilt its
+/// local recovery point.
+public enum GraphPersistentHistoryRecoveryReason {
+    case expiredToken
+    case storeUnavailable
+    case corruptedToken
+}
+
 /// Recoverable conditions that the application may want to surface or log.
 public enum GraphWarning: LocalizedError {
     case cloudStoreFallback(underlying: Error)
     case metadataPersistence(underlying: Error)
     case persistentHistoryTokenStore(underlying: Error)
     case persistentHistoryMissingTransactionAuthor
+    case persistentHistoryRecovery(
+        reason: GraphPersistentHistoryRecoveryReason,
+        underlying: Error?
+    )
 
     public var errorDescription: String? {
         switch self {
@@ -38,6 +50,20 @@ public enum GraphWarning: LocalizedError {
             return "GraphEvo could not persist the Persistent History token: \(error.localizedDescription)"
         case .persistentHistoryMissingTransactionAuthor:
             return "GraphEvo received a Persistent History transaction without an author; local-change filtering may be incomplete."
+        case .persistentHistoryRecovery(let reason, let underlying):
+            let description: String
+            switch reason {
+            case .expiredToken:
+                description = "Persistent History token expired; GraphEvo invalidated it and bootstrapped the current history head."
+            case .storeUnavailable:
+                description = "Persistent History token referenced a store that no longer exists; GraphEvo invalidated it and bootstrapped the current history head."
+            case .corruptedToken:
+                description = "Persistent History token was corrupted or could not be decoded; GraphEvo invalidated it and bootstrapped the current history head."
+            }
+            if let underlying {
+                return "\(description) Underlying error: \(underlying.localizedDescription)"
+            }
+            return description
         }
     }
 }

@@ -42,6 +42,10 @@ Il token viene salvato su disco in un percorso associato allo store e mantenuto
 anche in un backup locale. Con `appGroupIdentifier` il percorso del token può
 risiedere nell’App Group.
 
+L’identità del token è derivata dall’URL canonico e, quando disponibile, dal
+`NSStoreUUID` del persistent store. Se GraphEvo rileva una ricostruzione con una
+nuova identità di store, non riusa il token precedente.
+
 Il token identifica il punto della cronologia già elaborato, non un oggetto del
 dominio. Non usarlo per ricostruire direttamente l’identità delle entità.
 
@@ -54,7 +58,20 @@ quando Core Data, CloudKit e UI lavorano su contesti diversi.
 
 ## Eventi ed errori
 
-Gli errori del token producono `GraphWarning.persistentHistoryTokenStore`; una
+I token corrotti vengono invalidati insieme al file e al backup UserDefaults e
+GraphEvo porta il punto di recovery alla history head corrente. Lo stesso
+recovery viene applicato a:
+
+- `NSCocoaErrorDomain` `134301`: token Persistent History scaduto;
+- `NSCocoaErrorDomain` `134501`: token riferito a uno store non più presente.
+
+In entrambi i casi il coordinatore non ripete il token invalido alle successive
+remote-change notification e GraphEvo emette una sola diagnosi
+`GraphWarning.persistentHistoryRecovery` per il recovery eseguito. Questo
+bootstrap può saltare transazioni non più rappresentabili dal token; non
+genera callback watcher artificiali.
+
+Gli altri errori del token producono `GraphWarning.persistentHistoryTokenStore`; una
 transazione senza autore produce
 `GraphWarning.persistentHistoryMissingTransactionAuthor`;
 gli errori di elaborazione producono `GraphFailure.persistentHistory`.
