@@ -1,50 +1,49 @@
 # GraphEvo
 
-GraphEvo è una libreria Swift indipendente, evoluta dalla libreria
-[CosmicMind/Graph](https://github.com/CosmicMind/Graph), che offre un modello a
-grafo basato su Core Data con supporto alla persistenza locale e alla
-sincronizzazione tramite CloudKit.
+GraphEvo is an independent Swift library evolved from
+[CosmicMind/Graph](https://github.com/CosmicMind/Graph). It provides a Core
+Data graph model with local persistence and CloudKit synchronization.
 
-La libreria permette di modellare entità, relazioni e azioni, cercare i dati con
-predicati leggibili e reagire ai cambiamenti attraverso watcher e notifiche.
+The library models entities, relationships, and actions, queries data with
+readable predicates, and reacts to changes through watchers and notifications.
 
-## 📚 Documentazione
+## 📚 Documentation
 
-- [Reference completa delle API pubbliche](docs/api/public-api.md)
-- [Istruzioni operative per agenti IA](AGENTS.md)
-- [Indice della documentazione](docs/README.md)
-- [Guida introduttiva](docs/guides/getting-started.md)
-- [Modello a grafo](docs/concepts/graph-model.md)
-- [Persistenza](docs/concepts/persistence.md)
+- [Complete public API reference](docs/api/public-api.md)
+- [Operational instructions for AI agents](AGENTS.md)
+- [Documentation index](docs/README.md)
+- [Getting started guide](docs/guides/getting-started.md)
+- [Graph model](docs/concepts/graph-model.md)
+- [Persistence](docs/concepts/persistence.md)
 - [CloudKit](docs/concepts/cloudkit.md)
-- [Migrazioni](docs/migrations/overview.md)
+- [Migrations](docs/migrations/overview.md)
 
 ---
 
-## ✨ Funzionalità principali
+## ✨ Main features
 
-- Modello a grafo basato su Core Data con `Entity`, `Relationship` e `Action`
-- Supporto a `NSPersistentCloudKitContainer` e fallback locale
-- Store SQLite compatibile con i percorsi esistenti `GraphEvo_<name>.sqlite`
-- La configurazione a directory usa un percorso canonico indipendente dal backend; i vecchi percorsi `Local/...` e `Cloud/...` vengono riutilizzati automaticamente
-- `Graph(storeURL:)` accetta sia una directory sia un file SQLite esistente, mantenendo invariato il percorso del file esplicito
-- GraphEvo non esegue migrazioni automatiche tra modelli incompatibili: l’app deve migrare il proprio store e poi riaprirlo sul percorso originale
-- Codifica sicura di valori eterogenei tramite `ValueTransformer`
-- Opzioni abilitate: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
-- Delegate `GraphCloudStatusDelegate` per notificare disponibilità iCloud (fallback locale se non disponibile)
-- Watcher e notifiche locali/remoto tramite **Persistent History Tracking**
-- Configurazione CloudKit tramite override runtime o fallback Info.plist
-- La precedenza CloudKit è: configurazione esplicita, override runtime, quindi `Info.plist`
+- Core Data graph model with `Entity`, `Relationship`, and `Action`
+- `NSPersistentCloudKitContainer` support with local fallback
+- SQLite stores compatible with existing `GraphEvo_<name>.sqlite` paths
+- Directory-based configuration with a backend-independent canonical path; legacy `Local/...` and `Cloud/...` paths are reused automatically
+- `Graph(storeURL:)` accepts either a directory or an existing SQLite file and preserves an explicit file path
+- No automatic migration between incompatible models: the app must migrate its store and reopen it at the original path
+- Secure encoding of heterogeneous values through `ValueTransformer`
+- Enabled options: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
+- `GraphCloudStatusDelegate` for iCloud availability notifications, with local fallback when unavailable
+- Local and remote watchers/notifications through **Persistent History Tracking**
+- CloudKit configuration through a runtime override or an Info.plist fallback
+- CloudKit precedence: explicit configuration, runtime override, then `Info.plist`
 
 ---
 
-## 📦 Requisiti
+## 📦 Requirements
 
 - iOS 16+
 - Xcode 15.4+
 - Swift Package Manager
 
-Il modulo pubblico è `GraphEvo`:
+The public module is `GraphEvo`:
 
 ```swift
 import GraphEvo
@@ -52,61 +51,66 @@ import GraphEvo
 let graph = Graph(configuration: configuration)
 ```
 
-Il nome `Graph` resta quello della classe principale e dei concetti di dominio
-dell'API.
+`Graph` remains the name of the main class and the domain concepts exposed by
+the API.
 
-Il prefisso `GraphEvo_` e i relativi percorsi e chiavi interni persistenti sono
-quelli canonici della nuova release. Gli store creati dalle versioni di test
-precedenti con prefisso `GraphCK_` non vengono migrati automaticamente.
+The `GraphEvo_` prefix and its persistent internal paths and keys are
+canonical for the new release. Stores created by earlier test versions with
+the `GraphCK_` prefix are not migrated automatically.
 
-GraphEvo non impone flag `-Xfrontend` o impostazioni di strict concurrency al
-progetto che la integra. Questa scelta mantiene il prodotto consumabile anche
-da target che usano CocoaPods o altre dipendenze SwiftPM con impostazioni
-diverse. Se l'applicazione desidera abilitare il controllo di concorrenza,
-può impostare `SWIFT_STRICT_CONCURRENCY` direttamente sui propri target.
-
----
-
-## 🧪 Test
-
-- Il progetto builda correttamente su iOS 16+
-- I test coprono Watchers sia per notifiche locali che per simulazioni di cambiamenti remoti
-- Compatibilità piena con `Entity`, `Relationship`, `Search`
+GraphEvo does not impose `-Xfrontend` flags or strict-concurrency settings on
+the integrating project. This keeps it consumable by targets using CocoaPods
+or other SwiftPM dependencies with different settings. If the app wants to
+enable concurrency checking, it can set `SWIFT_STRICT_CONCURRENCY` on its own
+targets.
 
 ---
 
-## 📌 Note operative
+## 🧪 Tests
 
-### Migrazione applicativa dello store
-
-GraphEvo verifica la compatibilità del file SQLite prima di aprirlo. Se il modello non è compatibile, espone `GraphStoreOpeningError.incompatibleStore` e lascia invariati percorso, nome e contenuto dello store. La migrazione tra il modello CosmicMind/Graph e quello GraphEvo deve essere eseguita dall’applicazione, che conosce il significato dei propri dati.
+- The project builds correctly on iOS 16+
+- Tests cover watchers for both local notifications and simulated remote changes
+- Full compatibility with `Entity`, `Relationship`, and `Search`
 
 ---
 
-## ☁️ Configurazione CloudKit
+## 📌 Operational notes
 
-Per abilitare la sincronizzazione con il database privato CloudKit, è necessario specificare un **container identifier**.
+### Application-level store migration
 
-È possibile farlo in due modi:
+GraphEvo checks SQLite compatibility before opening a store. If the model is
+incompatible, it exposes `GraphStoreOpeningError.incompatibleStore` and leaves
+the store path, name, and contents unchanged. Migration between the
+CosmicMind/Graph model and the GraphEvo model must be performed by the app,
+which understands the meaning of its own data.
 
-1. **Override a runtime** (consigliato):
+---
+
+## ☁️ CloudKit configuration
+
+To enable synchronization with the private CloudKit database, provide a
+**container identifier**.
+
+1. **Runtime override** (recommended):
+
    ```swift
-   Graph.cloudKitContainerIdentifier = "iCloud.com.tuodominio.laTuaApp"
+   Graph.cloudKitContainerIdentifier = "iCloud.com.yourdomain.yourApp"
    var configuration = GraphStoreConfiguration()
    configuration.name = "Main"
    let graph = Graph(configuration: configuration)
    ```
 
-2. **Info.plist fallback** (opzionale):
-   - Aggiungere una chiave `GraphCloudKitContainerIdentifier` di tipo `String` con valore `iCloud.com.tuodominio.laTuaApp`.
+2. **Info.plist fallback** (optional): add a `String` key named
+   `GraphCloudKitContainerIdentifier` with a value such as
+   `iCloud.com.yourdomain.yourApp`.
 
-Se non viene specificato alcun identifier, lo store funziona comunque in modalità **locale** senza sincronizzazione.
+Without an identifier, the store still works in **local** mode without
+synchronization.
 
-## 📣 Stati, warning ed errori
+## 📣 State, warnings, and errors
 
-GraphEvo non dipende da una piattaforma di logging dell'applicazione. Per
-ricevere gli eventi importanti e gestirli con il logger dell'app, assegnare un
-`GraphEventDelegate`:
+GraphEvo does not depend on an application logging platform. To receive
+important events and route them to the app logger, assign a `GraphEventDelegate`:
 
 ```swift
 final class GraphEvents: GraphEventDelegate {
@@ -127,21 +131,34 @@ let graphEvents = GraphEvents()
 graph.eventDelegate = graphEvents
 ```
 
-`GraphReadiness` descrive esclusivamente l'utilizzabilità tecnica dello store
-e del relativo contesto Core Data. Un errore di una migrazione applicativa viene
-inviato come `GraphFailure.migration`, ma non porta automaticamente la
-readiness a `.failed` se lo store è comunque utilizzabile.
+`GraphReadiness` describes only the technical usability of the store and its
+Core Data context. An application migration error is delivered as
+`GraphFailure.migration`, but does not automatically set readiness to `.failed`
+if the store remains usable.
 
-Gli eventi vengono consegnati sul main thread. Gli stati e gli errori emessi
-durante l'apertura dello store vengono accodati fino all'assegnazione del
-delegate. Le API esistenti (`whenReady`, `GraphCloudStatusDelegate` e le
-completion di `sync`) restano disponibili per compatibilità.
+Events are delivered on the main thread. States and errors emitted while the
+store is opening are queued until a delegate is assigned. Existing APIs
+(`whenReady`, `GraphCloudStatusDelegate`, and `sync` completions) remain
+available for compatibility.
 
-Gli stati, i warning e gli aggiornamenti di avanzamento non vengono stampati
-automaticamente su stdout: l'applicazione è responsabile del loro logging.
-Gli errori non recuperabili restano disponibili anche su stdout come supporto
-diagnostico minimo.
+States, warnings, and progress updates are not printed automatically to
+stdout; the application is responsible for logging them. Unrecoverable errors
+remain available on stdout as minimal diagnostic support.
 
-La scrittura del file JSONL delle migrazioni è disabilitata per default. Se
-necessario per un caso di diagnostica, l'app può abilitarla esplicitamente con
+Migration JSONL file logging is disabled by default. For diagnostics, the app
+can enable it explicitly with
 `GraphMigrationLogger.fileLoggingEnabled = true`.
+
+## License and attribution
+
+GraphEvo is derived from [CosmicMind/Graph](https://github.com/CosmicMind/Graph),
+which is distributed under the MIT License. The original copyright and license
+notice are preserved in [`LICENSE.md`](LICENSE.md).
+
+GraphEvo and its modifications are released under the MIT License. Copyright
+for GraphEvo modifications belongs to the GraphEvo contributors.
+
+GraphEvo includes substantial changes and extensions to the original project,
+including the `GraphEvo` module, updated persistence behavior, migrations,
+CloudKit handling, tools, and documentation. GraphEvo is not affiliated with
+or endorsed by CosmicMind.

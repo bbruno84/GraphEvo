@@ -31,12 +31,11 @@ enum GraphAllowedClasses {
     ]
 }
 
-/// Serializza oggetti legacy (usati nel vecchio campo `object`) in modo sicuro.
-/// Garantisce compatibilità con `GraphValueTransformer`.
+/// Securely archives legacy objects used by the former `object` field.
 public enum GraphArchiver {
     
     /// Serializza un oggetto compatibile in `Data`.
-    /// - Throws: se il tipo non è archiviabile.
+    /// - Throws: if the type cannot be archived.
     public static func archive(_ object: Any) throws -> Data {
         let archivable: Any
 
@@ -78,7 +77,7 @@ public enum GraphArchiver {
         case let url as NSURL:
             archivable = url
         default:
-            // Fallback con log
+            // Fallback with logging.
             let typeName = String(describing: type(of: object))
             throw NSError(domain: "GraphArchiver", code: 99, userInfo: [NSLocalizedDescriptionKey: "Unsupported type for archiving: \(typeName)"])
         }
@@ -87,7 +86,7 @@ public enum GraphArchiver {
     }
     
     /// Deserializza un oggetto da Data usando la whitelist di classi consentite.
-    /// - Throws: se il dato non può essere deserializzato oppure il tipo non è consentito.
+    /// - Throws: if the data cannot be deserialized or the type is not allowed.
     public static func unarchive(_ data: Data) throws -> Any {
         do {
             let classSet = NSSet(array: GraphAllowedClasses.list) as! Set<AnyHashable>
@@ -136,7 +135,7 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
 
             return unarchived
         } catch {
-            print("❌ [GraphValueTransformer] Errore durante l'unarchiviazione: \(error)")
+            print("❌ [GraphValueTransformer] Unarchiving error: \(error)")
             return nil
         }
     }
@@ -147,7 +146,7 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
         do {
             return try GraphArchiver.archive(value)
         } catch {
-            print("❌ [GraphValueTransformer] Errore durante l'archiviazione: \(error)")
+            print("❌ [GraphValueTransformer] Archiving error: \(error)")
             return nil
         }
     }

@@ -44,13 +44,13 @@ final class CleanGraphStoreOpening: XCTestCase {
     func testOpenGraphFromSQLiteFile() throws {
         let bundle = Bundle.graphTests
         guard let legacySQLiteURL = bundle.url(forResource: "Graph", withExtension: "sqlite") else {
-            XCTFail("Graph.sqlite non trovato nel bundle")
+            XCTFail("Graph.sqlite was not found in the bundle")
             return
         }
         let legacyShmURL = bundle.url(forResource: "Graph", withExtension: "sqlite-shm")
         let legacyWalURL = bundle.url(forResource: "Graph", withExtension: "sqlite-wal")
 
-        // 2. Copia in una directory temporanea
+        // 2. Copy to a temporary directory.
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("TestGraphSQLite-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
 

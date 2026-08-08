@@ -1,10 +1,10 @@
 # CloudKit
 
-GraphEvo può usare `NSPersistentCloudKitContainer` per sincronizzare lo store
-privato CloudKit. La sincronizzazione è opzionale: senza un container identifier
-il graph resta locale.
+GraphEvo can use `NSPersistentCloudKitContainer` to synchronize a private
+CloudKit store. Synchronization is optional: without a container identifier,
+the graph remains local.
 
-## Configurazione
+## Configuration
 
 ```swift
 var configuration = GraphStoreConfiguration()
@@ -14,36 +14,37 @@ configuration.cloudKitContainerIdentifier = "iCloud.com.example.app"
 let graph = Graph(configuration: configuration)
 ```
 
-È possibile usare anche l’override runtime:
+A runtime override is also available:
 
 ```swift
 Graph.cloudKitContainerIdentifier = "iCloud.com.example.app"
 ```
 
-Come fallback, GraphEvo legge `GraphCloudKitContainerIdentifier` da Info.plist.
-L’ordine di precedenza è configurazione esplicita, override runtime e Info.plist.
+As a fallback, GraphEvo reads `GraphCloudKitContainerIdentifier` from
+Info.plist. Precedence is explicit configuration, runtime override, then
+Info.plist.
 
-## Cosa succede se CloudKit non è disponibile
+## When CloudKit is unavailable
 
-GraphEvo può aprire un normale store locale come fallback. L’app riceve un
-`GraphWarning.cloudStoreFallback` e uno stato `GraphPersistenceMode` coerente.
-Questo consente di mantenere l’app utilizzabile, ma significa che i dati creati
-durante il fallback non sono necessariamente sincronizzati.
+GraphEvo can open a regular local store as a fallback. The app receives
+`GraphWarning.cloudStoreFallback` and a matching `GraphPersistenceMode` state.
+This keeps the app usable, but data created during fallback is not necessarily
+synchronized.
 
-Per osservare gli stati usare `GraphEventDelegate` e, se serve il contratto
-legacy, `GraphCloudStatusDelegate`.
+Observe states through `GraphEventDelegate` and, when needed for the legacy
+contract, `GraphCloudStatusDelegate`.
 
-## Purge remoto dello store
+## Remote store purge
 
-Per gli strumenti amministrativi l’app può chiedere a GraphEvo di eliminare
-la zona Core Data dal database CloudKit privato:
+Administrative tools can ask GraphEvo to delete the Core Data zone from the
+private CloudKit database:
 
 ```swift
 graph.purgeCloudStore { result in
     switch result {
     case .success:
-        // L'app deve riaprire o ricreare lo store locale e
-        // azzerare token e persistent history locali.
+        // The app must reopen or recreate the local store and
+        // clear local tokens and Persistent History.
         break
     case .failure(let error):
         print(error.localizedDescription)
@@ -51,24 +52,24 @@ graph.purgeCloudStore { result in
 }
 ```
 
-L’API opera solo su un `NSPersistentCloudKitContainer` realmente caricato con
-uno store configurato per CloudKit. Non cancella file SQLite, non ricrea lo
-store e non esegue il purge durante i test o su un fallback locale. Il reset
-locale e la gestione dei token/history restano responsabilità dell’app.
+The API operates only on an `NSPersistentCloudKitContainer` actually loaded
+with a CloudKit-configured store. It does not delete SQLite files, recreate the
+store, or purge during tests or on a local fallback. Local reset and token/
+history management remain the app's responsibility.
 
-## Completamento degli import CloudKit
+## CloudKit import completion
 
-L’app può osservare gli import completati tramite `GraphCloudSyncDelegate`:
+The app can observe completed imports through `GraphCloudSyncDelegate`:
 
 ```swift
 final class SyncDelegate: GraphCloudSyncDelegate {
     func graph(_ graph: Graph, didCompleteCloudImport event: GraphCloudImportEvent) {
         guard event.succeeded else {
-            // Gestire event.error senza considerare l'import riuscito.
+            // Handle event.error without treating the import as successful.
             return
         }
         if event.isInitialImport {
-            // Eventuale operazione post-import dell'app.
+            // Optional app-specific post-import operation.
         }
     }
 }
@@ -77,32 +78,32 @@ let syncDelegate = SyncDelegate()
 graph.cloudSyncDelegate = syncDelegate
 ```
 
-`NSPersistentCloudKitContainer` non espone un evento nativo distinto per il
-primo sync. GraphEvo identifica il primo import combinando lo stato iniziale
-della replica locale (store vuoto e senza oggetti locali) con il primo evento
-`.import` completato per quello store. Sono considerati solo eventi terminati;
-`.setup` ed `.export` non generano callback. Il callback è consegnato sulla
-coda principale, viene deduplicato per `event.identifier` e non garantisce che
-non arrivino ulteriori import successivi. L’app può usare questo segnale per
-avviare operazioni post-import, come una deduplicazione esplicitamente
-controllata, ma GraphEvo non esegue alcuna deduplicazione automatica.
+`NSPersistentCloudKitContainer` does not expose a distinct native event for
+the first sync. GraphEvo identifies the first import by combining the initial
+local replica state (an empty store with no local objects) with the first
+completed `.import` event for that store. Only completed events count; `.setup`
+and `.export` do not trigger callbacks. The callback is delivered on the main
+queue, deduplicated by `event.identifier`, and does not guarantee that later
+imports will not arrive. The app may use this signal for controlled post-import
+operations such as explicit deduplication; GraphEvo performs no automatic
+deduplication.
 
-## Requisiti applicativi
+## Application requirements
 
-L’app che integra GraphEvo deve configurare in Xcode:
+An app integrating GraphEvo must configure in Xcode:
 
-- capability iCloud/CloudKit;
-- container identifier valido;
-- ambiente CloudKit corretto;
-- permessi e modello compatibili con i dati.
+- the iCloud/CloudKit capability;
+- a valid container identifier;
+- the correct CloudKit environment;
+- permissions and a model compatible with the data.
 
-GraphEvo non può sostituire la configurazione delle capability dell’app.
+GraphEvo cannot replace the app's capability configuration.
 
-## Cambiamenti remoti
+## Remote changes
 
-I cambiamenti provenienti da CloudKit passano attraverso Persistent History,
-vengono fusi nel contesto osservato e poi inoltrati ai watcher con
-`GraphSource.cloud`. Vedere [Persistent History](../migrations/persistent-history.md).
+CloudKit changes pass through Persistent History, are merged into the observed
+context, and are then forwarded to watchers with `GraphSource.cloud`. See
+[Persistent History](../migrations/persistent-history.md).
 
-In produzione mantenere callback idempotenti e verificare il comportamento con
-più dispositivi: notifiche locali e remote possono avere tempi diversi.
+In production, keep callbacks idempotent and verify behavior across multiple
+devices: local and remote notifications may arrive at different times.

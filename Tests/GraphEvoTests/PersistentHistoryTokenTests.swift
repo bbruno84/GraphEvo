@@ -8,12 +8,12 @@
 import XCTest
 @testable import GraphEvo
 
-/// Questi test NON generano vere transazioni di Persistent History (serve CloudKit reale).
+/// These tests do NOT create real Persistent History transactions (real CloudKit is required).
 /// Validano invece:
-/// - bootstrap senza token
-/// - idempotenza dell'handler in assenza di transazioni
-/// - comportamento con token corrotto (no crash, no token “magico”)
-/// - wiring del filtro autore (sanity)
+/// - bootstrap without a token
+/// - handler idempotence without transactions
+/// - corrupt-token behavior (no crash, no unexpected token)
+/// - author-filter wiring (sanity check)
 
 final class PersistentHistoryTokenTests: XCTestCase {
 
@@ -27,7 +27,7 @@ final class PersistentHistoryTokenTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Crea un `Graph` col nome richiesto (nuovo store per test), matching lo stile dei vostri test.
+    /// Creates a `Graph` with the requested name (a new store for each test).
     private func makeGraph(named graphName: String) -> Graph {
         var config = GraphStoreConfiguration()
         config.name = graphName
@@ -49,8 +49,8 @@ final class PersistentHistoryTokenTests: XCTestCase {
         g.ph_debug_clearToken()
         XCTAssertFalse(g.ph_debug_lastTokenExists(), "Token should not exist at bootstrap")
 
-        // Simula l’arrivo della notifica remota chiamando direttamente l’handler:
-        // in assenza di transazioni di PH, non deve crashare né creare token.
+        // Simulate a remote notification by calling the handler directly:
+        // Without PH transactions, this must not crash or create a token.
         g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
         waitForHistoryProcessingToSettle()
 
@@ -63,7 +63,7 @@ final class PersistentHistoryTokenTests: XCTestCase {
         g.ph_debug_clearToken()
         XCTAssertFalse(g.ph_debug_lastTokenExists())
 
-        // Più invocazioni consecutive: nessun token deve apparire senza transazioni PH reali.
+        // Repeated invocations: no token should appear without real PH transactions.
         for _ in 0..<3 {
             g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
         }
@@ -79,9 +79,9 @@ final class PersistentHistoryTokenTests: XCTestCase {
         g.ph_debug_clearToken()
         XCTAssertFalse(g.ph_debug_lastTokenExists())
 
-        // Corrompe il file token su disco e invoca l’handler:
-        // il load fallisce ma non deve crashare, e senza transazioni valide
-        // non deve apparire alcun token.
+        // Corrupt the token file on disk and invoke the handler:
+        // Loading may fail, but must not crash; without valid transactions,
+        // no token should appear.
         g.ph_debug_corruptTokenOnDisk()
         g.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
         waitForHistoryProcessingToSettle()
@@ -198,17 +198,4 @@ final class PersistentHistoryTokenTests: XCTestCase {
         XCTAssertTrue(secondURL.path.contains("PersistentHistory"))
     }
 
-    // MARK: - (Facoltativo) Segnaposto per integrazione reale con CloudKit
-    // Abilitare solo quando si eseguono test strumentali su device:
-    //
-    // func test_AdvanceToken_AfterRealRemoteSync() {
-    //     let g = makeGraph(named: "PH-Advance-\(UUID().uuidString)")
-    //     g.ph_debug_clearToken()
-    //     XCTAssertFalse(g.ph_debug_lastTokenExists())
-    //
-    //     // 1) Da un altro device: eseguire un inserimento che arrivi su questo store.
-    //     // 2) Attendere che il container pubblichi .NSPersistentStoreRemoteChange (l’handler viene chiamato).
-    //     // 3) Verificare che il token ora esista:
-    //     // XCTAssertTrue(g.ph_debug_lastTokenExists())
-    // }
 }

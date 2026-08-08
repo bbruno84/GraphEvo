@@ -1,9 +1,9 @@
-# Persistenza e URL degli store
+# Persistence and store URLs
 
-GraphEvo usa Core Data per persistere i dati. Il backend predefinito è SQLite;
-per i test e gli scenari temporanei è disponibile anche uno store in-memory.
+GraphEvo uses Core Data to persist data. SQLite is the default backend; an
+in-memory store is also available for tests and temporary scenarios.
 
-## Configurazione minima
+## Minimal configuration
 
 ```swift
 var configuration = GraphStoreConfiguration()
@@ -11,42 +11,40 @@ configuration.name = "Main"
 let graph = Graph(configuration: configuration)
 ```
 
-Il nome produce il file canonico `GraphEvo_Main.sqlite` quando `location` è una
-directory.
+When `location` is a directory, the name produces the canonical
+`GraphEvo_Main.sqlite` file.
 
-## Directory o file?
+## Directory or file?
 
-`location` è interpretata come file esplicito solo se la sua estensione è
-`.sqlite`. Altrimenti viene trattata come directory.
+`location` is interpreted as an explicit file only when its extension is
+`.sqlite`. Otherwise it is treated as a directory.
 
 ```swift
-// Directory: GraphEvo costruisce il nome finale.
+// Directory: GraphEvo builds the final name.
 configuration.location = URL(fileURLWithPath: "/tmp/MyApp/Graph", isDirectory: true)
 // /tmp/MyApp/Graph/GraphEvo_Main.sqlite
 
-// File: il percorso completo viene mantenuto.
+// File: the complete path is preserved.
 configuration.location = URL(fileURLWithPath: "/tmp/MyApp/custom.sqlite")
 // /tmp/MyApp/custom.sqlite
 ```
 
-Usare `URL(fileURLWithPath:)` per percorsi locali. Non concatenare manualmente
-stringhe `file://` e non passare URL HTTP a Core Data.
+Use `URL(fileURLWithPath:)` for local paths. Do not concatenate `file://`
+strings manually or pass HTTP URLs to Core Data.
 
-## Le proprietà URL
+## URL properties
 
-- `resolvedLocation` è la directory di lavoro dopo l’eventuale risoluzione App
-  Group.
-- `storeURL` è il percorso canonico calcolato dalla configurazione.
-- `resolvedStoreURL` è il percorso che GraphEvo aprirà davvero.
+- `resolvedLocation` is the working directory after any App Group resolution.
+- `storeURL` is the canonical path calculated from the configuration.
+- `resolvedStoreURL` is the path GraphEvo will actually open.
 
-La differenza è importante quando esiste uno store legacy. Il percorso canonico
-può non esistere, mentre `resolvedStoreURL` può puntare a un vecchio percorso
-riutilizzato.
+The difference matters when a legacy store exists. The canonical path may not
+exist while `resolvedStoreURL` points to a reused legacy path.
 
-## Store legacy
+## Legacy stores
 
-Con una configurazione a directory GraphEvo controlla, oltre al percorso
-canonico, layout precedenti come:
+For directory-based configuration, GraphEvo checks layouts such as these in
+addition to the canonical path:
 
 ```text
 <directory>/Graph.sqlite
@@ -54,44 +52,44 @@ canonico, layout precedenti come:
 <directory>/Cloud/<name>/GraphEvo_<name>.sqlite
 ```
 
-Un file esplicito `.sqlite` non attiva questa ricerca: quel file è la scelta
-autoritativa dell’applicazione.
+An explicit `.sqlite` file does not trigger this search; that file is the
+application's authoritative choice.
 
 ## App Group
 
-Se `appGroupIdentifier` è valorizzato e `location` è una directory, GraphEvo
-usa il container dell’App Group e il percorso `CosmicMind/Graph/`. Se il sistema
-non riesce a risolvere l’App Group, viene mantenuta la directory configurata.
+When `appGroupIdentifier` is set and `location` is a directory, GraphEvo uses
+the App Group container and the `CosmicMind/Graph/` path. If the system cannot
+resolve the App Group, the configured directory is retained.
 
-Un file SQLite esplicito ha sempre la precedenza e non viene spostato nell’App
-Group automaticamente.
+An explicit SQLite file always takes precedence and is not moved to the App
+Group automatically.
 
-## Backend in-memory
+## In-memory backend
 
 ```swift
 configuration.backend = .inMemory
 ```
 
-Il database vive solo in memoria. Le proprietà URL continuano a essere
-calcolate per coerenza, ma non rappresentano un file che verrà conservato.
+The database exists only in memory. URL properties are still calculated for
+consistency, but they do not identify a file that will be retained.
 
-## Readiness ed errori
+## Readiness and errors
 
-`GraphReadiness` descrive lo stato tecnico:
+`GraphReadiness` describes the technical state:
 
-- `.initializing`: apertura in corso;
-- `.ready`: store e contesto utilizzabili;
-- `.failed(error)`: apertura fallita.
+- `.initializing`: opening is in progress;
+- `.ready`: the store and context are usable;
+- `.failed(error)`: opening failed.
 
-Gli errori principali sono `incompatibleStore`, `unreadableStore` e
-`failedToLoadStore`. In caso di incompatibilità GraphEvo non modifica il file.
+The main errors are `incompatibleStore`, `unreadableStore`, and
+`failedToLoadStore`. For an incompatibility, GraphEvo does not modify the file.
 
-## Salvataggio
+## Saving
 
-- `sync()` salva in modo sincrono;
-- `async()` salva in background;
-- `clear()` cancella gli oggetti e salva;
-- `reset()` resetta il contesto senza cancellare il file.
+- `sync()` saves synchronously;
+- `async()` saves in the background;
+- `clear()` deletes objects and saves;
+- `reset()` resets the context without deleting the file.
 
-Per i lavori in background usare `newBackgroundContext()` e rispettare la
-concurrency queue del contesto Core Data.
+For background work, use `newBackgroundContext()` and respect the Core Data
+context's concurrency queue.

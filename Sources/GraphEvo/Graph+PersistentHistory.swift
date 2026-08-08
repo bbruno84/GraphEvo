@@ -9,7 +9,7 @@ import Foundation
 import CoreData
 import ObjectiveC.runtime
 
-// MARK: - Token store su disco (Application Support o App Group opzionale)
+// MARK: - Token store on disk (Application Support or optional App Group)
 
 private final class HistoryTokenStore {
     fileprivate enum LoadResult {
@@ -23,7 +23,7 @@ private final class HistoryTokenStore {
     private let backupKeyPrefix: String
     private let reportError: (Error) -> Void
 
-    // MARK: - Local shadow backup (UserDefaults) per la *stessa installazione*
+    // MARK: - Local shadow backup (UserDefaults) for the *same installation*
     private let backupDefaults: UserDefaults
 
     fileprivate init(
@@ -81,7 +81,7 @@ private final class HistoryTokenStore {
         backupKeyPrefix
     }
 
-    /// Carica il token dal backup in UserDefaults (stessa installazione)
+    /// Loads the token from the UserDefaults backup (same installation).
     func loadBackup() -> NSPersistentHistoryToken? {
         switch loadBackupResult() {
         case .loaded(let token): return token
@@ -101,14 +101,14 @@ private final class HistoryTokenStore {
         }
     }
 
-    /// Salva il token anche nel backup (UserDefaults)
+    /// Also saves the token to the UserDefaults backup.
     func saveBackup(_ token: NSPersistentHistoryToken) {
         if let data = try? NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true) {
             backupDefaults.set(data, forKey: backupKey())
         }
     }
 
-    /// Pulisce il backup (UserDefaults)
+    /// Clears the UserDefaults backup.
     func clearBackup() {
         backupDefaults.removeObject(forKey: backupKey())
     }
@@ -137,7 +137,7 @@ private final class HistoryTokenStore {
         do {
             let data = try NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true)
             try data.write(to: url, options: [.atomic])
-            // Mantieni anche un backup locale (fallback namespace)
+            // Keep a local backup as well (fallback namespace).
             self.saveBackup(token)
         } catch {
             reportError(error)
@@ -152,24 +152,24 @@ private final class HistoryTokenStore {
         } catch {
             reportError(error)
         }
-        // Pulisci anche il backup di fallback
+        // Clear the fallback backup as well.
         self.clearBackup()
     }
 
     func bootstrapTokenToCurrentHead(using context: NSManagedObjectContext) {
         context.performAndWait {
-            // Chiedi la history dal "beginning" senza filtrare: solo transazioni.
+            // Request history from the "beginning" without filtering: transactions only.
             let req = NSPersistentHistoryChangeRequest.fetchHistory(after: nil as NSPersistentHistoryToken?)
             req.resultType = .transactionsOnly
-            // ⚠️ Non impostare req.fetchRequest (niente sort/limit SQL su "timestamp")
+            // ⚠️ Do not set req.fetchRequest (no SQL sort/limit on "timestamp").
 
             do {
                 guard let result = try context.execute(req) as? NSPersistentHistoryResult else {return}
 
-                // Può essere NSNull se non ci sono transazioni
+                // May be NSNull when there are no transactions.
                 guard let txs = result.result as? [NSPersistentHistoryTransaction], !txs.isEmpty else {return}
 
-                // Ordina in memoria per timestamp (o semplicemente prendi la max per data)
+                // Sort in memory by timestamp (or simply take the latest date).
                 if let newest = txs.max(by: { lhs, rhs in lhs.timestamp < rhs.timestamp }) {
                     self.save(newest.token)
                 }
@@ -180,21 +180,21 @@ private final class HistoryTokenStore {
     }
     
 #if DEBUG
-    // DEBUG: sovrascrive il file token con dati non validi per simulare corruzione
+    // DEBUG: overwrite the token file with invalid data to simulate corruption.
     func debugCorruptOnDisk() {
         let junk = Data("not-a-token".utf8)
         try? junk.write(to: url, options: [.atomic])
-        // Non serve aggiornare _ph_lastToken qui: l'intento è simulare un token corrotto su disco.
+        // Do not update _ph_lastToken here: this simulates a token corrupted on disk.
     }
 
-    // DEBUG: verifica se il file token esiste su disco
+    // DEBUG: verify that the token file exists on disk.
     func debugTokenFileExists() -> Bool {
         return FileManager.default.fileExists(atPath: url.path)
     }
 #endif
 }
 
-// MARK: - Associated storage per Graph (no stored properties nelle extension)
+// MARK: - Associated storage for Graph (no stored properties in extensions)
 
 private enum _GraphPHKeys {
     // Use stable addressable keys for objc associated objects
@@ -248,7 +248,7 @@ private extension Graph {
         set { objc_setAssociatedObject(self, &_GraphPHKeys.bootstrapFlagKey, NSNumber(value: newValue), .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
 
-    /// Flag di sessione: true alla prima esecuzione (app "fredda" subito dopo install/launch), false successivamente.
+    /// Session flag: true on the first run (a "cold" app after install/launch), false afterwards.
     var _ph_isColdStartSession: Bool {
         get { (objc_getAssociatedObject(self, &_GraphPHKeys.coldStartFlagKey) as? NSNumber)?.boolValue ?? true }
         set { objc_setAssociatedObject(self, &_GraphPHKeys.coldStartFlagKey, NSNumber(value: newValue), .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
@@ -266,7 +266,7 @@ private extension Graph {
         return nil
     }
 
-    /// Marca l'avvio e determina se è una cold-start session (solo per questa installazione).
+    /// Marks startup and determines whether this is a cold-start session (this installation only).
     func _ph_markLaunchAndDetectColdStart() {
         let defaults = UserDefaults.standard
         let key = "GraphEvo.hasLaunchedOnce"
@@ -293,11 +293,11 @@ internal extension Graph {
         // Lazy load dal disco alla primissima occorrenza
         _ph_loadPersistedTokenIfNeeded()
 
-        // Se il token è ancora nil, scegli la strategia corretta in base alla sessione
+            // If the token is still nil, choose the strategy for this session.
         if _ph_lastToken == nil {
-            // Sessione calda → ripristina dal backup o bootstrap to head
+            // Warm session → restore from backup or bootstrap to head.
             _ph_restoreFromBackupOrBootstrapIfWarmSession()
-            // Se invece è cold start, l’helper non fa nulla e lasciamo il replay completo
+            // For a cold start, the helper does nothing and allows the full replay.
         }
 
         // The coordinator owns ordering, coalescing and delivery.
@@ -314,7 +314,7 @@ public extension Graph {
         _ph_markLaunchAndDetectColdStart()
         // Load token from disk (if any)
         _ph_loadPersistedTokenIfNeeded()
-        // Warm session & token mancante → prova il backup locale (UserDefaults)
+        // Warm session and missing token → try the local UserDefaults backup.
         if _ph_lastToken == nil, _ph_isColdStartSession == false {
             _ph_restoreFromBackupOrBootstrapIfWarmSession()
         }
@@ -349,13 +349,13 @@ internal extension Graph {
         bg.perform { [weak self] in
             guard let self = self else { completion(false); return }
 
-            // Richiesta: tutte le transazioni dopo l’ultimo token noto
+            // Request: all transactions after the latest known token.
             let token: NSPersistentHistoryToken? = self._ph_lastToken
             let request: NSPersistentHistoryChangeRequest = NSPersistentHistoryChangeRequest.fetchHistory(after: token)
 
-            // Nota: niente filtro SQL su `storeID`.
-            // Alcune configurazioni non espongono `storeID` nell'entità TRANSACTION → crash.
-            // Se servirà filtrare per store in multi-store, farlo *dopo* il fetch in memoria.
+            // Note: no SQL filter on `storeID`.
+            // Some configurations do not expose `storeID` on the TRANSACTION entity and crash.
+            // If multi-store filtering is needed, do it *after* the in-memory fetch.
 
             do {
                 guard let result = try bg.execute(request) as? NSPersistentHistoryResult,
@@ -368,30 +368,21 @@ internal extension Graph {
                 let orderedTransactions = transactions.sorted { $0.timestamp < $1.timestamp }
 
 
-                // Raccogliamo gli ObjectID per tipo di change
+                // Collect ObjectIDs by change type.
                 var insertedIDs: [NSManagedObjectID] = []
                 var updatedIDs:  [NSManagedObjectID] = []
                 var deletedIDs:  [NSManagedObjectID] = []
 
                 for tx in orderedTransactions {
-//                    #if DEBUG
-//                    let a = tx.author ?? "nil"
-//                    let cn = tx.contextName ?? "nil"
-//                    print("[PH] tx: author=\(a) contextName=\(cn) changes=\(tx.changes?.count ?? 0)")
-//                    #endif
-
-                    // 🔒 Hardening filtro autore: evita doppio callback sull’originatore
+                    // 🔒 Author-filter hardening: avoid a duplicate callback on the originating device.
                     if _ph_filterLocalWrites {
                         if let author = tx.author {
                             if author == _ph_appAuthor {
-//                                #if DEBUG
-//                                print("[PH] skip self-authored transaction (author=\(author))")
-//                                #endif
                                 continue
                             }
                         } else {
-                            // author == nil → probabile salvataggio da un contesto senza transactionAuthor
-                            // Questo può causare il doppio scatto su A dopo bootstrap del token.
+                            // author == nil → likely saved by a context without a transactionAuthor.
+                            // This can cause a duplicate callback on A after token bootstrap.
                             self.emit(.warning(.persistentHistoryMissingTransactionAuthor))
                         }
                     }
@@ -406,15 +397,15 @@ internal extension Graph {
                     }
                 }
 
-                // Se non c'è nulla, esci
+                // Nothing to process; return.
                 if insertedIDs.isEmpty, updatedIDs.isEmpty, deletedIDs.isEmpty {
                     self.persistPersistentHistoryToken(orderedTransactions.last?.token)
                     completion(true)
                     return
                 }
 
-                // Costruisci userInfo nel formato atteso dai Watch:
-                // NSSet di NSManagedObjectID (i Watch sanno convertirli in NSManagedObject col moc)
+                // Build userInfo in the format expected by Watch:
+                // an NSSet of NSManagedObjectID values, which Watch converts through its context.
                 let userInfo: [AnyHashable: Any] = [
                     NSInsertedObjectsKey: NSSet(array: insertedIDs),
                     NSUpdatedObjectsKey:  NSSet(array: updatedIDs),
@@ -435,7 +426,7 @@ internal extension Graph {
                     return
                 }
 
-                // Prima di postare la notifica, chiama GraphMigrationManager.handleRemoteEntityChanges
+                // Notify GraphMigrationManager.handleRemoteEntityChanges before posting the notification.
                 GraphMigrationManager.handleRemoteEntityChanges(
                     configuration: self.configuration,
                     graph: self,
@@ -559,21 +550,18 @@ private extension Graph {
         return false
     }
 
-    /// Se il token è mancante *in una sessione calda*, prova a ripristinarlo dal backup.
-    /// Se non esiste un backup, fai bootstrap alla head per evitare replay e doppi callback.
+    /// If the token is missing *in a warm session*, try to restore it from backup.
+    /// Without a backup, bootstrap to the head to avoid replay and duplicate callbacks.
     func _ph_restoreFromBackupOrBootstrapIfWarmSession() {
-        // Se abbiamo già un token in memoria, nulla da fare.
+        // A token already in memory needs no work.
         guard _ph_lastToken == nil else { return }
 
-        // Se è davvero una cold start session, lasciamo il replay completo.
+        // For a true cold-start session, allow the full replay.
         guard _ph_isColdStartSession == false else {
-//            #if DEBUG
-//            print("[PH] cold start: history replay from beginning (forced, no bootstrap)")
-//            #endif
             return
         }
 
-        // 1) Prova prima il backup su UserDefaults (stessa installazione / warm session)
+        // 1) Try the UserDefaults backup first (same installation / warm session).
         switch _ph_tokenStore.loadBackupResult() {
         case .loaded(let backup):
             _ph_lastToken = backup
@@ -590,7 +578,7 @@ private extension Graph {
             break
         }
 
-        // 2) Nessun backup disponibile → bootstrap alla head per evitare replay integrale
+        // 2) No backup available → bootstrap to the head to avoid a full replay.
         if let container = persistentContainer {
             let bg = container.newBackgroundContext()
             bg.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
@@ -617,13 +605,13 @@ private extension Graph {
 #if DEBUG
 @objc
 public extension Graph {
-    /// Cancella token in memoria e su disco
+    /// Clears the token in memory and on disk.
     func ph_debug_clearToken() {
         _ph_lastToken = nil
         _ph_tokenStore.clear()
     }
 
-    /// True se esiste un token in memoria o su disco
+    /// Returns true when a token exists in memory or on disk.
     func ph_debug_lastTokenExists() -> Bool {
         if _ph_lastToken != nil {
             return true
@@ -631,7 +619,7 @@ public extension Graph {
         return _ph_tokenStore.load() != nil
     }
 
-    /// Corrompe intenzionalmente il token su disco (per testare il recovery)
+    /// Intentionally corrupts the token on disk (to test recovery).
     func ph_debug_corruptTokenOnDisk() {
         _ph_tokenStore.debugCorruptOnDisk()
     }
@@ -641,21 +629,21 @@ public extension Graph {
         _ph_tokenStore.tokenURL
     }
 
-    /// Stampa autore configurato e nome del contesto attuale
+    /// Prints the configured author and current context name.
     func ph_debug_printAuthorAndContext() {
         let author = _ph_appAuthor
         let ctxName = (managedObjectContext?.name) ?? "nil"
         print("[PH][DEBUG] author=\(author) viewContext.name=\(ctxName)")
     }
 
-    /// Stampa stato sintetico del token (mem/disk)
+    /// Prints a compact token state (memory/disk).
     func ph_debug_printTokenStatus() {
         let mem = (_ph_lastToken != nil) ? "mem=YES" : "mem=NO"
         let disk = (_ph_tokenStore.load() != nil) ? "disk=YES" : "disk=NO"
         print("[PH][DEBUG] token: \(mem), \(disk)")
     }
 
-    /// DEBUG: abilita/disabilita il bootstrap del token alla head su cold start
+    /// DEBUG: enables or disables token bootstrap to the head on cold start.
     @objc func ph_debug_setBootstrapOnColdStart(_ enabled: Bool) {
         _ph_bootstrapToHeadOnColdStart = enabled
     }

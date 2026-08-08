@@ -22,8 +22,8 @@ final class GraphProvider: NSObject, GraphCloudStatusDelegate {
     private(set) var lastError: GraphStoreOpeningError?
 
     private override init() {
-        // Deve corrispondere al container abilitato negli entitlements e nel
-        // Developer Portal. L'ambiente CloudKit viene scelto da Xcode/account.
+        // Must match the container enabled in entitlements and the Developer
+        // Portal. Xcode/account selects the CloudKit environment.
         Graph.cloudKitContainerIdentifier = "iCloud.com.valerioburiani.GraphCKDemo"
 
         var configuration = GraphStoreConfiguration()
@@ -39,11 +39,11 @@ final class GraphProvider: NSObject, GraphCloudStatusDelegate {
             case .success:
                 self.readiness = .ready
                 self.lastError = nil
-                print("✅ GraphCKDemo Graph pronto: \(self.graph.location.path)")
+                print("✅ GraphCKDemo graph ready: \(self.graph.location.path)")
             case .failure(let error):
                 self.readiness = .failed(error)
                 self.lastError = error
-                print("❌ GraphCKDemo Graph non pronto: \(error.localizedDescription)")
+                print("❌ GraphCKDemo graph not ready: \(error.localizedDescription)")
             }
             self.publishStateChange()
         }
@@ -56,7 +56,7 @@ final class GraphProvider: NSObject, GraphCloudStatusDelegate {
 
     func graphIfReady() -> Graph? {
         guard isReady else {
-            print("⏳ GraphCKDemo: Graph non ancora pronto")
+            print("⏳ GraphCKDemo: graph is not ready yet")
             return nil
         }
         return graph
@@ -71,16 +71,16 @@ final class GraphProvider: NSObject, GraphCloudStatusDelegate {
 
     func readinessDescription() -> String {
         switch readiness {
-        case .initializing: return "Graph: apertura in corso"
-        case .ready: return "Graph: pronto"
-        case .failed(let error): return "Graph: errore — \(error.localizedDescription)"
+        case .initializing: return "Graph: opening"
+        case .ready: return "Graph: ready"
+        case .failed(let error): return "Graph: error — \(error.localizedDescription)"
         }
     }
 
     func cloudStatusDescription() -> String {
         switch cloudStatus {
-        case .available: return "CloudKit: account disponibile"
-        case .unavailable: return "CloudKit: account non disponibile"
+        case .available: return "CloudKit: account available"
+        case .unavailable: return "CloudKit: account unavailable"
         }
     }
 

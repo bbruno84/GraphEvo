@@ -1,9 +1,9 @@
-# Guide pratiche
+# Practical guides
 
-Questa sezione raccoglierà le guide passo passo per integrare GraphEvo in
-un’applicazione.
+This section contains step-by-step guides for integrating GraphEvo into an
+application.
 
-Documenti previsti:
+Documents:
 
 - `getting-started.md`
 - `search-and-predicates.md`

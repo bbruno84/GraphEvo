@@ -16,7 +16,7 @@ enum GraphTools {
         let exportDir = FileManager.default.temporaryDirectory.appendingPathComponent("ExportedImages", isDirectory: true)
         
         do {
-            // Crea la cartella se non esiste
+            // Create the directory when it does not exist.
             if !FileManager.default.fileExists(atPath: exportDir.path) {
                 try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
             }
@@ -30,14 +30,14 @@ enum GraphTools {
                 return nil
             }
             
-            // Salva su disco
+            // Save to disk.
             try data.write(to: fileURL)
-            print("✅ Immagine salvata: \(fileURL.path)")
+            print("✅ Image saved: \(fileURL.path)")
             
             return fileURL
             
         } catch {
-            print("❌ Errore salvataggio immagine '\(name)': \(error)")
+            print("❌ Image save error '\(name)': \(error)")
             return nil
         }
     }
@@ -47,7 +47,7 @@ enum GraphTools {
         let exportDir = FileManager.default.temporaryDirectory.appendingPathComponent("ExportedDocuments", isDirectory: true)
         
         do {
-            // Crea la cartella se non esiste
+            // Create the directory when it does not exist.
             if !FileManager.default.fileExists(atPath: exportDir.path) {
                 try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
             }
@@ -61,14 +61,14 @@ enum GraphTools {
                 return nil
             }
             
-            // Salva su disco
+            // Save to disk.
             try data.write(to: fileURL)
-            print("✅ Documento salvato: \(fileURL.path)")
+            print("✅ Document saved: \(fileURL.path)")
             
             return fileURL
             
         } catch {
-            print("❌ Errore salvataggio PDF '\(name)': \(error)")
+            print("❌ PDF save error '\(name)': \(error)")
             return nil
         }
     }

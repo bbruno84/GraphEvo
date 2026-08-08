@@ -1,18 +1,18 @@
-# Migrazioni
+# Migrations
 
-Una migrazione è una trasformazione applicativa dei dati già salvati. GraphEvo
-fornisce il lifecycle e il ledger, ma non decide come interpretare i dati
-dell’applicazione.
+A migration is an application-level transformation of saved data. GraphEvo
+provides the lifecycle and ledger, but does not decide how to interpret the
+application's data.
 
-## Quando serve
+## When a migration is needed
 
-Serve una migrazione quando cambia il significato dei dati, il formato delle
-proprietà, il modo di identificare un’entità o la struttura delle relazioni.
-Un cambio incompatibile del modello Core Data non viene migrato automaticamente.
+Use a migration when the meaning or format of properties, entity identity, or
+relationship structure changes. An incompatible Core Data model change is not
+migrated automatically.
 
-## Contratto
+## Contract
 
-Implementare `GraphMigration`:
+Implement `GraphMigration`:
 
 ```swift
 struct AddNoteStatus: GraphMigration {
@@ -35,53 +35,49 @@ struct AddNoteStatus: GraphMigration {
         context: GraphMigrationContext?,
         completion: @escaping (GraphMigrationResult) -> Void
     ) {
-        // trasformare i dati...
+        // Transform data...
         completion(.done)
     }
 }
 ```
 
-Le altre funzioni del protocollo consentono di definire backup, gestione dei
-cambiamenti remoti, riconoscimento di completamenti legacy e reset dello stato.
+Other protocol functions define backup behavior, remote-change handling, legacy
+completion recognition, and state reset.
 
-## Fasi
+## Phases
 
-- `.preInit`: prima dell’apertura completa del graph;
-- `.postInit`: dopo l’inizializzazione;
-- `.postMigration`: fase dedicata alle migrazioni;
-- `.ready`: graph pronto per l’uso normale.
+- `.preInit`: before the graph fully opens;
+- `.postInit`: after initialization;
+- `.postMigration`: the migration phase;
+- `.ready`: the graph is ready for normal use.
 
-Registrare le migrazioni prima di creare il graph:
+Register migrations before creating the graph:
 
 ```swift
 GraphMigrationManager.registerMigration(AddNoteStatus())
 ```
 
-La registrazione avviene una sola volta per `id` e l’esecuzione segue l’ordine
-di registrazione.
+Registration occurs once per `id`, and execution follows registration order.
 
-## Risultati e stato
+## Results and state
 
-La completion riceve `GraphMigrationResult`:
+The completion receives `GraphMigrationResult`: `.done` for completion,
+`.error(Error)` for failure, `.fallback` for an alternative path, and
+`.skipped` when no migration is required.
 
-- `.done`: migrazione completata;
-- `.error(Error)`: fallimento;
-- `.fallback`: usare un percorso alternativo;
-- `.skipped`: non necessaria.
+The ledger exposes `GraphMigrationRecord` and the `started`, `done`, and
+`failed` states. An application error is emitted as `GraphFailure.migration`; it
+does not automatically mean that the graph is unusable.
 
-Il ledger espone `GraphMigrationRecord` e gli stati `started`, `done` e `failed`.
-Un errore applicativo viene emesso come `GraphFailure.migration`; non implica
-automaticamente che il graph sia inutilizzabile.
+## Context
 
-## Contesto
+`GraphMigrationContext` passes data between phases.
+`previousMigrationRecord` exposes the previous record when available.
 
-`GraphMigrationContext` permette di passare dati tra fasi. La proprietà
-`previousMigrationRecord` espone il record precedente quando disponibile.
+## Safety rules
 
-## Regole di sicurezza
-
-1. Fare un backup prima di trasformare dati persistenti.
-2. Rendere la migrazione ripetibile o controllare il ledger prima di eseguirla.
-3. Non cancellare lo store originale prima di aver verificato il risultato.
-4. Registrare errori e versione della migrazione.
-5. Testare sia successo sia ripristino dopo un fallimento.
+1. Back up persistent data before transforming it.
+2. Make the migration repeatable or check the ledger before running it.
+3. Do not delete the original store before verifying the result.
+4. Record migration errors and version.
+5. Test both success and restoration after failure.

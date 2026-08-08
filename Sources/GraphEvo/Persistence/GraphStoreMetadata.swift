@@ -9,7 +9,7 @@ import Foundation
 import CoreData
 
 public enum GraphStoreMetadata {
-    // Chiavi nei metadata (proprietà list–safe).
+    // Metadata keys (property-list safe).
     private static let graphModelVersionKey = "GraphModelVersion"
     private static let appDataVersionKey    = "AppDataVersion"
 
@@ -26,9 +26,9 @@ public enum GraphStoreMetadata {
         return model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata)
     }
 
-    /// Legge le versioni correnti dai metadata dello store.
-    /// - Parameter configuration: configurazione completa dello store.
-    /// - Returns: GraphStoreConfiguration.Versions (nil = legacy/non presente)
+    /// Reads the current versions from store metadata.
+    /// - Parameter configuration: complete store configuration.
+    /// - Returns: GraphStoreConfiguration.Versions (nil = legacy or missing).
     public static func read(from configuration: GraphStoreConfiguration, at: URL? = nil) throws -> GraphStoreConfiguration.Versions {
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
             ofType: NSSQLiteStoreType,
@@ -40,8 +40,8 @@ public enum GraphStoreMetadata {
     }
     
 
-    /// Scrive le versioni nei metadata usando un PSC già aperto.
-    /// Non modifica nulla in memoria; persiste solo su disco.
+    /// Writes versions to metadata using an already-open PSC.
+    /// Does not change in-memory state; persists only to disk.
     public static func write(
         _ versions: GraphStoreConfiguration.Versions,
         using coordinator: NSPersistentStoreCoordinator,
@@ -67,7 +67,7 @@ public enum GraphStoreMetadata {
         )
     }
 
-    /// Comodo helper: apre temporaneamente lo store, scrive i metadata e chiude.
+    /// Convenience helper: temporarily opens the store, writes metadata, and closes it.
     public static func write(
         _ versions: GraphStoreConfiguration.Versions,
         to configuration: GraphStoreConfiguration,
@@ -88,7 +88,7 @@ public enum GraphStoreMetadata {
     }
 
     /// Decide se “serve upgrade” confrontando le versioni.
-    /// Regola: `nil` è legacy (= 0). Si migra se `current < required` per uno dei due.
+    /// Rule: `nil` is legacy (= 0). Upgrade when `current < required` for either version.
     public static func needsUpgrade(current: GraphStoreConfiguration.Versions,
                                     required: GraphStoreConfiguration.Versions) -> Bool {
         let curGM = current.graphModel ?? 0
@@ -102,12 +102,12 @@ public enum GraphStoreMetadata {
 // MARK: - Generic key/value metadata API
 
 public extension GraphStoreMetadata {
-    /// Legge un valore PropertyList-safe opzionale dai metadata dello store.
+    /// Reads an optional PropertyList-safe value from store metadata.
     /// - Parameters:
-    ///   - key: chiave del valore da leggere
-    ///   - configuration: configurazione completa dello store
-    ///   - at: URL opzionale dello store (default: configuration.resolvedStoreURL)
-    /// - Returns: valore opzionale di tipo T (PropertyList-safe), nil se assente o errore
+    ///   - key: key of the value to read.
+    ///   - configuration: complete store configuration.
+    ///   - at: optional store URL (default: configuration.resolvedStoreURL).
+    /// - Returns: An optional PropertyList-safe value of type T, nil when missing or on error.
     static func readValue<T>(forKey key: String, from configuration: GraphStoreConfiguration, at: URL? = nil) -> T? {
         do {
             let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
@@ -120,12 +120,12 @@ public extension GraphStoreMetadata {
         }
     }
 
-    /// Scrive o rimuove un valore PropertyList-safe nei metadata dello store.
+    /// Writes or removes a PropertyList-safe value in store metadata.
     /// - Parameters:
-    ///   - value: valore opzionale da scrivere; se nil, la chiave viene rimossa
-    ///   - key: chiave del valore da scrivere
-    ///   - configuration: configurazione completa dello store
-    ///   - model: modello Core Data usato per aprire temporaneamente lo store
+    ///   - value: optional value to write; when nil, the key is removed.
+    ///   - key: key of the value to write.
+    ///   - configuration: complete store configuration.
+    ///   - model: Core Data model used to temporarily open the store.
     /// - Throws: errori di I/O o Core Data
     static func writeValue<T>(_ value: T?, forKey key: String, to configuration: GraphStoreConfiguration, model: NSManagedObjectModel) throws {
         let psc = NSPersistentStoreCoordinator(managedObjectModel: model)
@@ -154,21 +154,21 @@ public extension GraphStoreMetadata {
         try psc.remove(store)
     }
 
-    /// Helper per leggere flag booleani dai metadata dello store.
-    /// Ritorna false se assente o in caso di errore.
+    /// Helper for reading Boolean flags from store metadata.
+    /// Returns false when missing or on error.
     /// - Parameters:
-    ///   - key: chiave del flag booleano
-    ///   - configuration: configurazione completa dello store
-    /// - Returns: valore booleano (false se assente o errore)
+    ///   - key: key of the Boolean flag.
+    ///   - configuration: complete store configuration.
+    /// - Returns: A Boolean value (false when missing or on error).
     static func boolValue(forKey key: String, from configuration: GraphStoreConfiguration) -> Bool {
         (readValue(forKey: key, from: configuration) as Bool?) ?? false
     }
 
-    /// Rimuove una chiave dai metadata dello store aprendo temporaneamente lo store.
+    /// Removes a key from store metadata by temporarily opening the store.
     /// - Parameters:
-    ///   - key: chiave da rimuovere
-    ///   - configuration: configurazione completa dello store
-    ///   - model: modello Core Data usato per aprire temporaneamente lo store
+    ///   - key: key to remove.
+    ///   - configuration: complete store configuration.
+    ///   - model: Core Data model used to temporarily open the store.
     /// - Throws: errori di I/O o Core Data
     static func removeValue(forKey key: String, to configuration: GraphStoreConfiguration, model: NSManagedObjectModel) throws {
         let psc = NSPersistentStoreCoordinator(managedObjectModel: model)
@@ -195,9 +195,9 @@ public extension GraphStoreMetadata {
 
     /// Restituisce tutte le chiavi presenti nei metadata dello store.
     /// - Parameters:
-    ///   - configuration: configurazione completa dello store
-    ///   - at: URL opzionale dello store (default: configuration.resolvedStoreURL)
-    /// - Returns: array di stringhe con tutte le chiavi presenti nei metadata
+    ///   - configuration: complete store configuration.
+    ///   - at: optional store URL (default: configuration.resolvedStoreURL).
+    /// - Returns: Array of strings containing all metadata keys.
     static func listAllKeys(from configuration: GraphStoreConfiguration, at: URL? = nil) -> [String] {
         do {
             let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(

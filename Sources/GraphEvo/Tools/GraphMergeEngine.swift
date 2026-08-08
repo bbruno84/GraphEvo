@@ -9,13 +9,13 @@
 import Foundation
 import CoreData
 
-/// Engine per fondere due grafi compatibili (es. baseline → live).
-/// Esegue un merge completo in due passaggi:
-///   1. Copia di tutte le Entity (nuove nel primary)
-///   2. Ricostruzione di relazioni e azioni
+/// Engine for merging two compatible graphs (for example, baseline → live).
+/// Performs a complete two-pass merge:
+///   1. Copy all entities (new entities go to the primary graph)
+///   2. Recreate relationships and actions.
 ///
-/// Tutte le nuove Entity vengono contrassegnate con un campo `source`,
-/// che può essere utilizzato in fase di dedup per discriminare l'origine.
+/// All new entities are marked with a `source` field,
+/// that can be used during deduplication to identify the source.
 public enum GraphMergeEngine {
     private struct EntityKey: Hashable {
         let type: String
@@ -34,14 +34,14 @@ public enum GraphMergeEngine {
 
     // MARK: - Public API
 
-    /// Esegue il merge da un Graph secondario (es. baseline migrato)
+    /// Merges data from a secondary graph (for example, a migrated baseline).
     /// in un Graph primario (es. store live).
     ///
     /// - Parameters:
-    ///   - secondaryGraph: Il grafo sorgente da cui importare i dati.
-    ///   - primaryGraph: Il grafo di destinazione in cui importare.
-    ///   - uuidFieldMap: Mappa che associa `entityType` → nome del campo UUID nel payload.
-    ///   - sourceTag: Etichetta di origine, salvata come `entity["source"]`.
+    ///   - secondaryGraph: The source graph from which to import data.
+    ///   - primaryGraph: The destination graph into which to import data.
+    ///   - uuidFieldMap: Map from `entityType` to the UUID field name in the payload.
+    ///   - sourceTag: Source label stored as `entity["source"]`.
     /// - Throws: Propaga eventuali errori Core Data o di mapping.
     @discardableResult
     public static func merge(
@@ -74,18 +74,18 @@ public enum GraphMergeEngine {
                         .sync()
 
                     // Mappa type+UUID → nuova entity nel primary.
-                    // Il solo UUID può collidere tra tipi diversi.
+                    // A UUID alone can collide across different types.
                     var importMap: [EntityKey: Entity] = [:]
                     var importedEntities = 0
                     var unmappedEntities = 0
 
-                    // Pass 1 — Copia entità
+                    // Pass 1 — Copy entities.
                     for src in secondaryEntities {
                         let newEntity = Entity(src.type, graph: primaryGraph)
                         copyMetadata(from: src, to: newEntity)
                         importedEntities += 1
 
-                        // Copia UUID logico
+                        // Copy the logical UUID.
                         if let uuidField = uuidFieldMap[src.type],
                            let uuidValue = src[dynamicMember: uuidField] {
                             newEntity[dynamicMember: uuidField] = uuidValue
@@ -101,7 +101,7 @@ public enum GraphMergeEngine {
                         }
                     }
 
-                    // Pass 2 — Ricrea relazioni e azioni
+                    // Pass 2 — Recreate relationships and actions.
                     var relCount = 0
                     var actCount = 0
                     var skippedRelCount = 0
@@ -115,7 +115,7 @@ public enum GraphMergeEngine {
                             continue
                         }
 
-                        // Relazioni come soggetto
+                        // Relationships where the entity is the subject.
                         for rel in src.relationshipsWhenSubject {
                             guard let objectKey = rel.object.flatMap({ entityKey(for: $0, using: uuidFieldMap) }),
                                   let mappedObject = importMap[objectKey] else {
@@ -179,7 +179,7 @@ public enum GraphMergeEngine {
 
     // MARK: - Helpers
 
-    /// Copia properties, tags e groups da una Entity all'altra.
+    /// Copies properties, tags, and groups from one entity to another.
     private static func copyMetadata(from source: Entity, to target: Entity) {
         for (key, value) in source.properties {
             target[dynamicMember: key] = value
@@ -192,7 +192,7 @@ public enum GraphMergeEngine {
         }
     }
 
-    /// Estrae il valore UUID logico dal payload di una entity.
+    /// Extracts the logical UUID value from an entity payload.
     private static func uuidValue(for entity: Entity, using uuidFieldMap: [String: String]) -> String? {
         guard let field = uuidFieldMap[entity.type],
               let value = entity[dynamicMember: field] as? String else {

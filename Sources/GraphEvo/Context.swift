@@ -387,24 +387,3 @@ internal extension Graph {
     }
   }
 }
-/*
-@available(iOS 10.0, OSX 10.12, *)
-fileprivate extension Graph {
-  // NOTE (M2): legacy helper, unused after migration to NSPersistentCloudKitContainer.
-  func prepareContextContainer() {
-    self.prepareSQLite()
-    
-    let storeDescription = NSPersistentStoreDescription()
-    storeDescription.shouldAddStoreAsynchronously = false
-    storeDescription.shouldMigrateStoreAutomatically = true //Added by bruno
-    storeDescription.shouldInferMappingModelAutomatically = true //Addeed by bruno
-    storeDescription.url = location
-    
-    let container = NSPersistentContainer(name: name, storeDescription: storeDescription)
-    container.loadPersistentStores { [unowned self] (storeDescription, error) in
-      self.managedObjectContext = container.viewContext
-      GraphContextRegistry.managedObjectContexts[self.route] = self.managedObjectContext
-    }
-  }
-}
-*/

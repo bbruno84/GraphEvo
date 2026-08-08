@@ -8,22 +8,22 @@
 import Foundation
 
 extension GraphTools {
-    /// Copia un file SQLite (con eventuali WAL/SHM) in una cartella temporanea del simulatore
+    /// Copies an SQLite file (and optional WAL/SHM files) to a temporary simulator directory.
     @discardableResult
     static func exportMigratedDB(to folderName: String = "ExportedDB", sqliteURL: URL) -> URL? {
         let fileManager = FileManager.default
         
-        // Cartella temporanea nel simulatore
+        // Temporary simulator directory.
         let tempDir = fileManager.temporaryDirectory
         let exportDir = tempDir.appendingPathComponent(folderName, isDirectory: true)
         
         do {
-            // Crea cartella se non esiste
+            // Create the directory when it does not exist.
             if !fileManager.fileExists(atPath: exportDir.path) {
                 try fileManager.createDirectory(at: exportDir, withIntermediateDirectories: true)
             }
             
-            // Copia i file SQLite, WAL e SHM
+            // Copy the SQLite, WAL, and SHM files.
             let baseName = sqliteURL.deletingPathExtension().lastPathComponent
             let extensions = ["sqlite", "sqlite-wal", "sqlite-shm"]
             
@@ -31,7 +31,7 @@ extension GraphTools {
                 let source = sqliteURL.deletingPathExtension().appendingPathExtension(ext)
                 if fileManager.fileExists(atPath: source.path) {
                     let dest = exportDir.appendingPathComponent("\(baseName).\(ext)")
-                    // Rimuovi se già presente
+                    // Remove an existing destination.
                     if fileManager.fileExists(atPath: dest.path) {
                         try fileManager.removeItem(at: dest)
                     }
@@ -44,7 +44,7 @@ extension GraphTools {
             return exportDir
             
         } catch {
-            print("❌ Errore durante l’esportazione: \(error)")
+            print("❌ Export error: \(error)")
             return nil
         }
     }

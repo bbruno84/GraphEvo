@@ -54,7 +54,7 @@ public struct GraphStoreConfiguration {
         return resolvedLocation.appendingPathComponent(storeFilename)
     }
 
-    /// Route (Local vs Cloud) determinata dalla presenza del container CloudKit.
+    /// Route (Local vs Cloud) determined by the presence of a CloudKit container.
     public var route: String {
         cloudKitContainerIdentifier == nil ? "Local/\(name)" : "Cloud/\(name)"
     }

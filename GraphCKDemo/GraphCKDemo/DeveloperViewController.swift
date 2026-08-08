@@ -157,8 +157,8 @@ final class DeveloperViewController: UIViewController {
         probe[dynamicMember: "createdAt"] = Date()
         graph.sync { success, error in
             print(success
-                  ? "☁️ CloudKit probe salvata localmente e inviata a sync"
-                  : "❌ CloudKit probe fallita: \(error?.localizedDescription ?? "errore sconosciuto")")
+                  ? "☁️ CloudKit probe saved locally and sent for sync"
+                  : "❌ CloudKit probe failed: \(error?.localizedDescription ?? "unknown error")")
         }
     }
     
@@ -197,7 +197,7 @@ final class DeveloperViewController: UIViewController {
             note[dynamicMember: "title"] = "Stress Note \(i)"
             note[dynamicMember: "createdAt"] = Date()
 
-            // 10% probabilità: aggiunta attachment con dimensione random tra 1.5 MB e 2 MB
+            // 10% probability: add an attachment with a random size from 1.5 MB to 2 MB.
             if Int.random(in: 1...10) == 1 {
                 let attachment = Entity("Attachment", graph: graph)
                 attachment[dynamicMember: "title"] = "Attachment \(i)"
@@ -214,7 +214,7 @@ final class DeveloperViewController: UIViewController {
                 createdAttachments.append(attachment)
             }
 
-            // 25% probabilità: aggiunta tag favorite
+            // 25% probability: add the favorite tag.
             if Bool.random(), Int.random(in: 0...3) == 0 {
                 note.add(tags: "favorite")
                 favoriteNotes.append(note)
@@ -245,10 +245,10 @@ final class DeveloperViewController: UIViewController {
             return sum + (data?.count ?? 0)
         }
 
-        print("📊 DUMP DELLO STATO ATTUALE")
-        print("📒 Note totali: \(notes.count)")
-        print("🔗 Relazioni 'NoteAttachment': \(relationships.count)")
-        print("⭐️ Note con tag 'favorite': \(favorites.count)")
-        print("📦 Dimensione totale allegati: \(ByteCountFormatter.string(fromByteCount: Int64(totalAttachmentBytes), countStyle: .file)) (\(totalAttachmentBytes) byte)")
+        print("📊 CURRENT STATE DUMP")
+        print("📒 Total notes: \(notes.count)")
+        print("🔗 'NoteAttachment' relationships: \(relationships.count)")
+        print("⭐️ Notes tagged 'favorite': \(favorites.count)")
+        print("📦 Total attachment size: \(ByteCountFormatter.string(fromByteCount: Int64(totalAttachmentBytes), countStyle: .file)) (\(totalAttachmentBytes) bytes)")
     }
 }

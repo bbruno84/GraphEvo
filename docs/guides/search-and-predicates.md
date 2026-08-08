@@ -1,10 +1,9 @@
-# Search e Predicate
+# Search and predicates
 
-`Search<T>` esegue ricerche tipizzate sugli oggetti del graph. `Predicate`
-fornisce un linguaggio compatto per descrivere i filtri senza costruire a mano
-le stringhe di `NSPredicate`.
+`Search<T>` runs typed searches over graph objects. `Predicate` provides a
+compact language for filters without manually building `NSPredicate` strings.
 
-## Ricerca di base
+## Basic search
 
 ```swift
 let users = Search<Entity>(graph: graph)
@@ -12,10 +11,10 @@ let users = Search<Entity>(graph: graph)
     .sync()
 ```
 
-Il tipo generico deve essere uno dei nodi supportati (`Entity`, `Relationship` o
-`Action`). Senza un predicato, la ricerca restituisce un array vuoto.
+The generic type must be a supported node (`Entity`, `Relationship`, or
+`Action`). Without a predicate, the search returns an empty array.
 
-## Filtri disponibili
+## Available filters
 
 ```swift
 .type("User")
@@ -24,8 +23,8 @@ Il tipo generico deve essere uno dei nodi supportati (`Entity`, `Relationship` o
 .member(of: "staff")
 ```
 
-Le funzioni accettano anche array e combinazioni di stringhe. I confronti sulle
-proprietà usano la sintassi naturale:
+Functions also accept arrays and combinations of strings. Property comparisons
+use natural syntax:
 
 ```swift
 "name" == "Ada"
@@ -33,37 +32,28 @@ proprietà usano la sintassi naturale:
 "createdAt" <= someDate
 ```
 
-Le stringhe sono confrontate ignorando maiuscole/minuscole e diacritici.
+Strings are compared case- and diacritic-insensitively.
 
-## Comporre i predicati
+## Combining predicates
 
 ```swift
 let filter = (.type("User") && .has(tags: "active")) || .type("Admin")
 let visible = Search<Entity>(graph: graph).where(filter).sync()
 ```
 
-Sono disponibili `&&`, `||` e il prefisso `!`.
+`&&`, `||`, and the prefix `!` are available.
 
 ```swift
 let notArchived = !("isArchived" == true)
 ```
 
-## Attenzione ai `where` successivi
+## Important: successive `where` calls
 
-L’implementazione attuale di `Search.where` combina i predicati aggiunti in
-chiamate successive con OR:
+The current implementation of `Search.where` combines predicates added by
+successive calls with OR. To express AND conditions, build one predicate with
+`&&`.
 
-```swift
-let result = Search<Entity>(graph: graph)
-    .where(.type("User"))
-    .where(.type("Admin"))
-    .sync()
-```
-
-La ricerca precedente significa quindi “User oppure Admin”. Per esprimere
-condizioni AND, costruire un singolo predicato con `&&`.
-
-## Risultati sincroni e asincroni
+## Synchronous and asynchronous results
 
 ```swift
 let result = Search<Entity>(graph: graph)
@@ -77,12 +67,12 @@ Search<Entity>(graph: graph)
     }
 ```
 
-`sync()` restituisce subito l’array. La sua completion opzionale viene eseguita
-sul main thread. `async()` avvia la ricerca in background.
+`sync()` returns the array immediately. Its optional completion runs on the
+main thread. `async()` starts the search in the background.
 
-## Paginazione
+## Pagination
 
-`Graph` espone `batchSize` e `batchOffset`, applicati alle ricerche successive:
+`Graph` exposes `batchSize` and `batchOffset`, applied to subsequent searches:
 
 ```swift
 graph.batchSize = 20
@@ -90,9 +80,9 @@ graph.batchOffset = 40
 let page = Search<Entity>(graph: graph).where(.type("Note")).sync()
 ```
 
-Impostare `batchSize = 0` per rimuovere il limite.
+Set `batchSize = 0` to remove the limit.
 
-## Combinare ricerche
+## Combining searches
 
 ```swift
 let users = Search<Entity>(graph: graph).where(.type("User"))
@@ -100,4 +90,4 @@ let admins = Search<Entity>(graph: graph).where(.type("Admin"))
 let both = (users + admins).sync()
 ```
 
-Le due ricerche devono appartenere allo stesso `Graph`.
+Both searches must belong to the same `Graph`.

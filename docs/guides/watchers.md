@@ -1,17 +1,16 @@
-# Watcher ed eventi di cambiamento
+# Watchers and change events
 
-Un `Watch<T>` permette di ricevere notifiche quando cambiano nodi di un certo
-tipo. È utile per aggiornare una UI o reagire a dati arrivati da un altro
-contesto o da CloudKit.
+`Watch<T>` receives notifications when nodes of a given type change. It is
+useful for updating a UI or reacting to data from another context or CloudKit.
 
-## Creare un watcher
+## Create a watcher
 
-I watcher sono tipizzati e inizialmente fermi:
+Watchers are typed and initially stopped:
 
 ```swift
 final class EntityEvents: GraphEntityDelegate {
     func graph(_ graph: Graph, inserted entity: Entity, source: GraphSource) {
-        print("Inserita \(entity.type) da \(source)")
+        print("Inserted \(entity.type) from \(source)")
     }
 }
 
@@ -22,48 +21,42 @@ watch.where(.type("Note"))
 watch.resume()
 ```
 
-Il delegate deve essere mantenuto in vita dall’applicazione. `Watch<Entity>` usa
-`GraphEntityDelegate`; per gli altri tipi usare `GraphRelationshipDelegate` o
-`GraphActionDelegate`.
+The app must keep the delegate alive. `Watch<Entity>` uses
+`GraphEntityDelegate`; use `GraphRelationshipDelegate` or
+`GraphActionDelegate` for the other node types.
 
-## Ciclo di vita
+## Lifecycle
 
-- `resume()` inizia l’osservazione;
-- `pause()` la sospende e rimuove le osservazioni;
-- `clear()` rimuove il filtro;
-- la deallocazione del watcher rimuove automaticamente le osservazioni.
+- `resume()` starts observation;
+- `pause()` suspends it and removes observations;
+- `clear()` removes the filter;
+- deallocating the watcher automatically removes observations.
 
-È possibile riutilizzare lo stesso watcher chiamando `pause()`, modificando il
-filtro e poi `resume()`.
+Reuse a watcher by calling `pause()`, changing its filter, and calling `resume()`.
 
-## Tipi di callback
+## Callback types
 
-I tre delegate coprono lo stesso insieme di eventi:
+The three delegates cover node insertion, update, and deletion; property
+addition, modification, and removal; tag addition and removal; and entering
+and leaving groups. For a relationship or action, the main parameter changes
+type but the callback shape remains the same.
 
-- inserimento, aggiornamento e cancellazione del nodo;
-- aggiunta, modifica e rimozione di proprietà;
-- aggiunta e rimozione di tag;
-- ingresso e uscita da gruppi.
+## Change source
 
-Per una relationship o action il parametro principale cambia tipo, ma la forma
-della callback resta la stessa.
+`GraphSource.local` indicates a change observed in the local context.
+`GraphSource.cloud` indicates a change processed through Persistent History
+from another context or CloudKit.
 
-## Origine del cambiamento
+Do not assume that every Cloud change produces exactly one callback: transaction
+authors and ordered merges reduce duplicates, but the app must keep callbacks
+idempotent.
 
-`GraphSource.local` indica una modifica osservata nel contesto locale.
-`GraphSource.cloud` indica una modifica elaborata tramite il flusso di
-Persistent History e proveniente da un altro contesto o da CloudKit.
-
-Non assumere che ogni modifica Cloud generi una sola callback: il codice usa
-transaction author e merge ordinato per ridurre i duplicati, ma l’applicazione
-deve mantenere callback idempotenti.
-
-## Filtri
+## Filters
 
 ```swift
 watch.where(.type("User"))
 watch.where(.has(tags: "active"))
 ```
 
-Come per `Search`, chiamate successive a `where` vengono combinate con OR.
-Costruire un singolo `Predicate` quando serve un AND esplicito.
+As with `Search`, successive `where` calls are combined with OR. Build one
+`Predicate` when an explicit AND is required.

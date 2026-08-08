@@ -1,36 +1,36 @@
 # Getting started
 
-Questa guida mostra il percorso minimo per usare GraphEvo in un’app iOS o macOS.
+This guide shows the minimum path for using GraphEvo in an iOS or macOS app.
 
-## 1. Aggiungere il package
+## 1. Add the package
 
-Aggiungere il package Swift al progetto e importare il modulo:
+Add the Swift package to the project and import the module:
 
 ```swift
 import GraphEvo
 ```
 
-GraphEvo richiede iOS 16+ o macOS 12+ secondo il `Package.swift`.
+GraphEvo requires iOS 16+ or macOS 12+, as declared by `Package.swift`.
 
-## 2. Creare una configurazione
+## 2. Create a configuration
 
 ```swift
 var configuration = GraphStoreConfiguration()
 configuration.name = "Main"
 ```
 
-Con questa configurazione GraphEvo crea o apre uno store SQLite con nome
-`GraphEvo_Main.sqlite` nella directory predefinita. Per un percorso dedicato:
+With this configuration GraphEvo creates or opens an SQLite store named
+`GraphEvo_Main.sqlite` in the default directory. For a dedicated path:
 
 ```swift
 configuration.location = File.applicationSupportDirectoryPath!
     .appendingPathComponent("MyApp/Graph", isDirectory: true)
 ```
 
-Per i dettagli sulla differenza tra directory e file SQLite vedere
-[Persistenza](../concepts/persistence.md).
+For the distinction between directories and SQLite files, see
+[Persistence](../concepts/persistence.md).
 
-## 3. Aprire il graph
+## 3. Open the graph
 
 ```swift
 let graph = Graph(configuration: configuration)
@@ -38,17 +38,17 @@ let graph = Graph(configuration: configuration)
 graph.whenReady { result in
     switch result {
     case .success(let graph):
-        print("Graph pronto: \(graph.name)")
+        print("Graph ready: \(graph.name)")
     case .failure(let error):
-        print("Apertura fallita: \(error.localizedDescription)")
+        print("Opening failed: \(error.localizedDescription)")
     }
 }
 ```
 
-`Graph` può iniziare l’apertura durante il proprio inizializzatore, quindi
-`whenReady` è il modo più chiaro per coordinare la UI o il caricamento iniziale.
+`Graph` may begin opening during initialization, so `whenReady` is the clearest
+way to coordinate UI or initial loading.
 
-## 4. Creare e salvare dati
+## 4. Create and save data
 
 ```swift
 let user = Entity("User", graph: graph)
@@ -56,22 +56,22 @@ user["name"] = "Ada Lovelace"
 user.add(tags: "active")
 
 let note = Entity("Note", graph: graph)
-note["title"] = "Prima nota"
+note["title"] = "First note"
 user.is(relationship: "writes").of(note)
 
 graph.sync { success, error in
     if let error {
         print(error.localizedDescription)
     } else if success {
-        print("Dati salvati")
+        print("Data saved")
     }
 }
 ```
 
-Le completion di `sync` e `async` vengono consegnate sul main thread. Le
-modifiche sono eseguite sul contesto del graph.
+`sync` and `async` completions are delivered on the main thread. Mutations are
+performed in the graph's context.
 
-## 5. Cercare dati
+## 5. Search data
 
 ```swift
 let notes = Search<Entity>(graph: graph)
@@ -80,9 +80,9 @@ let notes = Search<Entity>(graph: graph)
     .sync()
 ```
 
-Per query più articolate consultare [Search e Predicate](search-and-predicates.md).
+For more advanced queries, see [Search and predicates](search-and-predicates.md).
 
-## 6. Ricevere eventi
+## 6. Receive events
 
 ```swift
 final class Events: GraphEventDelegate {
@@ -95,16 +95,15 @@ let events = Events()
 graph.eventDelegate = events
 ```
 
-Il delegate va mantenuto in vita dall’applicazione. Gli eventi vengono
-consegnati sul main thread; quelli emessi prima dell’assegnazione vengono
-accodati.
+The app must keep the delegate alive. Events are delivered on the main thread;
+events emitted before assignment are queued.
 
-## 7. Cancellare o resettare
+## 7. Clear or reset
 
 ```swift
-graph.clear() // cancella i nodi e salva
-graph.reset() // resetta il contesto senza cancellare lo store dal filesystem
+graph.clear() // Deletes nodes and saves.
+graph.reset() // Resets the context without deleting the filesystem store.
 ```
 
-`clear()` è un’operazione sui dati. `reset()` riguarda il contesto Core Data e
-non va usato come sostituto della cancellazione del file SQLite.
+`clear()` operates on data. `reset()` concerns the Core Data context and must
+not be used as a replacement for deleting the SQLite file.

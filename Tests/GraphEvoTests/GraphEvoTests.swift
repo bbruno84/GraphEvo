@@ -48,7 +48,6 @@ final class GraphEvoTests: XCTestCase {
             g.sync()
 
             // Fetch back (adjust if your Search API differs)
-            //let results = Search<Entity>(types: ["note"]).sync()
             let results = Search<Entity>(graph: g).where(.type("note")).sync()
             debugPrint("Results: \(results.count)")
             let titles = results.compactMap { $0[dynamicMember: "title"] as? String }

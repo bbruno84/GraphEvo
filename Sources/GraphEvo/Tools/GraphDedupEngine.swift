@@ -10,18 +10,18 @@ import Foundation
 import CoreData
 
 /// Gestisce la deduplicazione di un Graph in base a un dizionario `uuidFieldMap`.
-/// Confronta le Entity dello stesso tipo con lo stesso UUID logico e unisce o elimina i duplicati.
-/// È pensato come fase successiva al merge baseline → live.
+/// Compares entities of the same type and logical UUID, then merges or removes duplicates.
+/// It is intended to run after a baseline → live merge.
 public enum GraphDedupEngine {
 
     // MARK: - Public API
 
-    /// Esegue la deduplicazione interna al grafo.
+    /// Performs deduplication within a graph.
     ///
     /// - Parameters:
-    ///   - graph: Il grafo in cui deduplicare.
+    ///   - graph: The graph to deduplicate.
     ///   - uuidFieldMap: Mappa `entityType` → campo UUID logico nel payload.
-    ///   - discriminator: Strategia che decide quale Entity mantenere.
+    ///   - discriminator: Strategy that decides which entity to keep.
     /// - Throws: Eventuali errori di Core Data.
     public static func deduplicate(
         in graph: Graph,
@@ -37,18 +37,18 @@ public enum GraphDedupEngine {
         var caughtError: Error?
         context.performAndWait {
             do {
-                // 1️⃣ Carica tutte le Entity
+                // 1️⃣ Load all entities.
                 let allEntities = Search<Entity>(graph: graph).where(.type("*")).sync()
 
-                // 2️⃣ Raggruppa per UUID logico
+                // 2️⃣ Group by logical UUID.
                 let grouped = groupEntitiesByUUID(allEntities, uuidFieldMap: uuidFieldMap)
                 var removed = 0
                 var merged = 0
                 var replacementByEntityID: [String: Entity] = [:]
                 var entitiesToDelete: [Entity] = []
 
-                // 3️⃣ Scegli prima tutti i survivor, senza cancellare nodi.
-                // Le relazioni vengono riscritte dopo con una vista globale dei duplicati.
+                // 3️⃣ Choose all survivors before deleting nodes.
+                // Relationships are rewritten later with a global duplicate map.
                 for (_, entities) in grouped where entities.count > 1 {
                     let survivor = chooseSurvivor(from: entities, discriminator: discriminator)
                     for duplicate in entities where duplicate.id != survivor.id {
@@ -59,8 +59,8 @@ public enum GraphDedupEngine {
                     }
                 }
 
-                // 4️⃣ Riscrivi le relazioni prima di eliminare i duplicati.
-                // Questo evita relazioni verso endpoint che stanno per essere cancellati.
+                // 4️⃣ Rewrite relationships before deleting duplicates.
+                // This avoids relationships pointing to endpoints about to be deleted.
                 let allRelationships = Search<Relationship>(graph: graph).where(.type("*")).sync()
                 var rewiredRelationships = 0
                 for relationship in allRelationships {
@@ -90,7 +90,7 @@ public enum GraphDedupEngine {
                     relationship.delete()
                 }
 
-                // 5️⃣ Deduplica eventuali relazioni identiche già presenti tra survivor.
+                // 5️⃣ Deduplicate identical relationships already present among survivors.
                 let remainingRelationships = Search<Relationship>(graph: graph).where(.type("*")).sync()
                 var seenRelationships = Set<RelationshipKey>()
                 for relationship in remainingRelationships {
@@ -107,7 +107,7 @@ public enum GraphDedupEngine {
                     }
                 }
 
-                // 6️⃣ Ora è sicuro eliminare le entità duplicate.
+                // 6️⃣ It is now safe to delete duplicate entities.
                 for duplicate in entitiesToDelete {
                     duplicate.delete()
                     removed += 1
@@ -159,7 +159,7 @@ public enum GraphDedupEngine {
         let objectID: String
     }
 
-    /// Raggruppa le Entity per UUID logico (usando `uuidFieldMap`).
+    /// Groups entities by logical UUID (using `uuidFieldMap`).
     private static func groupEntitiesByUUID(
         _ entities: [Entity],
         uuidFieldMap: [String: String]
@@ -181,7 +181,7 @@ public enum GraphDedupEngine {
         return survivor
     }
 
-    /// Copia proprietà, tag e gruppi senza toccare le relazioni.
+    /// Copies properties, tags, and groups without touching relationships.
     private static func mergeMetadata(from source: Entity, into target: Entity) {
         for (k, v) in source.properties {
             if target.properties[k] == nil {

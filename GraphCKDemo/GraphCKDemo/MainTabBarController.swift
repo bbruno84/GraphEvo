@@ -31,12 +31,12 @@ final class MainTabBarController: UITabBarController {
         }
 
         let notesImage = UIImage(systemName: "pencil") ?? {
-            print("❌ Icona 'pencil' non trovata, uso fallback")
+            print("❌ Icon 'pencil' not found; using fallback")
             return UIImage(systemName: "questionmark.circle")!
         }()
 
         let devImage = UIImage(systemName: "wrench.and.screwdriver") ?? {
-            print("❌ Icona 'wrench.and.screwdriver' non trovata, uso fallback")
+            print("❌ Icon 'wrench.and.screwdriver' not found; using fallback")
             return UIImage(systemName: "questionmark.circle")!
         }()
 

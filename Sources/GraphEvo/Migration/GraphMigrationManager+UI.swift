@@ -8,14 +8,14 @@
 import Foundation
 
 extension Notification.Name {
-    /// Notifica emessa quando avanza una migrazione.
+    /// Notification emitted as a migration advances.
     public static let GraphMigrationProgressDidChange = Notification.Name("GraphMigrationProgressDidChange")
     
     
 }
 
 extension GraphMigrationManager {
-    /// Chiavi standardizzate per userInfo della notifica di progress.
+    /// Standardized userInfo keys for progress notifications.
     public enum ProgressKey: String {
         case storeURL
         case phase
@@ -24,7 +24,7 @@ extension GraphMigrationManager {
         case status
     }
 
-    /// Rappresenta un evento di progress di migrazione.
+    /// Represents a migration progress event.
     public struct ProgressInfo {
         public let storeURL: URL
         public let phase: GraphLifecyclePhase
@@ -33,7 +33,7 @@ extension GraphMigrationManager {
         public let status: String
     }
 
-    /// Chiavi standardizzate per userInfo della notifica di failure.
+    /// Standardized userInfo keys for failure notifications.
     public enum FailureKey: String {
         case migrationID
         case phase
@@ -43,7 +43,7 @@ extension GraphMigrationManager {
         case errorDescription
     }
 
-    /// Rappresenta un errore di migrazione emesso dal lifecycle manager.
+    /// Represents a migration error emitted by the lifecycle manager.
     public struct FailureInfo {
         public let migrationID: String
         public let phase: GraphLifecyclePhase
@@ -96,13 +96,13 @@ extension GraphMigrationManager {
         )
     }
     
-    /// Invia manualmente una notifica di avanzamento migrazione.
+    /// Manually posts a migration progress notification.
     /// - Parameters:
     ///   - storeURL: L'URL dello store migrato.
-    ///   - phase: La fase della migrazione.
-    ///   - progress: Valore di avanzamento (0.0 - 1.0).
+    ///   - phase: The migration phase.
+    ///   - progress: Progress value (0.0 - 1.0).
     ///   - stepDescription: Descrizione dello step corrente.
-    ///   - status: Stato corrente della migrazione.
+    ///   - status: The current migration status.
     public static func postMigrationProgress(
         storeURL: URL,
         phase: GraphLifecyclePhase,
@@ -123,19 +123,19 @@ extension GraphMigrationManager {
     /*
     Esempio di utilizzo di postMigrationProgress:
 
-    // Invio manuale di una notifica di avanzamento migrazione
+    // Manually post a migration progress notification.
     GraphMigrationManager.postMigrationProgress(
-        storeURL: URL(fileURLWithPath: "/percorso/al/store.sqlite"),
+        storeURL: URL(fileURLWithPath: "/path/to/store.sqlite"),
         phase: .preparing,
         progress: 0.2,
-        stepDescription: "Preparazione della migrazione",
-        status: "In corso"
+        stepDescription: "Migration preparation",
+        status: "In progress"
     )
     */
     
-    /// Aggiunge un observer per le notifiche di progresso di migrazione.
-    /// - Parameter handler: Closure chiamata con l'evento ProgressInfo decodificato.
-    /// - Returns: Il token observer da utilizzare per la rimozione.
+    /// Adds an observer for migration progress notifications.
+    /// - Parameter handler: Closure called with the decoded ProgressInfo event.
+    /// - Returns: Observer token to use for removal.
     public static func observeMigrationProgress(using handler: @escaping (ProgressInfo) -> Void) -> NSObjectProtocol {
         return NotificationCenter.default.addObserver(forName: .GraphMigrationProgressDidChange, object: nil, queue: .main) { notification in
             if let progressInfo = parseProgress(from: notification) {
@@ -144,9 +144,9 @@ extension GraphMigrationManager {
         }
     }
 
-    /// Aggiunge un observer per le notifiche di fallimento migrazione.
-    /// - Parameter handler: Closure chiamata con l'evento FailureInfo decodificato.
-    /// - Returns: Il token observer da utilizzare per la rimozione.
+    /// Adds an observer for migration failure notifications.
+    /// - Parameter handler: Closure called with the decoded FailureInfo event.
+    /// - Returns: Observer token to use for removal.
     public static func observeMigrationFailure(using handler: @escaping (FailureInfo) -> Void) -> NSObjectProtocol {
         return NotificationCenter.default.addObserver(forName: .graphMigrationDidFail, object: nil, queue: .main) { notification in
             if let failureInfo = parseFailure(from: notification) {
@@ -164,12 +164,12 @@ extension GraphMigrationManager {
         // decides whether and where to log it.
     }
 
-    // Quando non serve più, rimuovere l'observer
+    // Remove the observer when it is no longer needed.
     GraphMigrationManager.removeProgressObserver(observer)
     */
     
-    /// Rimuove un observer precedentemente aggiunto.
-    /// - Parameter observer: Il token observer da rimuovere.
+    /// Removes a previously added observer.
+    /// - Parameter observer: The observer token to remove.
     public static func removeProgressObserver(_ observer: NSObjectProtocol) {
         NotificationCenter.default.removeObserver(observer)
     }

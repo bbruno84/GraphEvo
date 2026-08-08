@@ -57,7 +57,7 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
         if let img = UIImage(systemName: "star.fill") {
             samples.append(img)
         } else {
-            XCTFail("⚠️ UIImage systemName star.fill non disponibile")
+            XCTFail("⚠️ UIImage systemName star.fill is unavailable")
         }
         
         for sample in samples {
@@ -153,7 +153,7 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
                     XCTFail("Unsupported sample type: \(type(of: sample))")
                 }
             } catch {
-                XCTFail("❌ Archiviazione fallita per \(type(of: sample)): \(error)")
+                XCTFail("❌ Archiving failed for \(type(of: sample)): \(error)")
             }
         }
     }

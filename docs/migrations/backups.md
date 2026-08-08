@@ -1,10 +1,9 @@
-# Backup e ripristino
+# Backup and restore
 
-`MigrationBackupManager` crea copie recuperabili prima di una migrazione o di
-un’operazione di merge. Il backup deve essere considerato parte della procedura
-di sicurezza, non solo uno strumento di debug.
+`MigrationBackupManager` creates recoverable copies before a migration or
+merge. A backup is part of the safety procedure, not merely a debugging tool.
 
-## Backup di uno store
+## Back up a store
 
 ```swift
 let result = try MigrationBackupManager.backupStore(
@@ -15,13 +14,11 @@ let result = try MigrationBackupManager.backupStore(
 print(result.folderURL)
 ```
 
-Per uno store SQLite vengono copiati il file principale e, se presenti, i file
-`.sqlite-wal` e `.sqlite-shm`.
+For an SQLite store, the main file and, when present, `.sqlite-wal` and
+`.sqlite-shm` files are copied. An overload accepts `configuration` and
+`migration`, deriving the root from the migration itself.
 
-È disponibile anche un overload che riceve `configuration` e `migration`, così
-la root viene ricavata dalla migrazione stessa.
-
-## Backup di un singolo file
+## Back up one file
 
 ```swift
 try MigrationBackupManager.backupFile(
@@ -30,24 +27,24 @@ try MigrationBackupManager.backupFile(
 )
 ```
 
-È utile per file ausiliari come baseline, archivi o risorse di migrazione.
+This is useful for auxiliary files such as baselines, archives, or migration
+resources.
 
-## Policy di conflitto
+## Conflict policy
 
-- `.duplicate`: crea una nuova cartella con suffisso; è il default più sicuro;
-- `.skip`: riusa il backup esistente;
-- `.overwrite`: rimuove la cartella precedente e la ricrea.
+- `.duplicate`: create a new suffixed folder; this is the safest default;
+- `.skip`: reuse the existing backup;
+- `.overwrite`: remove and recreate the previous folder.
 
-Usare `.overwrite` solo quando il target è stato verificato e la perdita della
-copia precedente è intenzionale.
+Use `.overwrite` only after verifying the target and intentionally accepting the
+loss of the previous copy.
 
 ## Descriptor
 
-Ogni backup produce un `BackupDescriptor` con migration ID, label, percorso
-originale, data e lista dei file. Il descriptor viene salvato in
-`backup-info.json`.
+Each backup produces a `BackupDescriptor` with migration ID, label, original
+path, date, and file list. The descriptor is saved as `backup-info.json`.
 
-## Cercare e ripristinare
+## Find and restore
 
 ```swift
 let backups = try MigrationBackupManager.findBackupsForStore(
@@ -63,5 +60,5 @@ if let latest = backups.last {
 }
 ```
 
-Il ripristino sovrascrive per default i file esistenti. Passare
-`overwriteExisting: false` per lasciare intatti i file già presenti.
+Restore overwrites existing files by default. Pass `overwriteExisting: false`
+to leave existing files untouched.

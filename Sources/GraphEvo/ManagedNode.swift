@@ -64,15 +64,6 @@ internal class ManagedNode: ManagedObject {
         } ?? []
     }
     
-//    /// A reference to the properties.
-//    internal var properties: [String: Any] {
-//        return performAndWait { node in
-//            node.propertySet.reduce(into: [String: Any]()) { result, prop in
-//                result[prop.name] = ManagedNode.decodeIfData(prop.primitiveValue(forKey: "object"))
-//            }
-//        } ?? [:]
-//    }
-    
     /// A reference to the properties.
     internal var properties: [String: Any] {
       return performAndWait { node in

@@ -1,81 +1,77 @@
-# GraphEvo — istruzioni per agenti IA
+# GraphEvo — instructions for AI agents
 
-Questo file è il punto di ingresso operativo per gli agenti che lavorano sul
-repository. Prima di modificare il codice, leggere il `README.md` per il quadro
-generale e consultare la documentazione specifica in `docs/`.
+This file is the operational entry point for agents working in the repository.
+Before changing code, read `README.md` for the project overview and consult the
+relevant documentation in `docs/`.
 
-## Obiettivo della libreria
+## Library purpose
 
-GraphEvo è una libreria Swift basata su Core Data. Espone un modello a grafo:
+GraphEvo is a Swift library based on Core Data. It exposes a graph model:
 
-- `Graph` rappresenta uno store aperto e il suo contesto Core Data;
-- `Node` è la base comune degli oggetti pubblici;
-- `Entity` rappresenta un oggetto di dominio;
-- `Relationship` collega un subject a un object;
-- `Action` rappresenta un’azione con subjects e objects;
-- `Search` esegue query;
-- `Watch` osserva cambiamenti locali e remoti.
+- `Graph` represents an open store and its Core Data context;
+- `Node` is the common base for public objects;
+- `Entity` represents a domain object;
+- `Relationship` connects a subject to an object;
+- `Action` represents an action with subjects and objects;
+- `Search` executes queries;
+- `Watch` observes local and remote changes.
 
-Il riferimento completo alle API pubbliche è in
+The complete public API reference is in
 [`docs/api/public-api.md`](docs/api/public-api.md).
 
-## Mappa del repository
+## Repository map
 
-| Percorso | Responsabilità |
+| Path | Responsibility |
 |---|---|
-| `Sources/GraphEvo/Graph.swift` | Apertura del graph, readiness, contesto e delegati |
-| `Sources/GraphEvo/Node.swift` | Proprietà comuni, tag, gruppi e cancellazione |
-| `Sources/GraphEvo/Entity.swift` | Entità e accesso a relazioni/azioni |
-| `Sources/GraphEvo/Relationship.swift` | Relazioni orientate |
-| `Sources/GraphEvo/Action.swift` | Azioni e relativi soggetti/oggetti |
-| `Sources/GraphEvo/Search.swift` | Query tipizzate |
-| `Sources/GraphEvo/Predicate.swift` | Costruzione dei filtri |
-| `Sources/GraphEvo/Watch.swift` | Osservazione dei cambiamenti |
-| `Sources/GraphEvo/Persistence/` | Configurazione, store, metadati e contesti |
-| `Sources/GraphEvo/Migration/` | Migrazioni, ledger, backup e logging |
-| `Sources/GraphEvo/Tools/` | Merge, deduplicazione e strumenti diagnostici |
-| `Sources/GraphEvo/Transformer/` | Codifica sicura di valori eterogenei |
-| `Tests/GraphEvoTests/` | Test funzionali e regressioni |
+| `Sources/GraphEvo/Graph.swift` | Graph opening, readiness, context, and delegates |
+| `Sources/GraphEvo/Node.swift` | Common properties, tags, groups, and deletion |
+| `Sources/GraphEvo/Entity.swift` | Entities and relationship/action access |
+| `Sources/GraphEvo/Relationship.swift` | Directed relationships |
+| `Sources/GraphEvo/Action.swift` | Actions and their subjects/objects |
+| `Sources/GraphEvo/Search.swift` | Typed queries |
+| `Sources/GraphEvo/Predicate.swift` | Filter construction |
+| `Sources/GraphEvo/Watch.swift` | Change observation |
+| `Sources/GraphEvo/Persistence/` | Configuration, stores, metadata, and contexts |
+| `Sources/GraphEvo/Migration/` | Migrations, ledger, backups, and logging |
+| `Sources/GraphEvo/Tools/` | Merge, deduplication, and diagnostics |
+| `Sources/GraphEvo/Transformer/` | Safe encoding of heterogeneous values |
+| `Tests/GraphEvoTests/` | Functional and regression tests |
 
-## Regole architetturali
+## Architectural rules
 
-1. Usare le facciate pubbliche `Entity`, `Relationship` e `Action`. Non creare o
-   manipolare direttamente le classi Core Data `Managed*`, che sono dettagli
-   interni dell’implementazione.
-2. Ogni oggetto del dominio deve appartenere al `Graph` corretto. Non combinare
-   `Search` costruite su graph differenti.
-3. Dopo modifiche ai dati chiamare `graph.sync()` quando è necessario rendere
-   persistente il contesto.
-4. Usare `whenReady` quando il codice deve distinguere chiaramente tra graph
-   pronto e apertura fallita.
-5. Non aggiungere migrazioni automatiche per store incompatibili: GraphEvo deve
-   lasciare invariati file e percorso e segnalare `incompatibleStore`.
-6. Conservare il comportamento pubblico esistente e aggiornare i test quando
-   si modifica un contratto.
+1. Use the public `Entity`, `Relationship`, and `Action` facades. Do not create
+   or manipulate Core Data `Managed*` classes directly; they are implementation
+   details.
+2. Every domain object must belong to the correct `Graph`. Do not combine
+   `Search` instances built on different graphs.
+3. After changing data, call `graph.sync()` when the context must be persisted.
+4. Use `whenReady` when code must distinguish a ready graph from a failed open.
+5. Do not add automatic migrations for incompatible stores: GraphEvo must leave
+   the files and path unchanged and report `incompatibleStore`.
+6. Preserve existing public behavior and update tests when changing a contract.
 
-## Configurazione degli store e URL
+## Store configuration and URLs
 
-`GraphStoreConfiguration.location` può indicare una directory o un file SQLite.
-È considerata una location esplicita quando l’estensione è `.sqlite`.
+`GraphStoreConfiguration.location` may identify a directory or a SQLite file. It
+is an explicit file location when the extension is `.sqlite`.
 
-- Directory: GraphEvo costruisce `GraphEvo_<name>.sqlite` dentro la directory.
-- File `.sqlite`: il percorso completo è autorevole e non viene riscritto.
-- `resolvedLocation`: directory effettiva usata per la risoluzione.
-- `storeURL`: percorso canonico calcolato dalla configurazione.
-- `resolvedStoreURL`: percorso realmente aperto, incluso l’eventuale riuso di
-  uno store legacy.
-- `appGroupIdentifier`: può sostituire la directory per una configurazione
-  basata su directory; non sposta un file `.sqlite` esplicito.
-- `.inMemory`: usa un database temporaneo; le URL vengono calcolate ma non
-  identificano un file persistente.
+- Directory: GraphEvo builds `GraphEvo_<name>.sqlite` inside it.
+- `.sqlite` file: the complete path is authoritative and is not rewritten.
+- `resolvedLocation`: the effective directory used for resolution.
+- `storeURL`: the canonical URL calculated from the configuration.
+- `resolvedStoreURL`: the URL actually opened, including legacy-store reuse.
+- `appGroupIdentifier`: may replace a directory for directory-based
+  configuration; it does not move an explicit `.sqlite` file.
+- `.inMemory`: uses a temporary database; URLs are calculated but do not point
+  to a persistent file.
 
-Quando si modifica questa logica verificare almeno: directory nuova, file
-esplicito esistente, file esplicito non ancora creato, App Group, store legacy,
-backend in-memory e nomi con estensione maiuscola/minuscola.
+When changing this logic, verify at least: a new directory, an existing
+explicit file, a not-yet-created explicit file, App Group, legacy store,
+in-memory backend, and names with upper- or lowercase extensions.
 
-## API operative essenziali
+## Essential operational APIs
 
-### Apertura e salvataggio
+### Opening and saving
 
 ```swift
 var config = GraphStoreConfiguration()
@@ -90,16 +86,13 @@ graph.whenReady { result in
 }
 ```
 
-API da preferire:
+Prefer `Graph(configuration:migrationEnabled:)` for explicit configurations,
+`Graph(storeURL:backend:migrationEnabled:)` when the caller owns an exact
+directory or file, `whenReady` for opening results, `sync` for synchronous
+saves, `async` for asynchronous saves, and `newBackgroundContext()` for
+background Core Data work.
 
-- `Graph(configuration:migrationEnabled:)` per configurazioni esplicite;
-- `Graph(storeURL:backend:migrationEnabled:)` quando il chiamante possiede già
-  una directory o un file preciso;
-- `whenReady` per il risultato di apertura;
-- `sync` per il salvataggio sincrono e `async` per quello asincrono;
-- `newBackgroundContext()` per lavori Core Data in background.
-
-### Creazione e modifica dei dati
+### Creating and changing data
 
 ```swift
 let user = Entity("User", graph: graph)
@@ -111,10 +104,10 @@ user.is(relationship: "writes").of(note)
 graph.sync()
 ```
 
-Le proprietà dei nodi sono dinamiche e di tipo `Any?`. Per valori complessi
-usare i transformer/coder pubblici documentati nell’API reference.
+Node properties are dynamic and typed as `Any?`. Use the public transformers
+and coders documented in the API reference for complex values.
 
-### Query
+### Queries
 
 ```swift
 let activeUsers = Search<Entity>(graph: graph)
@@ -123,84 +116,82 @@ let activeUsers = Search<Entity>(graph: graph)
     .sync()
 ```
 
-Attenzione: chiamate successive a `where` vengono combinate con OR nel codice
-attuale. Se serve un’espressione composta esplicita, costruire un `Predicate`
-con `&&`, `||` e `!` prima di passarlo alla ricerca.
+Successive `where` calls are currently combined with OR. For an explicit
+compound expression, build a `Predicate` with `&&`, `||`, and `!` first.
 
-### Watcher
+### Watchers
 
-Un watcher è inizialmente fermo. Configurare il filtro e il delegate, quindi
-chiamare `resume()`. Usare `pause()` per sospenderlo e `clear()` per rimuovere
-il filtro. I callback distinguono `GraphSource.local` e `GraphSource.cloud`.
+A watcher is initially stopped. Configure its filter and delegate, then call
+`resume()`. Use `pause()` to suspend it and `clear()` to remove the filter.
+Callbacks distinguish `GraphSource.local` and `GraphSource.cloud`.
 
-## CloudKit e Persistent History
+## CloudKit and Persistent History
 
-La precedenza per il container identifier è:
+Container identifier precedence is:
 
 1. `configuration.cloudKitContainerIdentifier`;
 2. `Graph.cloudKitContainerIdentifier`;
-3. Info.plist `GraphCloudKitContainerIdentifier`.
+3. `GraphCloudKitContainerIdentifier` in Info.plist.
 
-Senza identifier il graph resta locale. Se CloudKit non è disponibile, GraphEvo
-può emettere un warning e usare un fallback locale.
+Without an identifier the graph remains local. If CloudKit is unavailable,
+GraphEvo may emit a warning and use a local fallback.
 
-Per il ciclo dei cambiamenti remoti chiamare
-`ph_prepareOnLaunchAfterContainerReady()` dopo che il container è pronto.
-Persistent History usa un token persistito e filtra le transazioni autoriali
-locali per evitare callback duplicate sul dispositivo originario.
+Call `ph_prepareOnLaunchAfterContainerReady()` after the container is ready.
+Persistent History uses a persisted token and filters local-authored
+transactions to avoid duplicate callbacks on the originating device.
 
-## Migrazioni
+## Migrations
 
-Registrare le migrazioni prima di creare o aprire il graph:
+Register migrations before creating or opening a graph:
 
 ```swift
 GraphMigrationManager.registerMigration(MyMigration())
 ```
 
-Le fasi sono `.preInit`, `.postInit`, `.postMigration` e `.ready`. Una migrazione
-deve dichiarare `id`, implementare `handlePhase`, indicare con `needsRun` se deve
-essere eseguita e chiamare la completion con `GraphMigrationResult`.
+The phases are `.preInit`, `.postInit`, `.postMigration`, and `.ready`. A
+migration declares `id`, implements `handlePhase`, reports whether it needs to
+run through `needsRun`, and calls its completion with `GraphMigrationResult`.
 
-Prima di trasformare uno store usare `MigrationBackupManager`. Il backup di uno
-store include `.sqlite` e, se presenti, i file `.sqlite-wal` e `.sqlite-shm`.
+Use `MigrationBackupManager` before transforming a store. A store backup
+includes `.sqlite` and, when present, `.sqlite-wal` and `.sqlite-shm` files.
 
-## Workflow per le modifiche
+## Change workflow
 
-1. Identificare il modulo responsabile e leggere i test correlati.
-2. Verificare se la modifica cambia un’API pubblica, una URL persistente, il
-   modello Core Data, la sincronizzazione o il comportamento dei watcher.
-3. Implementare il cambiamento mantenendo compatibilità e naming esistenti.
-4. Aggiungere o aggiornare test di regressione.
-5. Aggiornare il documento API e la guida tematica coinvolta.
-6. Eseguire `git diff --check` e i test disponibili.
-7. Riassumere chiaramente file modificati, test eseguiti e limitazioni ambientali.
+1. Identify the responsible module and read its related tests.
+2. Check whether the change affects a public API, persistent URL, Core Data
+   model, synchronization, or watcher behavior.
+3. Implement the change while preserving compatibility and existing naming.
+4. Add or update regression tests.
+5. Update the API document and the relevant thematic guide.
+6. Run `git diff --check` and the available tests.
+7. Clearly summarize changed files, tests, and environmental limitations.
 
-## Workflow Git e pull request
+All comments and documentation must be written in English. This includes
+Markdown files, API comments, inline code comments, test comments, and user-
+facing diagnostic messages introduced or modified by an agent.
 
-Ogni modifica deve rimanere tracciata, descritta e facilmente reversibile. Non
-lavorare direttamente sui branch condivisi o sui branch di release, salvo una
-richiesta esplicita.
+All implementations and distributions must comply with the requirements of
+the applicable software licenses, including attribution, copyright, notice,
+and redistribution obligations. Before adding or adapting third-party code,
+review its license and preserve the required notices.
 
-1. Partire dal branch corretto e verificare che il working tree sia pulito:
+## Git and pull-request workflow
+
+Keep every change tracked, described, and easy to reverse. Do not work directly
+on shared or release branches unless explicitly requested.
+
+1. Start on the correct branch and verify a clean tree:
 
    ```bash
    git status --short --branch
    git fetch --prune
    ```
 
-2. Creare un branch dedicato per la modifica. Usare un nome descrittivo, ad
-   esempio `codex/docs-agents-workflow` o `codex/fix-store-resolution`.
-
-   ```bash
-   git switch -c codex/<descrizione-breve>
-   ```
-
-3. Tenere la modifica concentrata sullo scopo del branch. Non includere file
-   estranei, formattazioni casuali o cambiamenti non spiegati.
-
-4. Aggiornare codice, test e documentazione insieme quando fanno parte dello
-   stesso comportamento. Il messaggio dei commit deve spiegare l’intento, non
-   solo elencare i file, per esempio:
+2. Create a dedicated descriptive branch, such as
+   `codex/docs-agents-workflow` or `codex/fix-store-resolution`.
+3. Keep the change focused; do not include unrelated files or formatting.
+4. Update code, tests, and documentation together when they describe one
+   behavior. Commit messages should explain intent, for example:
 
    ```text
    docs: document GraphStoreConfiguration URL resolution
@@ -208,7 +199,7 @@ richiesta esplicita.
    test: cover legacy store fallback
    ```
 
-5. Prima di creare la PR controllare sempre:
+5. Before opening a PR, run:
 
    ```bash
    git diff --check
@@ -218,35 +209,18 @@ richiesta esplicita.
    swift test
    ```
 
-   Se una verifica non può essere eseguita, descrivere il motivo nella PR e nel
-   riepilogo del lavoro. Non nascondere un test fallito né alterare il codice
-   solo per aggirare una limitazione dell’ambiente.
+   If a check cannot run, describe why in the PR and work summary. Do not hide
+   a failed test or alter code only to bypass a non-representative limitation.
+6. Publish the branch and open a PR against the intended target branch. Include
+   the goal, context, behavior before/after, files or modules, tests, risks,
+   limitations, follow-up work, and updated documentation.
+7. Wait for review and automated checks before merging. Merge through the PR.
+8. For tracked fixes, add a new commit or update the PR. Avoid rewriting shared
+   branch history. Prefer a revert commit for already-merged changes.
+9. Never use destructive commands such as `git reset --hard` or `git checkout --`
+   without an explicit request and a verified target.
 
-6. Pubblicare il branch e aprire una pull request verso il branch previsto. La
-   PR deve contenere:
-
-   - obiettivo e contesto della modifica;
-   - comportamento precedente e comportamento nuovo;
-   - elenco dei file o moduli coinvolti;
-   - test eseguiti e relativi risultati;
-   - eventuali rischi, limitazioni o attività successive;
-   - indicazione della documentazione aggiornata.
-
-7. Attendere la revisione e i controlli automatici prima del merge. Il merge
-   deve avvenire tramite PR, così codice, discussione, verifiche e decisioni
-   restano associati allo stesso cambiamento.
-
-8. Per correggere una modifica già tracciata, aggiungere un nuovo commit o
-   aggiornare la PR. Evitare di riscrivere la storia dei branch condivisi.
-   Per annullare una modifica già mergiata, preferire un commit di revert: il
-   cambiamento originale e la sua inversione restano entrambi visibili.
-
-9. Non usare comandi distruttivi come `git reset --hard` o `git checkout --`
-   senza una richiesta esplicita e senza aver verificato cosa verrebbe perso.
-   Prima di ogni operazione potenzialmente distruttiva controllare il target
-   esatto e creare, se necessario, una copia o un commit di salvataggio.
-
-## Verifiche consigliate
+## Recommended checks
 
 ```bash
 git diff --check
@@ -254,29 +228,27 @@ swift package dump-package
 swift test
 ```
 
-Il package dichiara iOS 16+ e macOS 12+, ma alcune parti importano framework
-Apple disponibili solo nel relativo SDK. Se `swift test` fallisce sul runner
-macOS per `UIKit` o `PDFKit`, riportare il limite senza modificare gli import
-solo per far passare un test locale non rappresentativo.
+The package declares iOS 16+ and macOS 12+, but some code imports Apple
+frameworks available only in the corresponding SDK. If `swift test` fails on a
+macOS runner because of `UIKit` or `PDFKit`, report the limitation without
+changing imports just to make a non-representative local test pass.
 
-## Errori da evitare
+## Avoid these mistakes
 
-- Non usare `Graph(name:)`: il costruttore pubblico richiede una configurazione
-  oppure una `storeURL`.
-- Non assumere che `location` sia sempre il file SQLite finale.
-- Non usare `storeURL` quando serve sapere quale file legacy verrà realmente
-  aperto: usare `resolvedStoreURL`.
-- Non modificare direttamente classi `Managed*` per correggere un comportamento
-  della API pubblica.
-- Non considerare `GraphReadiness` come risultato di una migrazione applicativa:
-  la migrazione comunica errori tramite `GraphEvent`.
-- Non introdurre sincronizzazione CloudKit senza gestire fallback, eventi e
-  Persistent History.
-- Non committare file di store, token o log generati dai test.
+- Do not use `Graph(name:)`; the public initializer requires a configuration or
+  a `storeURL`.
+- Do not assume `location` is always the final SQLite file.
+- Do not use `storeURL` when you need to know which legacy file is opened; use
+  `resolvedStoreURL`.
+- Do not modify `Managed*` classes directly to fix public API behavior.
+- Do not treat `GraphReadiness` as the result of an application migration;
+  migrations report errors through `GraphEvent`.
+- Do not introduce CloudKit synchronization without fallback and event handling.
+- Do not commit store files, tokens, or test-generated logs.
 
-## Aggiornamento della documentazione
+## Documentation updates
 
-Quando cambia una firma pubblica, aggiornare sempre
-[`docs/api/public-api.md`](docs/api/public-api.md). Quando cambia il flusso
-operativo, aggiornare questo file e la guida tematica corrispondente in `docs/`.
-Il `README.md` deve rimanere introduttivo: non duplicare lì la reference completa.
+When a public signature changes, always update
+[`docs/api/public-api.md`](docs/api/public-api.md). When an operational flow
+changes, update this file and the corresponding guide in `docs/`. Keep
+`README.md` introductory; do not duplicate the complete API reference there.

@@ -1,83 +1,73 @@
 # Persistent History
 
-Persistent History consente di capire quali modifiche sono state salvate in
-Core Data dopo l’ultima elaborazione. GraphEvo lo usa per consegnare ai watcher
-i cambiamenti arrivati da altri contesti e da CloudKit.
+Persistent History identifies changes saved in Core Data since the last
+processing point. GraphEvo uses it to deliver changes from other contexts and
+CloudKit to watchers.
 
-## Avvio
+## Startup
 
-Chiamare il metodo pubblico dopo che il persistent container è pronto:
+Call the public method after the persistent container is ready:
 
 ```swift
 graph.ph_prepareOnLaunchAfterContainerReady()
 ```
 
-GraphEvo carica il token salvato, oppure prepara una sessione iniziale senza
-perdere la cronologia necessaria.
+GraphEvo loads the saved token or prepares an initial session without losing
+the required history.
 
-## Elaborazione
+## Processing
 
-`processPersistentHistoryForRemoteChange()` accoda l’elaborazione. Per gestire
-una singola batch con completion usare:
+`processPersistentHistoryForRemoteChange()` queues processing. To process one
+batch with a completion:
 
 ```swift
 graph.processPersistentHistoryBatch { processed in
-    print("Batch elaborata: \(processed)")
+    print("Batch processed: \(processed)")
 }
 ```
 
-Il flusso generale è:
+The general flow is: load the latest token; read subsequent transactions;
+ignore local-authored transactions when appropriate; collect inserted, updated,
+and deleted object IDs; merge changes into the observed context; notify
+watchers; and save the new token only after delivery.
 
-1. caricare l’ultimo token;
-2. leggere le transazioni successive;
-3. ignorare le transazioni autoriali locali quando opportuno;
-4. raccogliere gli object ID inseriti, aggiornati e cancellati;
-5. fondere le modifiche nel contesto osservato;
-6. notificare i watcher;
-7. salvare il nuovo token solo dopo la consegna.
+## Tokens
 
-## Token
+The token is stored on disk at a store-associated path and also kept in a local
+backup. With `appGroupIdentifier`, the token path may reside in the App Group.
 
-Il token viene salvato su disco in un percorso associato allo store e mantenuto
-anche in un backup locale. Con `appGroupIdentifier` il percorso del token può
-risiedere nell’App Group.
+Token identity is derived from the canonical URL and, when available, the
+persistent store's `NSStoreUUID`. If GraphEvo detects a rebuilt store with a
+new identity, it does not reuse the previous token.
 
-L’identità del token è derivata dall’URL canonico e, quando disponibile, dal
-`NSStoreUUID` del persistent store. Se GraphEvo rileva una ricostruzione con una
-nuova identità di store, non riusa il token precedente.
+The token identifies a processed history position, not a domain object. Do not
+use it to reconstruct entity identity directly.
 
-Il token identifica il punto della cronologia già elaborato, non un oggetto del
-dominio. Non usarlo per ricostruire direttamente l’identità delle entità.
+## Duplicate callbacks
 
-## Callback duplicate
+GraphEvo assigns a transaction author to local contexts and filters transactions
+from the originating device. The app must still design idempotent callbacks:
+the same change may be observed at different times when Core Data, CloudKit,
+and the UI use different contexts.
 
-GraphEvo assegna un transaction author ai contesti locali e filtra le transazioni
-del dispositivo originario. Nonostante questo, l’applicazione deve progettare
-callback idempotenti: lo stesso cambiamento può essere osservato in più momenti
-quando Core Data, CloudKit e UI lavorano su contesti diversi.
+## Events and errors
 
-## Eventi ed errori
+Corrupt tokens are invalidated together with the file and UserDefaults backup,
+and GraphEvo moves recovery to the current history head. The same recovery is
+used for `NSCocoaErrorDomain` `134301` (an expired token) and `134501` (a token
+that refers to a missing store).
 
-I token corrotti vengono invalidati insieme al file e al backup UserDefaults e
-GraphEvo porta il punto di recovery alla history head corrente. Lo stesso
-recovery viene applicato a:
+The coordinator does not retry the invalid token on later remote-change
+notifications and GraphEvo emits one `GraphWarning.persistentHistoryRecovery`
+diagnostic. This bootstrap may skip transactions no longer representable by the
+token; it does not generate artificial watcher callbacks.
 
-- `NSCocoaErrorDomain` `134301`: token Persistent History scaduto;
-- `NSCocoaErrorDomain` `134501`: token riferito a uno store non più presente.
+Other token errors produce `GraphWarning.persistentHistoryTokenStore`; a
+transaction without an author produces
+`GraphWarning.persistentHistoryMissingTransactionAuthor`; processing errors
+produce `GraphFailure.persistentHistory`. Use `GraphEventDelegate` to record
+them.
 
-In entrambi i casi il coordinatore non ripete il token invalido alle successive
-remote-change notification e GraphEvo emette una sola diagnosi
-`GraphWarning.persistentHistoryRecovery` per il recovery eseguito. Questo
-bootstrap può saltare transazioni non più rappresentabili dal token; non
-genera callback watcher artificiali.
-
-Gli altri errori del token producono `GraphWarning.persistentHistoryTokenStore`; una
-transazione senza autore produce
-`GraphWarning.persistentHistoryMissingTransactionAuthor`;
-gli errori di elaborazione producono `GraphFailure.persistentHistory`.
-Usare `GraphEventDelegate` per registrarli.
-
-Gli helper `ph_debug_*` sono destinati a test e diagnostica, non al normale
-flusso applicativo. Le varianti che non hanno `print` nel nome non producono
-output implicito; le varianti `ph_debug_print...` stampano solo quando chiamate
-esplicitamente.
+`ph_debug_*` helpers are intended for tests and diagnostics, not normal
+application flow. Variants without `print` in the name produce no implicit
+output; `ph_debug_print...` variants print only when explicitly called.

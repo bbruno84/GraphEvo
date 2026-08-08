@@ -8,53 +8,53 @@
 
 import Foundation
 
-/// Gestisce backup e ripristino dei file usati dalle migrazioni
+/// Manages backup and restoration of files used by migrations.
 /// (store SQLite + WAL/SHM, baseline.zip, ecc).
 ///
-/// Obiettivi:
-/// - API unica riutilizzabile da tutte le migrazioni (`MigrationV1`, baseline, future)
-/// - Possibilità di ripristinare i file nella loro posizione originale
-/// - Opzioni di conflitto (skip / overwrite / duplicate)
-/// - Design pronto per futuri export su iCloud (basta scegliere un root in un container ubiquity)
+/// Goals:
+/// - One reusable API for all migrations (`MigrationV1`, baselines, and future migrations).
+/// - Restore files to their original location.
+/// - Conflict options (skip / overwrite / duplicate).
+/// - Ready for future iCloud exports by selecting a root in an ubiquity container.
 public enum MigrationBackupManager {
 
-    // MARK: - Tipi pubblici
+    // MARK: - Public types
 
-    /// Policy quando esiste già un backup per quella combinazione (migrazione + store).
+    /// Policy when a backup already exists for a migration/store combination.
     public enum ConflictPolicy {
-        /// Se esiste già un backup per quella migrazione + store, non fare nulla.
+        /// Do nothing when a backup already exists for the migration and store.
         case skip
-        /// Sovrascrivi il backup esistente (stessa cartella).
+        /// Overwrite the existing backup in the same folder.
         case overwrite
-        /// Crea una nuova cartella con suffisso incrementale (-1, -2, …).
+        /// Create a new folder with an incrementing suffix (-1, -2, ...).
         case duplicate
     }
 
-    /// Descrittore di un backup (serializzato su disco come JSON).
+    /// A backup descriptor serialized to disk as JSON.
     public struct BackupDescriptor: Codable {
-        /// Identificatore della migrazione che ha creato questo backup (es. "MigrationV1").
+        /// Identifier of the migration that created this backup (for example, "MigrationV1").
         public let migrationID: String
-        /// Facoltativo: label umana (es. "before-merge", "pre-baseline").
+        /// Optional human-readable label (for example, "before-merge").
         public let label: String?
-        /// Percorso completo del file (o dello store) originale.
+        /// Full path of the original file or store.
         public let originalPath: String
-        /// Data/ora di creazione del backup.
+        /// Backup creation date.
         public let createdAt: Date
-        /// Lista dei nomi dei file copiati all’interno della cartella di backup.
+        /// Names of files copied into the backup folder.
         public let files: [String]
     }
 
-    // MARK: - API pubblica
+    // MARK: - Public API
 
-    /// Esegue il backup di uno store SQLite (file principale + -wal + -shm).
+    /// Backs up an SQLite store (main file plus optional -wal and -shm files).
     ///
     /// - Parameters:
-    ///   - storeURL: URL del file .sqlite originale.
-    ///   - migrationID: ID della migrazione (usa `migration.id`).
-    ///   - label: Etichetta facoltativa (es. "pre-migration").
-    ///   - conflictPolicy: Come comportarsi se esiste già un backup per questa combinazione.
-    ///   - rootOverride: Root opzionale per i backup (es. una cartella in AppGroup o in iCloud).
-    /// - Returns: Descriptor + URL della cartella di backup.
+    ///   - storeURL: URL of the original .sqlite file.
+    ///   - migrationID: Migration ID (use `migration.id`).
+    ///   - label: Optional label (for example, "pre-migration").
+    ///   - conflictPolicy: Behavior when a backup already exists.
+    ///   - rootOverride: Optional backup root, such as an App Group or iCloud folder.
+    /// - Returns: The descriptor and backup-folder URL.
     @discardableResult
     public static func backupStore(
         at storeURL: URL,
@@ -69,12 +69,12 @@ public enum MigrationBackupManager {
         let storeDir = storeURL.deletingLastPathComponent()
         let storeName = storeDir.lastPathComponent
 
-        // Root per i backup: di default padre della directory dello store + "migrationBackups".
+        // Backup root: the store directory's parent plus "migrationBackups" by default.
         let backupRoot = rootOverride ?? storeDir
             .deletingLastPathComponent()
             .appendingPathComponent("migrationBackups", isDirectory: true)
 
-        // Cartella base per questa migrazione + store.
+        // Base folder for this migration and store.
         let baseFolderName = "\(migrationID)_\(storeName)"
         let baseFolderURL = backupRoot.appendingPathComponent(baseFolderName, isDirectory: true)
 
@@ -88,7 +88,7 @@ public enum MigrationBackupManager {
             return (existingDescriptor, backupFolderURL)
         }
 
-        // Assicurati che la cartella esista
+        // Ensure the folder exists.
         try fm.createDirectory(at: backupFolderURL, withIntermediateDirectories: true, attributes: nil)
 
         // File principali: .sqlite, .sqlite-wal, .sqlite-shm
@@ -135,14 +135,14 @@ public enum MigrationBackupManager {
         return (descriptor, backupFolderURL)
     }
 
-    /// Esegue il backup di un singolo file (es. baseline.zip).
+    /// Backs up a single file (for example, baseline.zip).
     ///
     /// - Parameters:
-    ///   - fileURL: URL del file da salvare.
-    ///   - migrationID: ID della migrazione che effettua il backup.
-    ///   - label: Etichetta facoltativa.
-    ///   - conflictPolicy: Policy di conflitto.
-    ///   - rootOverride: Root opzionale per i backup.
+    ///   - fileURL: URL of the file to back up.
+    ///   - migrationID: ID of the migration creating the backup.
+    ///   - label: Optional label.
+    ///   - conflictPolicy: Conflict policy.
+    ///   - rootOverride: Optional backup root.
     @discardableResult
     public static func backupFile(
         at fileURL: URL,
@@ -204,9 +204,8 @@ public enum MigrationBackupManager {
         return (descriptor, backupFolderURL)
     }
 
-    /// Convenience API: esegue il backup di uno store usando:
-    ///  - `migration.id` come identificatore
-    ///  - `migration.backupRoot(for:)` come root di default per i backup
+    /// Convenience API: backs up a store using `migration.id` as the identifier
+    /// and `migration.backupRoot(for:)` as the default backup root.
     @discardableResult
     public static func backupStore(
         at storeURL: URL,
@@ -225,9 +224,8 @@ public enum MigrationBackupManager {
         )
     }
 
-    /// Convenience API: esegue il backup di un singolo file usando:
-    ///  - `migration.id` come identificatore
-    ///  - `migration.backupRoot(for:)` come root di default per i backup
+    /// Convenience API: backs up a single file using `migration.id` as the identifier
+    /// and `migration.backupRoot(for:)` as the default backup root.
     @discardableResult
     public static func backupFile(
         at fileURL: URL,
@@ -246,13 +244,13 @@ public enum MigrationBackupManager {
         )
     }
 
-    /// Trova tutti i backup per una certa migrazione + store.
+    /// Finds all backups for a migration and store.
     ///
     /// - Parameters:
-    ///   - migrationID: ID della migrazione.
-    ///   - storeURL: URL dello store originale.
-    ///   - rootOverride: root dei backup (se differente dal default).
-    /// - Returns: Lista di (descriptor, folderURL) ordinati per data di creazione.
+    ///   - migrationID: Migration ID.
+    ///   - storeURL: URL of the original store.
+    ///   - rootOverride: Backup root when different from the default.
+    /// - Returns: `(descriptor, folderURL)` pairs ordered by creation date.
     public static func findBackupsForStore(
         migrationID: String,
         storeURL: URL,
@@ -286,7 +284,7 @@ public enum MigrationBackupManager {
                 let data = try Data(contentsOf: descriptorURL)
                 let descriptor = try JSONDecoder().decode(BackupDescriptor.self, from: data)
 
-                // Verifichiamo che l'originalPath corrisponda allo store passato.
+                // Verify that originalPath matches the supplied store.
                 if descriptor.originalPath == storeURL.path && descriptor.migrationID == migrationID {
                     results.append((descriptor, folder))
                 }
@@ -300,17 +298,17 @@ public enum MigrationBackupManager {
             }
         }
 
-        // Ordina per createdAt, dal più vecchio al più recente
+        // Sort by createdAt, oldest first.
         results.sort { $0.0.createdAt < $1.0.createdAt }
         return results
     }
 
-    /// Ripristina un backup nella posizione originale.
+    /// Restores a backup to its original location.
     ///
     /// - Parameters:
-    ///   - descriptor: Il descriptor del backup (tipicamente ottenuto da `backupStore` o `findBackupsForStore`).
-    ///   - folderURL: Cartella che contiene il backup e il relativo `backup-info.json`.
-    ///   - overwriteExisting: Se true, rimuove eventuali file correnti prima di copiare.
+    ///   - descriptor: Backup descriptor, usually returned by `backupStore` or `findBackupsForStore`.
+    ///   - folderURL: Folder containing the backup and its `backup-info.json`.
+    ///   - overwriteExisting: When true, remove current files before copying.
     public static func restoreToOriginalLocation(
         descriptor: BackupDescriptor,
         from folderURL: URL,
@@ -320,7 +318,7 @@ public enum MigrationBackupManager {
         let originalURL = URL(fileURLWithPath: descriptor.originalPath)
         let originalDir = originalURL.deletingLastPathComponent()
 
-        // Assicuriamoci che la cartella esista
+        // Ensure the folder exists.
         if !fm.fileExists(atPath: originalDir.path) {
             try fm.createDirectory(at: originalDir, withIntermediateDirectories: true, attributes: nil)
         }
@@ -363,14 +361,14 @@ public enum MigrationBackupManager {
         )
     }
 
-    // MARK: - Helpers privati
+    // MARK: - Private helpers
 
     private static func prepareBackupFolder(
         baseFolderURL: URL,
         conflictPolicy: ConflictPolicy,
         fileManager fm: FileManager
     ) throws -> (folderURL: URL, existingDescriptor: BackupDescriptor?) {
-        // Gestione ottimizzata della policy .skip con eventuale riutilizzo del descriptor esistente
+        // Optimize .skip by reusing an existing descriptor when possible.
         if conflictPolicy == .skip, fm.fileExists(atPath: baseFolderURL.path) {
             do {
                 let existingDescriptor = try loadDescriptor(in: baseFolderURL, fileManager: fm)
@@ -388,12 +386,12 @@ public enum MigrationBackupManager {
                     message: error.localizedDescription,
                     metadata: ["folder": baseFolderURL.lastPathComponent]
                 )
-                // Se non riusciamo a leggere il descriptor, procediamo come se non esistesse
+                // If the descriptor cannot be read, proceed as if it did not exist.
             }
         }
 
-        // Per tutti gli altri casi, o se lo skip non è andato a buon fine,
-        // demandiamo a `resolveBackupFolder` per ottenere la cartella corretta.
+        // For all other cases, or when skip fails, ask `resolveBackupFolder`
+        // for the correct folder.
         let folderURL = try resolveBackupFolder(
             baseFolderURL: baseFolderURL,
             conflictPolicy: conflictPolicy,
@@ -409,15 +407,15 @@ public enum MigrationBackupManager {
     ) throws -> URL {
         switch conflictPolicy {
         case .overwrite:
-            // Usiamo la cartella base, eventualmente svuotandola.
+            // Use the base folder, clearing it when necessary.
             if fm.fileExists(atPath: baseFolderURL.path) {
                 try fm.removeItem(at: baseFolderURL)
             }
             return baseFolderURL
 
         case .skip:
-            // La policy .skip viene gestita a livello superiore (chiamante).
-            // Qui risolviamo solo la cartella da usare per nuovi backup.
+            // The .skip policy is handled by the caller.
+            // Here we only resolve the folder for new backups.
             return baseFolderURL
 
         case .duplicate:

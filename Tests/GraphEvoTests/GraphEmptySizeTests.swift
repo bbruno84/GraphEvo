@@ -10,20 +10,20 @@ import XCTest
 
 final class GraphEmptySizeTests: XCTestCase {
     func testEmptyGraphFileSize() throws {
-        // 1. Usa un nome random per non confliggere con altri test
+        // 1. Use a random name to avoid conflicts with other tests.
         var configuration = GraphStoreConfiguration()
         configuration.name = "EmptyGraph-\(UUID().uuidString)"
         let graph = Graph(configuration: configuration)
 
-        // 2. Sincronizza subito (crea i file sul disco)
+        // 2. Sync immediately (creates the files on disk).
         graph.sync()
 
-        // 3. Recupera il percorso
+        // 3. Get the path.
         let sqliteURL = graph.location
 
-        // 4. Verifica esistenza
+        // 4. Verify existence.
         XCTAssertTrue(FileManager.default.fileExists(atPath: sqliteURL.path),
-                      "Il file Graph.sqlite non esiste al percorso atteso")
+                      "Graph.sqlite does not exist at the expected path")
 
         // 5. Recupera dimensione
         let attrs = try FileManager.default.attributesOfItem(atPath: sqliteURL.path)
@@ -46,7 +46,7 @@ final class GraphEmptySizeTests: XCTestCase {
             }
         }
 
-        // 6. Assert: deve essere > 0
-        XCTAssertGreaterThan(sizeBytes, 0, "Graph.sqlite vuoto deve avere size > 0")
+        // 6. Assert: must be greater than zero.
+        XCTAssertGreaterThan(sizeBytes, 0, "An empty Graph.sqlite must have size > 0")
     }
 }

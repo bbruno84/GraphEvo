@@ -1,9 +1,8 @@
-# Concetti fondamentali
+# Core concepts
 
-Questa sezione raccoglierà la descrizione del modello a grafo, della persistenza
-e dell’integrazione CloudKit.
+This section describes the graph model, persistence, and CloudKit integration.
 
-Documenti previsti:
+Documents:
 
 - `graph-model.md`
 - `persistence.md`

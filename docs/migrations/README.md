@@ -1,9 +1,9 @@
-# Migrazioni
+# Migrations
 
-Questa sezione raccoglierà la documentazione sul ciclo di vita delle migrazioni,
-sui backup e sul Persistent History.
+This section documents the migration lifecycle, backups, and Persistent
+History.
 
-Documenti previsti:
+Documents:
 
 - `overview.md`
 - `backups.md`

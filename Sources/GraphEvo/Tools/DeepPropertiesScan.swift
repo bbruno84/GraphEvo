@@ -65,7 +65,7 @@ extension GraphTools {
                             }
                         }
                     } else {
-                        // Caso 3: Non-Data non-nil
+                        // Case 3: non-Data, non-nil value.
                         ok += 1
                         let typeName = String(describing: type(of: payload!))
                         typeCounters[typeName, default: 0] += 1
