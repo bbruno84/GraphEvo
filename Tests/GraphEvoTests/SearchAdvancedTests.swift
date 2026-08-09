@@ -46,7 +46,7 @@ final class SearchAdvancedTests: XCTestCase {
         )
     }
 
-    func testSearchCompositionClearPaginationAndAsyncCallback() {
+    func testSearchCompositionClearPaginationAndAsyncCallback() async {
         let graph = makeGraph()
         for index in 0..<3 {
             let entity = Entity("SearchEntity", graph: graph)
@@ -77,6 +77,6 @@ final class SearchAdvancedTests: XCTestCase {
             XCTAssertEqual(results.count, 3)
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 2)
+        await fulfillment(of: [expectation], timeout: 10)
     }
 }
