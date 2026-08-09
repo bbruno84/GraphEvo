@@ -50,7 +50,7 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
            let pdf = PDFDocument(url: pdfURL) {
             samples.append(pdf)
         } else {
-            XCTFail("⚠️ Resource sample.pdf mancante in bundle test")
+            XCTFail("Resource sample.pdf was not found in the test bundle")
         }
         
         // UIImage sample

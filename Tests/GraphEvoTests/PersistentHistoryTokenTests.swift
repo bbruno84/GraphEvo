@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import CoreData
 @testable import GraphEvo
 
 /// These tests do NOT create real Persistent History transactions (real CloudKit is required).

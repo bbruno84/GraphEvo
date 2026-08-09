@@ -13,7 +13,7 @@ final class GraphCloudSyncTests: XCTestCase {
         }
     }
 
-    func testSuccessfulImportOnEmptyReplicaIsInitial() {
+    func testSuccessfulImportOnEmptyReplicaIsInitial() throws {
         let graph = makeGraph()
         let cloudContainer = makeOfflineCloudContainer()
         graph.persistentContainer = cloudContainer
@@ -22,7 +22,9 @@ final class GraphCloudSyncTests: XCTestCase {
         let expectation = expectation(description: "import callback")
         delegate.onEvent = { _ in expectation.fulfill() }
         graph.cloudSyncDelegate = delegate
-        let storeIdentifier = cloudContainer.persistentStoreCoordinator.persistentStores.first!.identifier
+        let storeIdentifier = try XCTUnwrap(
+            cloudContainer.persistentStoreCoordinator.persistentStores.first?.identifier
+        )
 
         graph.receiveCloudKitEventForTesting(
             storeIdentifier: storeIdentifier,
@@ -36,7 +38,7 @@ final class GraphCloudSyncTests: XCTestCase {
         XCTAssertTrue(delegate.events[0].succeeded)
     }
 
-    func testSuccessfulImportOnPopulatedReplicaIsNotInitial() {
+    func testSuccessfulImportOnPopulatedReplicaIsNotInitial() throws {
         let graph = makeGraph()
         _ = Entity("User", graph: graph)
         let cloudContainer = makeOfflineCloudContainer()
@@ -46,7 +48,9 @@ final class GraphCloudSyncTests: XCTestCase {
         let expectation = expectation(description: "import callback")
         delegate.onEvent = { _ in expectation.fulfill() }
         graph.cloudSyncDelegate = delegate
-        let storeIdentifier = cloudContainer.persistentStoreCoordinator.persistentStores.first!.identifier
+        let storeIdentifier = try XCTUnwrap(
+            cloudContainer.persistentStoreCoordinator.persistentStores.first?.identifier
+        )
 
         graph.receiveCloudKitEventForTesting(
             storeIdentifier: storeIdentifier,
