@@ -11,13 +11,11 @@ let package = Package(
     products: [
         .library(name: "GraphEvo", targets: ["GraphEvo"])
         // .library(name: "GraphEvoMigration", targets: ["GraphEvoMigration"]) // se lo separi
-    ], dependencies: [
-        .package(url: "https://github.com/weichsel/ZIPFoundation", from: "0.9.0")
     ],
     targets: [
         .target(
             name: "GraphEvo",
-            dependencies: ["ZIPFoundation"],
+            dependencies: [],
             path: "Sources/GraphEvo",
             swiftSettings: [
                 .define("GRAPHEVO_IOS16")
@@ -30,7 +28,7 @@ let package = Package(
         // ),
         .testTarget(
             name: "GraphEvoTests",
-            dependencies: ["GraphEvo", "ZIPFoundation"],
+            dependencies: ["GraphEvo"],
             path: "Tests/GraphEvoTests",
             resources: [.process("Resources")]
         )
