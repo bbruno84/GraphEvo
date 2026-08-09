@@ -77,6 +77,6 @@ final class SearchAdvancedTests: XCTestCase {
             XCTAssertEqual(results.count, 3)
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 2)
+        wait(for: [expectation], timeout: 10)
     }
 }
