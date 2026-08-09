@@ -1,8 +1,6 @@
-#OS X
-.DS_Store
-
 # Xcode
-build/*
+DerivedData/
+build/
 *.pbxuser
 !default.pbxuser
 *.mode1v3
@@ -11,12 +9,30 @@ build/*
 !default.mode2v3
 *.perspectivev3
 !default.perspectivev3
-xcuserdata
-profile
-*.moved-aside
-*.playground
-*.framework
-DerivedData
-Index
-Build
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
 
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# CocoaPods (se mai usato in passato)
+Pods/
+Podfile.lock
+
+# Carthage (in caso fosse mai stato testato)
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+
+# Misc
+*.swp
+*.swo
+*.DS_Store
+*.orig

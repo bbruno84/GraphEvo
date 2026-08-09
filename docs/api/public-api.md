@@ -1,0 +1,312 @@
+# GraphEvo — public API reference
+
+GraphEvo is a Swift library for organizing connected data. It is built on Core
+Data and supports both local stores and CloudKit-backed stores.
+
+This document summarizes the public API, common usage patterns, and important
+behavioral contracts. The source in `Sources/GraphEvo` and the test suite remain
+the authoritative implementation references.
+
+## 1. Module identity
+
+```swift
+import GraphEvo
+```
+
+- Public module: `GraphEvo`
+- Supported platforms: iOS 16+, macOS 12+
+- Runtime dependency: `ZIPFoundation` for migration utilities
+- CloudKit backend: `NSPersistentCloudKitContainer` when configured
+
+The public domain model consists of `Graph`, `Node`, `Entity`, `Relationship`,
+`Action`, `Search`, and `Watch`.
+
+## 2. Store configuration
+
+```swift
+public struct GraphStoreConfiguration {
+    public var name: String
+    public var location: URL?
+    public var backend: GraphStoreBackend
+    public var appGroupIdentifier: String?
+    public var cloudKitContainerIdentifier: String?
+}
+```
+
+`location` is treated as an explicit SQLite file when its extension is
+`.sqlite`; otherwise it is treated as a directory. For a directory, GraphEvo
+builds `GraphEvo_<name>.sqlite`. An explicit file path is authoritative and is
+never rewritten.
+
+Important calculated properties include:
+
+- `resolvedLocation`: the effective directory after App Group resolution;
+- `storeURL`: the canonical URL calculated from the configuration;
+- `legacyStoreURLs`: candidate legacy paths;
+- `resolvedStoreURL`: the URL actually selected for opening.
+
+For `.inMemory`, URLs are still calculated for consistency but do not identify a
+persistent file. `appGroupIdentifier` affects directory-based configurations;
+it does not move an explicit SQLite file.
+
+## 3. `Graph`
+
+```swift
+public init(configuration: GraphStoreConfiguration,
+            migrationEnabled: Bool = true)
+public init(storeURL: URL,
+            backend: GraphStoreBackend = .sqlite,
+            migrationEnabled: Bool = true)
+```
+
+`Graph` opens a store and owns the Core Data context used by the public facades.
+Use `whenReady` when opening must be coordinated explicitly:
+
+```swift
+let graph = Graph(configuration: configuration)
+graph.whenReady { result in
+    switch result {
+    case .success(let graph): graph.sync()
+    case .failure(let error): print(error.localizedDescription)
+    }
+}
+```
+
+Common properties and operations include `name`, `configuration`, `readiness`,
+`isReady`, `batchSize`, `batchOffset`, `eventDelegate`, `cloudSyncDelegate`,
+`sync()`, `async()`, `clear()`, `reset()`, `newBackgroundContext()`, and
+`whenReady(_:)`.
+
+`GraphReadiness` describes technical store availability:
+
+```swift
+public enum GraphReadiness {
+    case initializing
+    case ready
+    case failed(Error)
+}
+```
+
+`GraphStoreOpeningError` includes incompatible, unreadable, and failed-to-load
+store cases. An incompatible store is not changed automatically.
+
+## 4. Nodes and domain objects
+
+`Node` is the common base for all public graph objects. It exposes `graph`,
+`type`, `id`, `createdDate`, dynamic property access through
+`node["key"]`, tags, groups, and `delete()`.
+
+### `Entity`
+
+```swift
+public init(_ type: String, graph: Graph)
+```
+
+An `Entity` is a domain object with dynamic properties, tags, groups,
+relationships, and actions. Use `Entity` rather than Core Data `Managed*`
+classes.
+
+```swift
+let user = Entity("User", graph: graph)
+user["email"] = "ada@example.com"
+user.add(tags: "active")
+```
+
+Relationship and action shortcuts include `is(relationship:)`, `will(action:)`,
+and `did(action:)`.
+
+### `Relationship`
+
+A relationship is a directed, typed edge with `subject` and `object` entities.
+It can be created fluently:
+
+```swift
+user.is(relationship: "writes").of(note)
+```
+
+The related accessors distinguish `relationshipsWhenSubject` and
+`relationshipsWhenObject`.
+
+### `Action`
+
+An action represents an event with one or more `subjects` and `objects`:
+
+```swift
+let review = user.will(action: "reviews")
+review.add(objects: note)
+```
+
+`subjects`, `objects`, `actionsWhenSubject`, and `actionsWhenObject` expose the
+associated domain entities.
+
+### Tags and groups
+
+Node mutations are fluent and set-based:
+
+```swift
+user.add(tags: "active", "verified")
+user.remove(tags: "verified")
+user.toggle(tags: "featured")
+user.add(to: "authors")
+```
+
+`has(tags:using:)` supports `.and` and `.or`. Tags and groups do not contain
+duplicates.
+
+## 5. Predicates and search
+
+`Predicate` provides typed constructors such as `.type`, `.exists`, `.has`, and
+`.member`, together with property comparisons and the operators `&&`, `||`, and
+`!`. String comparisons are case- and diacritic-insensitive.
+
+```swift
+let filter = (.type("User") && .has(tags: "active")) || .type("Admin")
+let users = Search<Entity>(graph: graph).where(filter).sync()
+```
+
+`Search<T>` supports `Entity`, `Relationship`, and `Action`:
+
+```swift
+public init(graph: Graph)
+public func `where`(_ predicate: Predicate) -> Search<T>
+public func sync() -> [T]
+public func async(completion: @escaping ([T]) -> Void)
+```
+
+Successive `where` calls are combined with OR. Searches combined with `+` must
+belong to the same graph. A search without a predicate returns an empty array.
+
+## 6. Watchers
+
+`Watch<T>` observes changes to typed nodes:
+
+```swift
+public init(graph: Graph)
+public weak var delegate: GraphNodeDelegate?
+public var isRunning: Bool { get }
+public func clear() -> Watch<T>
+public func `where`(_ predicate: Predicate) -> Watch<T>
+public func resume() -> Watch<T>
+public func pause() -> Watch<T>
+```
+
+Watchers start stopped. `resume()` begins observation, `pause()` suspends it,
+and `clear()` removes its filter. Use `GraphEntityDelegate`,
+`GraphRelationshipDelegate`, or `GraphActionDelegate` according to `T`.
+Callbacks cover insertion, update, deletion, property changes, tag changes, and
+group membership changes. `GraphSource.local` and `.cloud` identify the change
+source.
+
+## 7. Events and CloudKit
+
+```swift
+public enum GraphPersistenceMode { case local; case cloud; case localFallback }
+public enum GraphEvent {
+    case stateChanged(GraphState)
+    case warning(GraphWarning)
+    case error(GraphFailure)
+}
+public protocol GraphEventDelegate: AnyObject {
+    func graph(_ graph: Graph, didReceive event: GraphEvent)
+}
+```
+
+Events are delivered on the main thread. States and warnings are not printed
+automatically; the application decides how to log them. Unrecoverable errors
+remain available as minimal diagnostics.
+
+CloudKit container precedence is explicit configuration, runtime
+`Graph.cloudKitContainerIdentifier`, then the
+`GraphCloudKitContainerIdentifier` Info.plist key. Without an identifier the
+graph remains local. If CloudKit is unavailable, GraphEvo may emit
+`GraphWarning.cloudStoreFallback` and use a local fallback.
+
+`purgeCloudStore(completion:)` is restricted to a loaded CloudKit container and
+does not delete or recreate local SQLite files. `GraphCloudSyncDelegate` can
+observe completed imports; initial-import callbacks are emitted only for an
+empty local replica and successful completed imports.
+
+## 8. Persistent History
+
+```swift
+@objc func ph_prepareOnLaunchAfterContainerReady()
+func processPersistentHistoryForRemoteChange()
+func processPersistentHistoryBatch(completion: @escaping (Bool) -> Void)
+```
+
+Call the preparation method after the persistent container is ready. GraphEvo
+stores a token, filters local-authored transactions, merges object changes, and
+advances the token after watcher delivery. Corrupt, expired (`134301`), or
+missing-store (`134501`) tokens are recovered at the current history head and
+reported through `GraphWarning.persistentHistoryRecovery`.
+
+`ph_debug_*` helpers are public test/diagnostic seams and are not an application
+contract.
+
+## 9. Migrations
+
+```swift
+public protocol GraphMigration {
+    var id: String { get }
+    var version: Int { get }
+    func handlePhase(... completion: @escaping (GraphMigrationResult) -> Void)
+    func needsRun(...) -> Bool
+}
+
+GraphMigrationManager.registerMigration(migration)
+```
+
+Lifecycle phases are `.preInit`, `.postInit`, `.postMigration`, and `.ready`.
+Registration is once per migration ID and follows registration order.
+
+`GraphMigrationResult` includes `.done`, `.error(Error)`, `.fallback`, and
+`.skipped`. `GraphMigrationContext` passes values between phases and exposes
+`previousMigrationRecord`. The ledger records `started`, `done`, and `failed`
+states. Application migration errors are delivered as
+`GraphFailure.migration`.
+
+`MigrationBackupManager` backs up SQLite files and their optional WAL/SHM
+sidecars. `ConflictPolicy` supports `.duplicate`, `.skip`, and `.overwrite`.
+File logging is disabled by default and can be enabled with
+`GraphMigrationLogger.fileLoggingEnabled = true`.
+
+## 10. Utilities
+
+Public utility types include `Model`, `GraphJSON`, `AnyCodable`,
+`AnyCodableObject`, `NSArrayOfAnyCodableObject`,
+`DictionaryOfAnyCodableObject`, `GraphArchiver`, `GraphValueTransformer`,
+`File`, and `GraphStoreMetadata`.
+
+Use `GraphValueTransformer.register()` when configuring a model manually.
+`GraphStoreMetadata` handles compatibility/version metadata but does not
+replace semantic data migrations.
+
+## 11. Merge and deduplication
+
+`GraphMergeEngine` imports entities from a secondary graph, recreates
+relationships and actions, and returns `GraphMergeReport`. Imported entities
+receive a `source` property.
+
+`GraphDedupEngine.deduplicate(in:uuidFieldMap:discriminator:)` and `DedupTool`
+deduplicate entities using logical UUID fields and a
+`DedupDiscriminator`. These operations may delete objects and rewrite
+relationships; create a backup first.
+
+## 12. Unsupported implementation details
+
+Core Data `Managed*` classes, `Container`, `Context`, registries, coordinators,
+and `internal`/`fileprivate` helpers are not public API contracts. Use the
+`Entity`, `Relationship`, and `Action` facades.
+
+## 13. Integration checklist
+
+1. Configure `GraphStoreConfiguration` and, when needed, CloudKit.
+2. Create `Graph` and handle `whenReady` or `eventDelegate`.
+3. Create nodes through `Entity(type, graph:)`, mutate properties, and call
+   `sync`.
+4. Use `Search` for queries and `Watch` for local/CloudKit callbacks.
+5. Prepare Persistent History after the container opens.
+6. Register migrations before creating the graph and back up before modifying a
+   SQLite store.
+7. Handle `GraphStoreOpeningError.incompatibleStore` explicitly; GraphEvo
+   leaves incompatible stores unchanged.

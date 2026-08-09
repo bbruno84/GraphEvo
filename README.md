@@ -1,204 +1,164 @@
-![Graph](http://www.cosmicmind.com/graph/github/graph-logo.png)
+# GraphEvo
 
-## Welcome to Graph
+GraphEvo is an independent Swift library evolved from
+[CosmicMind/Graph](https://github.com/CosmicMind/Graph). It provides a Core
+Data graph model with local persistence and CloudKit synchronization.
 
-Graph is a semantic database that is used to create data-driven applications.
+The library models entities, relationships, and actions, queries data with
+readable predicates, and reacts to changes through watchers and notifications.
 
-![Material Sample](http://cosmicmind.com/samples/github/page-tab-bar-controller-2.png)
+## 📚 Documentation
 
-* [Download the latest sample](https://github.com/CosmicMind/Samples/tree/master/Projects/Programmatic/CardTableView).
+- [Complete public API reference](docs/api/public-api.md)
+- [Operational instructions for AI agents](AGENTS.md)
+- [Documentation index](docs/README.md)
+- [Getting started guide](docs/guides/getting-started.md)
+- [Graph model](docs/concepts/graph-model.md)
+- [Persistence](docs/concepts/persistence.md)
+- [CloudKit](docs/concepts/cloudkit.md)
+- [Migrations](docs/migrations/overview.md)
 
-## Features
+---
 
-- [x] iCloud Support
-- [x] Multi Local & Cloud Graphs
-- [x] Thread Safe
-- [x] Store Any Data Type, Including Binary Data
-- [x] Relationship Modeling
-- [x] Action Modeling For Analytics
-- [x] Model With Graph Theory and Set Theory
-- [x] Asynchronous / Synchronous Search
-- [x] Asynchronous / Synchronous Saving
-- [x] Data-Driven Architecture
-- [x] Data Model Observation
-- [x] Comprehensive Unit Test Coverage
-- [x] Example Projects
+## ✨ Main features
 
-## Requirements
+- Core Data graph model with `Entity`, `Relationship`, and `Action`
+- `NSPersistentCloudKitContainer` support with local fallback
+- SQLite stores compatible with existing `GraphEvo_<name>.sqlite` paths
+- Directory-based configuration with a backend-independent canonical path; legacy `Local/...` and `Cloud/...` paths are reused automatically
+- `Graph(storeURL:)` accepts either a directory or an existing SQLite file and preserves an explicit file path
+- No automatic migration between incompatible models: the app must migrate its store and reopen it at the original path
+- Secure encoding of heterogeneous values through `ValueTransformer`
+- Enabled options: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
+- `GraphCloudStatusDelegate` for iCloud availability notifications, with local fallback when unavailable
+- Local and remote watchers/notifications through **Persistent History Tracking**
+- CloudKit configuration through a runtime override or an Info.plist fallback
+- CloudKit precedence: explicit configuration, runtime override, then `Info.plist`
 
-* iOS 8.0+ / Mac OS X 10.10+
-* Xcode 8.0+
+---
 
-## Communication
+## 📦 Requirements
 
-- If you **need help**, use [Stack Overflow](http://stackoverflow.com/questions/tagged/cosmicmind). (Tag 'cosmicmind')
-- If you'd like to **ask a general question**, use [Stack Overflow](http://stackoverflow.com/questions/tagged/cosmicmind).
-- If you **found a bug**, _and can provide steps to reliably reproduce it_, open an issue.
-- If you **have a feature request**, open an issue.
-- If you **want to contribute**, submit a pull request.
+- iOS 16+
+- Xcode 15.4+
+- Swift Package Manager
 
-## Installation
-
-> **Embedded frameworks require a minimum deployment target of iOS 8.**
-> - [Download Graph](https://github.com/CosmicMind/Graph/archive/master.zip)
-
-## CocoaPods
-
-[CocoaPods](http://cocoapods.org) is a dependency manager for Cocoa projects. You can install it with the following command:
-
-```bash
-$ gem install cocoapods
-```
-
-To integrate Graph's core features into your Xcode project using CocoaPods, specify it in your `Podfile`:
-
-```ruby
-source 'https://github.com/CocoaPods/Specs.git'
-platform :ios, '8.0'
-use_frameworks!
-
-pod 'Graph', '~> 3.1.0'
-```
-
-Then, run the following command:
-
-```bash
-$ pod install
-```
-
-## Carthage
-
-Carthage is a decentralized dependency manager that builds your dependencies and provides you with binary frameworks.
-
-You can install Carthage with Homebrew using the following command:
-
-```bash
-$ brew update
-$ brew install carthage
-```
-To integrate Graph into your Xcode project using Carthage, specify it in your Cartfile:
-
-```bash
-github "CosmicMind/Graph"
-```
-
-Run `carthage update` to build the framework and drag the built `Graph.framework` into your Xcode project.
-
-## Changelog
-
-Graph is a growing project and will encounter changes throughout its development. It is recommended that the [Changelog](https://github.com/CosmicMind/Graph/wiki/Changelog) be reviewed prior to updating versions.
-
-# Samples
-
-The following are samples to see how Graph may be used within your applications.
-
-* Visit the [Samples](https://github.com/CosmicMind/Samples) repo to see example projects using Graph.
-
-## Creating an Entity for an ImageCard
-
-An **Entity** is a model (data) object that represents a **person**, **place**, or **thing**. It may store property values, be a member of groups, and can be tagged.
-
-In the following example, we create an ImageCard view using Material and populate it's properties with an Entity that stores the data for that view.
-
-![Material ImageCard](http://www.cosmicmind.com/gifs/white/image-card.gif)
-
-#### Creating data
+The public module is `GraphEvo`:
 
 ```swift
-let graph = Graph()
+import GraphEvo
 
-let entity = Entity(type: "ImageCard")
-entity["title"] = "Graph"
-entity["detail"] = "Build Data-Driven Software"
-entity["content"] = "Graph is a semantic database that is used to create data-driven applications."
-entity["author"] = "CosmicMind"
-entity["image"] = UIImage.load(contentsOfFile: "frontier", ofType: "jpg")
-
-graph.sync()
+let graph = Graph(configuration: configuration)
 ```
 
-#### Setting the view's properties
+`Graph` remains the name of the main class and the domain concepts exposed by
+the API.
+
+The `GraphEvo_` prefix and its persistent internal paths and keys are
+canonical for the new release. Stores created by earlier test versions with
+the `GraphCK_` prefix are not migrated automatically.
+
+GraphEvo does not impose `-Xfrontend` flags or strict-concurrency settings on
+the integrating project. This keeps it consumable by targets using CocoaPods
+or other SwiftPM dependencies with different settings. If the app wants to
+enable concurrency checking, it can set `SWIFT_STRICT_CONCURRENCY` on its own
+targets.
+
+---
+
+## 🧪 Tests
+
+- The project builds correctly on iOS 16+
+- Tests cover watchers for both local notifications and simulated remote changes
+- Full compatibility with `Entity`, `Relationship`, and `Search`
+
+---
+
+## 📌 Operational notes
+
+### Application-level store migration
+
+GraphEvo checks SQLite compatibility before opening a store. If the model is
+incompatible, it exposes `GraphStoreOpeningError.incompatibleStore` and leaves
+the store path, name, and contents unchanged. Migration between the
+CosmicMind/Graph model and the GraphEvo model must be performed by the app,
+which understands the meaning of its own data.
+
+---
+
+## ☁️ CloudKit configuration
+
+To enable synchronization with the private CloudKit database, provide a
+**container identifier**.
+
+1. **Runtime override** (recommended):
+
+   ```swift
+   Graph.cloudKitContainerIdentifier = "iCloud.com.yourdomain.yourApp"
+   var configuration = GraphStoreConfiguration()
+   configuration.name = "Main"
+   let graph = Graph(configuration: configuration)
+   ```
+
+2. **Info.plist fallback** (optional): add a `String` key named
+   `GraphCloudKitContainerIdentifier` with a value such as
+   `iCloud.com.yourdomain.yourApp`.
+
+Without an identifier, the store still works in **local** mode without
+synchronization.
+
+## 📣 State, warnings, and errors
+
+GraphEvo does not depend on an application logging platform. To receive
+important events and route them to the app logger, assign a `GraphEventDelegate`:
 
 ```swift
-imageCard.toolbar?.title = entity["title"] as? String
-imageCard.toolbar?.detail = entity["detail"] as? String
-imageCard.imageView?.image = entity["image"] as? UIImage
-
-let contentLabel = UILabel()
-contentLabel.text = entity["content"] as? String
-imageCard.contentView = contentLabel
-
-let authorLabel = UILabel()
-authorLabel.text = entity["author"] as? String
-imageCard.bottomBar?.centerViews = [authorLabel]
-```
-
-* Download the complete [ImageCard example](https://github.com/CosmicMind/Samples/tree/master/Projects/Programmatic/ImageCard).
-* Learn more about [Material's ImageCard](http://cosmicmind.com/material/imagecard).
-
-## Searching a list of users in realtime
-
-Using the **Search** API is incredibly flexible. In the following example, Search is used to create a live search on user names with a dynamic UI provided by [Material's SearchBar](http://cosmicmind.com/material/searchbar).
-
-![Material SearchBar](http://www.cosmicmind.com/gifs/shared/search-bar-controller.gif)
-
-#### Preparing the search criteria
-
-```swift
-let graph = Graph()
-
-let search = Search<Entity>(graph: graph).for(types: "User").where(properties: "name")
-```
-
-#### Asynchronously searching graph
-
-```swift        
-search.async { [weak self, pattern = pattern] (users) in
-
-	guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
-	    return
+final class GraphEvents: GraphEventDelegate {
+    func graph(_ graph: Graph, didReceive event: GraphEvent) {
+        switch event {
+        case .stateChanged(let state):
+            appLogger.info("GraphEvo state: \(state)")
+        case .warning(let warning):
+            appLogger.warning(warning.localizedDescription)
+        case .error(let error):
+            appLogger.error(error.localizedDescription)
+        }
     }
-
-	var data = [Entity]()
-
-	for user in users {
-		if let name = user["name"] as? String {
-			let matches = regex.matches(in: name, range: NSRange(location: 0, length: name.utf16.count))
-
-			if 0 < matches.count {
-				data.append(user)
-			}
-		}
-	}
-
-	self?.tableView.data = data
 }
+
+let graph = Graph(configuration: configuration)
+let graphEvents = GraphEvents()
+graph.eventDelegate = graphEvents
 ```
 
-* Download the complete [Search example](https://github.com/CosmicMind/Samples/tree/master/Projects/Programmatic/Search).
-* Learn more about [Material's SearchBar](http://cosmicmind.com/material/searchbar).
+`GraphReadiness` describes only the technical usability of the store and its
+Core Data context. An application migration error is delivered as
+`GraphFailure.migration`, but does not automatically set readiness to `.failed`
+if the store remains usable.
 
-## License
+Events are delivered on the main thread. States and errors emitted while the
+store is opening are queued until a delegate is assigned. Existing APIs
+(`whenReady`, `GraphCloudStatusDelegate`, and `sync` completions) remain
+available for compatibility.
 
-The MIT License (MIT)
+States, warnings, and progress updates are not printed automatically to
+stdout; the application is responsible for logging them. Unrecoverable errors
+remain available on stdout as minimal diagnostic support.
 
-Copyright (C) 2019, CosmicMind, Inc. <http://cosmicmind.com>.
-All rights reserved.
+Migration JSONL file logging is disabled by default. For diagnostics, the app
+can enable it explicitly with
+`GraphMigrationLogger.fileLoggingEnabled = true`.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+## License and attribution
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+GraphEvo is derived from [CosmicMind/Graph](https://github.com/CosmicMind/Graph),
+which is distributed under the MIT License. The original copyright and license
+notice are preserved in [`LICENSE.md`](LICENSE.md).
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
+GraphEvo and its modifications are released under the MIT License. Copyright
+for GraphEvo modifications belongs to the GraphEvo contributors.
+
+GraphEvo includes substantial changes and extensions to the original project,
+including the `GraphEvo` module, updated persistence behavior, migrations,
+CloudKit handling, tools, and documentation. GraphEvo is not affiliated with
+or endorsed by CosmicMind.
