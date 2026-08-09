@@ -1,5 +1,7 @@
 # GraphEvo
 
+[![CI](https://github.com/bbruno84/GraphEvo/actions/workflows/ci.yml/badge.svg)](https://github.com/bbruno84/GraphEvo/actions/workflows/ci.yml)
+
 GraphEvo is an independent Swift library evolved from
 [CosmicMind/Graph](https://github.com/CosmicMind/Graph). It provides a Core
 Data graph model with local persistence and CloudKit synchronization.
