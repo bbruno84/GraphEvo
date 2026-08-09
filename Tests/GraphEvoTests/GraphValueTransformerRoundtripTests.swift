@@ -77,7 +77,27 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
                 let unarchived = GraphValueTransformer().transformedValue(archived)
                 
                 print("🔁 Roundtrip type=\(type(of: sample)) → \(String(describing: type(of: unarchived)))")
-                
+
+#if canImport(UIKit)
+                if let image = sample as? UIImage {
+                    XCTAssertEqual(
+                        unarchived as? Data,
+                        image.pngData(),
+                        "UIImage must round-trip to its PNG representation"
+                    )
+                    continue
+                }
+#elseif canImport(AppKit)
+                if let image = sample as? NSImage {
+                    XCTAssertEqual(
+                        unarchived as? Data,
+                        GraphImageSupport.pngData(from: image),
+                        "NSImage must round-trip to its PNG representation"
+                    )
+                    continue
+                }
+#endif
+
                 if let str = sample as? NSString {
                     XCTAssertEqual(str as String, unarchived as? String, "String mismatch")
                 } else if let num = sample as? NSNumber {
@@ -86,21 +106,6 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
                     XCTAssertEqual(unarchived as? Date, date, "Date roundtrip failed")
                 } else if let data = sample as? Data {
                     XCTAssertEqual(unarchived as? Data, data, "Data roundtrip failed")
-#if canImport(UIKit)
-                } else if let image = sample as? UIImage {
-                    XCTAssertEqual(
-                        unarchived as? Data,
-                        image.pngData(),
-                        "UIImage must round-trip to its PNG representation"
-                    )
-#elseif canImport(AppKit)
-                } else if let image = sample as? NSImage {
-                    XCTAssertEqual(
-                        unarchived as? Data,
-                        GraphImageSupport.pngData(from: image),
-                        "NSImage must round-trip to its PNG representation"
-                    )
-#endif
                 } else if let pdf = sample as? PDFDocument {
                     guard let data = unarchived as? Data,
                           let roundtrippedPDF = PDFDocument(data: data) else {
