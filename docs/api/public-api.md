@@ -15,7 +15,7 @@ import GraphEvo
 
 - Public module: `GraphEvo`
 - Supported platforms: iOS 16+, macOS 12+
-- Runtime dependency: `ZIPFoundation` for migration utilities
+- Runtime dependencies: none beyond the Apple platform frameworks required by GraphEvo
 - CloudKit backend: `NSPersistentCloudKitContainer` when configured
 
 The public domain model consists of `Graph`, `Node`, `Entity`, `Relationship`,
