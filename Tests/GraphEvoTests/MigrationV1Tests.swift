@@ -10,8 +10,12 @@ import CoreData
 final class MigrationV1Tests: XCTestCase {
     func testLegacyStoreRequiresApplicationMigration() throws {
         let bundle = Bundle.graphTests
-        guard let legacyURL = bundle.url(forResource: "Graph", withExtension: "sqlite") else {
-            XCTFail("Legacy store not found in test bundle")
+        guard let legacyURL = bundle.url(
+            forResource: "Graph",
+            withExtension: "sqlite",
+            subdirectory: "Legacy"
+        ) else {
+            XCTFail("Legacy store was not found in the Legacy resource directory")
             return
         }
 
