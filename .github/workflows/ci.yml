@@ -38,13 +38,14 @@ jobs:
         run: swift package dump-package
 
       - name: Resolve dependencies
-        run: swift package resolve
+        run: xcodebuild -resolvePackageDependencies -scheme GraphEvo
 
-      - name: Build package
-        run: swift build
-
-      - name: Run tests
-        run: swift test --parallel
+      - name: Build and run tests on iOS Simulator
+        run: >-
+          xcodebuild test
+          -scheme GraphEvo
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest'
+          CODE_SIGNING_ALLOWED=NO
 
       - name: Check diff formatting
         run: git diff --check
