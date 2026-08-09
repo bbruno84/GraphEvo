@@ -13,8 +13,12 @@
 //
 
 import XCTest
-import UIKit
 import PDFKit
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 @testable import GraphEvo
 
 final class GraphValueTransformerRoundtripTests: XCTestCase {
@@ -53,12 +57,19 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
             XCTFail("Resource sample.pdf was not found in the test bundle")
         }
         
-        // UIImage sample
-        if let img = UIImage(systemName: "star.fill") {
-            samples.append(img)
+#if canImport(UIKit)
+        if let image = UIImage(systemName: "star.fill") {
+            samples.append(image)
         } else {
-            XCTFail("⚠️ UIImage systemName star.fill is unavailable")
+            XCTFail("UIImage systemName star.fill is unavailable")
         }
+#elseif canImport(AppKit)
+        if let image = NSImage(systemSymbolName: "star.fill", accessibilityDescription: nil) {
+            samples.append(image)
+        } else {
+            XCTFail("NSImage systemSymbolName star.fill is unavailable")
+        }
+#endif
         
         for sample in samples {
             do {
@@ -75,12 +86,21 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
                     XCTAssertEqual(unarchived as? Date, date, "Date roundtrip failed")
                 } else if let data = sample as? Data {
                     XCTAssertEqual(unarchived as? Data, data, "Data roundtrip failed")
+#if canImport(UIKit)
                 } else if let image = sample as? UIImage {
                     XCTAssertEqual(
                         unarchived as? Data,
                         image.pngData(),
                         "UIImage must round-trip to its PNG representation"
                     )
+#elseif canImport(AppKit)
+                } else if let image = sample as? NSImage {
+                    XCTAssertEqual(
+                        unarchived as? Data,
+                        GraphImageSupport.pngData(from: image),
+                        "NSImage must round-trip to its PNG representation"
+                    )
+#endif
                 } else if let pdf = sample as? PDFDocument {
                     guard let data = unarchived as? Data,
                           let roundtrippedPDF = PDFDocument(data: data) else {
