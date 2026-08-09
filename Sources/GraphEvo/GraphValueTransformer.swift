@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import UIKit
 import PDFKit
 
 public enum GraphArchiverError: Error {
@@ -23,7 +22,6 @@ enum GraphAllowedClasses {
         NSArray.self,
         NSDictionary.self,
         NSURL.self,
-        UIImage.self,
         PDFDocument.self,
         AnyCodableObject.self,
         NSArrayOfAnyCodableObject.self,
@@ -37,6 +35,13 @@ public enum GraphArchiver {
     /// Serializza un oggetto compatibile in `Data`.
     /// - Throws: if the type cannot be archived.
     public static func archive(_ object: Any) throws -> Data {
+        if let imageData = GraphImageSupport.pngData(from: object) {
+            return try NSKeyedArchiver.archivedData(
+                withRootObject: imageData,
+                requiringSecureCoding: true
+            )
+        }
+
         let archivable: Any
 
         switch object {
@@ -57,12 +62,6 @@ public enum GraphArchiver {
         case let pdf as PDFDocument:
             guard let data = pdf.dataRepresentation() else {
                 throw GraphArchiverError.unsupported("PDFDocument without dataRepresentation")
-            }
-            return try NSKeyedArchiver.archivedData(withRootObject: data, requiringSecureCoding: true)
-
-        case let image as UIImage:
-            guard let data = image.pngData() else {
-                throw GraphArchiverError.unsupported("UIImage cannot be converted to PNG")
             }
             return try NSKeyedArchiver.archivedData(withRootObject: data, requiringSecureCoding: true)
 

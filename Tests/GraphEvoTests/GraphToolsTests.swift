@@ -1,6 +1,10 @@
 import XCTest
 import PDFKit
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 @testable import GraphEvo
 
 final class GraphToolsTests: XCTestCase {
@@ -36,14 +40,25 @@ final class GraphToolsTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: export.appendingPathComponent("Graph.sqlite-wal")), Data("wal".utf8))
         XCTAssertEqual(try Data(contentsOf: export.appendingPathComponent("Graph.sqlite-shm")), Data("shm".utf8))
 
+#if canImport(UIKit)
         let image = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { renderer in
             UIColor.systemBlue.setFill()
             renderer.fill(CGRect(origin: .zero, size: CGSize(width: 2, height: 2)))
         }
+#elseif canImport(AppKit)
+        let image = NSImage(size: NSSize(width: 2, height: 2))
+        image.lockFocus()
+        NSColor.systemBlue.setFill()
+        NSRect(x: 0, y: 0, width: 2, height: 2).fill()
+        image.unlockFocus()
+#endif
         let imageName = "GraphEvo-Image-\(UUID().uuidString)"
-        let imageURL = try XCTUnwrap(GraphTools.saveUIImageToDisk(image, named: imageName))
+        let imageURL = try XCTUnwrap(GraphTools.saveImageToDisk(image, named: imageName))
         defer { try? FileManager.default.removeItem(at: imageURL) }
-        XCTAssertEqual(try Data(contentsOf: imageURL), try XCTUnwrap(image.pngData()))
+        XCTAssertEqual(
+            try Data(contentsOf: imageURL),
+            try XCTUnwrap(GraphImageSupport.pngData(from: image))
+        )
 
         let document = PDFDocument()
         document.insert(try XCTUnwrap(PDFPage(image: image)), at: 0)

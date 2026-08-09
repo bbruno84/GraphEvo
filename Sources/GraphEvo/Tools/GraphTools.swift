@@ -6,13 +6,12 @@
 //
 
 import Foundation
-import UIKit
 import PDFKit
 
 enum GraphTools {
     
     @discardableResult
-    static func saveUIImageToDisk(_ image: UIImage, named name: String) -> URL? {
+    static func saveImageToDisk(_ image: Any, named name: String) -> URL? {
         let exportDir = FileManager.default.temporaryDirectory.appendingPathComponent("ExportedImages", isDirectory: true)
         
         do {
@@ -21,12 +20,10 @@ enum GraphTools {
                 try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
             }
             
-            // Genera il path
             let fileURL = exportDir.appendingPathComponent("\(name).png")
             
-            // Converte in PNG
-            guard let data = image.pngData() else {
-                print("⚠️ Impossibile convertire UIImage in PNG")
+            guard let data = GraphImageSupport.pngData(from: image) else {
+                print("⚠️ Image could not be converted to PNG")
                 return nil
             }
             
@@ -55,9 +52,8 @@ enum GraphTools {
             // Genera il path
             let fileURL = exportDir.appendingPathComponent("\(name).pdf")
             
-            // Converte in PNG
             guard let data = document.dataRepresentation() else {
-                print("⚠️ Impossibile convertire PDF in data")
+                print("⚠️ PDF could not be converted to data")
                 return nil
             }
             
