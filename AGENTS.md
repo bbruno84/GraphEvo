@@ -175,6 +175,26 @@ the applicable software licenses, including attribution, copyright, notice,
 and redistribution obligations. Before adding or adapting third-party code,
 review its license and preserve the required notices.
 
+## Branching model
+
+The repository uses three main branch roles:
+
+- `master`: contains only the latest stable release. Hotfix branches start from
+  `master` and are merged back through a pull request.
+- `development`: the ongoing integration branch. Feature and bugfix branches
+  start from `development` and are merged back through pull requests.
+- `release/<version>`: created from `development` when the feature freeze is
+  declared. During the release cycle, only bugfixes, stabilization work, and
+  release refinements should be merged into this branch.
+
+The historical branch `rebase/graphMHB-base` must be retained as project
+history. Do not delete, rename, rewrite, or use it as a base for ordinary
+feature work unless explicitly requested.
+
+Stable releases are promoted from the appropriate release branch into
+`master` through a pull request. Relevant hotfixes and release fixes should be
+forward-merged into `development` when applicable so the branches do not drift.
+
 ## Git and pull-request workflow
 
 Keep every change tracked, described, and easy to reverse. Do not work directly
