@@ -79,3 +79,25 @@ jobs:
 
       - name: Check diff formatting
         run: git diff --check
+
+  package-consumer:
+    name: Package consumer integration fixture
+    if: >-
+      github.ref == 'refs/heads/master' ||
+      (github.event_name == 'pull_request' && github.base_ref == 'master')
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show toolchain versions
+        run: |
+          sw_vers
+          swift --version
+
+      - name: Run package consumer fixture
+        run: swift run --package-path IntegrationTests/PackageConsumer
+
+      - name: Check diff formatting
+        run: git diff --check
