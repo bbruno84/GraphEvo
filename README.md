@@ -13,6 +13,9 @@ Data graph model with local persistence and CloudKit synchronization.
 The library models entities, relationships, and actions, queries data with
 readable predicates, and reacts to changes through watchers and notifications.
 
+The companion demonstration app is maintained separately in the
+[GraphEvoDemo repository](https://github.com/bbruno84/GraphEvoDemo).
+
 ## 📚 Documentation
 
 - [Complete public API reference](docs/api/public-api.md)
