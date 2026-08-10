@@ -88,7 +88,12 @@ public class Search<T: Node> {
    - Parameter completion: An optional completion block.
    */
   public func async(completion: @escaping (([T]) -> Void)) {
-    DispatchQueue.global(qos: .background).async {
+    guard let context = graph.managedObjectContext else {
+      completion([])
+      return
+    }
+
+    context.perform {
       self.sync(completion: completion)
     }
   }

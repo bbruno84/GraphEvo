@@ -1,5 +1,11 @@
 # GraphEvo
 
+[![CI](https://github.com/bbruno84/GraphEvo/actions/workflows/ci.yml/badge.svg)](https://github.com/bbruno84/GraphEvo/actions/workflows/ci.yml)
+[![Swift Package Manager](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-orange?logo=swift&logoColor=white)](https://www.swift.org/documentation/package-manager/)
+[![Platforms](https://img.shields.io/badge/platforms-iOS%2016%2B%20%7C%20macOS%2012%2B-blue?logo=apple&logoColor=white)](Package.swift)
+[![License MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
+[![Release](https://img.shields.io/github/v/release/bbruno84/GraphEvo?display_name=tag)](https://github.com/bbruno84/GraphEvo/releases)
+
 GraphEvo is an independent Swift library evolved from
 [CosmicMind/Graph](https://github.com/CosmicMind/Graph). It provides a Core
 Data graph model with local persistence and CloudKit synchronization.
