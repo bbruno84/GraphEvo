@@ -32,6 +32,11 @@ for indexes, keys, and dynamic members.
 Use these types when a value is not a simple string, number, date, or Boolean.
 Always verify that the value belongs to a class permitted by the transformer.
 
+Platform images are stored as PNG `Data`. Legacy archives containing `UIImage`
+on iOS or `NSImage` on macOS are accepted on their originating platform and
+normalized to PNG data when first read, allowing existing stores to migrate
+without an application-level rewrite.
+
 ## Files and metadata
 
 `File` provides asynchronous operations for existence, reading, writing,
