@@ -19,6 +19,40 @@ public enum GraphState {
     case readiness(GraphReadiness)
     case cloudStatus(GraphCloudStatus)
     case persistenceMode(GraphPersistenceMode)
+    case cloudImport(GraphCloudImportState)
+    case cloudUpload(GraphCloudUploadState)
+}
+
+/// Details of a CloudKit export (upload) operation.
+public struct GraphCloudUploadEvent {
+    public let identifier: UUID
+    public let storeIdentifier: String
+    public let startDate: Date?
+    public let endDate: Date?
+    public let succeeded: Bool
+    public let error: Error?
+
+    public init(
+        identifier: UUID,
+        storeIdentifier: String,
+        startDate: Date?,
+        endDate: Date?,
+        succeeded: Bool,
+        error: Error?
+    ) {
+        self.identifier = identifier
+        self.storeIdentifier = storeIdentifier
+        self.startDate = startDate
+        self.endDate = endDate
+        self.succeeded = succeeded
+        self.error = error
+    }
+}
+
+/// Lifecycle updates for a CloudKit export operation.
+public enum GraphCloudUploadState {
+    case started(GraphCloudUploadEvent)
+    case finished(GraphCloudUploadEvent)
 }
 
 /// Reason why GraphEvo discarded a Persistent History token and rebuilt its

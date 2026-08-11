@@ -121,14 +121,6 @@ public class Graph: NSObject {
         }
     }
 
-    /// Receives completed CloudKit import events. Delivery occurs on the main
-    /// queue. This callback does not imply that no later imports will occur.
-    public weak var cloudSyncDelegate: GraphCloudSyncDelegate? {
-        didSet {
-            flushPendingCloudImportEvents()
-        }
-    }
-    
     /// M2: cache last known iCloud availability to notify late-bound delegates.
     private var lastCloudStatus: GraphCloudStatus?
     
@@ -149,8 +141,10 @@ public class Graph: NSObject {
     internal var cloudSyncStoreIdentifier: String?
     internal var cloudSyncInitialImportPending = false
     internal var pendingCloudKitEvents: [GraphCloudKitEventSnapshot] = []
-    internal var pendingCloudImportEvents: [GraphCloudImportEvent] = []
-    internal var processedCloudImportEventIdentifiers = Set<UUID>()
+    internal var cloudSyncUploadStartedEventIdentifiers = Set<UUID>()
+    internal var cloudSyncUploadFinishedEventIdentifiers = Set<UUID>()
+    internal var cloudSyncImportStartedEventIdentifiers = Set<UUID>()
+    internal var cloudSyncImportFinishedEventIdentifiers = Set<UUID>()
     internal let cloudSyncStateLock = NSLock()
     
     /// M2: Optional override for the CloudKit container identifier.
