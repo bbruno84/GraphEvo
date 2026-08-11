@@ -34,6 +34,28 @@ final class GraphValueTransformerRoundtripTests: XCTestCase {
         XCTAssertNotNil(ValueTransformer(forName: GraphValueTransformer.name))
     }
 
+    func testLegacyImageArchiveIsMigratedToPNGData() throws {
+#if canImport(UIKit)
+        let image = try XCTUnwrap(UIImage(systemName: "star.fill"))
+#elseif canImport(AppKit)
+        let image = try XCTUnwrap(NSImage(systemSymbolName: "star.fill", accessibilityDescription: nil))
+#else
+        throw XCTSkip("No supported platform image type is available")
+#endif
+
+        let legacyArchive = try NSKeyedArchiver.archivedData(
+            withRootObject: image,
+            requiringSecureCoding: true
+        )
+        let migratedValue = try XCTUnwrap(GraphValueTransformer().transformedValue(legacyArchive) as? Data)
+
+#if canImport(UIKit)
+        XCTAssertEqual(migratedValue, image.pngData())
+#elseif canImport(AppKit)
+        XCTAssertEqual(migratedValue, GraphImageSupport.pngData(from: image))
+#endif
+    }
+
     func testRoundtrip() throws {
         var samples: [Any] = [
             "ciao" as NSString,

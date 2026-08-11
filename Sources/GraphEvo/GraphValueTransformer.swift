@@ -26,7 +26,7 @@ enum GraphAllowedClasses {
         AnyCodableObject.self,
         NSArrayOfAnyCodableObject.self,
         DictionaryOfAnyCodableObject.self
-    ]
+    ] + GraphImageSupport.legacyImageClasses
 }
 
 /// Securely archives legacy objects used by the former `object` field.
@@ -130,6 +130,12 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
             }
             if let dictAnyCodable = unarchived as? DictionaryOfAnyCodableObject {
                 return dictAnyCodable
+            }
+
+            // Legacy versions archived platform image objects directly. Normalize
+            // them to the current PNG Data representation on first read.
+            if let imageData = GraphImageSupport.pngData(from: unarchived) {
+                return imageData
             }
 
             return unarchived
