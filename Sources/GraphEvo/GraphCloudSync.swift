@@ -1,7 +1,9 @@
 import CoreData
 
-/// Details of a completed CloudKit import handled by GraphEvo.
+/// Details of a CloudKit import operation.
 public struct GraphCloudImportEvent {
+    /// The CloudKit event identifier, when supplied by Core Data.
+    public let identifier: UUID?
     public let storeIdentifier: String
     public let isInitialImport: Bool
     public let succeeded: Bool
@@ -10,6 +12,7 @@ public struct GraphCloudImportEvent {
     public let error: Error?
 
     public init(
+        identifier: UUID? = nil,
         storeIdentifier: String,
         isInitialImport: Bool,
         succeeded: Bool,
@@ -17,6 +20,7 @@ public struct GraphCloudImportEvent {
         endDate: Date?,
         error: Error?
     ) {
+        self.identifier = identifier
         self.storeIdentifier = storeIdentifier
         self.isInitialImport = isInitialImport
         self.succeeded = succeeded
@@ -26,9 +30,10 @@ public struct GraphCloudImportEvent {
     }
 }
 
-/// Receives completed import operations from a GraphEvo CloudKit container.
-public protocol GraphCloudSyncDelegate: AnyObject {
-    func graph(_ graph: Graph, didCompleteCloudImport event: GraphCloudImportEvent)
+/// Lifecycle updates for a CloudKit import operation.
+public enum GraphCloudImportState {
+    case started(GraphCloudImportEvent)
+    case finished(GraphCloudImportEvent)
 }
 
 internal struct GraphCloudKitEventSnapshot {
@@ -77,8 +82,11 @@ internal extension Graph {
             NotificationCenter.default.removeObserver(observer)
             cloudSyncEventObserver = nil
         }
-        pendingCloudImportEvents.removeAll()
         pendingCloudKitEvents.removeAll()
+        cloudSyncUploadStartedEventIdentifiers.removeAll()
+        cloudSyncUploadFinishedEventIdentifiers.removeAll()
+        cloudSyncImportStartedEventIdentifiers.removeAll()
+        cloudSyncImportFinishedEventIdentifiers.removeAll()
     }
 
     /// Binds event handling to the identifier of the store actually loaded by
@@ -122,21 +130,28 @@ internal extension Graph {
     }
 
     private func receiveCloudKitEvent(_ event: GraphCloudKitEventSnapshot) {
-        guard event.type == .import, event.endDate != nil else { return }
+        guard event.type == .import || event.type == .export else { return }
         guard cloudSyncEventObserver != nil || Graph.isRunningUnderTests else { return }
 
         if cloudSyncStoreIdentifier == nil {
-            if !pendingCloudKitEvents.contains(where: { $0.identifier == event.identifier }) {
+            if let index = pendingCloudKitEvents.firstIndex(where: { $0.identifier == event.identifier }) {
+                pendingCloudKitEvents[index] = event
+            } else {
                 pendingCloudKitEvents.append(event)
             }
             return
         }
 
-        guard !hasProcessedCloudEvent(event.identifier) else { return }
         guard cloudSyncStoreIdentifier == event.storeIdentifier else { return }
+
+        if event.type == .export {
+            receiveCloudExportEvent(event)
+            return
+        }
 
         let isInitialImport = cloudSyncInitialImportPending
         let importEvent = GraphCloudImportEvent(
+            identifier: event.identifier,
             storeIdentifier: event.storeIdentifier,
             isInitialImport: isInitialImport,
             succeeded: event.succeeded,
@@ -145,46 +160,70 @@ internal extension Graph {
             error: event.error
         )
 
+        if event.endDate == nil {
+            guard markCloudImportStarted(event.identifier) else { return }
+            emit(.stateChanged(.cloudImport(.started(importEvent))))
+            return
+        }
+
+        if markCloudImportFinished(event.identifier) {
+            emit(.stateChanged(.cloudImport(.finished(importEvent))))
+        }
+
         if event.succeeded {
             cloudSyncInitialImportPending = false
         }
-        deliverCloudImportEvent(importEvent)
     }
 
-    private func deliverCloudImportEvent(_ event: GraphCloudImportEvent) {
-        if Thread.isMainThread {
-            if let delegate = cloudSyncDelegate {
-                delegate.graph(self, didCompleteCloudImport: event)
-            } else {
-                pendingCloudImportEvents.append(event)
-            }
+    private func receiveCloudExportEvent(_ event: GraphCloudKitEventSnapshot) {
+        let uploadEvent = GraphCloudUploadEvent(
+            identifier: event.identifier,
+            storeIdentifier: event.storeIdentifier,
+            startDate: event.startDate,
+            endDate: event.endDate,
+            succeeded: event.succeeded,
+            error: event.error
+        )
+
+        if event.endDate == nil {
+            guard markCloudUploadStarted(event.identifier) else { return }
+            emit(.stateChanged(.cloudUpload(.started(uploadEvent))))
         } else {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if let delegate = self.cloudSyncDelegate {
-                    delegate.graph(self, didCompleteCloudImport: event)
-                } else {
-                    self.pendingCloudImportEvents.append(event)
-                }
-            }
+            guard markCloudUploadFinished(event.identifier) else { return }
+            emit(.stateChanged(.cloudUpload(.finished(uploadEvent))))
         }
     }
 
-    func flushPendingCloudImportEvents() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in self?.flushPendingCloudImportEvents() }
-            return
-        }
-        guard let delegate = cloudSyncDelegate else { return }
-        let events = pendingCloudImportEvents
-        pendingCloudImportEvents.removeAll()
-        events.forEach { delegate.graph(self, didCompleteCloudImport: $0) }
-    }
-
-    private func hasProcessedCloudEvent(_ identifier: UUID) -> Bool {
+    private func markCloudUploadStarted(_ identifier: UUID) -> Bool {
         cloudSyncStateLock.lock()
         defer { cloudSyncStateLock.unlock() }
-        return !processedCloudImportEventIdentifiers.insert(identifier).inserted
+        guard !cloudSyncUploadStartedEventIdentifiers.contains(identifier) else { return false }
+        cloudSyncUploadStartedEventIdentifiers.insert(identifier)
+        return true
+    }
+
+    private func markCloudUploadFinished(_ identifier: UUID) -> Bool {
+        cloudSyncStateLock.lock()
+        defer { cloudSyncStateLock.unlock() }
+        guard !cloudSyncUploadFinishedEventIdentifiers.contains(identifier) else { return false }
+        cloudSyncUploadFinishedEventIdentifiers.insert(identifier)
+        return true
+    }
+
+    private func markCloudImportStarted(_ identifier: UUID) -> Bool {
+        cloudSyncStateLock.lock()
+        defer { cloudSyncStateLock.unlock() }
+        guard !cloudSyncImportStartedEventIdentifiers.contains(identifier) else { return false }
+        cloudSyncImportStartedEventIdentifiers.insert(identifier)
+        return true
+    }
+
+    private func markCloudImportFinished(_ identifier: UUID) -> Bool {
+        cloudSyncStateLock.lock()
+        defer { cloudSyncStateLock.unlock() }
+        guard !cloudSyncImportFinishedEventIdentifiers.contains(identifier) else { return false }
+        cloudSyncImportFinishedEventIdentifiers.insert(identifier)
+        return true
     }
 }
 
@@ -195,6 +234,7 @@ internal extension Graph {
     func configureCloudSyncTrackingForTesting(storeIdentifier: String, initialImportPending: Bool) {
         cloudSyncStoreIdentifier = storeIdentifier
         cloudSyncInitialImportPending = initialImportPending
+        flushPendingCloudKitEvents()
     }
 
     func receiveCloudKitEventForTesting(

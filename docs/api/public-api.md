@@ -73,7 +73,7 @@ graph.whenReady { result in
 ```
 
 Common properties and operations include `name`, `configuration`, `readiness`,
-`isReady`, `batchSize`, `batchOffset`, `eventDelegate`, `cloudSyncDelegate`,
+`isReady`, `batchSize`, `batchOffset`, and `eventDelegate`,
 `sync()`, `async()`, `clear()`, `reset()`, `newBackgroundContext()`, and
 `whenReady(_:)`.
 
@@ -206,6 +206,31 @@ public enum GraphEvent {
     case warning(GraphWarning)
     case error(GraphFailure)
 }
+public enum GraphCloudImportState {
+    case started(GraphCloudImportEvent)
+    case finished(GraphCloudImportEvent)
+}
+public struct GraphCloudImportEvent {
+    public let identifier: UUID?
+    public let storeIdentifier: String
+    public let isInitialImport: Bool
+    public let succeeded: Bool
+    public let startDate: Date?
+    public let endDate: Date?
+    public let error: Error?
+}
+public enum GraphCloudUploadState {
+    case started(GraphCloudUploadEvent)
+    case finished(GraphCloudUploadEvent)
+}
+public struct GraphCloudUploadEvent {
+    public let identifier: UUID
+    public let storeIdentifier: String
+    public let startDate: Date?
+    public let endDate: Date?
+    public let succeeded: Bool
+    public let error: Error?
+}
 public protocol GraphEventDelegate: AnyObject {
     func graph(_ graph: Graph, didReceive event: GraphEvent)
 }
@@ -222,9 +247,8 @@ graph remains local. If CloudKit is unavailable, GraphEvo may emit
 `GraphWarning.cloudStoreFallback` and use a local fallback.
 
 `purgeCloudStore(completion:)` is restricted to a loaded CloudKit container and
-does not delete or recreate local SQLite files. `GraphCloudSyncDelegate` can
-observe completed imports; initial-import callbacks are emitted only for an
-empty local replica and successful completed imports.
+does not delete or recreate local SQLite files. Import and export lifecycle
+updates are delivered through `GraphEventDelegate`.
 
 ## 8. Persistent History
 
