@@ -57,36 +57,56 @@ with a CloudKit-configured store. It does not delete SQLite files, recreate the
 store, or purge during tests or on a local fallback. Local reset and token/
 history management remain the app's responsibility.
 
-## CloudKit import completion
-
-The app can observe completed imports through `GraphCloudSyncDelegate`:
-
-```swift
-final class SyncDelegate: GraphCloudSyncDelegate {
-    func graph(_ graph: Graph, didCompleteCloudImport event: GraphCloudImportEvent) {
-        guard event.succeeded else {
-            // Handle event.error without treating the import as successful.
-            return
-        }
-        if event.isInitialImport {
-            // Optional app-specific post-import operation.
-        }
-    }
-}
-
-let syncDelegate = SyncDelegate()
-graph.cloudSyncDelegate = syncDelegate
-```
-
 `NSPersistentCloudKitContainer` does not expose a distinct native event for
 the first sync. GraphEvo identifies the first import by combining the initial
 local replica state (an empty store with no local objects) with the first
-completed `.import` event for that store. Only completed events count; `.setup`
-and `.export` do not trigger callbacks. The callback is delivered on the main
-queue, deduplicated by `event.identifier`, and does not guarantee that later
-imports will not arrive. The app may use this signal for controlled post-import
-operations such as explicit deduplication; GraphEvo performs no automatic
-deduplication.
+completed `.import` event for that store. The `.started` and `.finished`
+updates are delivered through `GraphEventDelegate` on the main queue and are
+deduplicated by `event.identifier`. The `isInitialImport` flag remains
+available on `GraphCloudImportEvent` for the completed import state.
+The app may use this signal for controlled post-import operations such as
+explicit deduplication; GraphEvo performs no automatic deduplication.
+
+Import lifecycle diagnostics are also available through `GraphEventDelegate`,
+using the same start/finish API as uploads:
+
+```swift
+func graph(_ graph: Graph, didReceive event: GraphEvent) {
+    guard case .stateChanged(.cloudImport(let importState)) = event else { return }
+
+    switch importState {
+    case .started(let importEvent):
+        print("CloudKit import started: \(String(describing: importEvent.identifier))")
+    case .finished(let importEvent):
+        print("CloudKit import finished: \(importEvent.succeeded)")
+    }
+}
+```
+
+
+## CloudKit upload diagnostics
+
+The same native container event stream also reports CloudKit exports (uploads).
+GraphEvo forwards their lifecycle through `GraphEventDelegate`:
+
+```swift
+func graph(_ graph: Graph, didReceive event: GraphEvent) {
+    guard case .stateChanged(.cloudUpload(let uploadState)) = event else { return }
+
+    switch uploadState {
+    case .started(let upload):
+        print("CloudKit upload started: \(upload.identifier)")
+    case .finished(let upload):
+        print("CloudKit upload finished: \(upload.succeeded)")
+    }
+}
+```
+
+`started` is emitted when the export event has no `endDate`; `finished` is
+emitted when the same event receives an `endDate`. Notifications are
+deduplicated by event identifier and delivered on the main queue. This is an
+informational diagnostic signal: Core Data does not expose a reliable upload
+percentage or record count through `NSPersistentCloudKitContainer.Event`.
 
 ## Application requirements
 
