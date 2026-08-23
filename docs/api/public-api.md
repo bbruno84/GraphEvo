@@ -311,10 +311,15 @@ replace semantic data migrations.
 relationships and actions, and returns `GraphMergeReport`. Imported entities
 receive a `source` property.
 
-`GraphDedupEngine.deduplicate(in:uuidFieldMap:discriminator:)` and `DedupTool`
-deduplicate entities using logical UUID fields and a
-`DedupDiscriminator`. These operations may delete objects and rewrite
-relationships; create a backup first.
+`GraphDedupEngine.deduplicate(in:configuration:)` is the general-purpose
+deduplication entry point. Configure a `DedupKeyProvider`, a
+`DedupSurvivorSelector`, and, when needed, a custom `DedupMetadataMerger`.
+`UUIDFieldKeyProvider` supplies the standard UUID-field strategy.
+
+The default link policy rewires and deduplicates both relationships and
+actions. Metadata copies only missing properties and merges tags and groups
+without duplicates. The engine may delete objects and rewrite links; create a
+backup before running it on production data.
 
 ## 12. Unsupported implementation details
 
