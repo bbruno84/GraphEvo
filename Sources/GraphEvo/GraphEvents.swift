@@ -16,6 +16,7 @@ public enum GraphPersistenceMode {
 
 /// State changes emitted by GraphEvo.
 public enum GraphState {
+    case environment(GraphStoreEnvironment)
     case readiness(GraphReadiness)
     case cloudStatus(GraphCloudStatus)
     case persistenceMode(GraphPersistenceMode)

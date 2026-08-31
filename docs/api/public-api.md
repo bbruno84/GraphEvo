@@ -45,6 +45,14 @@ Important calculated properties include:
 - `legacyStoreURLs`: candidate legacy paths;
 - `resolvedStoreURL`: the URL actually selected for opening.
 
+`GraphStoreEnvironment` identifies whether the resolved store is for CloudKit
+Development, CloudKit Production, or local persistence. Directory-based CloudKit
+stores select the environment automatically; Development stores use a `-dev`
+filename suffix. `Graph(storeURL:)` always reports the local environment.
+
+Graph also publishes the resolved environment through its public `environment`
+property and emits it before the final readiness event.
+
 For `.inMemory`, URLs are still calculated for consistency but do not identify a
 persistent file. `appGroupIdentifier` affects directory-based configurations;
 it does not move an explicit SQLite file.
@@ -58,6 +66,10 @@ public init(storeURL: URL,
             backend: GraphStoreBackend = .sqlite,
             migrationEnabled: Bool = true)
 ```
+
+`Graph(storeURL:)` always opens the supplied store as local persistence. It
+does not inherit a CloudKit container identifier from `Graph`, configuration,
+or `Info.plist`.
 
 `Graph` opens a store and owns the Core Data context used by the public facades.
 Use `whenReady` when opening must be coordinated explicitly:
@@ -87,8 +99,9 @@ public enum GraphReadiness {
 }
 ```
 
-`GraphStoreOpeningError` includes incompatible, unreadable, and failed-to-load
-store cases. An incompatible store is not changed automatically.
+`GraphStoreOpeningError` includes incompatible, unreadable, failed-to-load,
+environment, registry-conflict, and incompatible-registered-store cases. An
+incompatible store is not changed automatically.
 
 ## 4. Nodes and domain objects
 
@@ -201,6 +214,10 @@ source.
 
 ```swift
 public enum GraphPersistenceMode { case local; case cloud; case localFallback }
+public enum GraphState {
+    case environment(GraphStoreEnvironment)
+    // Other state cases omitted here.
+}
 public enum GraphEvent {
     case stateChanged(GraphState)
     case warning(GraphWarning)

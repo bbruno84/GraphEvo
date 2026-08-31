@@ -93,6 +93,30 @@ final class GraphReadinessTests: XCTestCase {
         XCTAssertTrue(graph?.isReady == true)
     }
 
+    func testEnvironmentIsPublishedBeforeReadiness() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "Environment-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        let collector = EventCollector()
+        graph.eventDelegate = collector
+
+        let stateEvents = collector.events.compactMap { event -> String? in
+            guard case .stateChanged(let state) = event else { return nil }
+            switch state {
+            case .environment(let environment): return "environment:\(environment.rawValue)"
+            case .readiness(let readiness):
+                if case .ready = readiness { return "readiness:ready" }
+                return nil
+            default: return nil
+            }
+        }
+
+        XCTAssertEqual(stateEvents, ["environment:local", "readiness:ready"])
+        XCTAssertEqual(graph.environment, .local)
+    }
+
     func testAsyncInitializerReportsExistingStoreFailureWithoutReplacingIt() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("GraphEvo-ReadinessFailure-\(UUID().uuidString)", isDirectory: true)

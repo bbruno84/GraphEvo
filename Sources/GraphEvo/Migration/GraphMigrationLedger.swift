@@ -270,6 +270,7 @@ private extension GraphMigrationLedger {
     ) -> String {
         let identity = [
             configuration.cloudKitContainerIdentifier ?? "local",
+            configuration.environment?.rawValue ?? "local",
             configuration.name,
             migrationID,
             String(version)
