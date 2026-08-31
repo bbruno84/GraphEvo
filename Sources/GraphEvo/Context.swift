@@ -366,6 +366,8 @@ internal extension Graph {
   func storeDidOpenSuccessfully() {
     guard case .initializing = readiness else { return }
 
+    if migrationEnabled { GraphMigrationManager.registerKVSObservation(configuration: configuration) }
+
     guard migrationEnabled else {
       completeReadiness()
       return
@@ -378,11 +380,18 @@ internal extension Graph {
     ) { [weak self] in
       guard let self else { return }
       GraphMigrationManager.handlePhase(
-        .ready,
+        .postMigration,
         configuration: self.configuration,
         graph: self
       ) { [weak self] in
-        self?.completeReadiness()
+        guard let self else { return }
+        GraphMigrationManager.handlePhase(
+          .ready,
+          configuration: self.configuration,
+          graph: self
+        ) { [weak self] in
+          self?.completeReadiness()
+        }
       }
     }
   }
@@ -390,9 +399,6 @@ internal extension Graph {
   private func completeReadiness() {
     guard case .initializing = readiness else { return }
     readiness = .ready
-    if let environment {
-      emit(.stateChanged(.environment(environment)))
-    }
     emit(.stateChanged(.readiness(.ready)))
     let completions = readinessCompletions
     readinessCompletions.removeAll()

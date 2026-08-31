@@ -2,7 +2,17 @@
 
 GraphEvo can use `NSPersistentCloudKitContainer` to synchronize a private
 CloudKit store. Synchronization is optional: without a container identifier,
-the graph remains local.
+the graph remains local. GraphEvo derives the signed build environment
+internally and keeps Development and Production stores, ledgers, and KVS
+projections separate; the application continues to provide only a
+`GraphStoreConfiguration`.
+
+While a migration-enabled Graph is alive, GraphEvo observes external KVS
+changes for that normalized store. Entries include the logical store scope and
+publication/observation timestamps. Conflicts are ordered deterministically by
+generation, pseudonymous installation ID, then operation ID. Remote state is
+made available to migrations as an observation and never replaces the local
+ledger projection directly.
 
 ## Configuration
 

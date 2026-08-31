@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 /// The persistence environment selected for a Graph store.
-public enum GraphStoreEnvironment: String, Equatable {
+internal enum GraphStoreEnvironment: String, Codable, Equatable, Sendable {
     case development
     case production
     case local

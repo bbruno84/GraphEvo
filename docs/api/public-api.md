@@ -45,13 +45,12 @@ Important calculated properties include:
 - `legacyStoreURLs`: candidate legacy paths;
 - `resolvedStoreURL`: the URL actually selected for opening.
 
-`GraphStoreEnvironment` identifies whether the resolved store is for CloudKit
-Development, CloudKit Production, or local persistence. Directory-based CloudKit
-stores select the environment automatically; Development stores use a `-dev`
-filename suffix. `Graph(storeURL:)` always reports the local environment.
-
-Graph also publishes the resolved environment through its public `environment`
-property and emits it before the final readiness event.
+GraphEvo internally identifies whether the resolved store is for CloudKit
+Development, CloudKit Production, or local persistence. Directory-based
+CloudKit stores select the environment automatically; Development stores use a
+`-dev` filename suffix. `Graph(storeURL:)` always uses local persistence. The
+environment and its scope are implementation details and are not part of the
+application-facing API.
 
 For `.inMemory`, URLs are still calculated for consistency but do not identify a
 persistent file. `appGroupIdentifier` affects directory-based configurations;
@@ -214,10 +213,6 @@ source.
 
 ```swift
 public enum GraphPersistenceMode { case local; case cloud; case localFallback }
-public enum GraphState {
-    case environment(GraphStoreEnvironment)
-    // Other state cases omitted here.
-}
 public enum GraphEvent {
     case stateChanged(GraphState)
     case warning(GraphWarning)
@@ -298,13 +293,26 @@ GraphMigrationManager.registerMigration(migration)
 ```
 
 Lifecycle phases are `.preInit`, `.postInit`, `.postMigration`, and `.ready`.
-Registration is once per migration ID and follows registration order.
+Graph executes all four phases automatically in that order. Registration is
+once per migration ID and follows registration order.
 
 `GraphMigrationResult` includes `.done`, `.error(Error)`, `.fallback`, and
 `.skipped`. `GraphMigrationContext` passes values between phases and exposes
-`previousMigrationRecord`. The ledger records `started`, `done`, and `failed`
-states. Application migration errors are delivered as
-`GraphFailure.migration`.
+`previousMigrationRecord` and `migrationStateSnapshot`. The snapshot supports
+idempotent recovery decisions after an interrupted attempt. The versioned ledger records `started`, `done`,
+`notRequired`, `notExecuted`, and `failed` states. Runtime queues and contexts
+are isolated per normalized store scope; applications continue to provide only
+a `GraphStoreConfiguration`.
+
+`GraphMigrationManager` also supports `record(for:configuration:)`,
+`resetRecord(for:configuration:)`, the additive reset overload accepting
+multiple targets, requester and reason, and
+`forceMigration(_:configuration:requestedBy:reason:)` for a one-shot local
+force request. `GraphMigrationRequestedBy` includes `.system`,
+`.migrationManager`, `.supportCenter`, `.user`, and `.recovery`.
+Reset and force requests preserve ledger history. Application migration errors
+are delivered as `GraphFailure.migration`; environment routing, scope keys, and
+KVS projection details remain internal to GraphEvo.
 
 `MigrationBackupManager` backs up SQLite files and their optional WAL/SHM
 sidecars. `ConflictPolicy` supports `.duplicate`, `.skip`, and `.overwrite`.

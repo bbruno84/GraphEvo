@@ -94,8 +94,6 @@ public class Graph: NSObject {
     public var name: String { configuration.name }
     /// Graph route.
     public var route: String { configuration.route }
-    /// CloudKit or local environment selected for this Graph.
-    public var environment: GraphStoreEnvironment? { configuration.environment }
     /// Graph location.
     public var runtimeStoreURL: URL?
     public var location: URL {
@@ -235,6 +233,7 @@ public class Graph: NSObject {
     
     /// Deinitializer that removes the Graph from NSNotificationCenter.
     deinit {
+        if migrationEnabled { GraphMigrationManager.unregisterKVSObservation(configuration: configuration) }
         removeCloudSyncEventObserver()
         if let key = contextRegistryKey,
            let promoted = GraphContextRegistry.shared.release(graph: self, key: key) {

@@ -22,7 +22,7 @@ public struct GraphStoreConfiguration {
     /// Internal marker used by `Graph(storeURL:)` to force a directly supplied
     /// SQLite file to remain local, regardless of global CloudKit settings.
     internal var disablesCloudKit = false
-    public private(set) var environment: GraphStoreEnvironment? = nil
+    internal private(set) var environment: GraphStoreEnvironment? = nil
 
     /// Public default initializer so this type can be used in default argument values.
     public init() {}
