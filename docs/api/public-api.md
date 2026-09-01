@@ -304,7 +304,10 @@ idempotent recovery decisions after an interrupted attempt. The versioned ledger
 are isolated per normalized store scope; applications continue to provide only
 a `GraphStoreConfiguration`.
 
-`GraphMigrationManager` also supports `record(for:configuration:)`,
+`GraphMigrationManager` also supports `record(for:configuration:)` and the
+throwing `recordThrowing(for:configuration:)`. Diagnostic clients can read
+immutable history and state snapshots through `history(for:configuration:)`
+and `stateSnapshot(for:configuration:)`. It also supports
 `resetRecord(for:configuration:)`, the additive reset overload accepting
 multiple targets, requester and reason, and
 `forceMigration(_:configuration:requestedBy:reason:)` for a one-shot local
@@ -313,6 +316,13 @@ force request. `GraphMigrationRequestedBy` includes `.system`,
 Reset and force requests preserve ledger history. Application migration errors
 are delivered as `GraphFailure.migration`; environment routing, scope keys, and
 KVS projection details remain internal to GraphEvo.
+
+`GraphMigrationLedgerEntry` is a public, immutable, `Codable` diagnostic value.
+It includes the migration state, phase, operation and generation identifiers,
+request origin, pseudonymous device identifier, application and model versions,
+backup reference, decision metadata, source, timestamps, store scope, and any
+error or reset reason. `GraphMigrationDecisionReason` and
+`GraphMigrationDecisionSource` are public supporting enums.
 
 The internal schema-1 ledger keeps its current projection separate from its
 append-only history and transaction journal. Recovery is driven by the

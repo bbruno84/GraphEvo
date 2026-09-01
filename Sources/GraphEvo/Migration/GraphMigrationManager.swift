@@ -74,13 +74,21 @@ public final class GraphMigrationManager {
         for migration: GraphMigration,
         configuration: GraphStoreConfiguration
     ) -> GraphMigrationRecord? {
-        let resolvedConfiguration: GraphStoreConfiguration
-        do { resolvedConfiguration = try normalizedConfigurationThrowing(configuration) }
+        do { return try recordThrowing(for: migration, configuration: configuration) }
         catch {
-            GraphMigrationLogger.log(migrationID: migration.id, level: .error, event: "migration_configuration_resolution_failed", message: error.localizedDescription, configuration: configuration)
+            GraphMigrationLogger.log(migrationID: migration.id, level: .error, event: "migration_record_read_failed", message: error.localizedDescription, configuration: configuration)
             return nil
         }
-        return GraphMigrationLedger.reconciledRecord(
+    }
+
+    /// Returns the current record and propagates ledger or configuration errors.
+    public static func recordThrowing(
+        for migration: GraphMigration,
+        configuration: GraphStoreConfiguration
+    ) throws -> GraphMigrationRecord? {
+        let resolvedConfiguration: GraphStoreConfiguration
+        resolvedConfiguration = try normalizedConfigurationThrowing(configuration)
+        return try GraphMigrationLedger.reconciledRecordThrowing(
             migrationID: migration.id,
             version: migration.version,
             synchronization: migration.completionSynchronization,
@@ -261,7 +269,7 @@ public final class GraphMigrationManager {
         }
     }
 
-    static func history(
+    public static func history(
         for migration: GraphMigration,
         configuration: GraphStoreConfiguration
     ) throws -> [GraphMigrationLedgerEntry] {
@@ -273,7 +281,7 @@ public final class GraphMigrationManager {
         )
     }
 
-    static func stateSnapshot(
+    public static func stateSnapshot(
         for migration: GraphMigration,
         configuration: GraphStoreConfiguration
     ) throws -> GraphMigrationStateSnapshot {

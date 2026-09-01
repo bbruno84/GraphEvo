@@ -22,8 +22,8 @@ public struct GraphMigrationRecord: Codable, Equatable, Sendable {
 }
 
 public enum GraphMigrationRequestedBy: String, Codable, Sendable { case system, migrationManager, supportCenter, user, recovery }
-enum GraphMigrationDecisionReason: String, Codable { case remoteDone, noCandidate, alreadyCompatible, manualSkip }
-enum GraphMigrationDecisionSource: String, Codable { case localEvaluation, remoteKVS, recovery, manual }
+public enum GraphMigrationDecisionReason: String, Codable, Sendable { case remoteDone, noCandidate, alreadyCompatible, manualSkip }
+public enum GraphMigrationDecisionSource: String, Codable, Sendable { case localEvaluation, remoteKVS, recovery, manual }
 public enum GraphMigrationResetTarget: String, Codable, Sendable { case local, remote, localAndRemote }
 
 struct GraphMigrationForceRequest: Codable, Equatable {
@@ -37,32 +37,32 @@ struct GraphMigrationForceRequest: Codable, Equatable {
     let date: Date
 }
 
-struct GraphMigrationLedgerEntry: Codable, Equatable {
-    let schemaVersion: Int
-    let operationID: String
-    let generation: UInt64
-    let migrationID: String
-    let version: Int
-    let state: GraphMigrationState
-    let phase: String
-    let requestedBy: GraphMigrationRequestedBy
-    let deviceID: String
-    let appVersion: String
-    let graphModelVersion: Int?
-    let backupReference: String?
-    let previousOperationID: String?
-    let decisionReason: GraphMigrationDecisionReason?
-    let decisionSource: GraphMigrationDecisionSource?
-    let source: String
-    let date: Date
-    let errorDescription: String?
-    let storeScope: String
-    let observedAt: Date?
-    let publishedAt: Date?
-    let resetTargets: [GraphMigrationResetTarget]?
-    let requestReason: String?
+public struct GraphMigrationLedgerEntry: Codable, Equatable, Sendable {
+    public let schemaVersion: Int
+    public let operationID: String
+    public let generation: UInt64
+    public let migrationID: String
+    public let version: Int
+    public let state: GraphMigrationState
+    public let phase: String
+    public let requestedBy: GraphMigrationRequestedBy
+    public let deviceID: String
+    public let appVersion: String
+    public let graphModelVersion: Int?
+    public let backupReference: String?
+    public let previousOperationID: String?
+    public let decisionReason: GraphMigrationDecisionReason?
+    public let decisionSource: GraphMigrationDecisionSource?
+    public let source: String
+    public let date: Date
+    public let errorDescription: String?
+    public let storeScope: String
+    public let observedAt: Date?
+    public let publishedAt: Date?
+    public let resetTargets: [GraphMigrationResetTarget]?
+    public let requestReason: String?
 
-    init(schemaVersion: Int, operationID: String, generation: UInt64, migrationID: String, version: Int, state: GraphMigrationState, phase: String, requestedBy: GraphMigrationRequestedBy, deviceID: String, appVersion: String, graphModelVersion: Int?, backupReference: String?, previousOperationID: String?, decisionReason: GraphMigrationDecisionReason?, decisionSource: GraphMigrationDecisionSource? = nil, source: String, date: Date, errorDescription: String?, storeScope: String, observedAt: Date?, publishedAt: Date?, resetTargets: [GraphMigrationResetTarget]? = nil, requestReason: String? = nil) {
+    public init(schemaVersion: Int, operationID: String, generation: UInt64, migrationID: String, version: Int, state: GraphMigrationState, phase: String, requestedBy: GraphMigrationRequestedBy, deviceID: String, appVersion: String, graphModelVersion: Int?, backupReference: String?, previousOperationID: String?, decisionReason: GraphMigrationDecisionReason?, decisionSource: GraphMigrationDecisionSource? = nil, source: String, date: Date, errorDescription: String?, storeScope: String, observedAt: Date?, publishedAt: Date?, resetTargets: [GraphMigrationResetTarget]? = nil, requestReason: String? = nil) {
         self.schemaVersion = schemaVersion; self.operationID = operationID; self.generation = generation
         self.migrationID = migrationID; self.version = version; self.state = state; self.phase = phase
         self.requestedBy = requestedBy; self.deviceID = deviceID; self.appVersion = appVersion
@@ -78,7 +78,7 @@ struct GraphMigrationLedgerEntry: Codable, Equatable {
         case storeScope, observedAt, publishedAt, resetTargets, requestReason
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
         operationID = try c.decode(String.self, forKey: .operationID)
@@ -201,15 +201,18 @@ enum GraphMigrationLedger {
     }
 
     static func reconciledRecord(migrationID: String, version: Int, synchronization: GraphMigrationCompletionSynchronization, configuration: GraphStoreConfiguration) -> GraphMigrationRecord? {
-        queue.sync {
-            do {
-                guard let current = try readProjection(migrationID: migrationID, version: version, configuration: configuration)?.current else { return nil }
-                if synchronization == .localAndICloudKeyValueStore {
-                    try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration)
-                    try reconcileRemoteLocked(migrationID: migrationID, version: version, configuration: configuration)
-                }
-                return current
-            } catch { GraphMigrationLogger.log(migrationID: migrationID, level: .error, event: "migration_ledger_reconciliation_failed", message: error.localizedDescription, configuration: configuration); return nil }
+        do { return try reconciledRecordThrowing(migrationID: migrationID, version: version, synchronization: synchronization, configuration: configuration) }
+        catch { GraphMigrationLogger.log(migrationID: migrationID, level: .error, event: "migration_ledger_reconciliation_failed", message: error.localizedDescription, configuration: configuration); return nil }
+    }
+
+    static func reconciledRecordThrowing(migrationID: String, version: Int, synchronization: GraphMigrationCompletionSynchronization, configuration: GraphStoreConfiguration) throws -> GraphMigrationRecord? {
+        try queue.sync {
+            guard let current = try readProjection(migrationID: migrationID, version: version, configuration: configuration)?.current else { return nil }
+            if synchronization == .localAndICloudKeyValueStore {
+                try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration)
+                try reconcileRemoteLocked(migrationID: migrationID, version: version, configuration: configuration)
+            }
+            return current
         }
     }
 
@@ -228,7 +231,7 @@ enum GraphMigrationLedger {
     static func markDone(migrationID: String, version: Int, synchronization: GraphMigrationCompletionSynchronization, configuration: GraphStoreConfiguration, phase: String = "unknown", operationID: String = UUID().uuidString, generation: UInt64? = nil, backupReference: String? = nil, previousOperationID: String? = nil, requestedBy: GraphMigrationRequestedBy = .migrationManager, now: Date = Date()) throws -> GraphMigrationRecord {
         let record = try transition(migrationID: migrationID, version: version, state: .done, configuration: configuration, phase: phase, operationID: operationID, generation: generation, backupReference: backupReference, previousOperationID: previousOperationID, requestedBy: requestedBy, publish: synchronization == .localAndICloudKeyValueStore, now: now)
         if synchronization == .localAndICloudKeyValueStore {
-            queue.async { do { try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration) } catch { GraphMigrationLogger.log(migrationID: migrationID, level: .error, event: "migration_kvs_publish_failed", message: error.localizedDescription, configuration: configuration) } }
+            try queue.sync { try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration) }
         }
         return record
     }
@@ -455,24 +458,32 @@ private extension GraphMigrationLedger {
 
     static func publishPendingLocked(migrationID: String, version: Int, configuration: GraphStoreConfiguration) throws {
         guard var p = try readProjection(migrationID: migrationID, version: version, configuration: configuration), let pending = p.pendingPublication else { return }
-        do {
-            let published = copy(pending, source: pending.source, observedAt: pending.observedAt, publishedAt: Date())
-            let data = try encoder.encode(published)
-            var values = (kvs.object(forKey: kvsKey) as? [String: Any]) ?? [:]
-            let key = logicalKey(migrationID, version, configuration)
-            values[key] = data; kvs.set(values, forKey: kvsKey)
+        let published = copy(pending, source: pending.source, observedAt: pending.observedAt, publishedAt: Date())
+        let data = try encoder.encode(published)
+        let key = logicalKey(migrationID, version, configuration)
+        var lastError: Error?
+        for _ in 0..<3 {
+            do {
+                var values = (kvs.object(forKey: kvsKey) as? [String: Any]) ?? [:]
+                values[key] = data
+                kvs.set(values, forKey: kvsKey)
 #if DEBUG
-            try faultForTesting?(.afterKVSWrite)
+                try faultForTesting?(.afterKVSWrite)
 #endif
-            _ = kvs.synchronize()
-            guard let stored = (kvs.object(forKey: kvsKey) as? [String: Any])?[key] as? Data, stored == data else { throw GraphMigrationLedgerError.publicationNotAccepted }
-            p.lastPublished = published; p.pendingPublication = nil; p.publicationError = nil
-            try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
-        } catch {
-            p.publicationError = error.localizedDescription
-            try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
-            throw error
+                guard kvs.synchronize(), let stored = (kvs.object(forKey: kvsKey) as? [String: Any])?[key] as? Data, stored == data else {
+                    throw GraphMigrationLedgerError.publicationNotAccepted
+                }
+                p.lastPublished = published; p.pendingPublication = nil; p.publicationError = nil
+                try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
+                return
+            } catch {
+                lastError = error
+            }
         }
+        let error = lastError ?? GraphMigrationLedgerError.publicationNotAccepted
+        p.publicationError = error.localizedDescription
+        try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
+        throw error
     }
 
     static func remoteEntry(_ migrationID: String, _ version: Int, _ configuration: GraphStoreConfiguration) throws -> GraphMigrationLedgerEntry? {

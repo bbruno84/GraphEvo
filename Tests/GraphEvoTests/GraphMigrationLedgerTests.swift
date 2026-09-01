@@ -457,6 +457,25 @@ final class GraphMigrationLedgerTests: XCTestCase {
         XCTAssertNotNil(completed.lastPublished?.publishedAt)
     }
 
+    func testKVSPublicationPreservesEntriesFromOtherScopes() throws {
+        let store = TestMigrationKVSStore()
+        let otherKey = "other-scope|migration|1"
+        store.values["GraphEvo.migration.ledger.v2"] = [otherKey: Data([1, 2, 3])]
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+
+        try GraphMigrationLedger.reset(
+            migrationID: "preserve-scope",
+            version: 1,
+            configuration: configuration,
+            targets: [.remote],
+            requestedBy: .system,
+            reason: "concurrent publication"
+        )
+
+        let values = try XCTUnwrap(store.values["GraphEvo.migration.ledger.v2"] as? [String: Any])
+        XCTAssertEqual(values[otherKey] as? Data, Data([1, 2, 3]))
+    }
+
     func testCrashAfterKVSWriteRetriesWithoutChangingOperationIdentity() throws {
         enum SimulatedCrash: Error { case now }
         let store = TestMigrationKVSStore()
@@ -469,11 +488,32 @@ final class GraphMigrationLedgerTests: XCTestCase {
         }
         let migrationID = "kvs-write-crash"
 
-        XCTAssertThrowsError(try GraphMigrationLedger.reset(migrationID: migrationID, version: 1, configuration: configuration, targets: [.remote], requestedBy: .system, reason: "test"))
-        let operationID = try XCTUnwrap(GraphMigrationLedger.snapshot(migrationID: migrationID, version: 1, configuration: configuration)?.pendingPublication?.operationID)
+        try GraphMigrationLedger.reset(migrationID: migrationID, version: 1, configuration: configuration, targets: [.remote], requestedBy: .system, reason: "test")
+        let operationID = try XCTUnwrap(GraphMigrationLedger.snapshot(migrationID: migrationID, version: 1, configuration: configuration)?.lastPublished?.operationID)
         GraphMigrationLedger.setFaultForTesting(nil)
         try GraphMigrationLedger.retryPendingPublicationForTesting(migrationID: migrationID, version: 1, configuration: configuration)
         XCTAssertEqual(GraphMigrationLedger.snapshot(migrationID: migrationID, version: 1, configuration: configuration)?.lastPublished?.operationID, operationID)
+    }
+
+    func testFailedStateWritePropagatesLedgerErrorWithoutCreatingDoneState() throws {
+        enum SimulatedCrash: Error { case now }
+        let migrationID = "failed-state-write"
+        GraphMigrationLedger.setFaultForTesting { point in
+            if point == .afterJournal { throw SimulatedCrash.now }
+        }
+
+        XCTAssertThrowsError(try GraphMigrationLedger.markFailed(
+            migrationID: migrationID,
+            version: 1,
+            error: NSError(domain: "migration", code: 1),
+            configuration: configuration
+        ))
+        GraphMigrationLedger.setFaultForTesting(nil)
+        XCTAssertNotEqual(GraphMigrationLedger.localRecord(
+            migrationID: migrationID,
+            version: 1,
+            configuration: configuration
+        )?.state, .done)
     }
 
     func testLegacyKVSIsPromotedOnlyForProduction() throws {

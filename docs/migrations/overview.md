@@ -106,10 +106,28 @@ is never interpreted as a command channel.
 
 The local projection keeps remote observations, the last projection accepted
 by the local ubiquitous KVS store, and any publication still pending as
-separate values. A failed or interrupted publication does not invalidate local
-completion: GraphEvo retries the same operation ID during reconciliation and
-after external KVS notifications. Acceptance does not mean that another device
+separate values. A failed or interrupted publication remains pending and is
+surfaced as an error; GraphEvo retries the same operation ID during
+reconciliation and after external KVS notifications. Acceptance does not mean
+that another device
 has already received the value; KVS provides no remote-delivery acknowledgement.
+
+Diagnostic clients can read the immutable ledger history and current snapshot:
+
+```swift
+let history = try GraphMigrationManager.history(
+    for: migration,
+    configuration: configuration
+)
+let snapshot = try GraphMigrationManager.stateSnapshot(
+    for: migration,
+    configuration: configuration
+)
+```
+
+These APIs propagate ledger, reconciliation, and publication errors. The
+compatibility `record(for:configuration:)` API remains available for callers
+that use its optional return value.
 
 ## Context
 

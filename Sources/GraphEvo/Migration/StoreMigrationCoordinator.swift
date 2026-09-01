@@ -1,6 +1,15 @@
 import Foundation
 import CoreData
 
+private struct GraphMigrationIndeterminateError: LocalizedError {
+    let migrationError: Error
+    let ledgerError: Error
+
+    var errorDescription: String? {
+        "Migration result is indeterminate. Migration error: \(migrationError.localizedDescription). Ledger error: \(ledgerError.localizedDescription)."
+    }
+}
+
 /// Owns the runtime migration state for one normalized store scope.
 final class StoreMigrationCoordinator {
     private struct PendingPhase {
@@ -65,7 +74,13 @@ final class StoreMigrationCoordinator {
                 mutableContext?.set("GraphMigration.stateSnapshot", value: snapshot)
             }
             catch { fail(migration: migration, phase: phase, configuration: configuration, graph: graph, error: error); return }
-            let previous = GraphMigrationManager.record(for: migration, configuration: configuration)
+            let previous: GraphMigrationRecord?
+            do {
+                previous = try GraphMigrationManager.recordThrowing(for: migration, configuration: configuration)
+            } catch {
+                fail(migration: migration, phase: phase, configuration: configuration, graph: graph, error: error)
+                return
+            }
             if let previous { mutableContext?.set("GraphMigration.previousRecord", value: previous) }
             if forced != nil { mutableContext?.set("GraphMigration.forceRequest", value: forced) }
             if forced == nil,
@@ -173,9 +188,18 @@ final class StoreMigrationCoordinator {
 
     private func fail(migration: GraphMigration, phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, error: Error) {
         let metadata = attemptMetadata[migration.id]
-        if let configuration { do { _ = try GraphMigrationLedger.markFailed(migrationID: migration.id, version: migration.version, error: error, configuration: configuration, phase: String(describing: phase), operationID: metadata?.operationID ?? UUID().uuidString, generation: metadata?.generation, backupReference: metadata?.backupReference, requestedBy: metadata?.requestedBy ?? .migrationManager) } catch { GraphMigrationLogger.log(migrationID: migration.id, level: .error, event: "migration_failed_write_failed", message: error.localizedDescription, configuration: configuration) } }
-        GraphMigrationManager.postFailureNotification(migrationID: migration.id, phase: phase, configuration: configuration, graph: graph, error: error)
-        graph?.emit(.error(.migration(migrationID: migration.id, phase: String(describing: phase), underlying: error)))
+        let originalError = error
+        var reportedError: Error = originalError
+        if let configuration {
+            do {
+                _ = try GraphMigrationLedger.markFailed(migrationID: migration.id, version: migration.version, error: originalError, configuration: configuration, phase: String(describing: phase), operationID: metadata?.operationID ?? UUID().uuidString, generation: metadata?.generation, backupReference: metadata?.backupReference, requestedBy: metadata?.requestedBy ?? .migrationManager)
+            } catch {
+                GraphMigrationLogger.log(migrationID: migration.id, level: .error, event: "migration_failed_write_failed", message: "Original error: \(originalError.localizedDescription); ledger error: \(error.localizedDescription)", configuration: configuration)
+                reportedError = GraphMigrationIndeterminateError(migrationError: originalError, ledgerError: error)
+            }
+        }
+        GraphMigrationManager.postFailureNotification(migrationID: migration.id, phase: phase, configuration: configuration, graph: graph, error: reportedError)
+        graph?.emit(.error(.migration(migrationID: migration.id, phase: String(describing: phase), underlying: reportedError)))
         active.remove(migration.id); attemptMetadata.removeValue(forKey: migration.id); finish()
     }
 
