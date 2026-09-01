@@ -1,6 +1,23 @@
 import Foundation
 import Security
 
+#if !os(macOS)
+// SecTask is exported by Security on iOS, but its header is not shipped in
+// the iOS SDK. Keep the declarations local so the entitlement lookup remains
+// available to iOS clients without exposing another public API.
+private typealias GraphSecTaskRef = CFTypeRef
+
+@_silgen_name("SecTaskCreateFromSelf")
+private func graphSecTaskCreateFromSelf(_ allocator: CFAllocator?) -> GraphSecTaskRef?
+
+@_silgen_name("SecTaskCopyValueForEntitlement")
+private func graphSecTaskCopyValueForEntitlement(
+    _ task: GraphSecTaskRef,
+    _ entitlement: CFString,
+    _ error: UnsafeMutablePointer<CFError?>?
+) -> CFTypeRef?
+#endif
+
 /// The persistence environment selected for a Graph store.
 internal enum GraphStoreEnvironment: String, Codable, Equatable, Sendable {
     case development
@@ -42,11 +59,20 @@ internal enum GraphStoreEnvironmentResolver {
     }
 
     private static func readEntitlement() -> String? {
+#if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil) else { return nil }
         return SecTaskCopyValueForEntitlement(
             task,
             entitlementKey as CFString,
             nil
         ) as? String
+#else
+        guard let task = graphSecTaskCreateFromSelf(nil) else { return nil }
+        return graphSecTaskCopyValueForEntitlement(
+            task,
+            entitlementKey as CFString,
+            nil
+        ) as? String
+#endif
     }
 }
