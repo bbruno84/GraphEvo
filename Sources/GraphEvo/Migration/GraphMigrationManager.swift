@@ -65,6 +65,8 @@ public final class GraphMigrationManager {
         observedStores.removeAll()
         if let kvsObserver { NotificationCenter.default.removeObserver(kvsObserver) }
         kvsObserver = nil
+        GraphMigrationLedger.resetKVSStoreForTesting()
+        GraphMigrationLedger.setFaultForTesting(nil)
     }
 #endif
 
@@ -216,12 +218,13 @@ public final class GraphMigrationManager {
         let current = observedStores[scope]
         observedStores[scope] = (resolvedConfiguration, (current?.count ?? 0) + 1)
         if kvsObserver == nil {
-            kvsObserver = NotificationCenter.default.addObserver(forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification, object: NSUbiquitousKeyValueStore.default, queue: nil) { _ in
+            let observation = GraphMigrationLedger.kvsObservation
+            kvsObserver = NotificationCenter.default.addObserver(forName: observation.name, object: observation.object, queue: nil) { _ in
                 reconcileObservedStores()
             }
         }
         stateLock.unlock()
-        NSUbiquitousKeyValueStore.default.synchronize()
+        GraphMigrationLedger.synchronizeKVS()
         reconcileObservedStores()
     }
 

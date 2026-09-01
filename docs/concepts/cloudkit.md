@@ -14,6 +14,12 @@ generation, pseudonymous installation ID, then operation ID. Remote state is
 made available to migrations as an observation and never replaces the local
 ledger projection directly.
 
+Migration publication is tracked independently from observation. The
+per-store ledger persists both the last projection accepted by the local KVS
+store and a pending projection to retry. External notifications trigger
+reconciliation through the same environment-aware scope; legacy completion
+keys are promoted only for Production and are ignored in Development.
+
 ## Configuration
 
 ```swift

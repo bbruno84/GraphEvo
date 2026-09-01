@@ -74,8 +74,12 @@ store and survives retries and resets. An application error is emitted as
 `GraphFailure.migration`; it does not automatically mean that the graph is
 unusable.
 
-Ledger writes use a flushed temporary file followed by atomic replacement.
-Schema 0 records and the intermediate schema 2 envelope are upgraded lazily.
+Ledger schema 1 separates the current projection from the append-only JSONL
+history. Ordinary state reads decode only the projection; diagnostics and
+recovery tools load history explicitly. A flushed transaction journal makes a
+projection/history transition replayable after interruption without duplicating
+an event. Legacy unversioned records are schema 0 and are upgraded directly to
+schema 1. Other versioned formats are rejected without overwriting their files.
 History is limited to 2 MB per normalized store scope; older events are folded
 into a diagnostic summary while the current projection and recovery-relevant
 tail remain available.
@@ -100,14 +104,25 @@ A reset appends a structured `notExecuted` event rather than deleting history.
 A remote reset publishes that new projection to KVS; KVS is observational and
 is never interpreted as a command channel.
 
+The local projection keeps remote observations, the last projection accepted
+by the local ubiquitous KVS store, and any publication still pending as
+separate values. A failed or interrupted publication does not invalidate local
+completion: GraphEvo retries the same operation ID during reconciliation and
+after external KVS notifications. Acceptance does not mean that another device
+has already received the value; KVS provides no remote-delivery acknowledgement.
+
 ## Context
 
 `GraphMigrationContext` passes data between phases.
 `previousMigrationRecord` exposes the previous record when available, while
 `migrationStateSnapshot` contains local and observed remote state, generation,
 operation ID, phase, backup reference, attempt count, and interruption state.
-After an interrupted `started` attempt, `needsRun` must inspect the store and
-make an idempotent decision; a consumed force request is not replayed.
+After an interrupted `started` attempt, GraphEvo preserves the record until the
+phase that originally started it. In that phase, `needsRun` must inspect durable
+store data and make an idempotent decision: return `true` when work is missing
+or uncertain, and `false` only when the saved transformation is verifiably
+compatible. GraphEvo cannot infer an application's semantic postcondition, and
+a consumed force request is not replayed.
 
 ## Safety rules
 

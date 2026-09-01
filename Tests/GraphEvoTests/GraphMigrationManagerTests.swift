@@ -552,7 +552,92 @@ final class GraphMigrationManagerTests: XCTestCase {
         XCTAssertEqual(try GraphMigrationManager.stateSnapshot(for: migration, configuration: configuration).localRecord?.state, .done)
     }
 
+    func testInterruptedAttemptWaitsForItsRecordedPhaseBeforeRecoveryDecision() throws {
+        final class RecoveryMigration: GraphMigration {
+            let id: String
+            var evaluatedPhases: [GraphMigrationManager.GraphLifecyclePhase] = []
+            init(id: String) { self.id = id }
+            func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: inout GraphMigrationContext?) -> Bool {
+                evaluatedPhases.append(phase)
+                XCTAssertTrue(context?.migrationStateSnapshot?.interrupted == true)
+                return false
+            }
+            func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void) { XCTFail("Recovered data was already compatible"); completion(.done) }
+        }
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "RecoveryPhase-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+        let migration = RecoveryMigration(id: "RecoveryPhase")
+        _ = try GraphMigrationLedger.markStarted(migrationID: migration.id, version: migration.version, configuration: configuration, phase: "ready", operationID: "interrupted", generation: 3)
+        GraphMigrationManager.registerMigration(migration)
+
+        GraphMigrationManager.handlePhase(.preInit, configuration: configuration, graph: nil)
+        XCTAssertTrue(migration.evaluatedPhases.isEmpty)
+        XCTAssertEqual(GraphMigrationLedger.localRecord(migrationID: migration.id, version: migration.version, configuration: configuration)?.state, .started)
+
+        GraphMigrationManager.handlePhase(.ready, configuration: configuration, graph: nil)
+        XCTAssertEqual(migration.evaluatedPhases.count, 1)
+        let recovered = try XCTUnwrap(GraphMigrationManager.history(for: migration, configuration: configuration).last)
+        XCTAssertEqual(recovered.state, .notRequired)
+        XCTAssertEqual(recovered.decisionReason, .alreadyCompatible)
+        XCTAssertEqual(recovered.decisionSource, .recovery)
+    }
+
+    func testInterruptedAttemptCreatesANewAttemptWhenNeedsRunRemainsTrue() throws {
+        let migration = CompletingMigration(id: "RecoveryRetry") { $0 == .postInit }
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "RecoveryRetry-\(UUID().uuidString)"
+        configuration.backend = .inMemory
+        _ = try GraphMigrationLedger.markStarted(migrationID: migration.id, version: migration.version, configuration: configuration, phase: "postInit", operationID: "interrupted", generation: 8)
+        GraphMigrationManager.registerMigration(migration)
+
+        GraphMigrationManager.handlePhase(.postInit, configuration: configuration, graph: nil)
+
+        let history = try GraphMigrationManager.history(for: migration, configuration: configuration)
+        XCTAssertEqual(history.last?.state, .done)
+        XCTAssertGreaterThan(history.last?.generation ?? 0, 8)
+        XCTAssertNotEqual(history.last?.operationID, "interrupted")
+    }
+
+    func testKVSObserverReconcilesRemoteProjectionEndToEnd() throws {
+        struct SharedMigration: GraphMigration {
+            let id: String
+            var completionSynchronization: GraphMigrationCompletionSynchronization { .localAndICloudKeyValueStore }
+            func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: inout GraphMigrationContext?) -> Bool { false }
+            func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void) { completion(.skipped) }
+        }
+        let store = TestMigrationKVSStore()
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        let publisherRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let observerRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: publisherRoot); try? FileManager.default.removeItem(at: observerRoot) }
+        var publisher = GraphStoreConfiguration()
+        publisher.name = "ObserverScope"
+        publisher.location = publisherRoot.appendingPathComponent("store")
+        var observer = publisher
+        observer.location = observerRoot.appendingPathComponent("store")
+        let migration = SharedMigration(id: "ObserverMigration")
+        GraphMigrationManager.registerMigration(migration)
+        _ = try GraphMigrationLedger.markDone(migrationID: migration.id, version: migration.version, synchronization: .localAndICloudKeyValueStore, configuration: publisher, operationID: "remote-operation", generation: 4)
+        try GraphMigrationLedger.retryPendingPublicationForTesting(migrationID: migration.id, version: migration.version, configuration: publisher)
+
+        GraphMigrationManager.registerKVSObservation(configuration: observer)
+        NotificationCenter.default.post(name: store.changeNotification, object: store)
+
+        let snapshot = try GraphMigrationManager.stateSnapshot(for: migration, configuration: observer)
+        guard case .observed(let remote) = snapshot.remoteState else { return XCTFail("Expected observed remote state") }
+        XCTAssertEqual(remote.state, .done)
+        XCTAssertTrue(try GraphMigrationManager.history(for: migration, configuration: observer).contains { $0.source == "remoteKVS" && $0.observedAt != nil })
+        GraphMigrationManager.handlePhase(.postInit, configuration: observer, graph: nil)
+        let decision = try XCTUnwrap(GraphMigrationManager.history(for: migration, configuration: observer).last)
+        XCTAssertEqual(decision.state, .notRequired)
+        XCTAssertEqual(decision.decisionReason, .remoteDone)
+        XCTAssertEqual(decision.decisionSource, .remoteKVS)
+        GraphMigrationManager.unregisterKVSObservation(configuration: observer)
+    }
+
     func testAdvancedResetAPIRecordsAllTargetsAndDiagnostics() throws {
+        GraphMigrationLedger.setKVSStoreForTesting(TestMigrationKVSStore())
         var configuration = GraphStoreConfiguration()
         configuration.name = "ResetDiagnostics-\(UUID().uuidString)"
         configuration.backend = .inMemory

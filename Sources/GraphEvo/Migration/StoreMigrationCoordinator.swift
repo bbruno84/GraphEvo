@@ -68,6 +68,16 @@ final class StoreMigrationCoordinator {
             let previous = GraphMigrationManager.record(for: migration, configuration: configuration)
             if let previous { mutableContext?.set("GraphMigration.previousRecord", value: previous) }
             if forced != nil { mutableContext?.set("GraphMigration.forceRequest", value: forced) }
+            if forced == nil,
+               let snapshot = mutableContext?.migrationStateSnapshot,
+               snapshot.interrupted,
+               snapshot.phase != String(describing: phase) {
+                // Recovery must be decided in the phase that originally
+                // started the operation. Earlier lifecycle phases must not
+                // overwrite the durable `started` projection.
+                advance(phase, configuration: configuration, graph: graph)
+                return
+            }
             // `notRequired` is phase-specific: a migration may have no work to
             // do during preInit and still be required during postInit or ready.
             // Only a completed migration is terminal for the whole lifecycle.
@@ -87,10 +97,11 @@ final class StoreMigrationCoordinator {
         if !isActive && !needsRun {
             if let configuration {
                 let reason: GraphMigrationDecisionReason
-                if mutableContext?.migrationStateSnapshot?.interrupted == true { reason = .alreadyCompatible }
-                else if case .observed(let remote)? = mutableContext?.migrationStateSnapshot?.remoteState, remote.state == .done { reason = .remoteDone }
-                else { reason = .noCandidate }
-                do { try transition(.notRequired, migration: migration, configuration: configuration, phase: String(describing: phase), reason: reason) }
+                let decisionSource: GraphMigrationDecisionSource
+                if mutableContext?.migrationStateSnapshot?.interrupted == true { reason = .alreadyCompatible; decisionSource = .recovery }
+                else if case .observed(let remote)? = mutableContext?.migrationStateSnapshot?.remoteState, remote.state == .done { reason = .remoteDone; decisionSource = .remoteKVS }
+                else { reason = .noCandidate; decisionSource = .localEvaluation }
+                do { try transition(.notRequired, migration: migration, configuration: configuration, phase: String(describing: phase), reason: reason, decisionSource: decisionSource) }
                 catch { fail(migration: migration, phase: phase, configuration: configuration, graph: graph, error: error); return }
             }
             advance(phase, configuration: configuration, graph: graph); return
@@ -125,7 +136,7 @@ final class StoreMigrationCoordinator {
                 self.finishSuccessfulMigration(migration, phase: phase, configuration: configuration, graph: graph, completesMigration: completesMigration)
             case .skipped:
                 if let configuration {
-                    do { try self.transition(.notRequired, migration: migration, configuration: configuration, phase: String(describing: phase), reason: .manualSkip) }
+                    do { try self.transition(.notRequired, migration: migration, configuration: configuration, phase: String(describing: phase), reason: .manualSkip, decisionSource: .manual) }
                     catch { self.fail(migration: migration, phase: phase, configuration: configuration, graph: graph, error: error); return }
                 }
                 self.active.remove(migration.id); self.attemptMetadata.removeValue(forKey: migration.id); self.advance(phase, configuration: configuration, graph: graph)
@@ -151,11 +162,11 @@ final class StoreMigrationCoordinator {
         if let graph { graph.sync(persist) } else { persist(true, nil) }
     }
 
-    private func transition(_ state: GraphMigrationState, migration: GraphMigration, configuration: GraphStoreConfiguration, phase: String = "unknown", reason: GraphMigrationDecisionReason? = nil) throws {
+    private func transition(_ state: GraphMigrationState, migration: GraphMigration, configuration: GraphStoreConfiguration, phase: String = "unknown", reason: GraphMigrationDecisionReason? = nil, decisionSource: GraphMigrationDecisionSource = .localEvaluation) throws {
         let metadata = attemptMetadata[migration.id]
         switch state {
         case .done: _ = try GraphMigrationLedger.markDone(migrationID: migration.id, version: migration.version, synchronization: migration.completionSynchronization, configuration: configuration, phase: phase)
-        case .notRequired: _ = try GraphMigrationLedger.markNotRequired(migrationID: migration.id, version: migration.version, configuration: configuration, reason: reason ?? .noCandidate, phase: phase, operationID: metadata?.operationID ?? UUID().uuidString, generation: metadata?.generation, backupReference: metadata?.backupReference, requestedBy: metadata?.requestedBy ?? .migrationManager)
+        case .notRequired: _ = try GraphMigrationLedger.markNotRequired(migrationID: migration.id, version: migration.version, configuration: configuration, reason: reason ?? .noCandidate, decisionSource: decisionSource, phase: phase, operationID: metadata?.operationID ?? UUID().uuidString, generation: metadata?.generation, backupReference: metadata?.backupReference, requestedBy: metadata?.requestedBy ?? .migrationManager)
         default: break
         }
     }

@@ -314,6 +314,11 @@ Reset and force requests preserve ledger history. Application migration errors
 are delivered as `GraphFailure.migration`; environment routing, scope keys, and
 KVS projection details remain internal to GraphEvo.
 
+The internal schema-1 ledger keeps its current projection separate from its
+append-only history and transaction journal. Recovery is driven by the
+`migrationStateSnapshot` passed to `needsRun`; an interrupted attempt is
+evaluated in its originally recorded lifecycle phase.
+
 `MigrationBackupManager` backs up SQLite files and their optional WAL/SHM
 sidecars. `ConflictPolicy` supports `.duplicate`, `.skip`, and `.overwrite`.
 File logging is disabled by default and can be enabled with
