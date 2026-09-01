@@ -96,6 +96,40 @@ public final class GraphMigrationManager {
         )
     }
 
+    /// Adopts a completion recorded by a pre-ledger application marker.
+    ///
+    /// This is intentionally separate from `notRequired`: the migration did
+    /// run in the past, so the legacy migration identity must remain visible
+    /// to later migrations (for example a CloudKit replay). The operation is
+    /// idempotent and does not rewrite an existing completed record.
+    public static func adoptLegacyCompletion(
+        _ migration: GraphMigration,
+        configuration: GraphStoreConfiguration,
+        reason: String = "legacy compatibility bootstrap"
+    ) throws {
+        let configuration = try normalizedConfigurationThrowing(configuration)
+        if try recordThrowing(for: migration, configuration: configuration)?.state == .done {
+            return
+        }
+        _ = try GraphMigrationLedger.markDone(
+            migrationID: migration.id,
+            version: migration.version,
+            synchronization: migration.completionSynchronization,
+            configuration: configuration,
+            phase: "compatibilityBootstrap",
+            operationID: "legacy-adoption-\(migration.id)",
+            requestedBy: .recovery,
+            now: Date()
+        )
+        GraphMigrationLogger.log(
+            migrationID: migration.id,
+            level: .info,
+            event: "legacy_completion_adopted",
+            message: reason,
+            configuration: configuration
+        )
+    }
+
     public static func resetRecord(
         for migration: GraphMigration,
         configuration: GraphStoreConfiguration
