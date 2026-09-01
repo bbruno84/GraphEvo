@@ -201,6 +201,12 @@ final class GraphMigrationLedgerTests: XCTestCase {
 
     func testHistoryRetentionCompactsOlderEvents() throws {
         for index in 0..<500 {
+            _ = try GraphMigrationLedger.markStarted(
+                migrationID: "retention",
+                version: 1,
+                configuration: configuration,
+                operationID: "attempt-(index)-started"
+            )
             _ = try GraphMigrationLedger.markFailed(migrationID: "retention", version: 1, error: NSError(domain: "test", code: index, userInfo: [NSLocalizedDescriptionKey: String(repeating: "x", count: 8_000)]), configuration: configuration)
         }
         let snapshot = GraphMigrationLedger.snapshot(migrationID: "retention", version: 1, configuration: configuration)
@@ -215,9 +221,73 @@ final class GraphMigrationLedgerTests: XCTestCase {
         XCTAssertFalse((summary["removedByState"] as? [String: Int] ?? [:]).isEmpty)
     }
 
+    func testRepeatedNotRequiredEvaluationsUpdateProjectionWithoutHistoryNoise() throws {
+        _ = try GraphMigrationLedger.markNotRequired(
+            migrationID: "stable-evaluation",
+            version: 1,
+            configuration: configuration,
+            phase: "preInit",
+            operationID: "first",
+            now: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        _ = try GraphMigrationLedger.markNotRequired(
+            migrationID: "stable-evaluation",
+            version: 1,
+            configuration: configuration,
+            phase: "ready",
+            operationID: "second",
+            now: Date(timeIntervalSince1970: 1_700_000_010)
+        )
+
+        let history = try GraphMigrationLedger.history(
+            migrationID: "stable-evaluation",
+            version: 1,
+            configuration: configuration
+        )
+        XCTAssertEqual(history.count, 1)
+        XCTAssertEqual(history.first?.phase, "preInit")
+        XCTAssertEqual(
+            GraphMigrationLedger.snapshot(migrationID: "stable-evaluation", version: 1, configuration: configuration)?.latestEntry?.phase,
+            "ready"
+        )
+    }
+
+    func testNotRequiredDecisionChangeIsRecorded() throws {
+        _ = try GraphMigrationLedger.markNotRequired(
+            migrationID: "decision-change",
+            version: 1,
+            configuration: configuration,
+            reason: .noCandidate,
+            decisionSource: .localEvaluation,
+            operationID: "first"
+        )
+        _ = try GraphMigrationLedger.markNotRequired(
+            migrationID: "decision-change",
+            version: 1,
+            configuration: configuration,
+            reason: .remoteDone,
+            decisionSource: .remoteKVS,
+            operationID: "second"
+        )
+
+        let history = try GraphMigrationLedger.history(
+            migrationID: "decision-change",
+            version: 1,
+            configuration: configuration
+        )
+        XCTAssertEqual(history.count, 2)
+        XCTAssertEqual(history.last?.decisionReason, .remoteDone)
+    }
+
     func testRetentionLimitAppliesToTheWholeStoreScope() throws {
         for index in 0..<90 {
             for migrationID in ["aggregate-a", "aggregate-b"] {
+                _ = try GraphMigrationLedger.markStarted(
+                    migrationID: migrationID,
+                    version: 1,
+                    configuration: configuration,
+                    operationID: "attempt-(index)-(migrationID)-started"
+                )
                 _ = try GraphMigrationLedger.markFailed(
                     migrationID: migrationID,
                     version: 1,

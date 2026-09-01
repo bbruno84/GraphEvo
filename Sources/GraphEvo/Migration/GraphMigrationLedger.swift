@@ -336,9 +336,13 @@ private extension GraphMigrationLedger {
             var p = old ?? emptyProjection(migrationID: migrationID, version: version, current: record)
             let next = generation ?? p.latestGeneration + 1
             let event = entry(for: record, configuration: configuration, phase: phase, operationID: operationID, generation: next, backupReference: backupReference, previousOperationID: previousOperationID ?? p.latestEntry?.operationID, source: source, requestedBy: requestedBy, reason: reason, decisionSource: decisionSource)
-            p.current = record; p.latestEntry = event; p.latestGeneration = max(p.latestGeneration, next); p.historyCount += 1
+            let appendToHistory = shouldAppendHistory(previous: p.latestEntry, current: event)
+            p.current = record
+            p.latestEntry = event
+            p.latestGeneration = max(p.latestGeneration, next)
+            if appendToHistory { p.historyCount += 1 }
             if publish { p.pendingPublication = event; p.publicationError = nil }
-            try commit(p, entry: event, migrationID: migrationID, version: version, configuration: configuration)
+            try commit(p, entry: appendToHistory ? event : nil, migrationID: migrationID, version: version, configuration: configuration)
             return record
         }
     }
@@ -534,6 +538,21 @@ private extension GraphMigrationLedger {
 
     static func entry(for record: GraphMigrationRecord, configuration: GraphStoreConfiguration, phase: String = "unknown", operationID: String = UUID().uuidString, generation: UInt64 = 0, backupReference: String? = nil, previousOperationID: String? = nil, source: String = "localLedger", requestedBy: GraphMigrationRequestedBy = .migrationManager, reason: GraphMigrationDecisionReason? = nil, decisionSource: GraphMigrationDecisionSource? = nil, resetTargets: [GraphMigrationResetTarget]? = nil, requestReason: String? = nil) -> GraphMigrationLedgerEntry {
         GraphMigrationLedgerEntry(schemaVersion: schemaVersion, operationID: operationID, generation: generation == 0 ? UInt64(Date().timeIntervalSince1970 * 1000) : generation, migrationID: record.migrationID, version: record.version, state: record.state, phase: phase, requestedBy: requestedBy, deviceID: installationIdentifier, appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown", graphModelVersion: configuration.requiredGraphModelVersion, backupReference: backupReference, previousOperationID: previousOperationID, decisionReason: reason, decisionSource: decisionSource, source: source, date: record.updatedAt, errorDescription: record.errorDescription, storeScope: GraphStoreScope(configuration: configuration).logicalKey, observedAt: source == "remoteKVS" ? Date() : nil, publishedAt: nil, resetTargets: resetTargets, requestReason: requestReason)
+    }
+
+    /// Returns whether an entry represents a meaningful ledger transition.
+    /// The projection still advances for every evaluation; repeated
+    /// notRequired evaluations are deliberately kept out of append-only
+    /// history unless their decision meaning changes.
+    static func shouldAppendHistory(previous: GraphMigrationLedgerEntry?, current: GraphMigrationLedgerEntry) -> Bool {
+        guard let previous else { return true }
+        if current.state == .started { return true }
+        guard previous.state == current.state else { return true }
+        guard current.state == .notRequired else { return false }
+        return previous.decisionReason != current.decisionReason
+            || previous.decisionSource != current.decisionSource
+            || previous.source != current.source
+            || previous.errorDescription != current.errorDescription
     }
 
     static func isOrderedAfter(_ candidate: GraphMigrationLedgerEntry, _ reference: GraphMigrationLedgerEntry) -> Bool { candidate.generation != reference.generation ? candidate.generation > reference.generation : (candidate.deviceID != reference.deviceID ? candidate.deviceID > reference.deviceID : candidate.operationID > reference.operationID) }
