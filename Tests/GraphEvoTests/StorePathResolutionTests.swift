@@ -63,6 +63,36 @@ final class StorePathResolutionTests: XCTestCase {
         XCTAssertEqual(try? production.get(), .production)
     }
 
+    func testIOSSignatureFallbackDistinguishesDevelopmentAndProduction() {
+        XCTAssertEqual(
+            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
+                developmentSigned: true,
+                hasSignedCloudKitService: true
+            ),
+            .development
+        )
+        XCTAssertEqual(
+            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
+                developmentSigned: false,
+                hasSignedCloudKitService: true
+            ),
+            .production
+        )
+        XCTAssertEqual(
+            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
+                developmentSigned: nil,
+                hasSignedCloudKitService: true
+            ),
+            .production
+        )
+        XCTAssertNil(
+            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
+                developmentSigned: true,
+                hasSignedCloudKitService: false
+            )
+        )
+    }
+
     func testCloudKitReservationAllowsOnlyOneIndependentStore() {
         let key = "test-cloud-kit-\(UUID().uuidString)"
         XCTAssertTrue(GraphContextRegistry.shared.claimCloudKitStore(key: key))

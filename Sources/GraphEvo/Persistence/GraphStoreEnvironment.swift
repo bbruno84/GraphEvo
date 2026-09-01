@@ -27,10 +27,14 @@ internal enum GraphStoreEnvironment: String, Codable, Equatable, Sendable {
 
 internal enum GraphStoreEnvironmentResolver {
     static let entitlementKey = "com.apple.developer.icloud-container-environment"
+    static let cloudServicesEntitlementKey = "com.apple.developer.icloud-services"
+    static let developmentSigningEntitlementKey = "get-task-allow"
 
     static func resolve(
         configuration: GraphStoreConfiguration,
         entitlementValue: String? = readEntitlement(),
+        developmentSigned: Bool? = readBooleanEntitlement(developmentSigningEntitlementKey),
+        hasSignedCloudKitService: Bool = readCloudKitServices().contains("CloudKit"),
         runningUnderTests: Bool = Graph.isRunningUnderTests
     ) -> Result<GraphStoreEnvironment, GraphStoreOpeningError> {
         if configuration.disablesCloudKit || configuration.cloudKitContainerIdentifier == nil {
@@ -51,28 +55,58 @@ internal enum GraphStoreEnvironmentResolver {
             }
         }
 
-#if os(iOS) && targetEnvironment(simulator)
+#if os(iOS)
+#if targetEnvironment(simulator)
         return .success(.development)
+#else
+        if let environment = environmentFromIOSSignature(
+            developmentSigned: developmentSigned,
+            hasSignedCloudKitService: hasSignedCloudKitService
+        ) {
+            return .success(environment)
+        }
+        return .failure(.cloudKitEnvironmentUnavailable)
+#endif
 #else
         return .failure(.cloudKitEnvironmentUnavailable)
 #endif
     }
 
+    static func environmentFromIOSSignature(
+        developmentSigned: Bool?,
+        hasSignedCloudKitService: Bool
+    ) -> GraphStoreEnvironment? {
+        guard hasSignedCloudKitService else { return nil }
+        return developmentSigned == true ? .development : .production
+    }
+
     private static func readEntitlement() -> String? {
+        readEntitlementValue(for: entitlementKey) as? String
+    }
+
+    private static func readBooleanEntitlement(_ key: String) -> Bool? {
+        readEntitlementValue(for: key) as? Bool
+    }
+
+    private static func readCloudKitServices() -> [String] {
+        readEntitlementValue(for: cloudServicesEntitlementKey) as? [String] ?? []
+    }
+
+    private static func readEntitlementValue(for key: String) -> Any? {
 #if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil) else { return nil }
         return SecTaskCopyValueForEntitlement(
             task,
-            entitlementKey as CFString,
+            key as CFString,
             nil
-        ) as? String
+        )
 #else
         guard let task = graphSecTaskCreateFromSelf(nil) else { return nil }
         return graphSecTaskCopyValueForEntitlement(
             task,
-            entitlementKey as CFString,
+            key as CFString,
             nil
-        ) as? String
+        )
 #endif
     }
 }
