@@ -366,6 +366,10 @@ internal extension Graph {
   func storeDidOpenSuccessfully() {
     guard case .initializing = readiness else { return }
 
+    if let managedObjectContext {
+      watchEventCoordinator = GraphWatchEventCoordinator(graph: self, context: managedObjectContext)
+    }
+
     if migrationEnabled { GraphMigrationManager.registerKVSObservation(configuration: configuration) }
 
     guard migrationEnabled else {

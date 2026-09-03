@@ -51,6 +51,45 @@ Do not assume that every Cloud change produces exactly one callback: transaction
 authors and ordered merges reduce duplicates, but the app must keep callbacks
 idempotent.
 
+## Aggregated reports
+
+Use the Graph-level report delegate when the application needs one callback per
+local save or Persistent History processing cycle:
+
+```swift
+final class BatchEvents: GraphWatchReportDelegate {
+    func graph(_ graph: Graph, didReceive report: GraphWatchReport) {
+        switch report.source {
+        case .local: handleLocal(report.events)
+        case .cloud: handleCloud(report.events)
+        }
+    }
+}
+
+let batchEvents = BatchEvents()
+graph.watchReportSources = [.cloud]
+graph.watchReportDelegate = batchEvents
+```
+
+The app must retain the delegate. The delegate is weak, reports are delivered
+on the main thread, and no empty report is sent. A report contains all
+Graph-level events for its source; it does not use any `Watch` predicate.
+
+Local reports use a context save as their boundary. Deletions are captured
+before the save so the report can retain the same typed Graph wrappers used by
+legacy callbacks. Cloud reports use one Persistent History processing cycle as
+their boundary.
+
+Events have deterministic report ordering. Cloud transactions are ordered by
+transaction number, timestamp, and fetch position. Changes within a transaction
+are ordered by event kind, object URI, and property, tag, or group name. This
+stable order does not promise to reproduce the incidental iteration order of
+legacy callback sets.
+
+Batch and legacy delivery remain independent. A Graph may use cloud batches
+while retaining local atomic callbacks, but GraphEvo does not suppress either
+path automatically.
+
 ## Filters
 
 ```swift

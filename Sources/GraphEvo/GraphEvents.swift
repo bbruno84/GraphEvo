@@ -111,6 +111,7 @@ public enum GraphFailure: LocalizedError {
     case storeOpening(GraphStoreOpeningError)
     case migration(migrationID: String, phase: String, underlying: Error)
     case persistentHistory(underlying: Error)
+    case watchEventMaterialization(source: GraphSource, underlying: Error)
     case query(underlying: Error)
 
     public var errorDescription: String? {
@@ -121,6 +122,8 @@ public enum GraphFailure: LocalizedError {
             return "Migration '\(migrationID)' failed during \(phase): \(error.localizedDescription)"
         case .persistentHistory(let error):
             return "Persistent History processing failed: \(error.localizedDescription)"
+        case .watchEventMaterialization(let source, let error):
+            return "A \(source == .cloud ? "cloud" : "local") Watch event could not be materialized: \(error.localizedDescription)"
         case .query(let error):
             return "Graph query failed: \(error.localizedDescription)"
         }

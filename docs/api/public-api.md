@@ -209,6 +209,42 @@ Callbacks cover insertion, update, deletion, property changes, tag changes, and
 group membership changes. `GraphSource.local` and `.cloud` identify the change
 source.
 
+### Aggregated Watch reports
+
+`Graph` also exposes an optional Graph-level batch path. It does not inherit or
+apply predicates from individual `Watch` instances:
+
+```swift
+public enum GraphWatchEvent { /* typed Entity, Relationship, and Action cases */ }
+
+public final class GraphWatchReport {
+    public let graph: Graph
+    public let source: GraphSource
+    public let events: [GraphWatchEvent]
+}
+
+public protocol GraphWatchReportDelegate: AnyObject {
+    func graph(_ graph: Graph, didReceive report: GraphWatchReport)
+}
+
+public weak var Graph.watchReportDelegate: GraphWatchReportDelegate?
+public var Graph.watchReportSources: Set<GraphSource>
+```
+
+`GraphWatchEvent` has one case for every atomic Watch callback: node insertion
+and deletion, relationship update, and property, tag, and group addition,
+update, or removal for the supported node family. Deleted events retain the
+same `Entity`, `Relationship`, or `Action` wrappers used by legacy Watch.
+
+Reports are non-empty, immutable, and delivered on the main thread. They are
+not `Sendable`; their objects remain tied to the Graph managed object context.
+The default source set is `[.local, .cloud]`. Restrict it before assigning the
+delegate when only one source is wanted.
+
+Batch reporting and legacy watchers are parallel. Enabling reports does not
+disable atomic callbacks, so applications must not process both paths as the
+same logical consumer unless duplicate handling is intentional.
+
 ## 7. Events and CloudKit
 
 ```swift
@@ -218,6 +254,8 @@ public enum GraphEvent {
     case warning(GraphWarning)
     case error(GraphFailure)
 }
+// GraphFailure additionally reports watchEventMaterialization when one
+// change cannot be represented while the remaining batch continues.
 public enum GraphCloudImportState {
     case started(GraphCloudImportEvent)
     case finished(GraphCloudImportEvent)
