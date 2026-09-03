@@ -147,13 +147,14 @@ CloudKit changes pass through Persistent History, are merged into the observed
 context, and are then forwarded to watchers with `GraphSource.cloud`. See
 [Persistent History](../migrations/persistent-history.md).
 
-When a `GraphWatchReportDelegate` is configured for `.cloud`, the same
+When `Graph.watchReportCompletion` is configured for `.cloud`, the same
 reconstructed events are also delivered as one non-empty report for each
 Persistent History processing cycle. GraphEvo persists the history token after
 filtering and merging, before materializing and delivering the report. The
-delegate is not an acknowledgment: delivery and application processing never
-delay or rewind the token. A change that cannot be materialized is reported
-through `GraphEventDelegate`; other events continue when possible.
+completion is not an acknowledgment: delivery never delays or rewinds the
+Persistent History processing token. Batch materialization failures are
+retryable and leave the separate batch-delivery token unchanged; legacy Watch
+callbacks retain their existing best-effort behavior.
 
 In production, keep callbacks idempotent and verify behavior across multiple
 devices: local and remote notifications may arrive at different times.

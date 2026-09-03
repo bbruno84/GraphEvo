@@ -59,15 +59,49 @@ public final class GraphWatchReport {
     }
 }
 
-/// Receives aggregated Graph changes on the main thread.
-public protocol GraphWatchReportDelegate: AnyObject {
-    func graph(_ graph: Graph, didReceive report: GraphWatchReport)
+/// Completion used by GraphEvo after attempting batch report delivery.
+///
+/// A non-nil report represents a completed delivery. The error may also be
+/// non-nil when Persistent History retention caused a best-effort delivery.
+/// Materialization failures do not invoke this completion and are retried.
+public typealias GraphWatchReportCompletion = (_ report: GraphWatchReport?, _ error: Error?) -> Void
+
+/// Diagnostic information about one event that could not be materialized.
+public struct GraphWatchMaterializationIssue {
+    public let eventKind: String
+    public let objectReference: String?
+    public let error: Error
+
+    public init(eventKind: String, objectReference: String?, error: Error) {
+        self.eventKind = eventKind
+        self.objectReference = objectReference
+        self.error = error
+    }
 }
 
 internal enum GraphWatchChangeOperation: Int {
     case insert = 0
     case update = 1
     case delete = 2
+}
+
+internal extension GraphWatchChangeOperation {
+    var diagnosticName: String {
+        switch self {
+        case .insert: return "insert"
+        case .update: return "update"
+        case .delete: return "delete"
+        }
+    }
+}
+
+internal func redactedReference(_ object: NSManagedObject) -> String {
+    var hash: UInt64 = 14_695_981_039_346_656_037
+    for byte in object.objectID.uriRepresentation().absoluteString.utf8 {
+        hash ^= UInt64(byte)
+        hash = hash &* 1_099_511_628_211
+    }
+    return String(format: "%016llx", hash)
 }
 
 internal struct GraphWatchRemoteRecord {

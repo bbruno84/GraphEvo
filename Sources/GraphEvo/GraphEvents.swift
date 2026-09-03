@@ -73,6 +73,11 @@ public enum GraphWarning: LocalizedError {
         reason: GraphPersistentHistoryRecoveryReason,
         underlying: Error?
     )
+    case watchReportMaterializationFailed(
+        source: GraphSource,
+        failedEvents: Int,
+        details: [GraphWatchMaterializationIssue]
+    )
 
     public var errorDescription: String? {
         switch self {
@@ -98,6 +103,9 @@ public enum GraphWarning: LocalizedError {
                 return "\(description) Underlying error: \(underlying.localizedDescription)"
             }
             return description
+        case .watchReportMaterializationFailed(let source, let failedEvents, let details):
+            let first = details.first?.error.localizedDescription ?? "Unknown materialization error"
+            return "GraphEvo could not materialize \(failedEvents) \(source == .cloud ? "cloud" : "local") Watch report event(s); the batch will be retried. First error: \(first)"
         }
     }
 }

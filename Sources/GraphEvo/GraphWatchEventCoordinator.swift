@@ -35,15 +35,25 @@ internal final class GraphWatchEventCoordinator {
     private weak var context: NSManagedObjectContext?
     private var observers: [NSObjectProtocol] = []
     private var pendingLocalDeletions: [GraphWatchEventEnvelope] = []
+    private let cloudDelivery: GraphWatchBatchDeliveryCoordinator
 
     init(graph: Graph, context: NSManagedObjectContext) {
         self.graph = graph
         self.context = context
+        self.cloudDelivery = GraphWatchBatchDeliveryCoordinator(graph: graph, context: context)
         installObservers(context: context)
     }
 
     deinit {
         observers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    internal func requestCloudDelivery() {
+        cloudDelivery.request()
+    }
+
+    internal func prepareCloudDelivery(startingAfter token: NSPersistentHistoryToken?) {
+        cloudDelivery.prepare(startingAfter: token)
     }
 
     private func installObservers(context: NSManagedObjectContext) {
@@ -132,7 +142,13 @@ internal final class GraphWatchEventCoordinator {
         }
 
         deliverLegacy(envelopes, source: .cloud)
-        deliverReport(envelopes, source: .cloud)
+        if notification.userInfo?[GraphEvoOrderedRemoteChangesKey] != nil {
+            cloudDelivery.request()
+        } else {
+            // Keep direct/simulated notifications useful for tests and local
+            // integrations that do not have a Persistent History token.
+            deliverReport(envelopes, source: .cloud)
+        }
     }
 
     private func materialize(
@@ -153,6 +169,9 @@ internal final class GraphWatchEventCoordinator {
                     changeIndex: changeIndex + offset
                 )
             } catch {
+                // Preserve the legacy Watch error contract. The retryable
+                // warning is emitted only by the persistent-history batch
+                // delivery path.
                 graph.emit(.error(.watchEventMaterialization(source: source, underlying: error)))
                 return nil
             }
@@ -168,13 +187,13 @@ internal final class GraphWatchEventCoordinator {
     private func deliverReport(_ envelopes: [GraphWatchEventEnvelope], source: GraphSource) {
         guard let graph,
               graph.watchReportSources.contains(source),
-              graph.watchReportDelegate != nil,
+              graph.watchReportCompletion != nil,
               !envelopes.isEmpty else { return }
         let ordered = envelopes.sorted { $0.isOrdered(before: $1) }
         let deliver = { [weak graph] in
-            guard let graph, let delegate = graph.watchReportDelegate else { return }
+            guard let graph else { return }
             let report = GraphWatchReport(graph: graph, source: source, events: ordered.map(\.event))
-            delegate.graph(graph, didReceive: report)
+            graph.watchReportCompletion?(report, nil)
         }
         if Thread.isMainThread {
             deliver()

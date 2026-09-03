@@ -122,10 +122,10 @@ public class Graph: NSObject {
     public internal(set) lazy var watchers : [Watcher] = []
 
     /// Receives non-empty aggregated change reports on the main thread.
-    public weak var watchReportDelegate: GraphWatchReportDelegate?
+    public var watchReportCompletion: GraphWatchReportCompletion?
 
-    /// Sources delivered to `watchReportDelegate`. Legacy Watch callbacks are
-    /// independent and remain active for all sources.
+    /// Sources delivered to the batch completion.
+    /// Legacy Watch callbacks are independent and remain active for all sources.
     public var watchReportSources: Set<GraphSource> = [.local, .cloud]
 
     internal var watchEventCoordinator: GraphWatchEventCoordinator?

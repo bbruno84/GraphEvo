@@ -3,11 +3,11 @@ import XCTest
 @testable import GraphEvo
 
 final class GraphWatchReportTests: XCTestCase {
-    private final class ReportDelegate: GraphWatchReportDelegate {
+    private final class ReportCollector {
         var reports: [GraphWatchReport] = []
         var onReport: ((GraphWatchReport) -> Void)?
 
-        func graph(_ graph: Graph, didReceive report: GraphWatchReport) {
+        func receive(_ report: GraphWatchReport) {
             reports.append(report)
             onReport?(report)
         }
@@ -19,16 +19,42 @@ final class GraphWatchReportTests: XCTestCase {
         return Graph(configuration: configuration, migrationEnabled: false)
     }
 
+    private func install(_ collector: ReportCollector, on graph: Graph) {
+        graph.watchReportCompletion = { report, _ in
+            if let report { collector.receive(report) }
+        }
+    }
+
+    func testCompletionDeliversReportAndNilErrorOnLocalBatch() {
+        let graph = makeGraph()
+        let received = expectation(description: "completion report")
+        graph.watchReportSources = [.local]
+        graph.watchReportCompletion = { report, error in
+            XCTAssertTrue(Thread.isMainThread)
+            XCTAssertNotNil(report)
+            XCTAssertNil(error)
+            if let report {
+                XCTAssertEqual(report.source, .local)
+                XCTAssertFalse(report.events.isEmpty)
+            }
+            received.fulfill()
+        }
+
+        _ = Entity("Completion", graph: graph)
+        graph.sync()
+        wait(for: [received], timeout: 2)
+    }
+
     func testLocalSaveProducesOneGraphLevelReportWithAllNodeFamilies() {
         let graph = makeGraph()
-        let delegate = ReportDelegate()
+        let delegate = ReportCollector()
         let received = expectation(description: "local report")
         delegate.onReport = { report in
             XCTAssertTrue(Thread.isMainThread)
             XCTAssertEqual(report.source, .local)
             received.fulfill()
         }
-        graph.watchReportDelegate = delegate
+        install(delegate, on: graph)
 
         let subject = Entity("Person", graph: graph)
         subject[dynamicMember: "name"] = "Ada"
@@ -66,10 +92,10 @@ final class GraphWatchReportTests: XCTestCase {
         let entity = Entity("Temporary", graph: graph)
         graph.sync()
 
-        let delegate = ReportDelegate()
+        let delegate = ReportCollector()
         let received = expectation(description: "delete report")
         delegate.onReport = { _ in received.fulfill() }
-        graph.watchReportDelegate = delegate
+        install(delegate, on: graph)
 
         entity.delete()
         XCTAssertTrue(delegate.reports.isEmpty, "The batch must wait for the save boundary")
@@ -90,14 +116,14 @@ final class GraphWatchReportTests: XCTestCase {
         let entity = Entity("RemoteNote", graph: graph)
         graph.sync()
 
-        let reportDelegate = ReportDelegate()
+        let reportDelegate = ReportCollector()
         let reportReceived = expectation(description: "cloud report")
         reportDelegate.onReport = { report in
             XCTAssertEqual(report.source, .cloud)
             reportReceived.fulfill()
         }
         graph.watchReportSources = [.cloud]
-        graph.watchReportDelegate = reportDelegate
+        install(reportDelegate, on: graph)
 
         final class LegacyDelegate: NSObject, GraphEntityDelegate {
             let expectation: XCTestExpectation
@@ -127,9 +153,9 @@ final class GraphWatchReportTests: XCTestCase {
 
     func testEmptyAndUnselectedSourcesDoNotProduceReports() {
         let graph = makeGraph()
-        let delegate = ReportDelegate()
+        let delegate = ReportCollector()
         graph.watchReportSources = [.cloud]
-        graph.watchReportDelegate = delegate
+        install(delegate, on: graph)
 
         _ = Entity("LocalOnly", graph: graph)
         graph.sync()
@@ -183,14 +209,14 @@ final class GraphWatchReportTests: XCTestCase {
         action.add(tags: "action-tag").add(to: "action-group")
         graph.sync()
 
-        let delegate = ReportDelegate()
+        let delegate = ReportCollector()
         let updateReport = expectation(description: "update report")
         let removalReport = expectation(description: "removal report")
         delegate.onReport = { report in
             if delegate.reports.count == 1 { updateReport.fulfill() }
             if delegate.reports.count == 2 { removalReport.fulfill() }
         }
-        graph.watchReportDelegate = delegate
+        install(delegate, on: graph)
 
         subject[dynamicMember: "name"] = "After"
         relationship[dynamicMember: "weight"] = 2
@@ -234,10 +260,10 @@ final class GraphWatchReportTests: XCTestCase {
         let action = first.will(action: "message").add(objects: second)
         graph.sync()
 
-        let delegate = ReportDelegate()
+        let delegate = ReportCollector()
         let received = expectation(description: "typed deletions")
         delegate.onReport = { _ in received.fulfill() }
-        graph.watchReportDelegate = delegate
+        install(delegate, on: graph)
 
         relationship.delete()
         action.delete()
@@ -269,11 +295,11 @@ final class GraphWatchReportTests: XCTestCase {
         invalid.setValue("orphan", forKey: "name")
         invalid.setValue("value", forKey: "object")
 
-        let reports = ReportDelegate()
+        let reports = ReportCollector()
         let reportReceived = expectation(description: "partial report")
         reports.onReport = { _ in reportReceived.fulfill() }
         let events = EventDelegate()
-        graph.watchReportDelegate = reports
+        install(reports, on: graph)
         graph.eventDelegate = events
 
         NotificationCenter.default.post(
@@ -294,7 +320,7 @@ final class GraphWatchReportTests: XCTestCase {
     func testPersistentHistoryTokenIsPersistedBeforeCloudReportDelivery() throws {
         let graph = makeGraph()
         graph.ph_debug_clearToken()
-        let delegate = ReportDelegate()
+        let delegate = ReportCollector()
         let received = expectation(description: "persistent history report")
         delegate.onReport = { report in
             XCTAssertEqual(report.source, .cloud)
@@ -302,7 +328,7 @@ final class GraphWatchReportTests: XCTestCase {
             received.fulfill()
         }
         graph.watchReportSources = [.cloud]
-        graph.watchReportDelegate = delegate
+        install(delegate, on: graph)
 
         let background = try XCTUnwrap(graph.newBackgroundContext())
         background.performAndWait {
@@ -323,8 +349,8 @@ final class GraphWatchReportTests: XCTestCase {
         let second = Graph(configuration: configuration, migrationEnabled: false)
         XCTAssertTrue(first.managedObjectContext === second.managedObjectContext)
 
-        let firstDelegate = ReportDelegate()
-        let secondDelegate = ReportDelegate()
+        let firstDelegate = ReportCollector()
+        let secondDelegate = ReportCollector()
         let firstReceived = expectation(description: "first graph report")
         let secondReceived = expectation(description: "second graph report")
         firstDelegate.onReport = { report in
@@ -335,8 +361,8 @@ final class GraphWatchReportTests: XCTestCase {
             XCTAssertTrue(report.graph === second)
             secondReceived.fulfill()
         }
-        first.watchReportDelegate = firstDelegate
-        second.watchReportDelegate = secondDelegate
+        install(firstDelegate, on: first)
+        install(secondDelegate, on: second)
 
         _ = Entity("Shared", graph: first)
         first.sync()

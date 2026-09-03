@@ -351,6 +351,7 @@ internal extension Graph {
 
             // Request: all transactions after the latest known token.
             let token: NSPersistentHistoryToken? = self._ph_lastToken
+            self.watchEventCoordinator?.prepareCloudDelivery(startingAfter: token)
             let request: NSPersistentHistoryChangeRequest = NSPersistentHistoryChangeRequest.fetchHistory(after: token)
 
             // Note: no SQL filter on `storeID`.
@@ -627,6 +628,13 @@ private extension Graph {
         _ph_tokenStore.save(token)
         _ph_tokenStore.saveBackup(token)
         _ph_isColdStartSession = false
+    }
+
+}
+
+internal extension Graph {
+    func ph_processingTokenForWatchDelivery() -> NSPersistentHistoryToken? {
+        _ph_lastToken ?? _ph_tokenStore.load()
     }
 }
 

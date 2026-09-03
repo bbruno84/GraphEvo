@@ -223,11 +223,9 @@ public final class GraphWatchReport {
     public let events: [GraphWatchEvent]
 }
 
-public protocol GraphWatchReportDelegate: AnyObject {
-    func graph(_ graph: Graph, didReceive report: GraphWatchReport)
-}
+public typealias GraphWatchReportCompletion = (_ report: GraphWatchReport?, _ error: Error?) -> Void
 
-public weak var Graph.watchReportDelegate: GraphWatchReportDelegate?
+public var Graph.watchReportCompletion: GraphWatchReportCompletion?
 public var Graph.watchReportSources: Set<GraphSource>
 ```
 
@@ -238,8 +236,12 @@ same `Entity`, `Relationship`, or `Action` wrappers used by legacy Watch.
 
 Reports are non-empty, immutable, and delivered on the main thread. They are
 not `Sendable`; their objects remain tied to the Graph managed object context.
-The default source set is `[.local, .cloud]`. Restrict it before assigning the
-delegate when only one source is wanted.
+The completion receives `(report, nil)` after a successful delivery. Structural
+failures receive `(nil, error)`. A Persistent History retention gap may produce
+`(report, error)` for best-effort delivery. Materialization failures are
+retryable: no completion is called and the batch delivery token remains
+unchanged. The default source set is `[.local, .cloud]`. Restrict it before
+assigning the completion when only one source is wanted.
 
 Batch reporting and legacy watchers are parallel. Enabling reports does not
 disable atomic callbacks, so applications must not process both paths as the
