@@ -29,5 +29,8 @@ final class PublicMigrationAPICompileTests: XCTestCase {
         XCTAssertEqual(entry.state, .started)
         _ = GraphMigrationManager.history
         _ = GraphMigrationManager.stateSnapshot
+        _ = GraphMigrationManager.recoverySummary
+        _ = GraphMigrationManager.recordRecoverySummary
+        _ = Notification.Name.graphMigrationRecoverySummaryDidChange
     }
 }

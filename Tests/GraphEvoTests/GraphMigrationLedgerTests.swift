@@ -82,6 +82,67 @@ final class GraphMigrationLedgerTests: XCTestCase {
         XCTAssertEqual(done?.updatedAt, completedAt)
     }
 
+    func testRecoverySummaryIsHistoricalAndScoped() throws {
+        XCTAssertNil(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration))
+        _ = try GraphMigrationLedger.markDone(migrationID: "recovery", version: 2, synchronization: .local, configuration: configuration)
+        // Existing schema-1 ledgers without the additive field remain readable.
+        XCTAssertNil(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration))
+        try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2, configuration: configuration,
+            recoveryID: "first", recordsRequiringManualReview: 3)
+        let first = try XCTUnwrap(GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration))
+        XCTAssertTrue(first.requiresManualReview)
+        XCTAssertEqual(first.recordsRequiringManualReview, 3)
+        try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2, configuration: configuration,
+            recoveryID: "first", recordsRequiringManualReview: 0)
+        try GraphMigrationLedger.reset(migrationID: "recovery", version: 2, synchronization: .local, configuration: configuration)
+        XCTAssertEqual(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration), first)
+        XCTAssertNil(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 3, configuration: configuration))
+        var other = configuration!
+        other.name += "-other"
+        XCTAssertNil(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: other))
+        try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2, configuration: configuration,
+            recoveryID: "second", recordsRequiringManualReview: 0)
+        XCTAssertEqual(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration)?.requiresManualReview, false)
+        XCTAssertEqual(GraphMigrationLedger.localRecord(migrationID: "recovery", version: 2, configuration: configuration)?.state, .notExecuted)
+    }
+
+    func testRecoverySummaryNotifiesAfterPersistenceWithoutDeadlockOrDuplicate() throws {
+        let changed = expectation(description: "saved summary")
+        changed.assertForOverFulfill = true
+        let config = configuration!
+        let observer = NotificationCenter.default.addObserver(forName: .graphMigrationRecoverySummaryDidChange,
+            object: nil, queue: nil) { notification in
+            guard let change = notification.object as? GraphMigrationRecoverySummaryChange,
+                  change.migrationID == "notification-test" else { return }
+            XCTAssertTrue(Thread.isMainThread)
+            XCTAssertEqual(change.storeScope, GraphStoreScope(configuration: config).logicalKey)
+            XCTAssertEqual(try? GraphMigrationLedger.recoverySummary(migrationID: change.migrationID,
+                version: change.version, configuration: config), change.summary)
+            changed.fulfill()
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        for _ in 0..<2 {
+            try GraphMigrationLedger.recordRecoverySummary(migrationID: "notification-test", version: 2,
+                configuration: config, recoveryID: "publication", recordsRequiringManualReview: 3)
+        }
+        wait(for: [changed], timeout: 2)
+    }
+
+    func testRecoverySummaryRejectsInvalidInputAndRecoversJournal() throws {
+        XCTAssertThrowsError(try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2,
+            configuration: configuration, recoveryID: "", recordsRequiringManualReview: 0))
+        XCTAssertThrowsError(try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2,
+            configuration: configuration, recoveryID: "valid", recordsRequiringManualReview: -1))
+        GraphMigrationLedger.setFaultForTesting { point in
+            if case .afterJournal = point { throw NSError(domain: "test-interruption", code: 1) }
+        }
+        XCTAssertThrowsError(try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2,
+            configuration: configuration, recoveryID: "interrupted", recordsRequiringManualReview: 4))
+        GraphMigrationLedger.setFaultForTesting(nil)
+        XCTAssertEqual(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2,
+            configuration: configuration)?.recordsRequiringManualReview, 4)
+    }
+
     func testStartedThenFailedStoresHandledError() throws {
         struct ExpectedError: LocalizedError {
             var errorDescription: String? { "Expected migration failure" }

@@ -315,6 +315,25 @@ public final class GraphMigrationManager {
         )
     }
 
+    /// Latest local recovery outcome, or nil for ledgers without a recorded summary.
+    /// Retained across evaluation resets and failed retries; never inferred from KVS.
+    public static func recoverySummary(for migration: GraphMigration,
+                                       configuration: GraphStoreConfiguration) throws -> GraphMigrationRecoverySummary? {
+        try GraphMigrationLedger.recoverySummary(migrationID: migration.id, version: migration.version,
+            configuration: normalizedConfigurationThrowing(configuration))
+    }
+
+    /// Call only after the application has successfully published its recovered data.
+    /// Reusing the latest recoveryID is a no-op, even if the supplied count differs.
+    /// Use a new identity for a subsequent completed recovery, not for ordinary edits.
+    public static func recordRecoverySummary(for migration: GraphMigration,
+                                             configuration: GraphStoreConfiguration,
+                                             recoveryID: String, recordsRequiringManualReview: Int) throws {
+        try GraphMigrationLedger.recordRecoverySummary(migrationID: migration.id, version: migration.version,
+            configuration: normalizedConfigurationThrowing(configuration), recoveryID: recoveryID,
+            recordsRequiringManualReview: recordsRequiringManualReview)
+    }
+
     public static func stateSnapshot(
         for migration: GraphMigration,
         configuration: GraphStoreConfiguration

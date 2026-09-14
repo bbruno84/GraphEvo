@@ -136,6 +136,26 @@ that use its optional return value.
 
 ## Context
 
+### Historical recovery outcome
+
+After successfully publishing recovered domain data, an application can call
+`GraphMigrationManager.recordRecoverySummary(for:configuration:recoveryID:recordsRequiringManualReview:)`.
+Read it with `recoverySummary(for:configuration:)`, which throws on ledger errors
+and returns nil for older ledgers without a summary. This local-only snapshot
+contains `recoveryID`, `completedAt`, `recordsRequiringManualReview`, and the
+derived `requiresManualReview` flag. It does not modify technical migration state,
+query domain objects, or activate migration/synchronization work.
+
+Use a stable publication identity across retries; replaying the latest identity
+is a no-op. A subsequent completed recovery uses a new identity. Evaluation
+resets and failed retries preserve the last successful snapshot; ordinary user
+edits never update it. The summary is in the journaled local ledger projection,
+not KVS. A changed save posts `.graphMigrationRecoverySummaryDidChange` on the
+main queue with a `GraphMigrationRecoverySummaryChange` in `notification.object`
+(storeScope, migrationID, version, summary). Observe globally and filter the
+payload for the active store. Always read on launch: notifications are transient,
+and crash journal recovery is observed through the read API.
+
 `GraphMigrationContext` passes data between phases.
 `previousMigrationRecord` exposes the previous record when available, while
 `migrationStateSnapshot` contains local and observed remote state, generation,

@@ -480,6 +480,26 @@ File logging is disabled by default and can be enabled with
 
 ## 10. Utilities
 
+### Migration recovery summaries
+
+`GraphMigrationManager.recoverySummary(for:configuration:) throws -> GraphMigrationRecoverySummary?`
+reads the latest local historical recovery publication. Nil means unavailable.
+`recordRecoverySummary(for:configuration:recoveryID:recordsRequiringManualReview:) throws`
+persists an application-confirmed completed publication without changing migration
+state. A repeated latest recoveryID does not replace the snapshot. Counts must
+be nonnegative and identities nonempty.
+
+`GraphMigrationRecoverySummary` is Codable, Equatable and Sendable and exposes
+`recoveryID: String`, `completedAt: Date`, `recordsRequiringManualReview: Int`,
+and `requiresManualReview: Bool`. It survives evaluation resets and failed retries;
+it is not a live count or synchronized through KVS.
+`Notification.Name.graphMigrationRecoverySummaryDidChange` is delivered on the
+main queue after a changed save. Its object is the Sendable value
+`GraphMigrationRecoverySummaryChange` exposing `storeScope: String`,
+`migrationID: String`, `version: Int`, and `summary: GraphMigrationRecoverySummary`.
+Read on launch as well as observing notifications; journal replay does not emit
+a new notification. No domain data is read by either API.
+
 Public utility types include `Model`, `GraphJSON`, `AnyCodable`,
 `AnyCodableObject`, `NSArrayOfAnyCodableObject`,
 `DictionaryOfAnyCodableObject`, `GraphArchiver`, `GraphValueTransformer`,
