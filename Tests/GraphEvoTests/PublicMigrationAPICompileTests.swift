@@ -45,7 +45,7 @@ final class PublicMigrationAPICompileTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         var config = GraphStoreConfiguration()
         config.name = "PublicMetadata"
-        config.location = root
+        config.location = root.appendingPathComponent("store", isDirectory: true)
         let value = Payload(format: 7, names: ["a", "b"], date: Date(timeIntervalSince1970: 1234))
         XCTAssertNil(try GraphMigrationManager.metadata(Payload.self, forKey: "payload", for: Migration(), configuration: config))
         try GraphMigrationManager.setMetadata(value, forKey: "payload", for: Migration(), configuration: config)
