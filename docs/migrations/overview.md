@@ -134,27 +134,37 @@ These APIs propagate ledger, reconciliation, and publication errors. The
 compatibility `record(for:configuration:)` API remains available for callers
 that use its optional return value.
 
+## Application-owned metadata
+
+A migration can store small additional Codable values in its local ledger:
+`GraphMigrationManager.setMetadata(_:forKey:for:configuration:)`,
+`metadata(_:forKey:for:configuration:)`, and
+`removeMetadata(forKey:for:configuration:)`. The read method takes the expected
+Decodable type and returns nil only for a missing key; decoding and ledger
+errors propagate. The application owns schema versions, payload validation,
+meaning and operation-level idempotency. GraphEvo does not interpret payloads.
+
+Values are JSON-encoded with sorted keys and dates in milliseconds since 1970.
+Keys must be nonempty and at most 256 UTF-8 bytes; total encoded metadata is
+limited to 64 KiB per migration/store/version. Use backups for large artifacts.
+Identical encoded writes and missing-key removals are no-ops. Writes/removals
+are journaled and serialized; they do not change migration execution state,
+query domain objects or synchronize through KVS. Evaluation resets and failed
+attempts preserve metadata.
+
+A changed save/removal posts `.graphMigrationMetadataDidChange` on the main
+queue. Its `GraphMigrationMetadataChange` object exposes `storeScope`,
+`migrationID`, `version` and `key`, not application payloads. Filter these
+fields and reread the value; another write may already have followed it.
+Read on launch/store changes as well: notifications are transient and journal
+replay does not emit a new event.
+
+The superseded rc.11 domain-specific API has been removed before stable release.
+Its optional JSON extension remains readable under its original metadata key
+and survives unrelated writes without interpretation. Writing/removing that
+key replaces/removes the old extension too.
+
 ## Context
-
-### Historical recovery outcome
-
-After successfully publishing recovered domain data, an application can call
-`GraphMigrationManager.recordRecoverySummary(for:configuration:recoveryID:recordsRequiringManualReview:)`.
-Read it with `recoverySummary(for:configuration:)`, which throws on ledger errors
-and returns nil for older ledgers without a summary. This local-only snapshot
-contains `recoveryID`, `completedAt`, `recordsRequiringManualReview`, and the
-derived `requiresManualReview` flag. It does not modify technical migration state,
-query domain objects, or activate migration/synchronization work.
-
-Use a stable publication identity across retries; replaying the latest identity
-is a no-op. A subsequent completed recovery uses a new identity. Evaluation
-resets and failed retries preserve the last successful snapshot; ordinary user
-edits never update it. The summary is in the journaled local ledger projection,
-not KVS. A changed save posts `.graphMigrationRecoverySummaryDidChange` on the
-main queue with a `GraphMigrationRecoverySummaryChange` in `notification.object`
-(storeScope, migrationID, version, summary). Observe globally and filter the
-payload for the active store. Always read on launch: notifications are transient,
-and crash journal recovery is observed through the read API.
 
 `GraphMigrationContext` passes data between phases.
 `previousMigrationRecord` exposes the previous record when available, while

@@ -478,27 +478,37 @@ sidecars. `ConflictPolicy` supports `.duplicate`, `.skip`, and `.overwrite`.
 File logging is disabled by default and can be enabled with
 `GraphMigrationLogger.fileLoggingEnabled = true`.
 
+## Application-owned metadata
+
+A migration can store small additional Codable values in its local ledger:
+`GraphMigrationManager.setMetadata(_:forKey:for:configuration:)`,
+`metadata(_:forKey:for:configuration:)`, and
+`removeMetadata(forKey:for:configuration:)`. The read method takes the expected
+Decodable type and returns nil only for a missing key; decoding and ledger
+errors propagate. The application owns schema versions, payload validation,
+meaning and operation-level idempotency. GraphEvo does not interpret payloads.
+
+Values are JSON-encoded with sorted keys and dates in milliseconds since 1970.
+Keys must be nonempty and at most 256 UTF-8 bytes; total encoded metadata is
+limited to 64 KiB per migration/store/version. Use backups for large artifacts.
+Identical encoded writes and missing-key removals are no-ops. Writes/removals
+are journaled and serialized; they do not change migration execution state,
+query domain objects or synchronize through KVS. Evaluation resets and failed
+attempts preserve metadata.
+
+A changed save/removal posts `.graphMigrationMetadataDidChange` on the main
+queue. Its `GraphMigrationMetadataChange` object exposes `storeScope`,
+`migrationID`, `version` and `key`, not application payloads. Filter these
+fields and reread the value; another write may already have followed it.
+Read on launch/store changes as well: notifications are transient and journal
+replay does not emit a new event.
+
+The superseded rc.11 domain-specific API has been removed before stable release.
+Its optional JSON extension remains readable under its original metadata key
+and survives unrelated writes without interpretation. Writing/removing that
+key replaces/removes the old extension too.
+
 ## 10. Utilities
-
-### Migration recovery summaries
-
-`GraphMigrationManager.recoverySummary(for:configuration:) throws -> GraphMigrationRecoverySummary?`
-reads the latest local historical recovery publication. Nil means unavailable.
-`recordRecoverySummary(for:configuration:recoveryID:recordsRequiringManualReview:) throws`
-persists an application-confirmed completed publication without changing migration
-state. A repeated latest recoveryID does not replace the snapshot. Counts must
-be nonnegative and identities nonempty.
-
-`GraphMigrationRecoverySummary` is Codable, Equatable and Sendable and exposes
-`recoveryID: String`, `completedAt: Date`, `recordsRequiringManualReview: Int`,
-and `requiresManualReview: Bool`. It survives evaluation resets and failed retries;
-it is not a live count or synchronized through KVS.
-`Notification.Name.graphMigrationRecoverySummaryDidChange` is delivered on the
-main queue after a changed save. Its object is the Sendable value
-`GraphMigrationRecoverySummaryChange` exposing `storeScope: String`,
-`migrationID: String`, `version: Int`, and `summary: GraphMigrationRecoverySummary`.
-Read on launch as well as observing notifications; journal replay does not emit
-a new notification. No domain data is read by either API.
 
 Public utility types include `Model`, `GraphJSON`, `AnyCodable`,
 `AnyCodableObject`, `NSArrayOfAnyCodableObject`,

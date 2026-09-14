@@ -82,65 +82,77 @@ final class GraphMigrationLedgerTests: XCTestCase {
         XCTAssertEqual(done?.updatedAt, completedAt)
     }
 
-    func testRecoverySummaryIsHistoricalAndScoped() throws {
-        XCTAssertNil(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration))
-        _ = try GraphMigrationLedger.markDone(migrationID: "recovery", version: 2, synchronization: .local, configuration: configuration)
-        // Existing schema-1 ledgers without the additive field remain readable.
-        XCTAssertNil(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration))
-        try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2, configuration: configuration,
-            recoveryID: "first", recordsRequiringManualReview: 3)
-        let first = try XCTUnwrap(GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration))
-        XCTAssertTrue(first.requiresManualReview)
-        XCTAssertEqual(first.recordsRequiringManualReview, 3)
-        try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2, configuration: configuration,
-            recoveryID: "first", recordsRequiringManualReview: 0)
-        try GraphMigrationLedger.reset(migrationID: "recovery", version: 2, synchronization: .local, configuration: configuration)
-        XCTAssertEqual(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration), first)
-        XCTAssertNil(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 3, configuration: configuration))
+    func testMetadataKeysAreIndependentAndSurviveReset() throws {
+        let data = Data(#"{"value":3}"#.utf8)
+        XCTAssertNil(try GraphMigrationLedger.metadata(migrationID: "metadata", version: 1, configuration: configuration, key: "first"))
+        try GraphMigrationLedger.setMetadata(migrationID: "metadata", version: 1, configuration: configuration, key: "first", data: data)
+        try GraphMigrationLedger.setMetadata(migrationID: "metadata", version: 1, configuration: configuration, key: "second", data: Data("true".utf8))
+        try GraphMigrationLedger.reset(migrationID: "metadata", version: 1, synchronization: .local, configuration: configuration)
+        XCTAssertEqual(try GraphMigrationLedger.metadata(migrationID: "metadata", version: 1, configuration: configuration, key: "first"), data)
+        XCTAssertNil(try GraphMigrationLedger.metadata(migrationID: "metadata", version: 2, configuration: configuration, key: "first"))
         var other = configuration!
         other.name += "-other"
-        XCTAssertNil(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: other))
-        try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2, configuration: configuration,
-            recoveryID: "second", recordsRequiringManualReview: 0)
-        XCTAssertEqual(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2, configuration: configuration)?.requiresManualReview, false)
-        XCTAssertEqual(GraphMigrationLedger.localRecord(migrationID: "recovery", version: 2, configuration: configuration)?.state, .notExecuted)
+        XCTAssertNil(try GraphMigrationLedger.metadata(migrationID: "metadata", version: 1, configuration: other, key: "first"))
+        try GraphMigrationLedger.setMetadata(migrationID: "metadata", version: 1, configuration: configuration, key: "first", data: nil)
+        XCTAssertNil(try GraphMigrationLedger.metadata(migrationID: "metadata", version: 1, configuration: configuration, key: "first"))
+        XCTAssertNotNil(try GraphMigrationLedger.metadata(migrationID: "metadata", version: 1, configuration: configuration, key: "second"))
+        XCTAssertEqual(GraphMigrationLedger.localRecord(migrationID: "metadata", version: 1, configuration: configuration)?.state, .notExecuted)
     }
 
-    func testRecoverySummaryNotifiesAfterPersistenceWithoutDeadlockOrDuplicate() throws {
-        let changed = expectation(description: "saved summary")
+    func testMetadataNotifiesChangedWritesAndRemovalAfterPersistence() throws {
+        let changed = expectation(description: "saved metadata")
+        changed.expectedFulfillmentCount = 2
         changed.assertForOverFulfill = true
         let config = configuration!
-        let observer = NotificationCenter.default.addObserver(forName: .graphMigrationRecoverySummaryDidChange,
-            object: nil, queue: nil) { notification in
-            guard let change = notification.object as? GraphMigrationRecoverySummaryChange,
+        let observer = NotificationCenter.default.addObserver(forName: .graphMigrationMetadataDidChange, object: nil, queue: nil) { notification in
+            guard let change = notification.object as? GraphMigrationMetadataChange,
                   change.migrationID == "notification-test" else { return }
             XCTAssertTrue(Thread.isMainThread)
             XCTAssertEqual(change.storeScope, GraphStoreScope(configuration: config).logicalKey)
-            XCTAssertEqual(try? GraphMigrationLedger.recoverySummary(migrationID: change.migrationID,
-                version: change.version, configuration: config), change.summary)
+            XCTAssertEqual(change.key, "value")
+            // Reentrant reads are safe; the latest value may already have changed again.
+            do {
+                _ = try GraphMigrationLedger.metadata(migrationID: change.migrationID,
+                    version: change.version, configuration: config, key: change.key)
+            } catch { XCTFail("Metadata read failed: \(error)") }
             changed.fulfill()
         }
         defer { NotificationCenter.default.removeObserver(observer) }
         for _ in 0..<2 {
-            try GraphMigrationLedger.recordRecoverySummary(migrationID: "notification-test", version: 2,
-                configuration: config, recoveryID: "publication", recordsRequiringManualReview: 3)
+            try GraphMigrationLedger.setMetadata(migrationID: "notification-test", version: 1, configuration: config, key: "value", data: Data("3".utf8))
+        }
+        for _ in 0..<2 {
+            try GraphMigrationLedger.setMetadata(migrationID: "notification-test", version: 1, configuration: config, key: "value", data: nil)
         }
         wait(for: [changed], timeout: 2)
     }
 
-    func testRecoverySummaryRejectsInvalidInputAndRecoversJournal() throws {
-        XCTAssertThrowsError(try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2,
-            configuration: configuration, recoveryID: "", recordsRequiringManualReview: 0))
-        XCTAssertThrowsError(try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2,
-            configuration: configuration, recoveryID: "valid", recordsRequiringManualReview: -1))
+    func testMetadataRejectsInvalidInputAndRecoversJournal() throws {
+        XCTAssertThrowsError(try GraphMigrationLedger.setMetadata(migrationID: "metadata", version: 1, configuration: configuration, key: "", data: Data()))
+        XCTAssertThrowsError(try GraphMigrationLedger.setMetadata(migrationID: "metadata", version: 1, configuration: configuration, key: "large", data: Data(repeating: 0, count: 65537)))
         GraphMigrationLedger.setFaultForTesting { point in
             if case .afterJournal = point { throw NSError(domain: "test-interruption", code: 1) }
         }
-        XCTAssertThrowsError(try GraphMigrationLedger.recordRecoverySummary(migrationID: "recovery", version: 2,
-            configuration: configuration, recoveryID: "interrupted", recordsRequiringManualReview: 4))
+        let data = Data("4".utf8)
+        XCTAssertThrowsError(try GraphMigrationLedger.setMetadata(migrationID: "metadata", version: 1, configuration: configuration, key: "value", data: data))
         GraphMigrationLedger.setFaultForTesting(nil)
-        XCTAssertEqual(try GraphMigrationLedger.recoverySummary(migrationID: "recovery", version: 2,
-            configuration: configuration)?.recordsRequiringManualReview, 4)
+        XCTAssertEqual(try GraphMigrationLedger.metadata(migrationID: "metadata", version: 1, configuration: configuration, key: "value"), data)
+    }
+
+    func testPrereleaseExtensionRemainsOpaqueAcrossWritesAndRemoval() throws {
+        _ = try GraphMigrationLedger.markDone(migrationID: "compatibility", version: 1, synchronization: .local, configuration: configuration)
+        let url = GraphMigrationLedger.fileURLForTesting(migrationID: "compatibility", version: 1, configuration: configuration)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        json["recoverySummary"] = ["applicationField": 7, "nested": ["flag": true]]
+        try JSONSerialization.data(withJSONObject: json).write(to: url, options: .atomic)
+        try GraphMigrationLedger.setMetadata(migrationID: "compatibility", version: 1, configuration: configuration, key: "other", data: Data("true".utf8))
+        let data = try XCTUnwrap(GraphMigrationLedger.metadata(migrationID: "compatibility", version: 1, configuration: configuration, key: "recoverySummary"))
+        let preserved = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(preserved["applicationField"] as? Int, 7)
+        try GraphMigrationLedger.setMetadata(migrationID: "compatibility", version: 1, configuration: configuration, key: "recoverySummary", data: Data("42".utf8))
+        XCTAssertEqual(try GraphMigrationLedger.metadata(migrationID: "compatibility", version: 1, configuration: configuration, key: "recoverySummary"), Data("42".utf8))
+        try GraphMigrationLedger.setMetadata(migrationID: "compatibility", version: 1, configuration: configuration, key: "recoverySummary", data: nil)
+        XCTAssertNil(try GraphMigrationLedger.metadata(migrationID: "compatibility", version: 1, configuration: configuration, key: "recoverySummary"))
     }
 
     func testStartedThenFailedStoresHandledError() throws {

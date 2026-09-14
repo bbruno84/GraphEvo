@@ -121,7 +121,8 @@ private struct GraphMigrationCompactionSummary: Codable {
 }
 
 private struct LedgerProjection: Codable {
-    var recoverySummary: GraphMigrationRecoverySummary? = nil
+    var metadata: [String: Data]? = nil
+    var legacyExtension: GraphMigrationMetadataJSON? = nil
     var schemaVersion: Int
     var current: GraphMigrationRecord
     var latestEntry: GraphMigrationLedgerEntry?
@@ -133,6 +134,15 @@ private struct LedgerProjection: Codable {
     var latestGeneration: UInt64
     var historyCount: Int
     var compactionSummary: GraphMigrationCompactionSummary
+
+    enum CodingKeys: String, CodingKey {
+        case metadata
+        // Wire compatibility only; the value is decoded by the consuming app.
+        case legacyExtension = "recoverySummary"
+        case schemaVersion, current, latestEntry, remoteObserved, lastPublished
+        case pendingPublication, publicationError, forcePending, latestGeneration
+        case historyCount, compactionSummary
+    }
 }
 
 private struct LedgerSchemaHeader: Decodable { let schemaVersion: Int }
@@ -151,11 +161,11 @@ struct GraphMigrationLedgerSnapshot {
 }
 
 enum GraphMigrationLedgerError: LocalizedError, Equatable {
-    case corrupted(URL), unsupportedSchema(Int), invalidRemoteProjection, publicationNotAccepted, invalidRecoverySummary
+    case corrupted(URL), unsupportedSchema(Int), invalidRemoteProjection, publicationNotAccepted, invalidMetadata
 
     var errorDescription: String? {
         switch self {
-        case .invalidRecoverySummary: return "A recovery summary requires a nonempty identity and a nonnegative count."
+        case .invalidMetadata: return "Ledger metadata requires a nonempty key of at most 256 bytes and at most 64 KiB of total encoded metadata."
         case .corrupted(let url): return "The migration ledger at \(url.path) is corrupted or truncated."
         case .unsupportedSchema(let version): return "The migration ledger schema version \(version) is not supported."
         case .invalidRemoteProjection: return "The remote migration projection does not match the requested store scope or migration."
@@ -314,33 +324,36 @@ enum GraphMigrationLedger {
         try queue.sync { _ = try readProjection(migrationID: migrationID, version: version, configuration: configuration); return try readHistory(at: historyURL(migrationID, version, configuration)) }
     }
 
-    static func recoverySummary(migrationID: String, version: Int, configuration: GraphStoreConfiguration) throws -> GraphMigrationRecoverySummary? {
+    static func metadata(migrationID: String, version: Int, configuration: GraphStoreConfiguration, key: String) throws -> Data? {
         try queue.sync {
-            try readProjection(migrationID: migrationID, version: version, configuration: configuration)?.recoverySummary
+            let p = try readProjection(migrationID: migrationID, version: version, configuration: configuration)
+            if let data = p?.metadata?[key] { return data }
+            // Preserve the prerelease extension as opaque JSON, under its original key.
+            if key == "recoverySummary", let value = p?.legacyExtension { return try encoder.encode(value) }
+            return nil
         }
     }
 
-    static func recordRecoverySummary(migrationID: String, version: Int, configuration: GraphStoreConfiguration,
-                                      recoveryID: String, recordsRequiringManualReview: Int) throws {
-        guard !recoveryID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              recordsRequiringManualReview >= 0 else { throw GraphMigrationLedgerError.invalidRecoverySummary }
+    static func setMetadata(migrationID: String, version: Int, configuration: GraphStoreConfiguration,
+                            key: String, data: Data?) throws {
+        guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              key.utf8.count <= 256 else { throw GraphMigrationLedgerError.invalidMetadata }
         try queue.sync {
             var p = try readProjection(migrationID: migrationID, version: version, configuration: configuration)
                 ?? emptyProjection(migrationID: migrationID, version: version)
-            // A replay must not reinterpret a completed recovery after user edits.
-            guard p.recoverySummary?.recoveryID != recoveryID else { return }
-            // Whole seconds round-trip exactly through the ledger's millisecond
-            // JSON encoding, so the notification equals the persisted value.
-            let completedAt = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
-            let summary = GraphMigrationRecoverySummary(recoveryID: recoveryID, completedAt: completedAt,
-                recordsRequiringManualReview: recordsRequiringManualReview)
-            p.recoverySummary = summary
+            let legacy = key == "recoverySummary" ? p.legacyExtension : nil
+            let previous = try p.metadata?[key] ?? legacy.map { try encoder.encode($0) }
+            guard previous != data else { return }
+            var values = p.metadata ?? [:]
+            values[key] = data
+            guard try encoder.encode(values).count <= 64 * 1024 else { throw GraphMigrationLedgerError.invalidMetadata }
+            p.metadata = values.isEmpty ? nil : values
+            if key == "recoverySummary" { p.legacyExtension = nil }
             try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
-            let change = GraphMigrationRecoverySummaryChange(storeScope: GraphStoreScope(configuration: configuration).logicalKey,
-                migrationID: migrationID, version: version, summary: summary)
-            // Enqueue in commit order, but never invoke observers on the ledger queue.
+            let change = GraphMigrationMetadataChange(storeScope: GraphStoreScope(configuration: configuration).logicalKey,
+                migrationID: migrationID, version: version, key: key)
             DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .graphMigrationRecoverySummaryDidChange, object: change)
+                NotificationCenter.default.post(name: .graphMigrationMetadataDidChange, object: change)
             }
         }
     }

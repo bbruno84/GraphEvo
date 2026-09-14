@@ -315,23 +315,36 @@ public final class GraphMigrationManager {
         )
     }
 
-    /// Latest local recovery outcome, or nil for ledgers without a recorded summary.
-    /// Retained across evaluation resets and failed retries; never inferred from KVS.
-    public static func recoverySummary(for migration: GraphMigration,
-                                       configuration: GraphStoreConfiguration) throws -> GraphMigrationRecoverySummary? {
-        try GraphMigrationLedger.recoverySummary(migrationID: migration.id, version: migration.version,
-            configuration: normalizedConfigurationThrowing(configuration))
+    /// Reads application-owned metadata. Nil means absent; decoding errors propagate.
+    /// JSON dates use milliseconds since 1970. Values are local, not synchronized through KVS.
+    public static func metadata<Value: Decodable>(_ type: Value.Type, forKey key: String,
+                                                  for migration: GraphMigration,
+                                                  configuration: GraphStoreConfiguration) throws -> Value? {
+        guard let data = try GraphMigrationLedger.metadata(migrationID: migration.id, version: migration.version,
+            configuration: normalizedConfigurationThrowing(configuration), key: key) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .millisecondsSince1970
+        return try decoder.decode(type, from: data)
     }
 
-    /// Call only after the application has successfully published its recovered data.
-    /// Reusing the latest recoveryID is a no-op, even if the supplied count differs.
-    /// Use a new identity for a subsequent completed recovery, not for ordinary edits.
-    public static func recordRecoverySummary(for migration: GraphMigration,
-                                             configuration: GraphStoreConfiguration,
-                                             recoveryID: String, recordsRequiringManualReview: Int) throws {
-        try GraphMigrationLedger.recordRecoverySummary(migrationID: migration.id, version: migration.version,
-            configuration: normalizedConfigurationThrowing(configuration), recoveryID: recoveryID,
-            recordsRequiringManualReview: recordsRequiringManualReview)
+    /// Replaces one application-owned value without changing migration state.
+    /// The app owns payload schema, validation and operation-level idempotency.
+    /// Identical encoded values do not write or notify. Maximum total metadata: 64 KiB.
+    public static func setMetadata<Value: Encodable>(_ value: Value, forKey key: String,
+                                                     for migration: GraphMigration,
+                                                     configuration: GraphStoreConfiguration) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .millisecondsSince1970
+        encoder.outputFormatting = [.sortedKeys]
+        try GraphMigrationLedger.setMetadata(migrationID: migration.id, version: migration.version,
+            configuration: normalizedConfigurationThrowing(configuration), key: key, data: encoder.encode(value))
+    }
+
+    /// Removes one key. Evaluation resets otherwise preserve metadata.
+    public static func removeMetadata(forKey key: String, for migration: GraphMigration,
+                                      configuration: GraphStoreConfiguration) throws {
+        try GraphMigrationLedger.setMetadata(migrationID: migration.id, version: migration.version,
+            configuration: normalizedConfigurationThrowing(configuration), key: key, data: nil)
     }
 
     public static func stateSnapshot(
