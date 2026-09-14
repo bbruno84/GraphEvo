@@ -121,6 +121,7 @@ private struct GraphMigrationCompactionSummary: Codable {
 }
 
 private struct LedgerProjection: Codable {
+    var recoverySummary: GraphMigrationRecoverySummary? = nil
     var schemaVersion: Int
     var current: GraphMigrationRecord
     var latestEntry: GraphMigrationLedgerEntry?
@@ -150,10 +151,11 @@ struct GraphMigrationLedgerSnapshot {
 }
 
 enum GraphMigrationLedgerError: LocalizedError, Equatable {
-    case corrupted(URL), unsupportedSchema(Int), invalidRemoteProjection, publicationNotAccepted
+    case corrupted(URL), unsupportedSchema(Int), invalidRemoteProjection, publicationNotAccepted, invalidRecoverySummary
 
     var errorDescription: String? {
         switch self {
+        case .invalidRecoverySummary: return "A recovery summary requires a nonempty identity and a nonnegative count."
         case .corrupted(let url): return "The migration ledger at \(url.path) is corrupted or truncated."
         case .unsupportedSchema(let version): return "The migration ledger schema version \(version) is not supported."
         case .invalidRemoteProjection: return "The remote migration projection does not match the requested store scope or migration."
@@ -310,6 +312,37 @@ enum GraphMigrationLedger {
 
     static func history(migrationID: String, version: Int, configuration: GraphStoreConfiguration) throws -> [GraphMigrationLedgerEntry] {
         try queue.sync { _ = try readProjection(migrationID: migrationID, version: version, configuration: configuration); return try readHistory(at: historyURL(migrationID, version, configuration)) }
+    }
+
+    static func recoverySummary(migrationID: String, version: Int, configuration: GraphStoreConfiguration) throws -> GraphMigrationRecoverySummary? {
+        try queue.sync {
+            try readProjection(migrationID: migrationID, version: version, configuration: configuration)?.recoverySummary
+        }
+    }
+
+    static func recordRecoverySummary(migrationID: String, version: Int, configuration: GraphStoreConfiguration,
+                                      recoveryID: String, recordsRequiringManualReview: Int) throws {
+        guard !recoveryID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              recordsRequiringManualReview >= 0 else { throw GraphMigrationLedgerError.invalidRecoverySummary }
+        try queue.sync {
+            var p = try readProjection(migrationID: migrationID, version: version, configuration: configuration)
+                ?? emptyProjection(migrationID: migrationID, version: version)
+            // A replay must not reinterpret a completed recovery after user edits.
+            guard p.recoverySummary?.recoveryID != recoveryID else { return }
+            // Whole seconds round-trip exactly through the ledger's millisecond
+            // JSON encoding, so the notification equals the persisted value.
+            let completedAt = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+            let summary = GraphMigrationRecoverySummary(recoveryID: recoveryID, completedAt: completedAt,
+                recordsRequiringManualReview: recordsRequiringManualReview)
+            p.recoverySummary = summary
+            try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
+            let change = GraphMigrationRecoverySummaryChange(storeScope: GraphStoreScope(configuration: configuration).logicalKey,
+                migrationID: migrationID, version: version, summary: summary)
+            // Enqueue in commit order, but never invoke observers on the ledger queue.
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .graphMigrationRecoverySummaryDidChange, object: change)
+            }
+        }
     }
 
     static func fileURLForTesting(migrationID: String, version: Int, configuration: GraphStoreConfiguration) -> URL { recordURL(migrationID, version, configuration) }
