@@ -329,7 +329,10 @@ enum GraphMigrationLedger {
                 ?? emptyProjection(migrationID: migrationID, version: version)
             // A replay must not reinterpret a completed recovery after user edits.
             guard p.recoverySummary?.recoveryID != recoveryID else { return }
-            let summary = GraphMigrationRecoverySummary(recoveryID: recoveryID, completedAt: Date(),
+            // Whole seconds round-trip exactly through the ledger's millisecond
+            // JSON encoding, so the notification equals the persisted value.
+            let completedAt = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+            let summary = GraphMigrationRecoverySummary(recoveryID: recoveryID, completedAt: completedAt,
                 recordsRequiringManualReview: recordsRequiringManualReview)
             p.recoverySummary = summary
             try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
