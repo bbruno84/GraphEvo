@@ -15,7 +15,7 @@ struct GraphStoreScope: Hashable, Codable, Sendable {
     }
 
     init(configuration: GraphStoreConfiguration) {
-        runtimeURL = configuration.resolvedStoreURL.standardizedFileURL.path
+        runtimeURL = configuration.resolvedStoreURL.graphStableFileIdentityPath
         logicalName = configuration.name
         cloudKitContainerIdentifier = configuration.cloudKitContainerIdentifier
         environment = configuration.environment ?? .local

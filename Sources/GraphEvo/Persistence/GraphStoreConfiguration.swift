@@ -138,7 +138,7 @@ public struct GraphStoreConfiguration {
     /// Stable key used by the in-process context registry.
     /// It identifies the resolved store, not just its public route/name.
     internal var storeIdentityKey: String {
-        resolvedStoreURL.standardizedFileURL.path
+        resolvedStoreURL.graphStableFileIdentityPath
     }
 
     internal mutating func setResolvedEnvironment(_ environment: GraphStoreEnvironment) {
@@ -156,6 +156,31 @@ public struct GraphStoreConfiguration {
             self.graphModel = graphModel
             self.appData = appData
         }
+    }
+}
+
+extension URL {
+    /// Canonical file identity that remains stable when the final path does not
+    /// exist yet. Foundation only resolves aliases such as `/private/var` after
+    /// the complete path exists, which can otherwise change a store's runtime
+    /// identity while it is being opened.
+    internal var graphStableFileIdentityPath: String {
+        let fileManager = FileManager.default
+        var existingAncestor = self
+        var missingComponents: [String] = []
+
+        while !fileManager.fileExists(atPath: existingAncestor.path) {
+            let parent = existingAncestor.deletingLastPathComponent()
+            guard parent.path != existingAncestor.path else { break }
+            missingComponents.append(existingAncestor.lastPathComponent)
+            existingAncestor = parent
+        }
+
+        var canonical = existingAncestor.resolvingSymlinksInPath().standardizedFileURL
+        for component in missingComponents.reversed() where !component.isEmpty {
+            canonical.appendPathComponent(component)
+        }
+        return canonical.standardizedFileURL.path
     }
 }
 
