@@ -492,6 +492,50 @@ final class GraphMigrationManagerTests: XCTestCase {
         XCTAssertNotNil(snapshot?.latestEntry?.backupReference)
     }
 
+    func testStoreCreatedBetweenPreInitAndReadyKeepsOneMigrationCoordinator() throws {
+        let name = "CoordinatorPath-\(UUID().uuidString)"
+        let realDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(name, isDirectory: true)
+        let canonicalPath = realDirectory.path.hasPrefix("/private/")
+            ? String(realDirectory.path.dropFirst("/private".count))
+            : realDirectory.path
+        let privateDirectory = URL(fileURLWithPath: "/private" + canonicalPath, isDirectory: true)
+        let privateParent = privateDirectory.deletingLastPathComponent()
+        guard FileManager.default.isWritableFile(atPath: privateParent.path) else {
+            throw XCTSkip("The simulator sandbox does not expose the /private alias for its temporary directory")
+        }
+        try FileManager.default.createDirectory(at: privateDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: privateDirectory) }
+
+        var configuration = GraphStoreConfiguration()
+        configuration.name = name
+        configuration.location = privateDirectory.appendingPathComponent("GraphEvo_\(name).sqlite")
+        configuration.waitsForApplicationMigrations = true
+
+        let migration = LifecycleMigration(id: "CoordinatorPathMigration-\(UUID().uuidString)")
+        GraphMigrationManager.registerMigration(migration)
+
+        let beforeCreation = GraphStoreScope(configuration: configuration)
+        let registryKeyBeforeCreation = configuration.storeIdentityKey
+        XCTAssertFalse(FileManager.default.fileExists(atPath: configuration.resolvedStoreURL.path))
+
+        let graph = Graph(configuration: configuration)
+        let ready = expectation(description: "migration reaches ready on the original coordinator")
+        graph.whenReady { result in
+            if case .failure(let error) = result { XCTFail("\(error)") }
+            ready.fulfill()
+        }
+        wait(for: [ready], timeout: 10)
+
+        let afterCreation = GraphStoreScope(configuration: configuration)
+        XCTAssertEqual(beforeCreation, afterCreation)
+        XCTAssertEqual(registryKeyBeforeCreation, configuration.storeIdentityKey)
+        XCTAssertEqual(migration.handleCount, 4)
+        let history = try GraphMigrationManager.history(for: migration, configuration: configuration)
+        XCTAssertEqual(history.map(\.state), [.started, .done])
+        XCTAssertEqual(history.last?.generation, 1)
+    }
+
     func testCompletedScopeReleasesItsCoordinator() {
         var configuration = GraphStoreConfiguration()
         configuration.name = "CoordinatorRelease-\(UUID().uuidString)"
