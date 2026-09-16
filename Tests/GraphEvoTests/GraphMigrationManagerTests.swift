@@ -496,7 +496,14 @@ final class GraphMigrationManagerTests: XCTestCase {
         let name = "CoordinatorPath-\(UUID().uuidString)"
         let realDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(name, isDirectory: true)
-        let privateDirectory = URL(fileURLWithPath: "/private" + realDirectory.path, isDirectory: true)
+        let canonicalPath = realDirectory.path.hasPrefix("/private/")
+            ? String(realDirectory.path.dropFirst("/private".count))
+            : realDirectory.path
+        let privateDirectory = URL(fileURLWithPath: "/private" + canonicalPath, isDirectory: true)
+        let privateParent = privateDirectory.deletingLastPathComponent()
+        guard FileManager.default.isWritableFile(atPath: privateParent.path) else {
+            throw XCTSkip("The simulator sandbox does not expose the /private alias for its temporary directory")
+        }
         try FileManager.default.createDirectory(at: privateDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: privateDirectory) }
 
