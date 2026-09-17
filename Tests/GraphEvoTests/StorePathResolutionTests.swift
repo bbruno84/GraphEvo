@@ -63,33 +63,27 @@ final class StorePathResolutionTests: XCTestCase {
         XCTAssertEqual(try? production.get(), .production)
     }
 
-    func testIOSSignatureFallbackDistinguishesDevelopmentAndProduction() {
+    func testIOSBuildEnvironmentDistinguishesDevelopmentAndProduction() {
         XCTAssertEqual(
-            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
-                developmentSigned: true,
-                hasSignedCloudKitService: true
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: true,
+                isDebugBuild: false
             ),
             .development
         )
         XCTAssertEqual(
-            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
-                developmentSigned: false,
-                hasSignedCloudKitService: true
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: false,
+                isDebugBuild: true
             ),
-            .production
+            .development
         )
         XCTAssertEqual(
-            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
-                developmentSigned: nil,
-                hasSignedCloudKitService: true
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: false,
+                isDebugBuild: false
             ),
             .production
-        )
-        XCTAssertNil(
-            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
-                developmentSigned: true,
-                hasSignedCloudKitService: false
-            )
         )
     }
 

@@ -1,21 +1,6 @@
 import Foundation
+#if os(macOS)
 import Security
-
-#if !os(macOS)
-// SecTask is exported by Security on iOS, but its header is not shipped in
-// the iOS SDK. Keep the declarations local so the entitlement lookup remains
-// available to iOS clients without exposing another public API.
-private typealias GraphSecTaskRef = CFTypeRef
-
-@_silgen_name("SecTaskCreateFromSelf")
-private func graphSecTaskCreateFromSelf(_ allocator: CFAllocator?) -> GraphSecTaskRef?
-
-@_silgen_name("SecTaskCopyValueForEntitlement")
-private func graphSecTaskCopyValueForEntitlement(
-    _ task: GraphSecTaskRef,
-    _ entitlement: CFString,
-    _ error: UnsafeMutablePointer<CFError?>?
-) -> CFTypeRef?
 #endif
 
 /// The persistence environment selected for a Graph store.
@@ -27,14 +12,10 @@ public enum GraphStoreEnvironment: String, Codable, Equatable, Sendable {
 
 internal enum GraphStoreEnvironmentResolver {
     static let entitlementKey = "com.apple.developer.icloud-container-environment"
-    static let cloudServicesEntitlementKey = "com.apple.developer.icloud-services"
-    static let developmentSigningEntitlementKey = "get-task-allow"
 
     static func resolve(
         configuration: GraphStoreConfiguration,
         entitlementValue: String? = readEntitlement(),
-        developmentSigned: Bool? = readBooleanEntitlement(developmentSigningEntitlementKey),
-        hasSignedCloudKitService: Bool = readCloudKitServices().contains("CloudKit"),
         runningUnderTests: Bool = Graph.isRunningUnderTests
     ) -> Result<GraphStoreEnvironment, GraphStoreOpeningError> {
         if configuration.disablesCloudKit || configuration.cloudKitContainerIdentifier == nil {
@@ -47,6 +28,7 @@ internal enum GraphStoreEnvironmentResolver {
             return .success(.development)
         }
 
+#if os(macOS)
         if let entitlementValue {
             switch entitlementValue.trimmingCharacters(in: .whitespacesAndNewlines) {
             case "Development": return .success(.development)
@@ -54,59 +36,55 @@ internal enum GraphStoreEnvironmentResolver {
             default: break
             }
         }
+#endif
 
 #if os(iOS)
 #if targetEnvironment(simulator)
-        return .success(.development)
+        let isSimulator = true
 #else
-        if let environment = environmentFromIOSSignature(
-            developmentSigned: developmentSigned,
-            hasSignedCloudKitService: hasSignedCloudKitService
-        ) {
-            return .success(environment)
-        }
-        return .failure(.cloudKitEnvironmentUnavailable)
+        let isSimulator = false
 #endif
+#if DEBUG
+        let isDebugBuild = true
+#else
+        let isDebugBuild = false
+#endif
+        return .success(environmentForIOSBuild(
+            isSimulator: isSimulator,
+            isDebugBuild: isDebugBuild
+        ))
 #else
         return .failure(.cloudKitEnvironmentUnavailable)
 #endif
     }
 
-    static func environmentFromIOSSignature(
-        developmentSigned: Bool?,
-        hasSignedCloudKitService: Bool
-    ) -> GraphStoreEnvironment? {
-        guard hasSignedCloudKitService else { return nil }
-        return developmentSigned == true ? .development : .production
+    /// CloudKit follows the signed entitlement selected by Xcode. GraphEvo keeps
+    /// its store namespace aligned without inspecting that entitlement through
+    /// private iOS APIs: simulator and Debug builds use Development, while
+    /// optimized device builds use Production.
+    static func environmentForIOSBuild(
+        isSimulator: Bool,
+        isDebugBuild: Bool
+    ) -> GraphStoreEnvironment {
+        isSimulator || isDebugBuild ? .development : .production
     }
 
     private static func readEntitlement() -> String? {
-        readEntitlementValue(for: entitlementKey) as? String
-    }
-
-    private static func readBooleanEntitlement(_ key: String) -> Bool? {
-        readEntitlementValue(for: key) as? Bool
-    }
-
-    private static func readCloudKitServices() -> [String] {
-        readEntitlementValue(for: cloudServicesEntitlementKey) as? [String] ?? []
-    }
-
-    private static func readEntitlementValue(for key: String) -> Any? {
 #if os(macOS)
+        readEntitlementValue(for: entitlementKey) as? String
+#else
+        nil
+#endif
+    }
+
+#if os(macOS)
+    private static func readEntitlementValue(for key: String) -> Any? {
         guard let task = SecTaskCreateFromSelf(nil) else { return nil }
         return SecTaskCopyValueForEntitlement(
             task,
             key as CFString,
             nil
         )
-#else
-        guard let task = graphSecTaskCreateFromSelf(nil) else { return nil }
-        return graphSecTaskCopyValueForEntitlement(
-            task,
-            key as CFString,
-            nil
-        )
-#endif
     }
+#endif
 }
