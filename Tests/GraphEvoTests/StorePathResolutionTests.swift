@@ -44,7 +44,7 @@ final class StorePathResolutionTests: XCTestCase {
         XCTAssertTrue(configuration.legacyStoreURLs.isEmpty)
     }
 
-    func testEnvironmentResolverAcceptsBuildEntitlementWithoutAnAccountCheck() {
+    func testEnvironmentResolverUsesThePlatformEnvironmentWithoutAnAccountCheck() {
         var configuration = GraphStoreConfiguration()
         configuration.cloudKitContainerIdentifier = "iCloud.example"
 
@@ -59,37 +59,38 @@ final class StorePathResolutionTests: XCTestCase {
             runningUnderTests: false
         )
 
+#if os(macOS)
         XCTAssertEqual(try? development.get(), .development)
         XCTAssertEqual(try? production.get(), .production)
+#elseif os(iOS)
+        // iOS intentionally ignores entitlement values because reading them
+        // would require the private SecTask APIs rejected by App Store Connect.
+        XCTAssertEqual(try? development.get(), .development)
+        XCTAssertEqual(try? production.get(), .development)
+#endif
     }
 
-    func testIOSSignatureFallbackDistinguishesDevelopmentAndProduction() {
+    func testIOSBuildEnvironmentDistinguishesDevelopmentAndProduction() {
         XCTAssertEqual(
-            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
-                developmentSigned: true,
-                hasSignedCloudKitService: true
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: true,
+                isDebugBuild: false
             ),
             .development
         )
         XCTAssertEqual(
-            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
-                developmentSigned: false,
-                hasSignedCloudKitService: true
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: false,
+                isDebugBuild: true
             ),
-            .production
+            .development
         )
         XCTAssertEqual(
-            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
-                developmentSigned: nil,
-                hasSignedCloudKitService: true
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: false,
+                isDebugBuild: false
             ),
             .production
-        )
-        XCTAssertNil(
-            GraphStoreEnvironmentResolver.environmentFromIOSSignature(
-                developmentSigned: true,
-                hasSignedCloudKitService: false
-            )
         )
     }
 
