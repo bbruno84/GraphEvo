@@ -162,6 +162,8 @@ public class Graph: NSObject {
     internal var cloudSyncStoreIdentifier: String?
     internal var cloudSyncInitialImportPending = false
     internal var pendingCloudKitEvents: [GraphCloudKitEventSnapshot] = []
+    internal var cloudSyncSetupStartedEventIdentifiers = Set<UUID>()
+    internal var cloudSyncSetupFinishedEventIdentifiers = Set<UUID>()
     internal var cloudSyncUploadStartedEventIdentifiers = Set<UUID>()
     internal var cloudSyncUploadFinishedEventIdentifiers = Set<UUID>()
     internal var cloudSyncImportStartedEventIdentifiers = Set<UUID>()

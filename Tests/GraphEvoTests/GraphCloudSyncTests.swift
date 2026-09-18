@@ -184,6 +184,66 @@ final class GraphCloudSyncTests: XCTestCase {
         XCTAssertTrue(finished.succeeded)
     }
 
+    func testSetupPublishesStartedAndFinishedGraphEvents() {
+        let graph = makeGraph()
+        var events: [GraphEvent] = []
+        let eventDelegate = EventDelegate { events.append($0) }
+        graph.eventDelegate = eventDelegate
+        events.removeAll()
+        graph.configureCloudSyncTrackingForTesting(storeIdentifier: "store-1", initialImportPending: true)
+        let identifier = UUID()
+
+        graph.receiveCloudKitEventForTesting(
+            identifier: identifier,
+            storeIdentifier: "store-1",
+            type: .setup,
+            endDate: nil,
+            succeeded: false
+        )
+        graph.receiveCloudKitEventForTesting(
+            identifier: identifier,
+            storeIdentifier: "store-1",
+            type: .setup,
+            succeeded: true
+        )
+
+        XCTAssertEqual(events.count, 2)
+        guard case .stateChanged(.cloudSetup(.started(let started))) = events[0],
+              case .stateChanged(.cloudSetup(.finished(let finished))) = events[1]
+        else {
+            return XCTFail("Expected started and finished setup events")
+        }
+        XCTAssertEqual(started.identifier, identifier)
+        XCTAssertNil(started.endDate)
+        XCTAssertEqual(finished.identifier, identifier)
+        XCTAssertNotNil(finished.endDate)
+        XCTAssertTrue(finished.succeeded)
+    }
+
+    func testFailedSetupIsDeliveredWithError() {
+        let graph = makeGraph()
+        var events: [GraphEvent] = []
+        let eventDelegate = EventDelegate { events.append($0) }
+        graph.eventDelegate = eventDelegate
+        events.removeAll()
+        graph.configureCloudSyncTrackingForTesting(storeIdentifier: "store-1", initialImportPending: true)
+        let expectedError = NSError(domain: "CloudKitSetupTests", code: 17)
+
+        graph.receiveCloudKitEventForTesting(
+            storeIdentifier: "store-1",
+            type: .setup,
+            succeeded: false,
+            error: expectedError
+        )
+
+        guard case .stateChanged(.cloudSetup(.finished(let setup))) = events.first else {
+            return XCTFail("Expected a failed setup event")
+        }
+        XCTAssertFalse(setup.succeeded)
+        XCTAssertEqual((setup.error as NSError?)?.domain, expectedError.domain)
+        XCTAssertEqual((setup.error as NSError?)?.code, expectedError.code)
+    }
+
     func testDuplicateExportNotificationsDoNotRepeatUploadState() {
         let graph = makeGraph()
         var events: [GraphEvent] = []

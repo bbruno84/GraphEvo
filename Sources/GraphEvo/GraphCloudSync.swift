@@ -83,6 +83,8 @@ internal extension Graph {
             cloudSyncEventObserver = nil
         }
         pendingCloudKitEvents.removeAll()
+        cloudSyncSetupStartedEventIdentifiers.removeAll()
+        cloudSyncSetupFinishedEventIdentifiers.removeAll()
         cloudSyncUploadStartedEventIdentifiers.removeAll()
         cloudSyncUploadFinishedEventIdentifiers.removeAll()
         cloudSyncImportStartedEventIdentifiers.removeAll()
@@ -130,7 +132,7 @@ internal extension Graph {
     }
 
     private func receiveCloudKitEvent(_ event: GraphCloudKitEventSnapshot) {
-        guard event.type == .import || event.type == .export else { return }
+        guard event.type == .setup || event.type == .import || event.type == .export else { return }
         guard cloudSyncEventObserver != nil || Graph.isRunningUnderTests else { return }
 
         if cloudSyncStoreIdentifier == nil {
@@ -143,6 +145,11 @@ internal extension Graph {
         }
 
         guard cloudSyncStoreIdentifier == event.storeIdentifier else { return }
+
+        if event.type == .setup {
+            receiveCloudSetupEvent(event)
+            return
+        }
 
         if event.type == .export {
             receiveCloudExportEvent(event)
@@ -175,6 +182,25 @@ internal extension Graph {
         }
     }
 
+    private func receiveCloudSetupEvent(_ event: GraphCloudKitEventSnapshot) {
+        let setupEvent = GraphCloudSetupEvent(
+            identifier: event.identifier,
+            storeIdentifier: event.storeIdentifier,
+            startDate: event.startDate,
+            endDate: event.endDate,
+            succeeded: event.succeeded,
+            error: event.error
+        )
+
+        if event.endDate == nil {
+            guard markCloudSetupStarted(event.identifier) else { return }
+            emit(.stateChanged(.cloudSetup(.started(setupEvent))))
+        } else {
+            guard markCloudSetupFinished(event.identifier) else { return }
+            emit(.stateChanged(.cloudSetup(.finished(setupEvent))))
+        }
+    }
+
     private func receiveCloudExportEvent(_ event: GraphCloudKitEventSnapshot) {
         let uploadEvent = GraphCloudUploadEvent(
             identifier: event.identifier,
@@ -199,6 +225,22 @@ internal extension Graph {
         defer { cloudSyncStateLock.unlock() }
         guard !cloudSyncUploadStartedEventIdentifiers.contains(identifier) else { return false }
         cloudSyncUploadStartedEventIdentifiers.insert(identifier)
+        return true
+    }
+
+    private func markCloudSetupStarted(_ identifier: UUID) -> Bool {
+        cloudSyncStateLock.lock()
+        defer { cloudSyncStateLock.unlock() }
+        guard !cloudSyncSetupStartedEventIdentifiers.contains(identifier) else { return false }
+        cloudSyncSetupStartedEventIdentifiers.insert(identifier)
+        return true
+    }
+
+    private func markCloudSetupFinished(_ identifier: UUID) -> Bool {
+        cloudSyncStateLock.lock()
+        defer { cloudSyncStateLock.unlock() }
+        guard !cloudSyncSetupFinishedEventIdentifiers.contains(identifier) else { return false }
+        cloudSyncSetupFinishedEventIdentifiers.insert(identifier)
         return true
     }
 

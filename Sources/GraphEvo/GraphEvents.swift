@@ -19,8 +19,41 @@ public enum GraphState {
     case readiness(GraphReadiness)
     case cloudStatus(GraphCloudStatus)
     case persistenceMode(GraphPersistenceMode)
+    case cloudSetup(GraphCloudSetupState)
     case cloudImport(GraphCloudImportState)
     case cloudUpload(GraphCloudUploadState)
+}
+
+/// Details of a CloudKit store setup operation.
+public struct GraphCloudSetupEvent {
+    public let identifier: UUID
+    public let storeIdentifier: String
+    public let startDate: Date?
+    public let endDate: Date?
+    public let succeeded: Bool
+    public let error: Error?
+
+    public init(
+        identifier: UUID,
+        storeIdentifier: String,
+        startDate: Date?,
+        endDate: Date?,
+        succeeded: Bool,
+        error: Error?
+    ) {
+        self.identifier = identifier
+        self.storeIdentifier = storeIdentifier
+        self.startDate = startDate
+        self.endDate = endDate
+        self.succeeded = succeeded
+        self.error = error
+    }
+}
+
+/// Lifecycle updates for CloudKit store setup.
+public enum GraphCloudSetupState {
+    case started(GraphCloudSetupEvent)
+    case finished(GraphCloudSetupEvent)
 }
 
 /// Details of a CloudKit export (upload) operation.
