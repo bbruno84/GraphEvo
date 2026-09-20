@@ -566,6 +566,376 @@ final class GraphWatchReportTests: XCTestCase {
         wait(for: [received], timeout: 1)
     }
 
+    func testFailedIncrementalImportDrainsCommittedPartialHistory() throws {
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+        graph.configureCloudSyncTrackingForTesting(
+            storeIdentifier: "failed-incremental-import-store",
+            initialImportPending: false
+        )
+        let importIdentifier = UUID()
+        let received = expectation(description: "partial cloud report from failed import")
+        graph.watchReportCompletion = { report, error in
+            XCTAssertNil(error)
+            guard let report else { return }
+            XCTAssertTrue(report.events.contains {
+                if case .insertedEntity(let entity) = $0 { return entity.type == "PartiallyImported" }
+                return false
+            })
+            received.fulfill()
+        }
+
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "failed-incremental-import-store",
+            type: .import,
+            endDate: nil,
+            succeeded: false
+        )
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-FAILED-IMPORT-PARTIAL-HISTORY"
+            _ = ManagedEntity("PartiallyImported", managedObjectContext: background)
+            try background.save()
+        }
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "failed-incremental-import-store",
+            type: .import,
+            succeeded: false,
+            error: NSError(domain: "GraphWatchReportTests", code: 1)
+        )
+
+        wait(for: [received], timeout: 1)
+    }
+
+    func testCompletedImportWithNoPendingHistoryDoesNotProduceReport() {
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+        graph.configureCloudSyncTrackingForTesting(
+            storeIdentifier: "empty-incremental-import-store",
+            initialImportPending: false
+        )
+        let unexpected = expectation(description: "no cloud report for empty import")
+        unexpected.isInverted = true
+        graph.watchReportCompletion = { _, _ in unexpected.fulfill() }
+        let importIdentifier = UUID()
+
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "empty-incremental-import-store",
+            type: .import,
+            endDate: nil,
+            succeeded: false
+        )
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "empty-incremental-import-store",
+            type: .import,
+            succeeded: true
+        )
+
+        wait(for: [unexpected], timeout: 0.25)
+    }
+
+    func testImportCompletionAfterRemoteWakeupDoesNotRedeliverConsumedHistory() throws {
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+        graph.configureCloudSyncTrackingForTesting(
+            storeIdentifier: "already-delivered-import-store",
+            initialImportPending: false
+        )
+        let collector = ReportCollector()
+        let received = expectation(description: "report from remote-change wakeup")
+        collector.onReport = { _ in received.fulfill() }
+        install(collector, on: graph)
+
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-ALREADY-DELIVERED"
+            _ = ManagedEntity("AlreadyDelivered", managedObjectContext: background)
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [received], timeout: 3)
+
+        let duplicate = expectation(description: "no duplicate after import completion")
+        duplicate.isInverted = true
+        collector.onReport = { _ in duplicate.fulfill() }
+        let importIdentifier = UUID()
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "already-delivered-import-store",
+            type: .import,
+            endDate: nil,
+            succeeded: false
+        )
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "already-delivered-import-store",
+            type: .import,
+            succeeded: true
+        )
+
+        wait(for: [duplicate], timeout: 0.25)
+        XCTAssertEqual(collector.reports.count, 1)
+    }
+
+    func testNewCloudDeliveryCoordinatorResumesFromPersistedCursor() throws {
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+        let firstReceived = expectation(description: "first report before coordinator recreation")
+        graph.watchReportCompletion = { report, _ in
+            guard report != nil else { return }
+            firstReceived.fulfill()
+        }
+
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-BEFORE-DELIVERY-RECREATION"
+            _ = ManagedEntity("BeforeDeliveryRecreation", managedObjectContext: background)
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [firstReceived], timeout: 3)
+
+        let recreated = GraphWatchBatchDeliveryCoordinator(
+            graph: graph,
+            context: try XCTUnwrap(graph.managedObjectContext)
+        )
+        let replay = expectation(description: "persisted cursor prevents replay")
+        replay.isInverted = true
+        graph.watchReportCompletion = { report, _ in
+            if report != nil { replay.fulfill() }
+        }
+        recreated.request()
+        wait(for: [replay], timeout: 0.25)
+
+        let secondReceived = expectation(description: "new report after coordinator recreation")
+        graph.watchReportCompletion = { report, error in
+            XCTAssertNil(error)
+            guard let report else { return }
+            XCTAssertTrue(report.events.contains {
+                if case .insertedEntity(let entity) = $0 { return entity.type == "AfterDeliveryRecreation" }
+                return false
+            })
+            XCTAssertFalse(report.events.contains {
+                if case .insertedEntity(let entity) = $0 { return entity.type == "BeforeDeliveryRecreation" }
+                return false
+            })
+            secondReceived.fulfill()
+        }
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-AFTER-DELIVERY-RECREATION"
+            _ = ManagedEntity("AfterDeliveryRecreation", managedObjectContext: background)
+            try background.save()
+        }
+        recreated.request()
+        wait(for: [secondReceived], timeout: 3)
+    }
+
+    func testCloudBatchMaterializationFailureKeepsCursorForRetry() throws {
+        final class WarningCollector: GraphEventDelegate {
+            var onMaterializationFailure: (() -> Void)?
+            func graph(_ graph: Graph, didReceive event: GraphEvent) {
+                guard case .warning(.watchReportMaterializationFailed(
+                    source: .cloud,
+                    failedEvents: _,
+                    details: _
+                )) = event else { return }
+                onMaterializationFailure?()
+            }
+        }
+
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+        let warnings = WarningCollector()
+        graph.eventDelegate = warnings
+        let warningReceived = expectation(description: "retryable materialization warning")
+        warningReceived.assertForOverFulfill = false
+        warnings.onMaterializationFailure = { warningReceived.fulfill() }
+        let prematureReport = expectation(description: "no partial report")
+        prematureReport.isInverted = true
+        graph.watchReportCompletion = { report, _ in
+            if report != nil { prematureReport.fulfill() }
+        }
+
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        var ownerID: NSManagedObjectID!
+        var orphanID: NSManagedObjectID!
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-INVALID-WATCH-BATCH"
+            let owner = ManagedEntity("RecoveredOwner", managedObjectContext: background)
+            _ = ManagedEntity("ValidAlongsideInvalid", managedObjectContext: background)
+            let orphan = NSEntityDescription.insertNewObject(
+                forEntityName: "ManagedEntityProperty",
+                into: background
+            )
+            orphan.setValue("recoverable", forKey: "name")
+            orphan.setValue("value", forKey: "object")
+            try background.save()
+            ownerID = owner.objectID
+            orphanID = orphan.objectID
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [warningReceived, prematureReport], timeout: 1)
+
+        let retryReceived = expectation(description: "complete report after materialization retry")
+        graph.watchReportCompletion = { report, error in
+            XCTAssertNil(error)
+            guard let report else { return }
+            XCTAssertTrue(report.events.contains {
+                if case .insertedEntity(let entity) = $0 { return entity.type == "ValidAlongsideInvalid" }
+                return false
+            })
+            XCTAssertTrue(report.events.contains {
+                if case .addedEntityProperty(let entity, "recoverable", _) = $0 {
+                    return entity.type == "RecoveredOwner"
+                }
+                return false
+            })
+            retryReceived.fulfill()
+        }
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-REPAIRED-WATCH-BATCH"
+            let owner = try background.existingObject(with: ownerID)
+            let orphan = try background.existingObject(with: orphanID)
+            orphan.setValue(owner, forKey: "node")
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [retryReceived], timeout: 3)
+    }
+
+    func testRemoteWakeupAndImportCompletionCoalesceIntoOneReport() throws {
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+        graph.configureCloudSyncTrackingForTesting(
+            storeIdentifier: "coalesced-import-store",
+            initialImportPending: false
+        )
+        let collector = ReportCollector()
+        let received = expectation(description: "one coalesced cloud report")
+        collector.onReport = { _ in received.fulfill() }
+        install(collector, on: graph)
+
+        let importIdentifier = UUID()
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "coalesced-import-store",
+            type: .import,
+            endDate: nil,
+            succeeded: false
+        )
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-COALESCED-IMPORT"
+            _ = ManagedEntity("CoalescedImport", managedObjectContext: background)
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "coalesced-import-store",
+            type: .import,
+            succeeded: true
+        )
+        wait(for: [received], timeout: 3)
+
+        let duplicate = expectation(description: "no second report from overlapping wakeups")
+        duplicate.isInverted = true
+        collector.onReport = { _ in duplicate.fulfill() }
+        wait(for: [duplicate], timeout: 0.25)
+        XCTAssertEqual(collector.reports.count, 1)
+        XCTAssertTrue(collector.reports[0].events.contains {
+            if case .insertedEntity(let entity) = $0 { return entity.type == "CoalescedImport" }
+            return false
+        })
+    }
+
+    func testPersistentHistoryMaterializesRemotePropertyUpdateAndEntityDeletion() throws {
+        final class WarningCollector: GraphEventDelegate {
+            var warnings: [GraphWarning] = []
+            func graph(_ graph: Graph, didReceive event: GraphEvent) {
+                if case .warning(let warning) = event { warnings.append(warning) }
+            }
+        }
+
+        let graph = makeGraph()
+        let entity = Entity("RemoteMutable", graph: graph)
+        entity[dynamicMember: "name"] = "Before"
+        graph.sync()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+
+        let collector = ReportCollector()
+        let warnings = WarningCollector()
+        graph.eventDelegate = warnings
+        let updateReceived = expectation(description: "remote property update report")
+        let deletionReceived = expectation(description: "remote entity deletion report")
+        collector.onReport = { report in
+            if report.events.contains(where: {
+                if case .updatedEntityProperty(_, "name", let value) = $0 {
+                    return value as? String == "After"
+                }
+                return false
+            }) {
+                updateReceived.fulfill()
+            }
+            if report.events.contains(where: {
+                if case .deletedEntity = $0 { return true }
+                return false
+            }) {
+                deletionReceived.fulfill()
+            }
+        }
+        install(collector, on: graph)
+
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-PROPERTY-UPDATE"
+            let request = NSFetchRequest<ManagedEntityProperty>(entityName: "ManagedEntityProperty")
+            request.predicate = NSPredicate(format: "name == %@", "name")
+            let property = try XCTUnwrap(background.fetch(request).first)
+            property.object = "After"
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [updateReceived], timeout: 3)
+
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-ENTITY-DELETION"
+            let request = NSFetchRequest<ManagedEntity>(entityName: "ManagedEntity")
+            request.predicate = NSPredicate(format: "type == %@", "RemoteMutable")
+            let remoteEntity = try XCTUnwrap(background.fetch(request).first)
+            background.delete(remoteEntity)
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [deletionReceived], timeout: 3)
+        XCTAssertGreaterThanOrEqual(
+            collector.reports.count,
+            2,
+            "The remote deletion must produce a report distinct from the preceding update"
+        )
+        XCTAssertTrue(collector.reports.flatMap(\.events).contains {
+            if case .deletedEntity(let deleted) = $0 { return deleted.type == "RemoteMutable" }
+            return false
+        }, "The deleted entity report must preserve the domain type needed by consumers")
+        XCTAssertFalse(warnings.warnings.contains {
+            if case .watchReportMaterializationFailed(source: .cloud, failedEvents: _, details: _) = $0 {
+                return true
+            }
+            return false
+        }, warnings.warnings.map(\.localizedDescription).joined(separator: "\n"))
+    }
+
     func testGraphsSharingAContextReceiveOneReportPerInstance() {
         var configuration = GraphStoreConfiguration()
         configuration.name = "SharedWatchReport-\(UUID().uuidString)"
