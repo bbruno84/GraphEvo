@@ -175,6 +175,12 @@ internal extension Graph {
 
         if markCloudImportFinished(event.identifier) {
             emit(.stateChanged(.cloudImport(.finished(importEvent))))
+            // A CloudKit import may commit Persistent History before Core Data
+            // posts (or without it posting) a remote-change notification. Use
+            // the import completion as an additional wake-up for the same
+            // token-driven delivery pipeline. The delivery token keeps this
+            // idempotent when both notifications arrive.
+            processPersistentHistoryForRemoteChange()
         }
 
         if event.succeeded {
