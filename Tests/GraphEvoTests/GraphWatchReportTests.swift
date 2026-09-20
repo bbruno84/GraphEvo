@@ -422,6 +422,150 @@ final class GraphWatchReportTests: XCTestCase {
         XCTAssertEqual(delegate.reports.count, 1)
     }
 
+    func testPersistentHistoryDeliversTwoConsecutiveCloudBatchesExactlyOnce() throws {
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+
+        let collector = ReportCollector()
+        let firstReceived = expectation(description: "first persistent history report")
+        let secondReceived = expectation(description: "second persistent history report")
+        collector.onReport = { report in
+            switch collector.reports.count {
+            case 1: firstReceived.fulfill()
+            case 2: secondReceived.fulfill()
+            default: XCTFail("Unexpected duplicate cloud report")
+            }
+        }
+        install(collector, on: graph)
+
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-WATCH-REPORT-FIRST"
+            _ = ManagedEntity("FirstRemoteBatch", managedObjectContext: background)
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [firstReceived], timeout: 3)
+
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-WATCH-REPORT-SECOND"
+            _ = ManagedEntity("SecondRemoteBatch", managedObjectContext: background)
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [secondReceived], timeout: 3)
+
+        XCTAssertEqual(collector.reports.count, 2)
+        XCTAssertTrue(collector.reports[0].events.contains {
+            if case .insertedEntity(let entity) = $0 { return entity.type == "FirstRemoteBatch" }
+            return false
+        })
+        XCTAssertTrue(collector.reports[1].events.contains {
+            if case .insertedEntity(let entity) = $0 { return entity.type == "SecondRemoteBatch" }
+            return false
+        })
+        XCTAssertFalse(collector.reports[1].events.contains {
+            if case .insertedEntity(let entity) = $0 { return entity.type == "FirstRemoteBatch" }
+            return false
+        })
+    }
+
+    func testCloudDeliveryCursorSurvivesLocalOnlyHistoryBetweenRemoteBatches() throws {
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+
+        let collector = ReportCollector()
+        let firstReceived = expectation(description: "first cloud report")
+        let secondReceived = expectation(description: "cloud report after local-only history")
+        collector.onReport = { _ in
+            switch collector.reports.count {
+            case 1: firstReceived.fulfill()
+            case 2: secondReceived.fulfill()
+            default: XCTFail("Unexpected duplicate cloud report")
+            }
+        }
+        install(collector, on: graph)
+
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-WATCH-BEFORE-LOCAL"
+            _ = ManagedEntity("BeforeLocalHistory", managedObjectContext: background)
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [firstReceived], timeout: 3)
+
+        _ = Entity("LocalOnlyHistory", graph: graph)
+        graph.sync()
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-WATCH-AFTER-LOCAL"
+            _ = ManagedEntity("AfterLocalHistory", managedObjectContext: background)
+            try background.save()
+        }
+        graph.handlePersistentStoreRemoteChange(Notification(name: .NSPersistentStoreRemoteChange))
+        wait(for: [secondReceived], timeout: 3)
+
+        XCTAssertEqual(collector.reports.count, 2)
+        XCTAssertTrue(collector.reports[1].events.contains {
+            if case .insertedEntity(let entity) = $0 { return entity.type == "AfterLocalHistory" }
+            return false
+        })
+        XCTAssertFalse(collector.reports[1].events.contains {
+            if case .insertedEntity(let entity) = $0 { return entity.type == "LocalOnlyHistory" }
+            return false
+        })
+    }
+
+    func testSuccessfulIncrementalImportDrainsPendingHistoryWithoutRemoteChangeWakeup() throws {
+        let graph = makeGraph()
+        graph.ph_debug_clearToken()
+        graph.watchReportSources = [.cloud]
+        graph.configureCloudSyncTrackingForTesting(
+            storeIdentifier: "incremental-import-store",
+            initialImportPending: false
+        )
+        let importIdentifier = UUID()
+
+        let received = expectation(description: "cloud report driven by completed import")
+        graph.watchReportCompletion = { report, error in
+            XCTAssertNil(error)
+            guard let report else { return }
+            XCTAssertEqual(report.source, .cloud)
+            XCTAssertTrue(report.events.contains {
+                if case .insertedEntity(let entity) = $0 { return entity.type == "ImportedWithoutWakeup" }
+                return false
+            })
+            received.fulfill()
+        }
+
+        let background = try XCTUnwrap(graph.newBackgroundContext())
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "incremental-import-store",
+            type: .import,
+            endDate: nil,
+            succeeded: false
+        )
+        try background.performAndWait {
+            background.transactionAuthor = "REMOTE-IMPORT-WITHOUT-WAKEUP"
+            _ = ManagedEntity("ImportedWithoutWakeup", managedObjectContext: background)
+            try background.save()
+        }
+
+        graph.receiveCloudKitEventForTesting(
+            identifier: importIdentifier,
+            storeIdentifier: "incremental-import-store",
+            type: .import,
+            succeeded: true
+        )
+
+        wait(for: [received], timeout: 1)
+    }
+
     func testGraphsSharingAContextReceiveOneReportPerInstance() {
         var configuration = GraphStoreConfiguration()
         configuration.name = "SharedWatchReport-\(UUID().uuidString)"
