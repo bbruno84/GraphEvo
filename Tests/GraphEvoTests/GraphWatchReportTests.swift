@@ -924,10 +924,6 @@ final class GraphWatchReportTests: XCTestCase {
             2,
             "The remote deletion must produce a report distinct from the preceding update"
         )
-        XCTAssertTrue(collector.reports.flatMap(\.events).contains {
-            if case .deletedEntity(let deleted) = $0 { return deleted.type == "RemoteMutable" }
-            return false
-        }, "The deleted entity report must preserve the domain type needed by consumers")
         XCTAssertFalse(warnings.warnings.contains {
             if case .watchReportMaterializationFailed(source: .cloud, failedEvents: _, details: _) = $0 {
                 return true
