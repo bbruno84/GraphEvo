@@ -147,3 +147,35 @@ An absent `createdDate` remains valid according to the existing Core Data model.
 `Date.distantPast` as a compatibility fallback. Reading does not mutate the
 store, and encoding omits the absent date. These accessors read the facade's
 context; the validator independently reads saved state.
+
+## Regression coverage
+
+The contract is exercised against disposable Core Data stores. Remote-history
+fixtures use a separate context and a remote transaction author; they do not
+claim to reproduce live CloudKit scheduling. Corruption fixtures close the store
+before changing an archived payload, then reopen it through GraphEvo.
+
+| Contract or failure mode | Regression suite and evidence |
+|---|---|
+| Saved state, pending edits, permanent IDs without rows, deleted roots, store isolation, in-memory saves | `GraphStructuralValidationTests` |
+| Empty optional references; own and directly associated properties, tags and groups; all endpoint participants | `GraphStructuralValidationTests` |
+| Bounded traversal in a mesh and self-loops | `GraphStructuralValidationTests` |
+| Materializable endpoint with corrupt details: containing Entity, Relationship and Action pass; separate endpoint validation fails | `GraphStructuralValidationRegressionTests.testCorruptEndpointDetailsRequireSeparateApplicationValidation` |
+| Corrupt Relationship and Action properties invalidate the edge and both associated entity roles | `GraphStructuralValidationRegressionTests.testCorruptRelationshipDetailsFailBothIncomingAndOutgoingEntityValidation` and `testCorruptActionDetailsFailBothSubjectAndObjectEntityValidation` |
+| Missing endpoint carries its destination ID and cause; cloud delivery retries after repair | `GraphStructuralValidationTests.testDanglingEndpointIsReportedAndDoesNotTraverseItsEntity` and `testCloudValidationFailureRetainsDeliveryTokenAndRetriesAfterRepair` |
+| Corrupt Entity payloads, repeated reads, optional nil, valid Data, diagnostic scope restoration | `GraphStructuralValidationRegressionTests` |
+| Local best-effort delivery excludes invalid owners and includes failure results alongside valid owners | `GraphStructuralValidationRegressionTests.testLocalBatchOmitsInvalidOwnerAndStillDeliversValidOwner` |
+| Invalid survivor retains the entire cloud interval, including deletion evidence, until repair | `GraphStructuralValidationRegressionTests.testInvalidSurvivorRetainsDeletionEvidenceUntilRepair` |
+| Local deletion supersedes pending remote changes without discarding unrelated survivors | `GraphStructuralValidationRegressionTests` |
+| Remote deletions of all node families; missing detail reconstruction; deletion-only reports; persisted cursor after coordinator recreation | `GraphWatchRemoteDeletionTests` |
+| Existing report ordering, source selection, legacy callbacks, incremental history, cursor persistence and retry | `GraphWatchReportTests` |
+| Optional creation date, fallback, encoding, pending edits and no read-side mutation for all facades | `NodeOptionalCreatedDateTests` |
+| API available without `@testable` access | `PublicGraphWatchReportAPICompileTests` |
+
+Remaining gaps are explicit: there is no end-to-end batch-delivery regression
+forcing an expired history cursor through recovery, no injected unresolved
+Action participant or tag/group destination, and no live cross-device CloudKit
+test. Functional coverage of small Actions is not a performance guarantee for
+large participant sets. SDK-specific behavior still needs device/OS coverage
+beyond the local macOS and iOS Simulator runs. Line coverage is supplementary;
+it does not establish these untested guarantees.

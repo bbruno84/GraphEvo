@@ -95,6 +95,16 @@ final class GraphWatchRemoteDeletionTests: XCTestCase {
         delivery.request()
         wait(for: [received], timeout: 3)
         XCTAssertTrue(entity.validateStructure().isValid)
+        let tokens = GraphWatchDeliveryTokenStore(configuration: graph.configuration,
+            storeURL: graph.runtimeStoreURL ?? graph.configuration.resolvedStoreURL)
+        XCTAssertNotNil(try tokens.load())
+        let duplicate = expectation(description: "recreated coordinator does not repeat deletion-only report")
+        duplicate.isInverted = true
+        graph.watchReportCompletion = { _, _ in duplicate.fulfill() }
+        let recreated = GraphWatchBatchDeliveryCoordinator(graph: graph, context: graph.managedObjectContext)
+        recreated.request()
+        wait(for: [duplicate], timeout: 0.3)
+
     }
 
     func testRemoteDeletionOfPreviouslySavedNodeFamiliesPreservesEvidence() throws {
