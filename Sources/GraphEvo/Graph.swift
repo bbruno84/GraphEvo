@@ -243,6 +243,8 @@ public class Graph: NSObject {
 
     internal let migrationEnabled: Bool
     internal var isTransactionFacade = false
+    internal var isReadSnapshot = false
+    internal var snapshotReadError: Error?
     internal var readinessCompletions: [(Result<Graph, GraphStoreOpeningError>) -> Void] = []
     
     /// Deinitializer that removes the Graph from NSNotificationCenter.

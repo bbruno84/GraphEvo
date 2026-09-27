@@ -151,6 +151,14 @@ its default `false` behavior when modifying lifecycle code. `graph.transaction`
 offers public Node APIs on a scoped private context; do not escape the facade,
 perform external writes inside its body, or mistake it for a CloudKit pause.
 
+Completion publication to KVS is best-effort after durable local completion.
+Do not convert a KVS acceptance failure into a migration failure. Keep it pending
+for retry, and never overwrite a newer validated remote projection already
+visible/observed with superseded pending work. Durable ledger failures still
+propagate; KVS provides neither distributed locking nor delivery acknowledgement.
+New remote resets observe KVS before allocating their generation. Local-only
+resets do not consult KVS; publication retries must never rebase their generation.
+
 Register migrations before creating or opening a graph:
 
 ```swift

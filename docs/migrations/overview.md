@@ -44,6 +44,36 @@ struct AddNoteStatus: GraphMigration {
 Other protocol functions define backup behavior, remote-change handling, legacy
 completion recognition, and state reset.
 
+`completionSynchronization(for configuration: GraphStoreConfiguration)` defaults
+to the existing `completionSynchronization` property. Override the method when
+sharing completion is meaningful only for cloud-backed configurations. The
+manager, coordinator and KVS observer use the configuration-dependent policy.
+KVS is asynchronous metadata replication, not a distributed lock or evidence
+that the data has reached CloudKit.
+
+When synchronization is enabled after a local completion, the ledger stages the
+existing completion for publication without rerunning migration code. It does
+not backfill over a known remote projection (including a reset). Rejected KVS
+publication remains pending and does not invalidate local completion, including
+the completion of a newly executed migration. Durable ledger failures still
+propagate. Explicit remote-reset publication retains its existing error behavior.
+
+Before each publication attempt, compare the pending operation with validated
+remote state already visible in KVS and previously observed state. A newer remote
+operation supersedes pending work according to the ledger's existing generation,
+device and operation ordering. Retire that work without changing local execution
+state or claiming successful publication. This is not compare-and-swap: a remote
+write arriving after the check remains subject to KVS's asynchronous behavior.
+
+A new reset targeting remote state observes visible KVS state before allocating
+its generation, advancing beyond the highest known generation. Local-only resets
+do not consult KVS. Publication retries retain their original operation and
+generation; they never rebase superseded work into a new request.
+
+For interrupted local attempts, state snapshots retain the local operation,
+phase and backup reference even if a newer remote completion was observed.
+The generation remains the highest observed generation so retries advance it.
+
 ## Phases
 
 - `.preInit`: before the graph fully opens;
@@ -112,7 +142,7 @@ is never interpreted as a command channel.
 The local projection keeps remote observations, the last projection accepted
 by the local ubiquitous KVS store, and any publication still pending as
 separate values. A failed or interrupted publication remains pending and is
-surfaced as an error; GraphEvo retries the same operation ID during
+recorded with a publication error; GraphEvo retries the same operation ID during
 reconciliation and after external KVS notifications. Acceptance does not mean
 that another device
 has already received the value; KVS provides no remote-delivery acknowledgement.
@@ -130,7 +160,9 @@ let snapshot = try GraphMigrationManager.stateSnapshot(
 )
 ```
 
-These APIs propagate ledger, reconciliation, and publication errors. The
+These APIs propagate ledger and reconciliation errors. KVS acceptance failures
+during completion and ordinary reconciliation remain pending instead of failing
+local migration execution. The
 compatibility `record(for:configuration:)` API remains available for callers
 that use its optional return value.
 
