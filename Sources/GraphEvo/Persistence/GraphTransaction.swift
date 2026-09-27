@@ -5,6 +5,7 @@ public enum GraphTransactionError: LocalizedError {
     case pendingUserChanges
     case storeChanged
     case nestedTransaction
+    case readOnlySnapshotModified
 
     public var errorDescription: String? {
         switch self {
@@ -12,6 +13,7 @@ public enum GraphTransactionError: LocalizedError {
         case .pendingUserChanges: return "Graph transaction refused: pendingUserChanges (unsaved changes in the view context)."
         case .storeChanged: return "Graph transaction refused: storeChanged (the analyzed store revision is no longer current)."
         case .nestedTransaction: return "Graph transaction refused: nestedTransaction."
+        case .readOnlySnapshotModified: return "Graph read snapshot must not modify data."
         }
     }
 }
@@ -105,6 +107,36 @@ public struct GraphTransactionDiagnostics {
 }
 
 extension Graph {
+    /// Reads committed local data on a pinned private context. Call from a worker
+    /// queue and return values only. Pending UI edits are neither read nor changed.
+    /// This is a local snapshot, not a CloudKit synchronization barrier.
+    public func readSnapshot<T>(_ body: (Graph) throws -> T) throws -> T {
+        guard !isTransactionFacade else { throw GraphTransactionError.nestedTransaction }
+        guard let view = managedObjectContext,
+              let coordinator = view.performAndWait({ view.persistentStoreCoordinator }) else {
+            throw GraphTransactionError.unavailableContext
+        }
+        let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+        context.persistentStoreCoordinator = coordinator
+        context.undoManager = nil
+        return try context.performAndWait {
+            defer { context.reset() }
+            if configuration.backend == .sqlite {
+                try context.setQueryGenerationFrom(.current)
+                let pin = NSFetchRequest<NSManagedObjectID>(entityName: ModelIdentifier.entityName)
+                pin.resultType = .managedObjectIDResultType
+                pin.fetchLimit = 1
+                _ = try context.fetch(pin)
+            }
+            let facade = Graph(transactionContext: context, configuration: configuration)
+            facade.isReadSnapshot = true
+            let value = try body(facade)
+            if let error = facade.snapshotReadError { throw error }
+            guard !context.hasChanges else { throw GraphTransactionError.readOnlySnapshotModified }
+            return value
+        }
+    }
+
     /// Call on the context queue, only with IDs from committed history/save
     /// notifications. Faulting a removed row can leave an empty deletion pending.
     /// Never persist inserts, updates, or deletions unrelated to that batch.

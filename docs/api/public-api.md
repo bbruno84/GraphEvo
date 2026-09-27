@@ -120,6 +120,19 @@ incompatible store is not changed automatically.
 node without changing its persistent ID. Save through `sync` or an enclosing
 `Graph.transaction`.
 
+### Committed read snapshots
+
+`Graph.readSnapshot<T>(_ body: (Graph) throws -> T) throws -> T` creates a
+private read context on the current store coordinator. Call it from a worker
+queue, use synchronous searches, and return detached values, never Node or
+managed-object instances. SQLite snapshots are pinned to a query generation;
+in-memory stores provide context isolation but not generation pinning. The
+snapshot excludes unsaved view-context edits and does not save, merge or reset
+the view context. Search errors propagate out of the snapshot. Mutations cause
+`GraphTransactionError.readOnlySnapshotModified`; nested transactions/saves are
+unsupported. The scoped facade must not escape the closure. This is a committed
+local-store view, not a CloudKit completion guarantee.
+
 ### Required application migrations and scoped transactions
 
 `GraphStoreConfiguration.waitsForApplicationMigrations` defaults to `false`.
@@ -460,6 +473,17 @@ force request. `GraphMigrationRequestedBy` includes `.system`,
 Reset and force requests preserve ledger history. Application migration errors
 are delivered as `GraphFailure.migration`; environment routing, scope keys, and
 KVS projection details remain internal to GraphEvo.
+
+A rejected KVS completion publication remains pending without changing a
+successfully completed local migration to `failed`. Local ledger errors still
+propagate. Publication retries preserve a newer validated remote projection
+already visible or observed, retiring superseded pending work without claiming
+it was published. This does not provide distributed locking or remote delivery
+acknowledgement.
+
+New remote reset requests observe visible KVS state before allocating a generation
+above the highest known generation. Local-only resets do not consult KVS, and
+publication retries do not allocate a new operation or generation.
 
 `GraphMigrationLedgerEntry` is a public, immutable, `Codable` diagnostic value.
 It includes the migration state, phase, operation and generation identifiers,

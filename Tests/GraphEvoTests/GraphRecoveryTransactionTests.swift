@@ -3,6 +3,77 @@ import CoreData
 @testable import GraphEvo
 
 final class GraphRecoveryTransactionTests: XCTestCase {
+    func testReadSnapshotExcludesPendingEditsAndRejectsWrites() throws {
+        var config = GraphStoreConfiguration()
+        config.name = UUID().uuidString
+        config.location = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let graph = Graph(configuration: config, migrationEnabled: false)
+        let ready = expectation(description: "ready")
+        graph.whenReady { _ in ready.fulfill() }
+        wait(for: [ready], timeout: 10)
+        let saved = Entity("SnapshotFixture", graph: graph)
+        saved[dynamicMember: "value"] = "committed"
+        graph.sync()
+        saved[dynamicMember: "value"] = "pending"
+        let unsaved = Entity("SnapshotFixture", graph: graph)
+        let finished = expectation(description: "private snapshot")
+        DispatchQueue.global(qos: .utility).async {
+            defer { finished.fulfill() }
+            do {
+                let values = try graph.readSnapshot { scoped -> [String] in
+                    XCTAssertFalse(Thread.isMainThread)
+                    return Search<Entity>(graph: scoped).where(.type("SnapshotFixture")).sync()
+                        .compactMap { $0[dynamicMember: "value"] as? String }
+                }
+                XCTAssertEqual(values, ["committed"])
+                XCTAssertThrowsError(try graph.readSnapshot { scoped in
+                    _ = Entity("ForbiddenWrite", graph: scoped)
+                }) { error in
+                    guard case GraphTransactionError.readOnlySnapshotModified = error else {
+                        return XCTFail("Unexpected error: \(error)")
+                    }
+                }
+                XCTAssertEqual(try graph.readSnapshot { Search<Entity>(graph: $0).where(.type("SnapshotFixture")).sync().count }, 1)
+            } catch { XCTFail("\(error)") }
+        }
+        wait(for: [finished], timeout: 10)
+        XCTAssertTrue(graph.managedObjectContext.hasChanges)
+        XCTAssertEqual(saved[dynamicMember: "value"] as? String, "pending")
+        withExtendedLifetime(unsaved) {}
+        graph.managedObjectContext.rollback()
+    }
+
+    func testReadSnapshotRemainsPinnedAcrossConcurrentCommit() throws {
+        var config = GraphStoreConfiguration()
+        config.name = UUID().uuidString
+        config.location = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let graph = Graph(configuration: config, migrationEnabled: false)
+        let ready = expectation(description: "ready")
+        graph.whenReady { _ in ready.fulfill() }
+        wait(for: [ready], timeout: 10)
+        _ = Entity("SnapshotFixture", graph: graph)
+        graph.sync()
+        let finished = expectation(description: "pinned snapshot")
+        DispatchQueue.global(qos: .utility).async {
+            defer { finished.fulfill() }
+            do {
+                try graph.readSnapshot { scoped in
+                    XCTAssertEqual(Search<Entity>(graph: scoped).where(.type("SnapshotFixture")).sync().count, 1)
+                    let writer = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+                    writer.persistentStoreCoordinator = scoped.managedObjectContext.persistentStoreCoordinator
+                    try writer.performAndWait {
+                        let facade = Graph(transactionContext: writer, configuration: config)
+                        _ = Entity("SnapshotFixture", graph: facade)
+                        try writer.save()
+                    }
+                    XCTAssertEqual(Search<Entity>(graph: scoped).where(.type("SnapshotFixture")).sync().count, 1)
+                }
+                XCTAssertEqual(try graph.readSnapshot { Search<Entity>(graph: $0).where(.type("SnapshotFixture")).sync().count }, 2)
+            } catch { XCTFail("\(error)") }
+        }
+        wait(for: [finished], timeout: 10)
+    }
+
     func testWholeEntityDeletionLeavesViewCleanAfterDelivery() throws {
         try assertWholeEntityDeletion(backend: .sqlite)
     }

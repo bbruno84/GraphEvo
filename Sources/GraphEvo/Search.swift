@@ -157,6 +157,7 @@ private extension Search {
           result = try moc.fetch(request)
         }
       } catch {
+        if graph.isReadSnapshot { graph.snapshotReadError = error }
         graph.emit(.error(.query(underlying: error)))
       }
     }

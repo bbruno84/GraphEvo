@@ -69,7 +69,7 @@ final class StoreMigrationCoordinator {
             do {
                 try GraphMigrationLedger.validate(migrationID: migration.id, version: migration.version, configuration: configuration)
                 forced = try GraphMigrationLedger.consumeForce(migrationID: migration.id, version: migration.version, configuration: configuration)
-                try GraphMigrationLedger.reconcileRemoteObservation(migrationID: migration.id, version: migration.version, synchronization: migration.completionSynchronization, configuration: configuration)
+                try GraphMigrationLedger.reconcileRemoteObservation(migrationID: migration.id, version: migration.version, synchronization: migration.completionSynchronization(for: configuration), configuration: configuration)
                 let snapshot = try GraphMigrationLedger.stateSnapshot(migrationID: migration.id, version: migration.version, configuration: configuration)
                 mutableContext?.set("GraphMigration.stateSnapshot", value: snapshot)
             }
@@ -170,7 +170,7 @@ final class StoreMigrationCoordinator {
             do {
                 guard completesMigration else { self.advance(phase, configuration: configuration, graph: graph); return }
                 let metadata = self.attemptMetadata[migration.id]
-                _ = try GraphMigrationLedger.markDone(migrationID: migration.id, version: migration.version, synchronization: migration.completionSynchronization, configuration: configuration, phase: String(describing: phase), operationID: metadata?.operationID ?? UUID().uuidString, generation: metadata?.generation, backupReference: metadata?.backupReference, requestedBy: metadata?.requestedBy ?? .migrationManager)
+                _ = try GraphMigrationLedger.markDone(migrationID: migration.id, version: migration.version, synchronization: migration.completionSynchronization(for: configuration), configuration: configuration, phase: String(describing: phase), operationID: metadata?.operationID ?? UUID().uuidString, generation: metadata?.generation, backupReference: metadata?.backupReference, requestedBy: metadata?.requestedBy ?? .migrationManager)
                 self.active.remove(migration.id); self.attemptMetadata.removeValue(forKey: migration.id); self.advance(phase, configuration: configuration, graph: graph)
             } catch { self.fail(migration: migration, phase: phase, configuration: configuration, graph: graph, error: error) }
         }
@@ -180,7 +180,7 @@ final class StoreMigrationCoordinator {
     private func transition(_ state: GraphMigrationState, migration: GraphMigration, configuration: GraphStoreConfiguration, phase: String = "unknown", reason: GraphMigrationDecisionReason? = nil, decisionSource: GraphMigrationDecisionSource = .localEvaluation) throws {
         let metadata = attemptMetadata[migration.id]
         switch state {
-        case .done: _ = try GraphMigrationLedger.markDone(migrationID: migration.id, version: migration.version, synchronization: migration.completionSynchronization, configuration: configuration, phase: phase)
+        case .done: _ = try GraphMigrationLedger.markDone(migrationID: migration.id, version: migration.version, synchronization: migration.completionSynchronization(for: configuration), configuration: configuration, phase: phase)
         case .notRequired: _ = try GraphMigrationLedger.markNotRequired(migrationID: migration.id, version: migration.version, configuration: configuration, reason: reason ?? .noCandidate, decisionSource: decisionSource, phase: phase, operationID: metadata?.operationID ?? UUID().uuidString, generation: metadata?.generation, backupReference: metadata?.backupReference, requestedBy: metadata?.requestedBy ?? .migrationManager)
         default: break
         }

@@ -219,8 +219,10 @@ enum GraphMigrationLedger {
         try queue.sync {
             guard let current = try readProjection(migrationID: migrationID, version: version, configuration: configuration)?.current else { return nil }
             if synchronization == .localAndICloudKeyValueStore {
-                try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration)
+                try publishPendingBestEffort(migrationID: migrationID, version: version, configuration: configuration)
                 try reconcileRemoteLocked(migrationID: migrationID, version: version, configuration: configuration)
+                try stageCompletedLocalPublicationIfNeededLocked(migrationID: migrationID, version: version, configuration: configuration)
+                try publishPendingBestEffort(migrationID: migrationID, version: version, configuration: configuration)
             }
             return current
         }
@@ -229,8 +231,10 @@ enum GraphMigrationLedger {
     static func reconcileRemoteObservation(migrationID: String, version: Int, synchronization: GraphMigrationCompletionSynchronization, configuration: GraphStoreConfiguration) throws {
         guard synchronization == .localAndICloudKeyValueStore else { return }
         try queue.sync {
-            try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration)
+            try publishPendingBestEffort(migrationID: migrationID, version: version, configuration: configuration)
             try reconcileRemoteLocked(migrationID: migrationID, version: version, configuration: configuration)
+            try stageCompletedLocalPublicationIfNeededLocked(migrationID: migrationID, version: version, configuration: configuration)
+            try publishPendingBestEffort(migrationID: migrationID, version: version, configuration: configuration)
         }
     }
 
@@ -241,7 +245,7 @@ enum GraphMigrationLedger {
     static func markDone(migrationID: String, version: Int, synchronization: GraphMigrationCompletionSynchronization, configuration: GraphStoreConfiguration, phase: String = "unknown", operationID: String = UUID().uuidString, generation: UInt64? = nil, backupReference: String? = nil, previousOperationID: String? = nil, requestedBy: GraphMigrationRequestedBy = .migrationManager, now: Date = Date()) throws -> GraphMigrationRecord {
         let record = try transition(migrationID: migrationID, version: version, state: .done, configuration: configuration, phase: phase, operationID: operationID, generation: generation, backupReference: backupReference, previousOperationID: previousOperationID, requestedBy: requestedBy, publish: synchronization == .localAndICloudKeyValueStore, now: now)
         if synchronization == .localAndICloudKeyValueStore {
-            try queue.sync { try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration) }
+            try queue.sync { try publishPendingBestEffort(migrationID: migrationID, version: version, configuration: configuration) }
         }
         return record
     }
@@ -264,6 +268,11 @@ enum GraphMigrationLedger {
     static func reset(migrationID: String, version: Int, configuration: GraphStoreConfiguration, targets: Set<GraphMigrationResetTarget>, requestedBy: GraphMigrationRequestedBy, reason: String) throws {
         let normalized = targets.contains(.localAndRemote) ? Set<GraphMigrationResetTarget>([.local, .remote]) : targets
         try queue.sync {
+            // Allocate new remote requests after observing KVS. Publication retries
+            // retain their original generation and must not supersede newer work.
+            if normalized.contains(.remote) {
+                try reconcileRemoteLocked(migrationID: migrationID, version: version, configuration: configuration)
+            }
             let now = Date()
             var p = try readProjection(migrationID: migrationID, version: version, configuration: configuration) ?? emptyProjection(migrationID: migrationID, version: version)
             let record = GraphMigrationRecord(migrationID: migrationID, version: version, state: .notExecuted, startedAt: now, updatedAt: now)
@@ -316,7 +325,8 @@ enum GraphMigrationLedger {
             let p = try readProjection(migrationID: migrationID, version: version, configuration: configuration)
             let remote: GraphMigrationRemoteState = p?.remoteObserved.map { .observed(record(from: $0)) } ?? .unknown
             let latest = [p?.latestEntry, p?.remoteObserved].compactMap { $0 }.max(by: { isOrderedAfter($1, $0) })
-            return GraphMigrationStateSnapshot(storeScope: GraphStoreScope(configuration: configuration).logicalKey, localRecord: p?.current, remoteState: remote, generation: latest?.generation, operationID: latest?.operationID, phase: latest?.phase, backupReference: latest?.backupReference, errorDescription: p?.current.errorDescription, attemptCount: p?.historyCount ?? 0, interrupted: p?.current.state == .started)
+            let attempt = p?.current.state == .started ? p?.latestEntry : latest
+            return GraphMigrationStateSnapshot(storeScope: GraphStoreScope(configuration: configuration).logicalKey, localRecord: p?.current, remoteState: remote, generation: latest?.generation, operationID: attempt?.operationID, phase: attempt?.phase, backupReference: attempt?.backupReference, errorDescription: p?.current.errorDescription, attemptCount: p?.historyCount ?? 0, interrupted: p?.current.state == .started)
         }
     }
 
@@ -515,6 +525,24 @@ private extension GraphMigrationLedger {
         for _ in 0..<3 {
             do {
                 var values = (kvs.object(forKey: kvsKey) as? [String: Any]) ?? [:]
+                let visible = try (values[key] as? Data).map {
+                    try decodeRemoteProjection($0, migrationID: migrationID, version: version, configuration: configuration)
+                }
+                // Check on every retry, before writing. This is not a distributed
+                // CAS: only a newer value already visible/observed can be protected.
+                let newer = [p.remoteObserved, visible].compactMap { $0 }
+                    .filter { isOrderedAfter($0, pending) }
+                    .max(by: { isOrderedAfter($1, $0) })
+                if let newer {
+                    try storeRemoteObservation(newer, migrationID: migrationID, version: version, configuration: configuration)
+                    // Observation writes its own projection; preserve it while
+                    // retiring stale work, without claiming successful publication.
+                    p = try readProjection(migrationID: migrationID, version: version, configuration: configuration) ?? p
+                    p.pendingPublication = nil
+                    p.publicationError = nil
+                    try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
+                    return
+                }
                 values[key] = data
                 kvs.set(values, forKey: kvsKey)
 #if DEBUG
@@ -536,13 +564,37 @@ private extension GraphMigrationLedger {
         throw error
     }
 
+    static func publishPendingBestEffort(migrationID: String, version: Int, configuration: GraphStoreConfiguration) throws {
+        do {
+            try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration)
+        } catch GraphMigrationLedgerError.publicationNotAccepted {
+            // Pending publication and its error are durable. A KVS retry must not
+            // turn an already completed local migration into a failed migration.
+            GraphMigrationLogger.log(migrationID: migrationID, level: .warning,
+                event: "migration_kvs_publication_pending", message: "KVS publication remains pending.",
+                configuration: configuration)
+        }
+    }
+
+    /// Backfills an existing completion when KVS sharing is enabled later.
+    /// Never overwrite a known remote projection, particularly a remote reset.
+    static func stageCompletedLocalPublicationIfNeededLocked(migrationID: String, version: Int, configuration: GraphStoreConfiguration) throws {
+        guard var p = try readProjection(migrationID: migrationID, version: version, configuration: configuration),
+              p.current.state == .done,
+              p.pendingPublication == nil,
+              p.lastPublished == nil,
+              p.remoteObserved == nil,
+              let completed = p.latestEntry,
+              completed.state == .done else { return }
+        p.pendingPublication = completed
+        p.publicationError = nil
+        try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
+    }
+
     static func remoteEntry(_ migrationID: String, _ version: Int, _ configuration: GraphStoreConfiguration) throws -> GraphMigrationLedgerEntry? {
         let key = logicalKey(migrationID, version, configuration)
         if let values = kvs.object(forKey: kvsKey) as? [String: Any], let data = values[key] as? Data {
-            let item = try decoder.decode(GraphMigrationLedgerEntry.self, from: data)
-            guard item.schemaVersion == schemaVersion else { throw GraphMigrationLedgerError.unsupportedSchema(item.schemaVersion) }
-            guard item.migrationID == migrationID, item.version == version, item.storeScope == GraphStoreScope(configuration: configuration).logicalKey else { throw GraphMigrationLedgerError.invalidRemoteProjection }
-            return observedRemote(item)
+            return try decodeRemoteProjection(data, migrationID: migrationID, version: version, configuration: configuration)
         }
         guard configuration.environment == .production, let legacy = kvs.dictionary(forKey: legacyCloudKey(migrationID, version, configuration)), legacy["status"] as? String == GraphMigrationState.done.rawValue else { return nil }
         let date = legacy["completedAt"] as? Date ?? Date()
@@ -552,6 +604,14 @@ private extension GraphMigrationLedger {
         try commit(p, entry: nil, migrationID: migrationID, version: version, configuration: configuration)
         try publishPendingLocked(migrationID: migrationID, version: version, configuration: configuration)
         return observedRemote(item, source: "legacyKVS")
+    }
+
+    static func decodeRemoteProjection(_ data: Data, migrationID: String, version: Int, configuration: GraphStoreConfiguration) throws -> GraphMigrationLedgerEntry {
+        let item = try decoder.decode(GraphMigrationLedgerEntry.self, from: data)
+        guard item.schemaVersion == schemaVersion else { throw GraphMigrationLedgerError.unsupportedSchema(item.schemaVersion) }
+        guard item.migrationID == migrationID, item.version == version,
+              item.storeScope == GraphStoreScope(configuration: configuration).logicalKey else { throw GraphMigrationLedgerError.invalidRemoteProjection }
+        return observedRemote(item)
     }
 
     static func observedRemote(_ item: GraphMigrationLedgerEntry, source: String = "remoteKVS") -> GraphMigrationLedgerEntry { copy(item, source: source, observedAt: Date(), publishedAt: item.publishedAt ?? item.date) }

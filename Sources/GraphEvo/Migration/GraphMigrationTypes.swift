@@ -63,6 +63,7 @@ public protocol GraphMigration {
     var id: String { get }
     var version: Int { get }
     var completionSynchronization: GraphMigrationCompletionSynchronization { get }
+    func completionSynchronization(for configuration: GraphStoreConfiguration) -> GraphMigrationCompletionSynchronization
     /// Default root folder for backups used by this migration.
     func backupRoot(for configuration: GraphStoreConfiguration?) -> URL?
     func handlePhase(
@@ -96,6 +97,9 @@ public protocol GraphMigration {
 public extension GraphMigration {
     var version: Int { 1 }
     var completionSynchronization: GraphMigrationCompletionSynchronization { .local }
+    func completionSynchronization(for configuration: GraphStoreConfiguration) -> GraphMigrationCompletionSynchronization {
+        completionSynchronization
+    }
 
     func backupRoot(for configuration: GraphStoreConfiguration?) -> URL? {
         guard let config = configuration else { return nil }

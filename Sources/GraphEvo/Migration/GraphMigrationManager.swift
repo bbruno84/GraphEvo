@@ -91,7 +91,7 @@ public final class GraphMigrationManager {
         return try GraphMigrationLedger.reconciledRecordThrowing(
             migrationID: migration.id,
             version: migration.version,
-            synchronization: migration.completionSynchronization,
+            synchronization: migration.completionSynchronization(for: resolvedConfiguration),
             configuration: resolvedConfiguration
         )
     }
@@ -114,7 +114,7 @@ public final class GraphMigrationManager {
         _ = try GraphMigrationLedger.markDone(
             migrationID: migration.id,
             version: migration.version,
-            synchronization: migration.completionSynchronization,
+            synchronization: migration.completionSynchronization(for: configuration),
             configuration: configuration,
             phase: "compatibilityBootstrap",
             operationID: "legacy-adoption-\(migration.id)",
@@ -138,7 +138,7 @@ public final class GraphMigrationManager {
         try GraphMigrationLedger.reset(
             migrationID: migration.id,
             version: migration.version,
-            synchronization: migration.completionSynchronization,
+            synchronization: migration.completionSynchronization(for: configuration),
             configuration: configuration
         )
     }
@@ -172,7 +172,7 @@ public final class GraphMigrationManager {
         try GraphMigrationLedger.reset(
             migrationID: migration.id,
             version: migration.version,
-            synchronization: migration.completionSynchronization,
+            synchronization: migration.completionSynchronization(for: configuration),
             configuration: configuration,
             target: target
         )
@@ -282,12 +282,12 @@ public final class GraphMigrationManager {
     private static func reconcileObservedStores() {
         stateLock.lock(); let stores = observedStores.values.map(\.configuration); let migrations = self.migrations; stateLock.unlock()
         for configuration in stores {
-            for migration in migrations where migration.completionSynchronization == .localAndICloudKeyValueStore {
+            for migration in migrations where migration.completionSynchronization(for: configuration) == .localAndICloudKeyValueStore {
                 do {
                     try GraphMigrationLedger.reconcileRemoteObservation(
                         migrationID: migration.id,
                         version: migration.version,
-                        synchronization: migration.completionSynchronization,
+                        synchronization: migration.completionSynchronization(for: configuration),
                         configuration: configuration
                     )
                 } catch {

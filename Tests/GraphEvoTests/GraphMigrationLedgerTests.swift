@@ -523,6 +523,30 @@ final class GraphMigrationLedgerTests: XCTestCase {
         XCTAssertNil(entry.publishedAt)
     }
 
+    func testNewerRemoteCompletionDoesNotReplaceInterruptedLocalPhase() throws {
+        let store = TestMigrationKVSStore()
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        let id = "interrupted-local-with-newer-remote"
+        _ = try GraphMigrationLedger.markStarted(migrationID: id, version: 1,
+            configuration: configuration, phase: "preInit", operationID: "local-attempt",
+            generation: 7, backupReference: "local-backup")
+        var publisher = configuration!
+        publisher.location = temporaryDirectory.appendingPathComponent("publisher")
+        _ = try GraphMigrationLedger.markDone(migrationID: id, version: 1,
+            synchronization: .localAndICloudKeyValueStore, configuration: publisher,
+            phase: "ready", operationID: "remote-completion", generation: 9)
+        try GraphMigrationLedger.reconcileRemoteObservation(migrationID: id, version: 1,
+            synchronization: .localAndICloudKeyValueStore, configuration: configuration)
+        let snapshot = try GraphMigrationLedger.stateSnapshot(migrationID: id, version: 1, configuration: configuration)
+        XCTAssertTrue(snapshot.interrupted)
+        XCTAssertEqual(snapshot.phase, "preInit")
+        XCTAssertEqual(snapshot.operationID, "local-attempt")
+        XCTAssertEqual(snapshot.backupReference, "local-backup")
+        XCTAssertEqual(snapshot.generation, 9, "New attempts must advance beyond the observed remote generation")
+        guard case .observed(let remote) = snapshot.remoteState else { return XCTFail("Missing remote completion") }
+        XCTAssertEqual(remote.state, .done)
+    }
+
     func testSameGenerationRemoteConflictUsesDeterministicOrdering() throws {
         let migrationID = "remote-conflict"
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -626,6 +650,238 @@ final class GraphMigrationLedgerTests: XCTestCase {
         XCTAssertNil(completed.pendingPublication)
         XCTAssertEqual(completed.lastPublished?.operationID, pending.operationID)
         XCTAssertNotNil(completed.lastPublished?.publishedAt)
+    }
+
+    func testExistingLocalCompletionIsPublishedWhenSynchronizationIsEnabled() throws {
+        let store = TestMigrationKVSStore()
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        let migrationID = "local-completion-backfill"
+
+        _ = try GraphMigrationLedger.markDone(
+            migrationID: migrationID,
+            version: 1,
+            synchronization: .local,
+            configuration: configuration,
+            operationID: "original-local-operation",
+            generation: 7
+        )
+        XCTAssertNil(GraphMigrationLedger.snapshot(
+            migrationID: migrationID,
+            version: 1,
+            configuration: configuration
+        )?.lastPublished)
+
+        try GraphMigrationLedger.reconcileRemoteObservation(
+            migrationID: migrationID,
+            version: 1,
+            synchronization: .localAndICloudKeyValueStore,
+            configuration: configuration
+        )
+
+        let published = try XCTUnwrap(GraphMigrationLedger.snapshot(
+            migrationID: migrationID,
+            version: 1,
+            configuration: configuration
+        )?.lastPublished)
+        XCTAssertEqual(published.state, .done)
+        XCTAssertEqual(published.operationID, "original-local-operation")
+        XCTAssertEqual(published.generation, 7)
+        XCTAssertNil(GraphMigrationLedger.snapshot(
+            migrationID: migrationID,
+            version: 1,
+            configuration: configuration
+        )?.pendingPublication)
+        XCTAssertNotNil(store.values["GraphEvo.migration.ledger.v2"])
+
+        try GraphMigrationLedger.reconcileRemoteObservation(
+            migrationID: migrationID,
+            version: 1,
+            synchronization: .localAndICloudKeyValueStore,
+            configuration: configuration
+        )
+        XCTAssertEqual(GraphMigrationLedger.snapshot(
+            migrationID: migrationID,
+            version: 1,
+            configuration: configuration
+        )?.lastPublished?.operationID, "original-local-operation")
+    }
+
+    func testBackfillPublicationRejectionPreservesCompletionAndRetries() throws {
+        let store = TestMigrationKVSStore()
+        store.acceptsWrites = false
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        let id = "backfill-retry"
+        _ = try GraphMigrationLedger.markDone(migrationID: id, version: 1,
+            synchronization: .local, configuration: configuration, operationID: "original", generation: 7)
+        try GraphMigrationLedger.reconcileRemoteObservation(migrationID: id, version: 1,
+            synchronization: .localAndICloudKeyValueStore, configuration: configuration)
+        XCTAssertEqual(GraphMigrationLedger.localRecord(migrationID: id, version: 1, configuration: configuration)?.state, .done)
+        XCTAssertNotNil(GraphMigrationLedger.snapshot(migrationID: id, version: 1, configuration: configuration)?.pendingPublication)
+        store.acceptsWrites = true
+        try GraphMigrationLedger.reconcileRemoteObservation(migrationID: id, version: 1,
+            synchronization: .localAndICloudKeyValueStore, configuration: configuration)
+        XCTAssertEqual(GraphMigrationLedger.snapshot(migrationID: id, version: 1, configuration: configuration)?.lastPublished?.operationID, "original")
+        XCTAssertNil(GraphMigrationLedger.snapshot(migrationID: id, version: 1, configuration: configuration)?.pendingPublication)
+    }
+
+    func testPendingBackfillDoesNotOverwriteNewerRemoteReset() throws {
+        try assertPendingBackfillYieldsToNewerRemote(reset: true)
+    }
+
+    func testNewRemoteResetAdvancesBeyondVisibleRemoteGeneration() throws {
+        try assertResetWithLaggingLocalLedger(targets: [.remote])
+    }
+
+    func testNewCombinedResetAdvancesBeyondVisibleRemoteGeneration() throws {
+        try assertResetWithLaggingLocalLedger(targets: [.localAndRemote])
+    }
+
+    func testLocalOnlyResetDoesNotObserveOrPublishRemoteState() throws {
+        try assertResetWithLaggingLocalLedger(targets: [.local])
+    }
+
+    private func assertResetWithLaggingLocalLedger(targets: Set<GraphMigrationResetTarget>) throws {
+        let store = TestMigrationKVSStore()
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        let id = "lagging-reset"
+        var local = configuration!
+        local.location = temporaryDirectory.appendingPathComponent("local/store")
+        var remote = local
+        remote.location = temporaryDirectory.appendingPathComponent("remote/store")
+        _ = try GraphMigrationLedger.markDone(migrationID: id, version: 1, synchronization: .local,
+            configuration: local, operationID: "local", generation: 3)
+        _ = try GraphMigrationLedger.markDone(migrationID: id, version: 1, synchronization: .localAndICloudKeyValueStore,
+            configuration: remote, operationID: "remote", generation: 12)
+        let before = store.values["GraphEvo.migration.ledger.v2"] as? [String: Data]
+        try GraphMigrationLedger.reset(migrationID: id, version: 1, configuration: local,
+            targets: targets, requestedBy: .supportCenter, reason: "new user request")
+        let projection = try XCTUnwrap(GraphMigrationLedger.snapshot(migrationID: id, version: 1, configuration: local))
+        XCTAssertNil(projection.pendingPublication)
+        XCTAssertEqual(projection.current.state, targets == [.remote] ? .done : .notExecuted)
+        if targets == [.local] {
+            XCTAssertEqual(projection.latestEntry?.generation, 4)
+            XCTAssertNil(projection.lastPublished)
+            XCTAssertEqual(store.values["GraphEvo.migration.ledger.v2"] as? [String: Data], before)
+            guard case .unknown = try GraphMigrationLedger.stateSnapshot(migrationID: id, version: 1, configuration: local).remoteState else {
+                return XCTFail("Local reset must not observe KVS")
+            }
+        } else {
+            let published = try XCTUnwrap(projection.lastPublished)
+            XCTAssertEqual(published.generation, 13)
+            XCTAssertEqual(published.state, .notExecuted)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .millisecondsSince1970
+            let values = try XCTUnwrap(store.values["GraphEvo.migration.ledger.v2"] as? [String: Data])
+            let actual = try decoder.decode(GraphMigrationLedgerEntry.self, from: XCTUnwrap(values.values.first))
+            XCTAssertEqual(actual.operationID, published.operationID)
+            XCTAssertEqual(actual.state, .notExecuted)
+            try GraphMigrationLedger.retryPendingPublicationForTesting(migrationID: id, version: 1, configuration: local)
+            XCTAssertEqual(GraphMigrationLedger.snapshot(migrationID: id, version: 1, configuration: local)?.lastPublished?.operationID,
+                published.operationID, "Retry must not create a new reset")
+        }
+    }
+
+    func testPendingBackfillDoesNotOverwriteNewerRemoteCompletion() throws {
+        try assertPendingBackfillYieldsToNewerRemote(reset: false)
+    }
+
+    func testPendingBackfillRespectsNewerObservationEvenWhenKVSNoLongerContainsIt() throws {
+        try assertPendingBackfillYieldsToNewerRemote(reset: true, cachedOnly: true)
+    }
+
+    private func assertPendingBackfillYieldsToNewerRemote(reset: Bool, cachedOnly: Bool = false) throws {
+        let store = TestMigrationKVSStore()
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        let id = "superseded-backfill"
+        var local = configuration!
+        local.location = temporaryDirectory.appendingPathComponent("local/store")
+        var remote = local
+        remote.location = temporaryDirectory.appendingPathComponent("remote/store")
+        _ = try GraphMigrationLedger.markDone(migrationID: id, version: 1, synchronization: .local,
+            configuration: local, operationID: "old-local", generation: 7)
+        store.acceptsWrites = false
+        try GraphMigrationLedger.reconcileRemoteObservation(migrationID: id, version: 1,
+            synchronization: .localAndICloudKeyValueStore, configuration: local)
+        XCTAssertNotNil(GraphMigrationLedger.snapshot(migrationID: id, version: 1, configuration: local)?.pendingPublication)
+        store.acceptsWrites = true
+        if reset {
+            _ = try GraphMigrationLedger.markStarted(migrationID: id, version: 1,
+                configuration: remote, operationID: "remote-attempt", generation: 8)
+            try GraphMigrationLedger.reset(migrationID: id, version: 1, configuration: remote,
+                targets: [.remote], requestedBy: .supportCenter, reason: "newer remote reset")
+        } else {
+            _ = try GraphMigrationLedger.markDone(migrationID: id, version: 1,
+                synchronization: .localAndICloudKeyValueStore, configuration: remote,
+                operationID: "new-remote", generation: 9)
+        }
+        if cachedOnly {
+            let entry = try XCTUnwrap(GraphMigrationLedger.history(migrationID: id, version: 1, configuration: remote).last)
+            try GraphMigrationLedger.reconcileRemoteEntryForTesting(entry, configuration: local)
+            store.values.removeValue(forKey: "GraphEvo.migration.ledger.v2")
+        }
+        let before = store.values["GraphEvo.migration.ledger.v2"] as? [String: Data]
+        try GraphMigrationLedger.reconcileRemoteObservation(migrationID: id, version: 1,
+            synchronization: .localAndICloudKeyValueStore, configuration: local)
+        XCTAssertEqual(store.values["GraphEvo.migration.ledger.v2"] as? [String: Data], before)
+        let projection = try XCTUnwrap(GraphMigrationLedger.snapshot(migrationID: id, version: 1, configuration: local))
+        XCTAssertNil(projection.pendingPublication)
+        XCTAssertNil(projection.lastPublished, "Supersession is not successful publication")
+        XCTAssertEqual(projection.current.state, .done, "Remote state must not rewrite local execution")
+        let snapshot = try GraphMigrationLedger.stateSnapshot(migrationID: id, version: 1, configuration: local)
+        guard case .observed(let observed) = snapshot.remoteState else { return XCTFail("Missing remote observation") }
+        XCTAssertEqual(observed.state, reset ? .notExecuted : .done)
+        XCTAssertEqual(snapshot.generation, 9)
+    }
+
+    func testExistingRemoteProjectionPreventsLocalCompletionBackfill() throws {
+        let store = TestMigrationKVSStore()
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        let migrationID = "local-completion-with-remote-reset"
+        let publisherRoot = temporaryDirectory.appendingPathComponent("publisher")
+        let observerRoot = temporaryDirectory.appendingPathComponent("observer")
+        var publisher = configuration!
+        publisher.location = publisherRoot.appendingPathComponent("store/current.sqlite")
+        var observer = configuration!
+        observer.location = observerRoot.appendingPathComponent("store/current.sqlite")
+
+        try GraphMigrationLedger.reset(
+            migrationID: migrationID,
+            version: 1,
+            configuration: publisher,
+            targets: [.remote],
+            requestedBy: .supportCenter,
+            reason: "intentional remote reset"
+        )
+        _ = try GraphMigrationLedger.markDone(
+            migrationID: migrationID,
+            version: 1,
+            synchronization: .local,
+            configuration: observer,
+            operationID: "older-local-completion",
+            generation: 1
+        )
+
+        _ = try GraphMigrationLedger.reconciledRecordThrowing(
+            migrationID: migrationID,
+            version: 1,
+            synchronization: .localAndICloudKeyValueStore,
+            configuration: observer
+        )
+
+        let snapshot = try GraphMigrationLedger.stateSnapshot(
+            migrationID: migrationID,
+            version: 1,
+            configuration: observer
+        )
+        guard case .observed(let remote) = snapshot.remoteState else {
+            return XCTFail("Expected the remote reset to be observed")
+        }
+        XCTAssertEqual(remote.state, .notExecuted)
+        XCTAssertNil(GraphMigrationLedger.snapshot(
+            migrationID: migrationID,
+            version: 1,
+            configuration: observer
+        )?.lastPublished)
     }
 
     func testKVSPublicationPreservesEntriesFromOtherScopes() throws {

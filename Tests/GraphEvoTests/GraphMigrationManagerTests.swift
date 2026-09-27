@@ -370,6 +370,7 @@ final class GraphMigrationManagerTests: XCTestCase {
     }
 
     func testDefaultMigrationHelpersAndLedgerReconciliation() throws {
+        GraphMigrationLedger.setKVSStoreForTesting(TestMigrationKVSStore())
         let migrationID = "ManagerDefaults-\(UUID().uuidString)"
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("GraphEvo-ManagerDefaults-\(UUID().uuidString)", isDirectory: true)
@@ -641,6 +642,103 @@ final class GraphMigrationManagerTests: XCTestCase {
         XCTAssertEqual(history.last?.state, .done)
         XCTAssertGreaterThan(history.last?.generation ?? 0, 8)
         XCTAssertNotEqual(history.last?.operationID, "interrupted")
+    }
+
+    func testInterruptedPreInitResumesDespiteNewerRemoteReadyCompletion() throws {
+        GraphMigrationLedger.setKVSStoreForTesting(TestMigrationKVSStore())
+        final class Migration: GraphMigration {
+            let id = UUID().uuidString
+            var handled = false
+            var completionSynchronization: GraphMigrationCompletionSynchronization { .localAndICloudKeyValueStore }
+            func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: inout GraphMigrationContext?) -> Bool {
+                XCTAssertTrue(context?.migrationStateSnapshot?.interrupted == true)
+                return phase == .preInit
+            }
+            func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void) {
+                handled = true
+                completion(.done)
+            }
+        }
+        let migration = Migration()
+        var local = GraphStoreConfiguration()
+        local.name = UUID().uuidString
+        local.location = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("store")
+        var remote = local
+        remote.location = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("store")
+        _ = try GraphMigrationLedger.markStarted(migrationID: migration.id, version: migration.version,
+            configuration: local, phase: "preInit", operationID: "local", generation: 7)
+        _ = try GraphMigrationLedger.markDone(migrationID: migration.id, version: migration.version,
+            synchronization: .localAndICloudKeyValueStore, configuration: remote,
+            phase: "ready", operationID: "remote", generation: 9)
+        GraphMigrationManager.registerMigration(migration)
+        GraphMigrationManager.handlePhase(.preInit, configuration: local, graph: nil)
+        XCTAssertTrue(migration.handled)
+        GraphMigrationManager.handlePhase(.ready, configuration: local, graph: nil)
+        let snapshot = try GraphMigrationManager.stateSnapshot(for: migration, configuration: local)
+        XCTAssertEqual(snapshot.localRecord?.state, .done)
+        XCTAssertGreaterThan(snapshot.generation ?? 0, 9)
+    }
+
+    func testCoordinatorUsesConfigurationDependentCompletionPolicy() throws {
+        let store = TestMigrationKVSStore()
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        struct Migration: GraphMigration {
+            let id = UUID().uuidString
+            var completionSynchronization: GraphMigrationCompletionSynchronization { .localAndICloudKeyValueStore }
+            func completionSynchronization(for configuration: GraphStoreConfiguration) -> GraphMigrationCompletionSynchronization { .local }
+            func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: inout GraphMigrationContext?) -> Bool { true }
+            func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void) { completion(.done) }
+        }
+        let migration = Migration()
+        var configuration = GraphStoreConfiguration()
+        configuration.name = UUID().uuidString
+        configuration.location = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        GraphMigrationManager.registerMigration(migration)
+        GraphMigrationManager.handlePhase(.preInit, configuration: configuration, graph: nil)
+        GraphMigrationManager.handlePhase(.ready, configuration: configuration, graph: nil)
+        XCTAssertEqual(try GraphMigrationManager.recordThrowing(for: migration, configuration: configuration)?.state, .done)
+        XCTAssertTrue(store.values.isEmpty, "Protocol dispatch must use the per-configuration override, including record reads/backfill")
+    }
+
+    func testCompletedMigrationSucceedsWhenKVSPublicationIsRejectedAndDoesNotRerun() throws {
+        let store = TestMigrationKVSStore()
+        store.acceptsWrites = false
+        GraphMigrationLedger.setKVSStoreForTesting(store)
+        final class Migration: GraphMigration {
+            let id = UUID().uuidString
+            var runs = 0
+            var completionSynchronization: GraphMigrationCompletionSynchronization { .localAndICloudKeyValueStore }
+            func needsRun(at phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: inout GraphMigrationContext?) -> Bool { phase == .ready }
+            func handlePhase(_ phase: GraphMigrationManager.GraphLifecyclePhase, configuration: GraphStoreConfiguration?, graph: Graph?, context: GraphMigrationContext?, completion: @escaping (GraphMigrationResult) -> Void) {
+                runs += 1
+                completion(.done)
+            }
+        }
+        let migration = Migration()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var configuration = GraphStoreConfiguration()
+        configuration.name = UUID().uuidString
+        configuration.location = root.appendingPathComponent("store")
+        GraphMigrationManager.registerMigration(migration)
+        let completed = expectation(description: "local completion succeeds without KVS")
+        GraphMigrationManager.handlePhaseResult(.ready, configuration: configuration, graph: nil) { result in
+            if case .failure(let error) = result { XCTFail("\(error)") }
+            completed.fulfill()
+        }
+        wait(for: [completed], timeout: 5)
+        let pending = try XCTUnwrap(GraphMigrationLedger.snapshot(migrationID: migration.id, version: migration.version, configuration: configuration))
+        XCTAssertEqual(pending.current.state, .done)
+        XCTAssertNotNil(pending.pendingPublication)
+        XCTAssertNotNil(pending.publicationError)
+        XCTAssertFalse(try GraphMigrationManager.history(for: migration, configuration: configuration).contains { $0.state == .failed })
+        store.acceptsWrites = true
+        GraphMigrationManager.handlePhase(.ready, configuration: configuration, graph: nil)
+        let published = try XCTUnwrap(GraphMigrationLedger.snapshot(migrationID: migration.id, version: migration.version, configuration: configuration))
+        XCTAssertEqual(migration.runs, 1)
+        XCTAssertEqual(published.current.state, .done)
+        XCTAssertNil(published.pendingPublication)
+        XCTAssertEqual(published.lastPublished?.operationID, pending.pendingPublication?.operationID)
     }
 
     func testKVSObserverReconcilesRemoteProjectionEndToEnd() throws {
