@@ -172,10 +172,38 @@ before changing an archived payload, then reopen it through GraphEvo.
 | Optional creation date, fallback, encoding, pending edits and no read-side mutation for all facades | `NodeOptionalCreatedDateTests` |
 | API available without `@testable` access | `PublicGraphWatchReportAPICompileTests` |
 
-Remaining gaps are explicit: there is no end-to-end batch-delivery regression
-forcing an expired history cursor through recovery, no injected unresolved
-Action participant or tag/group destination, and no live cross-device CloudKit
-test. Functional coverage of small Actions is not a performance guarantee for
-large participant sets. SDK-specific behavior still needs device/OS coverage
-beyond the local macOS and iOS Simulator runs. Line coverage is supplementary;
-it does not establish these untested guarantees.
+### Failure injection and history recovery
+
+`GraphStructuralReadFailureTests` uses a test-only persistent store coordinator
+that rejects selected destination fetches with a known error; all other reads
+use the real SQLite store. It verifies unresolved Action subjects/objects and
+unresolved tags/groups for every node family, including validation through an
+associated Entity. Assertions check the source ID, relationship name,
+destination ID, unresolved state and original error. Removing the injected
+failure makes a fresh validation succeed. This represents a reference exposed
+by Core Data whose destination cannot currently be read; it does not pretend
+the destination row is absent.
+
+Separate closed-store deletion fixtures demonstrate the observable absence
+boundary. On the tested SDKs, deleted Action participant rows are omitted from
+the exposed collections even when join rows remain. Deleted tag/group rows
+likewise disappear from their inverse collections. The tests assert that the
+validator reports only the remaining participants or an absent collection,
+without inventing unresolved references that Core Data does not expose.
+This distinction is part of the contract, not proof of import completeness.
+
+`GraphWatchHistoryGapTests` expires a real delivery cursor by pruning history
+through Core Data and first verifies that fetching with it throws an expired
+history error. It then exercises the complete report coordinator for:
+
+- Retained valid history, gap diagnostics, cursor advancement and no replay
+  after coordinator recreation.
+- Empty retained history, with a gap diagnostic and no invented events.
+- An invalid survivor mixed with remote deletion evidence: no partial report,
+  unchanged expired cursor, and delivery with the gap diagnostic after repair.
+
+Remaining integration limits are live cross-device CloudKit scheduling and OS
+versions outside the local macOS/iOS Simulator runs. Large Action participant
+sets still need performance measurements; functional tests are not a throughput
+or latency guarantee. Line coverage remains supplementary to these behavioral
+assertions.

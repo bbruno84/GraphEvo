@@ -51,6 +51,51 @@ final class GraphStructuralValidationRegressionTests: XCTestCase {
         return Graph(storeURL: url, migrationEnabled: false)
     }
 
+    func testDeletedTagAndGroupRowsAreAbsentForEveryNodeFamily() throws {
+        let sql = ["ENTITY", "RELATIONSHIP", "ACTION"].flatMap { family in
+            ["TAG", "GROUP"].map { "DELETE FROM ZMANAGED" + family + $0 + ";" }
+        }.joined(separator: " ")
+        let graph = try payloadFixture(sql: sql) { graph in
+            let root = Entity("Root", graph: graph)
+            let edge = root.is(relationship: "Edge").of(root)
+            let action = root.will(action: "Action").add(objects: root)
+            for node in [root as Node, edge, action] { node.add(tags: "removed").add(to: "removed") }
+        }
+        let root = try XCTUnwrap(Search<Entity>(graph: graph).where(.type("Root")).sync().first)
+        let edge = try XCTUnwrap(Search<Relationship>(graph: graph).where(.type("Edge")).sync().first)
+        let action = try XCTUnwrap(Search<Action>(graph: graph).where(.type("Action")).sync().first)
+        for node in [root as Node, edge, action] {
+            let result = node.validateStructure()
+            XCTAssertTrue(result.isValid)
+            for key in ["tagSet", "groupSet"] {
+                let reference = try XCTUnwrap(result.references.first { $0.sourceObjectID == node.node.objectID && $0.relationshipName == key })
+                XCTAssertEqual(reference.state, .absent)
+                XCTAssertNil(reference.destinationObjectID)
+                XCTAssertNil(reference.error)
+            }
+        }
+    }
+
+    func testDeletedActionParticipantsNotExposedByCoreDataAreNotInvented() throws {
+        let graph = try payloadFixture(sql: "DELETE FROM ZMANAGEDENTITY WHERE ZTYPE='Missing';") { graph in
+            let root = Entity("Root", graph: graph)
+            let missing = Entity("Missing", graph: graph)
+            _ = Action("Edge", graph: graph).add(subjects: root, missing).add(objects: root, missing)
+        }
+        let action = try XCTUnwrap(Search<Action>(graph: graph).where(.type("Edge")).sync().first)
+        let root = try XCTUnwrap(Search<Entity>(graph: graph).where(.type("Root")).sync().first)
+        for node in [action as Node, root] {
+            let result = node.validateStructure()
+            XCTAssertTrue(result.isValid)
+            for key in ["subjectSet", "objectSet"] {
+                let participants = result.references.filter { $0.sourceObjectID == action.node.objectID && $0.relationshipName == key }
+                XCTAssertEqual(participants.count, 1)
+                XCTAssertEqual(participants.first?.destinationObjectID, root.node.objectID)
+                XCTAssertEqual(participants.first?.state, .materialized)
+            }
+        }
+    }
+
     func testCorruptRelationshipDetailsFailBothIncomingAndOutgoingEntityValidation() throws {
         try assertCorruptEdgeDetails(action: false)
     }
