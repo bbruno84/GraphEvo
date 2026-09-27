@@ -125,3 +125,25 @@ per-root reference results are not shared, so work and result size can grow
 quadratically. Report processing waits synchronously for validation. The Action
 scope is intentionally retained; optimizing this cost is deferred, not replaced
 by a weaker validation contract.
+
+
+## Confirmed remote deletions
+
+Retained remote deletions supersede older insert/update records for the same
+object. The coordinator attempts to reconstruct their typed deletion events.
+If a deleted detail's former owner or payload is unavailable, it is delivered
+in `report.unmaterializedDeletions` with its local object ID and the original
+reconstruction error. The application can invalidate cached references or
+refresh its queries; GraphEvo does not invent the missing owner or value.
+A report may contain only these deletion references. They count as delivered
+evidence and allow the token to advance, while failures on surviving objects
+continue to retain the entire batch. No Core Data model changes or additional
+history-preservation attributes are required.
+
+## Optional creation dates
+
+An absent `createdDate` remains valid according to the existing Core Data model.
+`Node.createdDateIfPresent` exposes the absence and `Node.createdDate` returns
+`Date.distantPast` as a compatibility fallback. Reading does not mutate the
+store, and encoding omits the absent date. These accessors read the facade's
+context; the validator independently reads saved state.

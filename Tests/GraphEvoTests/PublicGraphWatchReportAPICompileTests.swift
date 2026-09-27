@@ -13,6 +13,7 @@ final class PublicGraphWatchReportAPICompileTests: XCTestCase {
                 _ = report.source
                 _ = report.events
                 _ = report.structuralValidationResults
+                _ = report.unmaterializedDeletions.map { ($0.objectID, $0.error) }
             }
             _ = error
         }
@@ -33,6 +34,7 @@ final class PublicGraphWatchReportAPICompileTests: XCTestCase {
                 _ = report.source
                 _ = report.events
                 _ = report.structuralValidationResults
+                _ = report.unmaterializedDeletions.map { ($0.objectID, $0.error) }
             }
             _ = error
         }
@@ -49,6 +51,7 @@ final class PublicGraphWatchReportAPICompileTests: XCTestCase {
         graph.sync()
         for node in nodes {
             let result: GraphStructuralValidationResult = node.validateStructure()
+            _ = node.createdDateIfPresent
             XCTAssertTrue(result.isValid)
             for reference in result.references {
                 switch reference.state {

@@ -162,54 +162,8 @@ internal final class GraphWatchBatchDeliveryCoordinator {
                     self.finishWithoutReport()
                     return
                 }
-                let target = context
-                try GraphWatchLocalCapture.whileSuppressed(target) {
-                    try target.performAndWait {
-                        let mergeInfo: [AnyHashable: Any] = [
-                            NSInsertedObjectIDsKey: NSSet(array: fetched.inserted),
-                            NSUpdatedObjectIDsKey: NSSet(array: fetched.updated),
-                            NSDeletedObjectIDsKey: NSSet(array: fetched.deleted)
-                        ]
-                        target.mergeChanges(fromContextDidSave: Notification(name: .GraphEvoSimulatedRemoteChange, object: target, userInfo: mergeInfo))
-                        try Graph.finalizePersistedDeletions(in: target, ids: Set(fetched.deleted))
-                    }
-                }
-                var envelopes: [GraphWatchEventEnvelope] = []
-                var issues: [GraphWatchMaterializationIssue] = []
-                var validationResults: [GraphStructuralValidationResult] = []
-                try target.performAndWait {
-                    for record in fetched.records {
-                        let object = target.object(with: record.objectID)
-                        do {
-                            if let envelope = try GraphWatchEventMaterializer.materialize(object: object, operation: record.operation, source: .cloud, transactionIndex: record.transactionIndex, changeIndex: record.changeIndex) {
-                                envelopes.append(envelope)
-                            }
-                        } catch {
-                            issues.append(GraphWatchMaterializationIssue(eventKind: record.operation.diagnosticName, objectReference: redactedReference(object), error: error))
-                        }
-                    }
-                    try Graph.finalizePersistedDeletions(in: target, ids: Set(fetched.deleted))
-                    validationResults = GraphWatchStructuralValidation.validate(envelopes, in: target, deletedIDs: Set(fetched.deleted))
-                    issues += GraphWatchStructuralValidation.issues(validationResults, envelopes: envelopes)
-                }
-                if !issues.isEmpty {
-                    graph.emit(.warning(.watchReportMaterializationFailed(source: .cloud, failedEvents: issues.count, details: issues)))
-                    self.finishMaterializationFailure()
-                    return
-                }
-                guard let lastToken = fetched.lastToken else {
-                    self.finishWith(report: nil, error: fetched.gapError)
-                    return
-                }
-                guard !envelopes.isEmpty else {
-                    try self.store.save(lastToken)
-                    self.token = lastToken
-                    self.finishWith(report: nil, error: fetched.gapError ?? GraphWatchDeliveryError.historyGap(underlying: NSError(domain: "GraphEvo", code: 2)))
-                    return
-                }
-                try self.store.save(lastToken)
-                self.token = lastToken
-                self.finishWith(report: GraphWatchReport(graph: graph, source: .cloud, events: envelopes.sorted { $0.isOrdered(before: $1) }.map(\.event), structuralValidationResults: validationResults), error: fetched.gapError)
+                try self.merge(fetched, into: context)
+                self.materializeAndDeliver(fetched, context: context)
             } catch {
                 if self.isHistoryGap(error) {
                     self.processAfterHistoryGap(using: bg, context: context, original: error)
@@ -244,6 +198,7 @@ internal final class GraphWatchBatchDeliveryCoordinator {
         var envelopes: [GraphWatchEventEnvelope] = []
         var issues: [GraphWatchMaterializationIssue] = []
         var validationResults: [GraphStructuralValidationResult] = []
+        var unmaterializedDeletions: [GraphWatchUnmaterializedDeletion] = []
         do {
             try context.performAndWait {
                 for record in fetched.records {
@@ -251,7 +206,12 @@ internal final class GraphWatchBatchDeliveryCoordinator {
                     do {
                         if let envelope = try GraphWatchEventMaterializer.materialize(object: object, operation: record.operation, source: .cloud, transactionIndex: record.transactionIndex, changeIndex: record.changeIndex) { envelopes.append(envelope) }
                     } catch {
-                        issues.append(GraphWatchMaterializationIssue(eventKind: record.operation.diagnosticName, objectReference: redactedReference(object), error: error))
+                        if record.operation == .delete {
+                            // The retained delete is proof of absence, not an import to await.
+                            unmaterializedDeletions.append(GraphWatchUnmaterializedDeletion(objectID: record.objectID, error: error))
+                        } else {
+                            issues.append(GraphWatchMaterializationIssue(eventKind: record.operation.diagnosticName, objectReference: redactedReference(object), error: error))
+                        }
                     }
                 }
                 try Graph.finalizePersistedDeletions(in: context, ids: Set(fetched.deleted))
@@ -264,9 +224,8 @@ internal final class GraphWatchBatchDeliveryCoordinator {
         }
         if !issues.isEmpty {
             graph.emit(.warning(.watchReportMaterializationFailed(source: .cloud, failedEvents: issues.count, details: issues)))
-            // A batch is all-or-nothing with respect to materialization. Even
-            // after a history-gap recovery, never advance the delivery token
-            // or expose a report that represents only part of the batch.
+            // Surviving-object failures retain the entire batch, including
+            // deletion evidence, even after history-gap recovery.
             finishMaterializationFailure()
             return
         }
@@ -277,7 +236,14 @@ internal final class GraphWatchBatchDeliveryCoordinator {
             }
             try store.save(lastToken)
             token = lastToken
-            let report = envelopes.isEmpty ? nil : GraphWatchReport(graph: graph, source: .cloud, events: envelopes.sorted { $0.isOrdered(before: $1) }.map(\.event), structuralValidationResults: validationResults)
+            let report = envelopes.isEmpty && unmaterializedDeletions.isEmpty ? nil : GraphWatchReport(
+                graph: graph, source: .cloud,
+                events: envelopes.sorted { $0.isOrdered(before: $1) }.map(\.event),
+                structuralValidationResults: validationResults,
+                unmaterializedDeletions: unmaterializedDeletions.sorted {
+                    $0.objectID.uriRepresentation().absoluteString < $1.objectID.uriRepresentation().absoluteString
+                }
+            )
             finishWith(report: report, error: fetched.gapError)
         } catch { finishStructural(error) }
     }
@@ -351,10 +317,15 @@ internal final class GraphWatchBatchDeliveryCoordinator {
             }
         }
         guard let last else { return FetchedHistory(records: [], inserted: [], updated: [], deleted: [], lastToken: token, historyGap: historyGap, gapError: gapError) }
+        let allDeleted = locallyDeleted.union(deleted)
         return FetchedHistory(
-            records: records.filter { !locallyDeleted.contains($0.objectID) },
-            inserted: inserted.filter { !locallyDeleted.contains($0) },
-            updated: updated.filter { !locallyDeleted.contains($0) },
+            // Inserts/updates superseded by a retained deletion cannot be materialized
+            // from today's store. Keep remote deletions for typed or reference delivery.
+            records: records.filter {
+                !locallyDeleted.contains($0.objectID) && ($0.operation == .delete || !allDeleted.contains($0.objectID))
+            },
+            inserted: inserted.filter { !allDeleted.contains($0) },
+            updated: updated.filter { !allDeleted.contains($0) },
             deleted: deleted.filter { !locallyDeleted.contains($0) },
             lastToken: last, historyGap: historyGap, gapError: gapError
         )

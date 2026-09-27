@@ -137,7 +137,12 @@ batches retain their delivery token on failure, while local delivery remains
 best-effort. Deleted owners are excluded. The validator does not retry or
 certify import completion. Decoder errors must fail structural validation.
 Retained local deletion records may supersede pending remote events; missing
-rows alone are not deletion evidence. See `docs/guides/structural-validation.md`.
+rows alone are not deletion evidence. Remote deletions supersede inserts/updates;
+when their typed event cannot be reconstructed, reports expose
+`unmaterializedDeletions` with IDs and causes. Consumers must inspect this array
+even when `events` is empty. `Node.createdDateIfPresent` exposes an absent date;
+`createdDate` uses a read-only `Date.distantPast` fallback. Do not change the Core
+Data model to make that field required. See `docs/guides/structural-validation.md`.
 
 
 ## CloudKit and Persistent History

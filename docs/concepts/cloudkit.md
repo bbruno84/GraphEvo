@@ -175,7 +175,7 @@ reconstructed events are also delivered as one non-empty report for each
 Persistent History processing cycle. GraphEvo persists the history token after
 filtering and merging, before materializing and delivering the report. The
 completion is not an acknowledgment: delivery never delays or rewinds the
-Persistent History processing token. Batch materialization failures are
+Persistent History processing token. Materialization failures for surviving objects are
 retryable and leave the separate batch-delivery token unchanged; legacy Watch
 callbacks retain their existing best-effort behavior.
 
@@ -187,3 +187,9 @@ Report materialization also checks the persisted structure of surviving event
 owners. Unresolved dependencies within the bounded validation scope retain the
 batch-delivery token under the same retry policy. This does not establish that
 all remote links have arrived. See [Structural validation](../guides/structural-validation.md).
+
+
+Confirmed remote deletions that lack a reconstructable owner or payload are
+included in `GraphWatchReport.unmaterializedDeletions`. Consumers must inspect
+that collection even when `events` is empty. These references preserve deletion
+evidence and do not block the delivery cursor waiting for removed data.

@@ -50,7 +50,7 @@ public class Node: NSObject, Codable {
     try container.encode(tags, forKey: .tags)
     try container.encode(groups, forKey: .groups)
     try container.encode(AnyCodable(properties), forKey: .properties)
-    try container.encode(createdDate, forKey: .createdDate)
+    try container.encodeIfPresent(createdDateIfPresent, forKey: .createdDate)
   }
   
   /**
@@ -149,9 +149,16 @@ public class Node: NSObject, Codable {
     return node.id
   }
   
-  /// A reference to the createDate.
+  /// Creation timestamp, or `Date.distantPast` when the optional stored value is absent.
+  /// The fallback is never written to the context or store.
   public var createdDate: Date {
-    return node.performAndWait { $0.createdDate }
+    return createdDateIfPresent ?? .distantPast
+  }
+
+  /// The creation timestamp exposed by this facade's context, if present.
+  /// Unlike structural validation, this accessor includes unsaved context edits.
+  public var createdDateIfPresent: Date? {
+    return node.performAndWait { $0.value(forKey: "createdDate") as? Date }
   }
 
   /// Preserves a known creation timestamp during application reconciliation,

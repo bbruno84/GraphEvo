@@ -69,7 +69,8 @@ graph.watchReportCompletion = { report, error in
 }
 ```
 
-Reports are delivered on the main thread, and no empty report is sent. A report contains all
+Reports are delivered on the main thread. A report has typed events, confirmed
+unmaterialized deletion references, or both; a completely empty report is not sent. A report contains all
 Graph-level events for its source; it does not use any `Watch` predicate.
 
 Local reports use a context save as their boundary. Deletions are captured
@@ -121,3 +122,11 @@ An interval containing only local or superseded events is consumed without a
 report. Missing destinations without such deletion evidence still retain the
 delivery token. Property decoding failures are included in structural failures,
 with their original decoder error available in the result.
+
+
+Remote deletions also supersede older inserts/updates. If the deleted detail's
+owner or payload can no longer be reconstructed, inspect
+`report.unmaterializedDeletions` for its object ID and error. These confirmed
+deletions advance delivery rather than waiting indefinitely for removed data.
+The `events` array alone can therefore be empty; consumers should inspect both
+arrays. Surviving-object failures still withhold the batch.

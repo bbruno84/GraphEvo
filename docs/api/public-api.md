@@ -322,6 +322,12 @@ public final class GraphWatchReport {
     public let source: GraphSource
     public let events: [GraphWatchEvent]
     public let structuralValidationResults: [GraphStructuralValidationResult]
+    public let unmaterializedDeletions: [GraphWatchUnmaterializedDeletion]
+}
+
+public struct GraphWatchUnmaterializedDeletion {
+    public let objectID: NSManagedObjectID
+    public let error: Error
 }
 
 public typealias GraphWatchReportCompletion = (_ report: GraphWatchReport?, _ error: Error?) -> Void
@@ -335,7 +341,8 @@ and deletion, relationship update, and property, tag, and group addition,
 update, or removal for the supported node family. Deleted events retain the
 same `Entity`, `Relationship`, or `Action` wrappers used by legacy Watch.
 
-Reports are non-empty, immutable, and delivered on the main thread. They are
+Reports contain at least one typed event or unmaterialized deletion reference,
+are immutable, and are delivered on the main thread. They are
 not `Sendable`; their objects remain tied to the Graph managed object context.
 The completion receives `(report, nil)` after a successful delivery. Structural
 failures receive `(nil, error)`. A Persistent History retention gap may produce
@@ -642,3 +649,30 @@ causes, while optional nil values remain valid. For Watch delivery, retained
 local deletion records can supersede pending remote events without producing
 cloud callbacks. An entirely superseded interval is consumed silently; absence
 alone is not evidence of deletion.
+
+
+### Optional creation dates
+
+```swift
+public var Node.createdDate: Date { get }
+public var Node.createdDateIfPresent: Date? { get }
+```
+
+`createdDateIfPresent` reads the value in the facade's context, including pending
+edits. `createdDate` preserves its nonoptional signature and returns
+`Date.distantPast` if the value is absent. This fallback is not written to the
+context/store. Node encoding omits an absent `createdDate` rather than encoding
+the fallback. Existing date values and `setCreatedDate(_:)` are unchanged.
+
+### Confirmed deletions without reconstructable event details
+
+Cloud history discards inserts/updates superseded by retained deletions.
+Remote deletion events are still reconstructed when possible. When the former
+owner or payload cannot be recovered, `unmaterializedDeletions` carries the
+deleted local object ID and the reconstruction error. Its ID is intended for
+invalidation, not for fetching the deleted object. Such a report can have an
+empty `events` array and a nonempty `unmaterializedDeletions` array.
+
+Confirmed deletion evidence is deliverable and advances the delivery token;
+failed materialization or validation of surviving objects still retains the
+whole batch. Missing rows alone remain insufficient evidence of deletion.
