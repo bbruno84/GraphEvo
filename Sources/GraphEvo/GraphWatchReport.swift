@@ -51,11 +51,14 @@ public final class GraphWatchReport {
     public let graph: Graph
     public let source: GraphSource
     public let events: [GraphWatchEvent]
+    /// Saved-state validation of unique surviving event owners. Deleted owners are excluded.
+    public let structuralValidationResults: [GraphStructuralValidationResult]
 
-    internal init(graph: Graph, source: GraphSource, events: [GraphWatchEvent]) {
+    internal init(graph: Graph, source: GraphSource, events: [GraphWatchEvent], structuralValidationResults: [GraphStructuralValidationResult] = []) {
         self.graph = graph
         self.source = source
         self.events = events
+        self.structuralValidationResults = structuralValidationResults
     }
 }
 

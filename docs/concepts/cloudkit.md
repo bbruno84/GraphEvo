@@ -181,3 +181,9 @@ callbacks retain their existing best-effort behavior.
 
 In production, keep callbacks idempotent and verify behavior across multiple
 devices: local and remote notifications may arrive at different times.
+
+
+Report materialization also checks the persisted structure of surviving event
+owners. Unresolved dependencies within the bounded validation scope retain the
+batch-delivery token under the same retry policy. This does not establish that
+all remote links have arrived. See [Structural validation](../guides/structural-validation.md).

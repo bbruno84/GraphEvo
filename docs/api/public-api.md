@@ -321,6 +321,7 @@ public final class GraphWatchReport {
     public let graph: Graph
     public let source: GraphSource
     public let events: [GraphWatchEvent]
+    public let structuralValidationResults: [GraphStructuralValidationResult]
 }
 
 public typealias GraphWatchReportCompletion = (_ report: GraphWatchReport?, _ error: Error?) -> Void
@@ -577,3 +578,60 @@ and `internal`/`fileprivate` helpers are not public API contracts. Use the
    SQLite store.
 7. Handle `GraphStoreOpeningError.incompatibleStore` explicitly; GraphEvo
    leaves incompatible stores unchanged.
+
+
+## Structural validation
+
+Available on `Entity`, `Relationship`, and `Action` through `Node`:
+
+```swift
+public func validateStructure() -> GraphStructuralValidationResult
+
+public enum GraphStructuralReferenceState: String {
+    case absent, unresolved, materialized
+}
+
+public struct GraphStructuralReference {
+    public let sourceObjectID: NSManagedObjectID?
+    public let relationshipName: String?
+    public let destinationObjectID: NSManagedObjectID?
+    public let state: GraphStructuralReferenceState
+    public let error: Error?
+}
+
+public struct GraphStructuralValidationResult {
+    public let objectID: NSManagedObjectID
+    public let references: [GraphStructuralReference]
+    public var issues: [GraphStructuralReference] { get }
+    public var isValid: Bool { get }
+}
+
+public enum GraphStructuralValidationError: LocalizedError {
+    case missingContext, missingStore, notPersisted, objectNotFound, unexpectedEntity
+    public var errorDescription: String? { get }
+}
+
+public struct GraphStructuralValidationFailure: LocalizedError {
+    public let result: GraphStructuralValidationResult
+    public var errorDescription: String? { get }
+}
+```
+
+This synchronous API checks saved local state, ignoring pending edits. Call it
+on the owning context queue. Optional absent references are informational;
+unresolved references fail validation. Results contain local object IDs rather
+than context-bound facades. They do not refresh the caller's objects.
+
+Entity validation includes direct relationship/action details and endpoint
+materialization. Endpoint entities' own relationships are not traversed.
+Relationship and Action validation materializes their endpoints/participants
+without recursing. All root and edge properties, tags and groups are checked.
+
+Watch reports expose validation results for surviving event owners. Cloud
+Persistent History batches retain their delivery token on structural failure;
+local batches preserve best-effort delivery. Deleted owners are excluded.
+Warnings/errors expose `GraphStructuralValidationFailure.result` with details.
+The validator itself does not retry or enforce delivery policy.
+
+See [Structural validation](../guides/structural-validation.md) for the complete
+scope, result semantics, deletion handling, and saved-state limitations.

@@ -129,6 +129,15 @@ For Graph-level batches, assign `Graph.watchReportCompletion` and select sources
 with `Graph.watchReportSources`. Batch reports do not apply Watch predicates,
 are delivered on the main thread, and do not disable legacy callbacks.
 
+`Node.validateStructure()` checks saved local state for Entity, Relationship,
+and Action. Entity scope includes direct edges, their details and endpoints;
+endpoint entities are not traversed recursively. Optional absent references
+are informational. Report delivery uses the same validator: cloud history
+batches retain their delivery token on failure, while local delivery remains
+best-effort. Deleted owners are excluded. The validator does not retry or
+certify import completion. See `docs/guides/structural-validation.md`.
+
+
 ## CloudKit and Persistent History
 
 Container identifier precedence is:

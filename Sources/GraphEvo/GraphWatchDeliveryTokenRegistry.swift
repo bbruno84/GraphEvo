@@ -171,6 +171,7 @@ internal final class GraphWatchBatchDeliveryCoordinator {
                 }
                 var envelopes: [GraphWatchEventEnvelope] = []
                 var issues: [GraphWatchMaterializationIssue] = []
+                var validationResults: [GraphStructuralValidationResult] = []
                 try target.performAndWait {
                     for record in fetched.records {
                         let object = target.object(with: record.objectID)
@@ -183,8 +184,10 @@ internal final class GraphWatchBatchDeliveryCoordinator {
                         }
                     }
                     try Graph.finalizePersistedDeletions(in: target, ids: Set(fetched.deleted))
+                    validationResults = GraphWatchStructuralValidation.validate(envelopes, in: target, deletedIDs: Set(fetched.deleted))
+                    issues += GraphWatchStructuralValidation.issues(validationResults, envelopes: envelopes)
                 }
-                if !issues.isEmpty && !fetched.historyGap {
+                if !issues.isEmpty {
                     graph.emit(.warning(.watchReportMaterializationFailed(source: .cloud, failedEvents: issues.count, details: issues)))
                     self.finishMaterializationFailure()
                     return
@@ -201,7 +204,7 @@ internal final class GraphWatchBatchDeliveryCoordinator {
                 }
                 try self.store.save(lastToken)
                 self.token = lastToken
-                self.finishWith(report: GraphWatchReport(graph: graph, source: .cloud, events: envelopes.sorted { $0.isOrdered(before: $1) }.map(\.event)), error: fetched.gapError)
+                self.finishWith(report: GraphWatchReport(graph: graph, source: .cloud, events: envelopes.sorted { $0.isOrdered(before: $1) }.map(\.event), structuralValidationResults: validationResults), error: fetched.gapError)
             } catch {
                 if self.isHistoryGap(error) {
                     self.processAfterHistoryGap(using: bg, context: context, original: error)
@@ -235,6 +238,7 @@ internal final class GraphWatchBatchDeliveryCoordinator {
         guard let graph else { return }
         var envelopes: [GraphWatchEventEnvelope] = []
         var issues: [GraphWatchMaterializationIssue] = []
+        var validationResults: [GraphStructuralValidationResult] = []
         do {
             try context.performAndWait {
                 for record in fetched.records {
@@ -246,6 +250,8 @@ internal final class GraphWatchBatchDeliveryCoordinator {
                     }
                 }
                 try Graph.finalizePersistedDeletions(in: context, ids: Set(fetched.deleted))
+                validationResults = GraphWatchStructuralValidation.validate(envelopes, in: context, deletedIDs: Set(fetched.deleted))
+                issues += GraphWatchStructuralValidation.issues(validationResults, envelopes: envelopes)
             }
         } catch {
             finishStructural(error)
@@ -266,7 +272,7 @@ internal final class GraphWatchBatchDeliveryCoordinator {
             }
             try store.save(lastToken)
             token = lastToken
-            let report = envelopes.isEmpty ? nil : GraphWatchReport(graph: graph, source: .cloud, events: envelopes.sorted { $0.isOrdered(before: $1) }.map(\.event))
+            let report = envelopes.isEmpty ? nil : GraphWatchReport(graph: graph, source: .cloud, events: envelopes.sorted { $0.isOrdered(before: $1) }.map(\.event), structuralValidationResults: validationResults)
             finishWith(report: report, error: fetched.gapError)
         } catch { finishStructural(error) }
     }

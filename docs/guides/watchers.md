@@ -99,3 +99,17 @@ watch.where(.has(tags: "active"))
 
 As with `Search`, successive `where` calls are combined with OR. Build one
 `Predicate` when an explicit AND is required.
+
+
+## Structural validation before report delivery
+
+Reports use the shared `Node.validateStructure()` validator on persisted state.
+`report.structuralValidationResults` identifies the checked event owners and
+reference outcomes. Cloud Persistent History batches with unresolved
+references are withheld using the existing materialization-warning and retry
+path; their delivery token does not advance. Local batches remain best-effort.
+Explicitly deleted owners are excluded from saved-state validation.
+
+See [Structural validation](structural-validation.md) for the bounded traversal,
+diagnostics, direct API, and the distinction between local validity and import
+completeness. Legacy Watch callbacks remain independent.
