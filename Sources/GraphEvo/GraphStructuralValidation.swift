@@ -171,12 +171,14 @@ internal enum GraphStructuralValidator {
                     request.includesPendingChanges = false
                     request.returnsObjectsAsFaults = false
                     request.fetchLimit = 1
-                    guard let object = try context.fetch(request).first else {
-                        throw GraphStructuralValidationError.objectNotFound
+                    return try GraphValueDecodingDiagnostics.checking {
+                        guard let object = try context.fetch(request).first else {
+                            throw GraphStructuralValidationError.objectNotFound
+                        }
+                        // Include the fetch: Core Data may decode attributes before returning it.
+                        for key in object.entity.attributesByName.keys.sorted() { _ = object.value(forKey: key) }
+                        return object
                     }
-                    // Read attributes, including transformables, without following relationships.
-                    for key in object.entity.attributesByName.keys.sorted() { _ = object.value(forKey: key) }
-                    return object
                 }
                 objects[id] = result
             }

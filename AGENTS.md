@@ -135,7 +135,9 @@ endpoint entities are not traversed recursively. Optional absent references
 are informational. Report delivery uses the same validator: cloud history
 batches retain their delivery token on failure, while local delivery remains
 best-effort. Deleted owners are excluded. The validator does not retry or
-certify import completion. See `docs/guides/structural-validation.md`.
+certify import completion. Decoder errors must fail structural validation.
+Retained local deletion records may supersede pending remote events; missing
+rows alone are not deletion evidence. See `docs/guides/structural-validation.md`.
 
 
 ## CloudKit and Persistent History

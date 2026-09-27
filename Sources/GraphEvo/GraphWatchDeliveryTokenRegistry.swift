@@ -154,6 +154,11 @@ internal final class GraphWatchBatchDeliveryCoordinator {
             do {
                 let fetched = try self.fetch(after: self.token, in: bg)
                 if fetched.records.isEmpty {
+                    // Consume history containing only local changes or superseded remote events.
+                    if let last = fetched.lastToken {
+                        try self.store.save(last)
+                        self.token = last
+                    }
                     self.finishWithoutReport()
                     return
                 }
@@ -219,7 +224,7 @@ internal final class GraphWatchBatchDeliveryCoordinator {
         do {
             let fetched = try fetch(after: nil, in: bg, historyGap: true, gapError: GraphWatchDeliveryError.historyGap(underlying: original))
             guard !fetched.records.isEmpty else {
-                if let current = graph?.ph_processingTokenForWatchDelivery() {
+                if let current = fetched.lastToken ?? graph?.ph_processingTokenForWatchDelivery() {
                     try store.save(current)
                     token = current
                 }
@@ -318,14 +323,26 @@ internal final class GraphWatchBatchDeliveryCoordinator {
         var updated: [NSManagedObjectID] = []
         var deleted: [NSManagedObjectID] = []
         var last: NSPersistentHistoryToken?
+        var locallyDeleted = Set<NSManagedObjectID>()
         for (txIndex, pair) in transactions.enumerated() {
             let tx = pair.element
             last = tx.token
-            if tx.author == GraphDeviceAuthor.current() { continue }
+            if tx.author == GraphDeviceAuthor.current() {
+                // Local changes do not produce cloud callbacks, but their deletions
+                // prove that older remote events no longer have a surviving object.
+                for change in tx.changes ?? [] {
+                    if change.changeType == .delete { locallyDeleted.insert(change.changedObjectID) }
+                    if change.changeType == .insert { locallyDeleted.remove(change.changedObjectID) }
+                }
+                continue
+            }
             for (changeIndex, change) in (tx.changes ?? []).enumerated() {
                 let operation: GraphWatchChangeOperation
                 switch change.changeType {
-                case .insert: operation = .insert; inserted.append(change.changedObjectID)
+                case .insert:
+                    locallyDeleted.remove(change.changedObjectID)
+                    operation = .insert
+                    inserted.append(change.changedObjectID)
                 case .update: operation = .update; updated.append(change.changedObjectID)
                 case .delete: operation = .delete; deleted.append(change.changedObjectID)
                 @unknown default: continue
@@ -334,7 +351,13 @@ internal final class GraphWatchBatchDeliveryCoordinator {
             }
         }
         guard let last else { return FetchedHistory(records: [], inserted: [], updated: [], deleted: [], lastToken: token, historyGap: historyGap, gapError: gapError) }
-        return FetchedHistory(records: records, inserted: inserted, updated: updated, deleted: deleted, lastToken: last, historyGap: historyGap, gapError: gapError)
+        return FetchedHistory(
+            records: records.filter { !locallyDeleted.contains($0.objectID) },
+            inserted: inserted.filter { !locallyDeleted.contains($0) },
+            updated: updated.filter { !locallyDeleted.contains($0) },
+            deleted: deleted.filter { !locallyDeleted.contains($0) },
+            lastToken: last, historyGap: historyGap, gapError: gapError
+        )
     }
 
     private func isHistoryGap(_ error: Error) -> Bool {

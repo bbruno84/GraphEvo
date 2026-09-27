@@ -635,3 +635,10 @@ The validator itself does not retry or enforce delivery policy.
 
 See [Structural validation](../guides/structural-validation.md) for the complete
 scope, result semantics, deletion handling, and saved-state limitations.
+
+
+Structural validation preserves property decoder errors as unresolved reference
+causes, while optional nil values remain valid. For Watch delivery, retained
+local deletion records can supersede pending remote events without producing
+cloud callbacks. An entirely superseded interval is consumed silently; absence
+alone is not evidence of deletion.

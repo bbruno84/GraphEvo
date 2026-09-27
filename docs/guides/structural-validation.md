@@ -44,6 +44,11 @@ There is no recursive traversal of the mesh and no application deduplication.
 Materialization means fetching a persisted row and reading its Core Data
 attributes, including transformables. Optional nil values are not application
 validation errors; this does not validate the semantics of decoded payloads.
+Decoder failures from `GraphValueTransformer` are captured during each validation
+read and returned as unresolved references with the original error. This
+includes decoding performed by the fetch itself. The transformer's public
+nil-on-failure behavior outside validation is preserved; a genuine optional nil
+value remains valid.
 
 ## Reference results
 
@@ -99,6 +104,24 @@ not require the deleted row to remain in the store. Removed property/tag/group
 events still validate a surviving owner, without requiring the removed member
 to exist. Direct validation of a saved deletion fails as expected.
 
+Local-authored history remains excluded from cloud callbacks, but its deletion
+records are used to recognize superseded remote events. If a pending remote
+object was subsequently deleted locally, its obsolete events are omitted before
+materialization. Surviving remote events are still delivered. An interval with
+only local or superseded changes advances the delivery token without invoking
+the completion. Mere absence from the store is never treated as deletion proof:
+an unresolved reference without a retained deletion record still fails.
+
 The validator itself only returns results. Retry and delivery policy belong to
 the caller, including the Watch report coordinator. Legacy Watch callbacks are
 independent and retain their existing behavior.
+
+
+## Known performance limitation
+
+Actions with many participants can cause repeated participant enumeration when
+many related entities are validated in the same report. Fetches are cached, but
+per-root reference results are not shared, so work and result size can grow
+quadratically. Report processing waits synchronously for validation. The Action
+scope is intentionally retained; optimizing this cost is deferred, not replaced
+by a weaker validation contract.

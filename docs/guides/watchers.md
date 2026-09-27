@@ -113,3 +113,11 @@ Explicitly deleted owners are excluded from saved-state validation.
 See [Structural validation](structural-validation.md) for the bounded traversal,
 diagnostics, direct API, and the distinction between local validity and import
 completeness. Legacy Watch callbacks remain independent.
+
+
+When retained history proves that a pending remote object was subsequently
+deleted locally, the superseded events are omitted before materialization.
+An interval containing only local or superseded events is consumed without a
+report. Missing destinations without such deletion evidence still retain the
+delivery token. Property decoding failures are included in structural failures,
+with their original decoder error available in the result.
