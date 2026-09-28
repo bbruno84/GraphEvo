@@ -321,6 +321,13 @@ public final class GraphWatchReport {
     public let graph: Graph
     public let source: GraphSource
     public let events: [GraphWatchEvent]
+    public let structuralValidationResults: [GraphStructuralValidationResult]
+    public let unmaterializedDeletions: [GraphWatchUnmaterializedDeletion]
+}
+
+public struct GraphWatchUnmaterializedDeletion {
+    public let objectID: NSManagedObjectID
+    public let error: Error
 }
 
 public typealias GraphWatchReportCompletion = (_ report: GraphWatchReport?, _ error: Error?) -> Void
@@ -334,7 +341,8 @@ and deletion, relationship update, and property, tag, and group addition,
 update, or removal for the supported node family. Deleted events retain the
 same `Entity`, `Relationship`, or `Action` wrappers used by legacy Watch.
 
-Reports are non-empty, immutable, and delivered on the main thread. They are
+Reports contain at least one typed event or unmaterialized deletion reference,
+are immutable, and are delivered on the main thread. They are
 not `Sendable`; their objects remain tied to the Graph managed object context.
 The completion receives `(report, nil)` after a successful delivery. Structural
 failures receive `(nil, error)`. A Persistent History retention gap may produce
@@ -352,6 +360,7 @@ same logical consumer unless duplicate handling is intentional.
 ```swift
 public enum GraphPersistenceMode { case local; case cloud; case localFallback }
 public enum GraphEvent {
+    case transactionDiagnostic(GraphTransactionTrace)
     case stateChanged(GraphState)
     case warning(GraphWarning)
     case error(GraphFailure)
@@ -577,3 +586,206 @@ and `internal`/`fileprivate` helpers are not public API contracts. Use the
    SQLite store.
 7. Handle `GraphStoreOpeningError.incompatibleStore` explicitly; GraphEvo
    leaves incompatible stores unchanged.
+
+
+## Structural validation
+
+Available on `Entity`, `Relationship`, and `Action` through `Node`:
+
+```swift
+public func validateStructure() -> GraphStructuralValidationResult
+
+public enum GraphStructuralReferenceState: String {
+    case absent, unresolved, materialized
+}
+
+public struct GraphStructuralReference {
+    public let sourceObjectID: NSManagedObjectID?
+    public let relationshipName: String?
+    public let destinationObjectID: NSManagedObjectID?
+    public let state: GraphStructuralReferenceState
+    public let error: Error?
+}
+
+public struct GraphStructuralValidationResult {
+    public let objectID: NSManagedObjectID
+    public let references: [GraphStructuralReference]
+    public var issues: [GraphStructuralReference] { get }
+    public var isValid: Bool { get }
+}
+
+public enum GraphStructuralValidationError: LocalizedError {
+    case missingContext, missingStore, notPersisted, objectNotFound, unexpectedEntity
+    public var errorDescription: String? { get }
+}
+
+public struct GraphStructuralValidationFailure: LocalizedError {
+    public let result: GraphStructuralValidationResult
+    public var errorDescription: String? { get }
+}
+```
+
+This synchronous API checks saved local state, ignoring pending edits. Call it
+on the owning context queue. Optional absent references are informational;
+unresolved references fail validation. Results contain local object IDs rather
+than context-bound facades. They do not refresh the caller's objects.
+
+Entity validation includes direct relationship/action details and endpoint
+materialization. Endpoint entities' own relationships are not traversed.
+Relationship and Action validation materializes their endpoints/participants
+without recursing. All root and edge properties, tags and groups are checked.
+
+Watch reports expose validation results for surviving event owners. Cloud
+Persistent History batches retain their delivery token on structural failure;
+local batches preserve best-effort delivery. Deleted owners are excluded.
+Warnings/errors expose `GraphStructuralValidationFailure.result` with details.
+The validator itself does not retry or enforce delivery policy.
+
+See [Structural validation](../guides/structural-validation.md) for the complete
+scope, result semantics, deletion handling, and saved-state limitations.
+
+
+Structural validation preserves property decoder errors as unresolved reference
+causes, while optional nil values remain valid. For Watch delivery, retained
+local deletion records can supersede pending remote events without producing
+cloud callbacks. An entirely superseded interval is consumed silently; absence
+alone is not evidence of deletion.
+
+
+### Optional creation dates
+
+```swift
+public var Node.createdDate: Date { get }
+public var Node.createdDateIfPresent: Date? { get }
+```
+
+`createdDateIfPresent` reads the value in the facade's context, including pending
+edits. `createdDate` preserves its nonoptional signature and returns
+`Date.distantPast` if the value is absent. This fallback is not written to the
+context/store. Node encoding omits an absent `createdDate` rather than encoding
+the fallback. Existing date values and `setCreatedDate(_:)` are unchanged.
+
+### Confirmed deletions without reconstructable event details
+
+Cloud history discards inserts/updates superseded by retained deletions.
+Remote deletion events are still reconstructed when possible. When the former
+owner or payload cannot be recovered, `unmaterializedDeletions` carries the
+deleted local object ID and the reconstruction error. Its ID is intended for
+invalidation, not for fetching the deleted object. Such a report can have an
+empty `events` array and a nonempty `unmaterializedDeletions` array.
+
+Confirmed deletion evidence is deliverable and advances the delivery token;
+failed materialization or validation of surviving objects still retains the
+whole batch. Missing rows alone remain insufficient evidence of deletion.
+
+## CloudKit node identity
+
+```swift
+public func Graph.cloudRecordID(for node: Node) throws -> CKRecord.ID?
+public func Graph.cloudRecordIDs(for nodes: [Node]) throws -> [CKRecord.ID?]
+
+public enum GraphCloudRecordIdentityError: Error, Equatable, LocalizedError {
+    case unavailableContext
+    case foreignContext
+    case unavailableContainer
+    case inconsistentContainer
+}
+```
+
+Both methods address the main Core Data node underlying an `Entity`,
+`Relationship`, or `Action`, never its separate property records. They use
+Apple's public `NSPersistentCloudKitContainer.recordIDs(for:)` mapping API.
+The single method delegates to the batch path.
+
+Call on the receiving Graph's context queue, using nodes from that same context.
+Inside `transaction` or `readSnapshot`, use the supplied Graph facade and fetch
+nodes there. A node from another context is rejected even if its store is the
+same. Results contain complete `CKRecord.ID` values, including zone identities.
+
+The batch preserves input order, count and duplicates; an empty batch returns
+`[]`. Invalid input throws before any mapping lookup, including on local stores.
+`unavailableContext` covers a missing graph/node context or unloaded context
+store; `foreignContext` indicates a node from another context;
+`unavailableContainer` means no lookup container is available;
+`inconsistentContainer` indicates incompatible coordinator/store ownership.
+
+Normal identity absence is `nil`: local/fallback mode, an unsaved node (including
+one already assigned a permanent ID), pending deletion, or no mapping returned
+by Apple. These causes are not distinguished. An invalidated/detached facade is
+an API error, not a missing mapping. There is no cache, implicit save, permanent
+ID allocation, export request or network request added by this wrapper.
+
+The result reflects metadata available at lookup time. Even inside
+`readSnapshot`, identity metadata is not guaranteed to share the pinned data
+generation. An identity is not proof of export, sync or structural completeness.
+Container, environment, database and account are comparison context external
+to `CKRecord.ID`. See [CloudKit identity](../concepts/cloudkit.md#node-record-identity).
+
+
+## Opt-in transaction diagnostics
+
+```swift
+public func Graph.transaction<T>(diagnosticID: UUID, _ body: (Graph) throws -> T) throws -> T
+```
+
+The original `transaction(_:)` API remains unchanged and does not collect these
+traces or query history. The overload preserves the same result, thrown error,
+save/rollback behavior and generation guard. Reuse the application's attempt
+UUID; GraphEvo does not allocate a competing correlation identity.
+
+Two `GraphEvent.transactionDiagnostic(GraphTransactionTrace)` events are queued
+on the main queue, never delivered synchronously by the overload. The first has
+`phase == .outcome`, after transaction context scopes have unwound and rollback
+has finished when required. History is read afterward on a separate utility
+context, producing a `.history` supplement. The transaction return does not
+wait for either callback or history collection. Delivery requires the Graph and
+process to remain alive; persist the outcome even if no supplement arrives.
+Early failures and successful no-op bodies also produce both phases when the
+Graph remains available. Existing error events are not suppressed or changed.
+
+`GraphTransactionTrace` and all nested types are `Codable`:
+
+| Field | Type and meaning |
+|---|---|
+| `diagnosticID` | Caller-supplied `UUID` |
+| `phase` | `.outcome` or `.history` |
+| `startedAt`, `finishedAt` | Wall-clock `Date` boundaries |
+| `outcome` | `.succeeded` or `.failed`, matching method result |
+| `didSave` | Whether the private context save succeeded; can be true if later merge failed |
+| `checkpoints` | Bounded checkpoint array; empty on the history supplement |
+| `errorDomain`, `errorCode` | Optional original NSError identity, without description/userInfo |
+| `history` | Optional history summary, present on the supplement |
+
+Checkpoint fields are `stage`, monotonic `elapsed` seconds from entry,
+optional `inserted`/`updated`/`deleted` staged counts, and optional
+`generationsEqual`. Stages are `.begin`, `.pinned`, `.bodyEnd`,
+`.precommitCompare`, `.saveResult`, `.rollbackResult`, `.finished`.
+Absent stages do not imply success: early failures never enter the body,
+no-op bodies do not save/compare generations, and non-SQLite stores do not run
+the SQLite comparison. `.pinned` indicates completion of context preparation;
+only SQLite contexts actually pin a query generation. `.saveResult` marks a
+successful private save, while `.rollbackResult` records the completed rollback.
+
+History fields are `status` (`.available`/`.unavailable`), `from`, `through`,
+`observedChanges`, `groups`, `truncated`, `isExhaustive`, and optional
+`errorDomain`/`errorCode`. Each group contains optional `author`, `entityName`
+(Core Data schema, not the node's domain type), `operation` and `count`.
+No node payloads, changed values, tombstones, object IDs, or generation-token
+bytes are included.
+
+The history read first counts changes since entry. Above 512 it skips detail
+materialization and returns `available`, `truncated: true`, zero observed changes
+and no groups. This count conservatively includes changes after the outcome.
+Otherwise, detail reads use the wall-clock interval; output is capped at 512
+observed changes, 64 groups and 128 characters per author/schema name. Count
+and detail reads are not atomic; concurrent history can grow between them, so
+these caps are not a hard bound on all internal Core Data work. Truncation is
+flagged. `isExhaustive` is always false: retention, bookkeeping, wall-clock
+adjustments and the non-atomic interval prevent completeness or causal claims.
+
+A zero count with `truncated == true` means details were omitted, not that no
+writes happened. History failures produce an unavailable supplement and never
+change the original transaction result. No retries or alternative conflict
+checks are introduced. Consumers with exhaustive `GraphEvent` switches must
+handle the new diagnostic case. A consumer may correlate terminal application
+state, outcome, and history in any arrival order using the UUID.

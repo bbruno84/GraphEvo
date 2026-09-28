@@ -12,6 +12,8 @@ final class PublicGraphWatchReportAPICompileTests: XCTestCase {
                 _ = report.graph
                 _ = report.source
                 _ = report.events
+                _ = report.structuralValidationResults
+                _ = report.unmaterializedDeletions.map { ($0.objectID, $0.error) }
             }
             _ = error
         }
@@ -31,6 +33,8 @@ final class PublicGraphWatchReportAPICompileTests: XCTestCase {
                 _ = report.graph
                 _ = report.source
                 _ = report.events
+                _ = report.structuralValidationResults
+                _ = report.unmaterializedDeletions.map { ($0.objectID, $0.error) }
             }
             _ = error
         }
@@ -38,4 +42,25 @@ final class PublicGraphWatchReportAPICompileTests: XCTestCase {
         let completion: GraphWatchReportCompletion? = graph.watchReportCompletion
         XCTAssertNotNil(completion)
     }
+
+    func testStructuralValidationIsAvailableOnAllPublicNodeFamilies() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "PublicValidation-\(UUID().uuidString)"
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        let nodes: [Node] = [Entity("E", graph: graph), Relationship("R", graph: graph), Action("A", graph: graph)]
+        graph.sync()
+        for node in nodes {
+            let result: GraphStructuralValidationResult = node.validateStructure()
+            _ = node.createdDateIfPresent
+            XCTAssertTrue(result.isValid)
+            for reference in result.references {
+                switch reference.state {
+                case .absent: XCTAssertNil(reference.destinationObjectID)
+                case .materialized: XCTAssertNotNil(reference.destinationObjectID)
+                case .unresolved: XCTFail("Unexpected unresolved reference")
+                }
+            }
+        }
+    }
+
 }

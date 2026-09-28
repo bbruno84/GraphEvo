@@ -170,10 +170,24 @@ internal final class GraphWatchEventCoordinator {
               graph.watchReportSources.contains(source),
               graph.watchReportCompletion != nil,
               !envelopes.isEmpty else { return }
-        let ordered = envelopes.sorted { $0.isOrdered(before: $1) }
+        guard let context else { return }
+        let results = GraphWatchStructuralValidation.validate(envelopes, in: context)
+        let invalidIDs = Set(results.filter { !$0.isValid }.map(\.objectID))
+        let issues = GraphWatchStructuralValidation.issues(results, envelopes: envelopes)
+        if source == .cloud && !issues.isEmpty {
+            graph.emit(.warning(.watchReportMaterializationFailed(source: source, failedEvents: issues.count, details: issues)))
+            return
+        }
+        // Local delivery retains its best-effort contract; there is no history retry cursor.
+        for issue in issues {
+            graph.emit(.error(.watchEventMaterialization(source: source, underlying: issue.error)))
+        }
+        let ordered = envelopes.filter { !invalidIDs.contains($0.owner.objectID) }
+            .sorted { $0.isOrdered(before: $1) }
+        guard !ordered.isEmpty else { return }
         let deliver = { [weak graph] in
             guard let graph else { return }
-            let report = GraphWatchReport(graph: graph, source: source, events: ordered.map(\.event))
+            let report = GraphWatchReport(graph: graph, source: source, events: ordered.map(\.event), structuralValidationResults: results)
             graph.watchReportCompletion?(report, nil)
         }
         if Thread.isMainThread {

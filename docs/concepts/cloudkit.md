@@ -175,9 +175,80 @@ reconstructed events are also delivered as one non-empty report for each
 Persistent History processing cycle. GraphEvo persists the history token after
 filtering and merging, before materializing and delivering the report. The
 completion is not an acknowledgment: delivery never delays or rewinds the
-Persistent History processing token. Batch materialization failures are
+Persistent History processing token. Materialization failures for surviving objects are
 retryable and leave the separate batch-delivery token unchanged; legacy Watch
 callbacks retain their existing best-effort behavior.
 
 In production, keep callbacks idempotent and verify behavior across multiple
 devices: local and remote notifications may arrive at different times.
+
+
+Report materialization also checks the persisted structure of surviving event
+owners. Unresolved dependencies within the bounded validation scope retain the
+batch-delivery token under the same retry policy. This does not establish that
+all remote links have arrived. See [Structural validation](../guides/structural-validation.md).
+
+
+Confirmed remote deletions that lack a reconstructable owner or payload are
+included in `GraphWatchReport.unmaterializedDeletions`. Consumers must inspect
+that collection even when `events` is empty. These references preserve deletion
+evidence and do not block the delivery cursor waiting for removed data.
+
+## Node record identity
+
+Recover the complete CloudKit identity of a main graph node on demand:
+
+```swift
+let identity = try graph.cloudRecordID(for: entity)
+let identities = try graph.cloudRecordIDs(for: [entity, relationship, action])
+```
+
+The receiving Graph and nodes must share a context, and the caller must use its
+queue. In a transaction or snapshot, fetch the nodes through the supplied scoped
+Graph and call its identity methods. These facades share access to the existing
+container; no additional store or container is opened. The APIs do not read
+`Node.id`, whose getter can obtain permanent object IDs.
+
+The batch returns one optional per input position, retaining order and duplicates.
+Local/fallback mode, unsaved nodes, pending deletion and absent Apple mappings
+produce `nil`. Invalid contexts or mismatched ownership throw typed
+`GraphCloudRecordIdentityError` values, including in local mode. The wrapper
+never saves, requests export, performs network requests or caches an absent
+mapping. Call again when the application needs a fresh result.
+
+`CKRecord.ID` includes record and zone identity. It does not contain the
+container, Development/Production environment, database scope or account.
+Compare identities only within a matching operational context. Identity presence
+is not an export acknowledgement, synchronization barrier or graph completeness
+check. A pinned read snapshot does not imply pinned CloudKit identity metadata.
+GraphEvo adds no deduplication or application selection policy.
+
+Apple documents [single-record identity lookup](https://developer.apple.com/documentation/coredata/nspersistentcloudkitcontainer/recordidformanagedobjectid:)
+and [batch identity lookup](https://developer.apple.com/documentation/coredata/nspersistentcloudkitcontainer/recordidsformanagedobjectids:).
+These APIs are available on iOS 13/macOS 10.15 and later, within GraphEvo's
+supported deployment targets.
+
+### Verification scope
+
+`GraphCloudRecordIdentityTests` tests all three node families, ordered partial
+batches, duplicate inputs, refreshed mappings, unsaved temporary/permanent IDs,
+local mode, context/container errors, transaction/snapshot propagation and
+preservation of pending changes and saved values. Mapping-positive cases use
+an injected reader with a non-mirroring SQLite container: they are simulated,
+not evidence of a successful CloudKit export. A separate test calls Apple's
+reader on that non-mirrored store and expects no mapping. The local fallback
+test covers its effective plain-container behavior, not a real account failure.
+The public API is also compiled without `@testable` access.
+
+A real-device acceptance check remains necessary:
+
+1. Use the same CloudKit container, environment, private database and account on
+   two devices; create and save a node on the first device.
+2. Allow normal synchronization and find that same imported node on the second
+   device using application data independent of its local Graph ID.
+3. Query its identity on each owning context. If unavailable, retry later via
+   application policy without forcing an export from the lookup API.
+4. Compare complete `CKRecord.ID` values (record name and zone), and confirm they
+   match even when the local Graph IDs differ. Repeat for all three node families.
+
+The automated tests do not claim this two-device acceptance check has run.

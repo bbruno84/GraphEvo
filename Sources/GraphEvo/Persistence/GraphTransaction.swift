@@ -128,7 +128,8 @@ extension Graph {
                 pin.fetchLimit = 1
                 _ = try context.fetch(pin)
             }
-            let facade = Graph(transactionContext: context, configuration: configuration)
+            let facade = Graph(transactionContext: context, configuration: configuration,
+                identityContainer: persistentContainer, identityReader: cloudRecordIDReader)
             facade.isReadSnapshot = true
             let value = try body(facade)
             if let error = facade.snapshotReadError { throw error }
@@ -164,11 +165,31 @@ extension Graph {
     /// fresh snapshot. This does not suspend CloudKit: concurrent inserts after
     /// the final generation check require a subsequent reconciliation pass.
     public func transaction<T>(_ body: (Graph) throws -> T) throws -> T {
+        try executeTransaction(body, trace: nil)
+    }
+
+    /// Opt-in bounded diagnostics, delivered asynchronously after the outcome.
+    /// The history supplement is observational and never affects commit or retry policy.
+    public func transaction<T>(diagnosticID: UUID, _ body: (Graph) throws -> T) throws -> T {
+        let trace = GraphTransactionTraceRecorder(id: diagnosticID)
+        do {
+            let result = try executeTransaction(body, trace: trace)
+            trace.finish(graph: self, error: nil)
+            return result
+        } catch {
+            trace.finish(graph: self, error: error)
+            throw error
+        }
+    }
+
+    private func executeTransaction<T>(_ body: (Graph) throws -> T,
+                                       trace: GraphTransactionTraceRecorder?) throws -> T {
         guard !isTransactionFacade else { throw GraphTransactionError.nestedTransaction }
         guard let view = managedObjectContext,
               let coordinator = view.persistentStoreCoordinator else {
             throw GraphTransactionError.unavailableContext
         }
+        trace?.coordinator = coordinator
         try view.performAndWait { try rejectPendingChanges(in: view, checkpoint: "beforeBody") }
         let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         context.persistentStoreCoordinator = coordinator
@@ -195,10 +216,14 @@ extension Graph {
                     pin.fetchLimit = 1
                     _ = try context.fetch(pin)
                 }
-                let facade = Graph(transactionContext: context, configuration: configuration)
+                trace?.record(.pinned, context: context)
+                let facade = Graph(transactionContext: context, configuration: configuration,
+                    identityContainer: persistentContainer, identityReader: cloudRecordIDReader)
+                defer { trace?.record(.bodyEnd, context: context) }
                 return try body(facade)
             } catch {
                 context.rollback()
+                trace?.record(.rollbackResult, context: context)
                 throw error
             }
         }
@@ -236,9 +261,13 @@ extension Graph {
                             _ = try probe.fetch(request)
                             return probe.queryGenerationToken
                         }
-                        guard context.queryGenerationToken == latest else { throw GraphTransactionError.storeChanged }
+                        let equal = context.queryGenerationToken == latest
+                        trace?.record(.precommitCompare, context: context, generationsEqual: equal)
+                        guard equal else { throw GraphTransactionError.storeChanged }
                     }
                     try context.save()
+                    trace?.didSave = true
+                    trace?.record(.saveResult, context: context)
                 }
                 if let savedObjectIDs {
                     NSManagedObjectContext.mergeChanges(fromRemoteContextSave: savedObjectIDs, into: [view])
@@ -254,7 +283,10 @@ extension Graph {
                 }
             }
         } catch {
-            context.performAndWait { context.rollback() }
+            context.performAndWait {
+                context.rollback()
+                trace?.record(.rollbackResult, context: context)
+            }
             throw error
         }
         return result

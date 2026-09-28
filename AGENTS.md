@@ -129,6 +129,22 @@ For Graph-level batches, assign `Graph.watchReportCompletion` and select sources
 with `Graph.watchReportSources`. Batch reports do not apply Watch predicates,
 are delivered on the main thread, and do not disable legacy callbacks.
 
+`Node.validateStructure()` checks saved local state for Entity, Relationship,
+and Action. Entity scope includes direct edges, their details and endpoints;
+endpoint entities are not traversed recursively. Optional absent references
+are informational. Report delivery uses the same validator: cloud history
+batches retain their delivery token on failure, while local delivery remains
+best-effort. Deleted owners are excluded. The validator does not retry or
+certify import completion. Decoder errors must fail structural validation.
+Retained local deletion records may supersede pending remote events; missing
+rows alone are not deletion evidence. Remote deletions supersede inserts/updates;
+when their typed event cannot be reconstructed, reports expose
+`unmaterializedDeletions` with IDs and causes. Consumers must inspect this array
+even when `events` is empty. `Node.createdDateIfPresent` exposes an absent date;
+`createdDate` uses a read-only `Date.distantPast` fallback. Do not change the Core
+Data model to make that field required. See `docs/guides/structural-validation.md`.
+
+
 ## CloudKit and Persistent History
 
 Container identifier precedence is:
@@ -289,3 +305,25 @@ When a public signature changes, always update
 [`docs/api/public-api.md`](docs/api/public-api.md). When an operational flow
 changes, update this file and the corresponding guide in `docs/`. Keep
 `README.md` introductory; do not duplicate the complete API reference there.
+
+## CloudKit node identities
+
+Use `graph.cloudRecordID(for:)` or ordered `cloudRecordIDs(for:)` with nodes from
+that facade's own context, on its queue. Scoped transaction/snapshot facades reuse
+the open container. Missing mappings are optional and never cached. Validate
+ownership even for local/fallback stores; misuse is a typed error. Never derive
+CloudKit IDs from Graph IDs, obtain permanent IDs, save, or request export as a
+side effect of lookup. Identity metadata is not pinned to a snapshot generation
+and is not proof of sync completion. Keep injected mapping tests distinct from
+real cross-device CloudKit verification.
+
+## Opt-in transaction diagnostics
+
+`transaction(diagnosticID:_:)` preserves the original transaction guard and
+result. It queues `GraphEvent.transactionDiagnostic` outcome and then an
+asynchronous history supplement, correlated by the caller's UUID. Never invoke
+the diagnostic delegate from a transaction context/lock scope. Keep summaries
+payload-free and bounded, distinguish truncated/unavailable history from no
+writes, and never infer causal CloudKit bookkeeping from a generation mismatch.
+History is observational, non-atomic and never a replacement concurrency guard.
+The original overload must perform no trace history reads.

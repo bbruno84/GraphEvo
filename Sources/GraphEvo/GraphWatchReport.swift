@@ -45,25 +45,40 @@ public enum GraphWatchEvent {
     case removedActionFromGroup(action: Action, name: String)
 }
 
-/// A non-empty group of Graph changes produced by one local save or one
-/// Persistent History processing cycle.
+/// A group of Graph changes produced by one local save or one history cycle.
+/// At least one typed event or unmaterialized deletion is present.
 public final class GraphWatchReport {
     public let graph: Graph
     public let source: GraphSource
     public let events: [GraphWatchEvent]
+    /// Saved-state validation of unique surviving event owners. Deleted owners are excluded.
+    public let structuralValidationResults: [GraphStructuralValidationResult]
+    /// Confirmed history deletions whose former owner or payload could not be reconstructed.
+    /// These references are delivered instead of retrying an object that no longer exists.
+    public let unmaterializedDeletions: [GraphWatchUnmaterializedDeletion]
 
-    internal init(graph: Graph, source: GraphSource, events: [GraphWatchEvent]) {
+    internal init(graph: Graph, source: GraphSource, events: [GraphWatchEvent], structuralValidationResults: [GraphStructuralValidationResult] = [], unmaterializedDeletions: [GraphWatchUnmaterializedDeletion] = []) {
         self.graph = graph
         self.source = source
         self.events = events
+        self.structuralValidationResults = structuralValidationResults
+        self.unmaterializedDeletions = unmaterializedDeletions
     }
+}
+
+/// A confirmed remote deletion without enough surviving data for a typed Watch event.
+/// The local object ID remains useful for invalidation; the deleted object is not fetchable.
+public struct GraphWatchUnmaterializedDeletion {
+    public let objectID: NSManagedObjectID
+    public let error: Error
 }
 
 /// Completion used by GraphEvo after attempting batch report delivery.
 ///
 /// A non-nil report represents a completed delivery. The error may also be
 /// non-nil when Persistent History retention caused a best-effort delivery.
-/// Materialization failures do not invoke this completion and are retried.
+/// Materialization failures for surviving objects are retried. Confirmed deletions
+/// that cannot be reconstructed are included in `unmaterializedDeletions`.
 public typealias GraphWatchReportCompletion = (_ report: GraphWatchReport?, _ error: Error?) -> Void
 
 /// Diagnostic information about one event that could not be materialized.
