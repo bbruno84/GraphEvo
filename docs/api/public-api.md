@@ -676,3 +676,46 @@ empty `events` array and a nonempty `unmaterializedDeletions` array.
 Confirmed deletion evidence is deliverable and advances the delivery token;
 failed materialization or validation of surviving objects still retains the
 whole batch. Missing rows alone remain insufficient evidence of deletion.
+
+## CloudKit node identity
+
+```swift
+public func Graph.cloudRecordID(for node: Node) throws -> CKRecord.ID?
+public func Graph.cloudRecordIDs(for nodes: [Node]) throws -> [CKRecord.ID?]
+
+public enum GraphCloudRecordIdentityError: Error, Equatable, LocalizedError {
+    case unavailableContext
+    case foreignContext
+    case unavailableContainer
+    case inconsistentContainer
+}
+```
+
+Both methods address the main Core Data node underlying an `Entity`,
+`Relationship`, or `Action`, never its separate property records. They use
+Apple's public `NSPersistentCloudKitContainer.recordIDs(for:)` mapping API.
+The single method delegates to the batch path.
+
+Call on the receiving Graph's context queue, using nodes from that same context.
+Inside `transaction` or `readSnapshot`, use the supplied Graph facade and fetch
+nodes there. A node from another context is rejected even if its store is the
+same. Results contain complete `CKRecord.ID` values, including zone identities.
+
+The batch preserves input order, count and duplicates; an empty batch returns
+`[]`. Invalid input throws before any mapping lookup, including on local stores.
+`unavailableContext` covers a missing graph/node context or unloaded context
+store; `foreignContext` indicates a node from another context;
+`unavailableContainer` means no lookup container is available;
+`inconsistentContainer` indicates incompatible coordinator/store ownership.
+
+Normal identity absence is `nil`: local/fallback mode, an unsaved node (including
+one already assigned a permanent ID), pending deletion, or no mapping returned
+by Apple. These causes are not distinguished. An invalidated/detached facade is
+an API error, not a missing mapping. There is no cache, implicit save, permanent
+ID allocation, export request or network request added by this wrapper.
+
+The result reflects metadata available at lookup time. Even inside
+`readSnapshot`, identity metadata is not guaranteed to share the pinned data
+generation. An identity is not proof of export, sync or structural completeness.
+Container, environment, database and account are comparison context external
+to `CKRecord.ID`. See [CloudKit identity](../concepts/cloudkit.md#node-record-identity).

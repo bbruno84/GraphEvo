@@ -202,6 +202,9 @@ public class Graph: NSObject {
     /// Keep a reference to the persistent container so background contexts can
     /// be created for both CloudKit and local stores.
     internal var persistentContainer: NSPersistentContainer?
+    // Scoped facades share identity lookup access without acquiring container lifecycle duties.
+    internal var scopedIdentityContainer: NSPersistentContainer?
+    internal var cloudRecordIDReader: GraphCloudRecordIDReading = AppleGraphCloudRecordIDReader()
 
     /// Serializes ordinary saves. Purge uses a view-queue state gate instead:
     /// a thread-owned lock must not span asynchronous CloudKit completion.
@@ -314,11 +317,15 @@ public class Graph: NSObject {
     }
 
     /// A scoped facade for public Node APIs; never opens/registers another store.
-    internal init(transactionContext: NSManagedObjectContext, configuration: GraphStoreConfiguration) {
+    internal init(transactionContext: NSManagedObjectContext, configuration: GraphStoreConfiguration,
+                  identityContainer: NSPersistentContainer? = nil,
+                  identityReader: GraphCloudRecordIDReading = AppleGraphCloudRecordIDReader()) {
         self.configuration = configuration
         self.migrationEnabled = false
         super.init()
         self.managedObjectContext = transactionContext
+        self.scopedIdentityContainer = identityContainer
+        self.cloudRecordIDReader = identityReader
         self.isTransactionFacade = true
         self.readiness = .ready
     }

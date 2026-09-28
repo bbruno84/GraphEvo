@@ -305,3 +305,14 @@ When a public signature changes, always update
 [`docs/api/public-api.md`](docs/api/public-api.md). When an operational flow
 changes, update this file and the corresponding guide in `docs/`. Keep
 `README.md` introductory; do not duplicate the complete API reference there.
+
+## CloudKit node identities
+
+Use `graph.cloudRecordID(for:)` or ordered `cloudRecordIDs(for:)` with nodes from
+that facade's own context, on its queue. Scoped transaction/snapshot facades reuse
+the open container. Missing mappings are optional and never cached. Validate
+ownership even for local/fallback stores; misuse is a typed error. Never derive
+CloudKit IDs from Graph IDs, obtain permanent IDs, save, or request export as a
+side effect of lookup. Identity metadata is not pinned to a snapshot generation
+and is not proof of sync completion. Keep injected mapping tests distinct from
+real cross-device CloudKit verification.

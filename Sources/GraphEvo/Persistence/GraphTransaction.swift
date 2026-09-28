@@ -128,7 +128,8 @@ extension Graph {
                 pin.fetchLimit = 1
                 _ = try context.fetch(pin)
             }
-            let facade = Graph(transactionContext: context, configuration: configuration)
+            let facade = Graph(transactionContext: context, configuration: configuration,
+                identityContainer: persistentContainer, identityReader: cloudRecordIDReader)
             facade.isReadSnapshot = true
             let value = try body(facade)
             if let error = facade.snapshotReadError { throw error }
@@ -195,7 +196,8 @@ extension Graph {
                     pin.fetchLimit = 1
                     _ = try context.fetch(pin)
                 }
-                let facade = Graph(transactionContext: context, configuration: configuration)
+                let facade = Graph(transactionContext: context, configuration: configuration,
+                    identityContainer: persistentContainer, identityReader: cloudRecordIDReader)
                 return try body(facade)
             } catch {
                 context.rollback()
