@@ -360,6 +360,7 @@ same logical consumer unless duplicate handling is intentional.
 ```swift
 public enum GraphPersistenceMode { case local; case cloud; case localFallback }
 public enum GraphEvent {
+    case transactionDiagnostic(GraphTransactionTrace)
     case stateChanged(GraphState)
     case warning(GraphWarning)
     case error(GraphFailure)
@@ -719,3 +720,72 @@ The result reflects metadata available at lookup time. Even inside
 generation. An identity is not proof of export, sync or structural completeness.
 Container, environment, database and account are comparison context external
 to `CKRecord.ID`. See [CloudKit identity](../concepts/cloudkit.md#node-record-identity).
+
+
+## Opt-in transaction diagnostics
+
+```swift
+public func Graph.transaction<T>(diagnosticID: UUID, _ body: (Graph) throws -> T) throws -> T
+```
+
+The original `transaction(_:)` API remains unchanged and does not collect these
+traces or query history. The overload preserves the same result, thrown error,
+save/rollback behavior and generation guard. Reuse the application's attempt
+UUID; GraphEvo does not allocate a competing correlation identity.
+
+Two `GraphEvent.transactionDiagnostic(GraphTransactionTrace)` events are queued
+on the main queue, never delivered synchronously by the overload. The first has
+`phase == .outcome`, after transaction context scopes have unwound and rollback
+has finished when required. History is read afterward on a separate utility
+context, producing a `.history` supplement. The transaction return does not
+wait for either callback or history collection. Delivery requires the Graph and
+process to remain alive; persist the outcome even if no supplement arrives.
+Early failures and successful no-op bodies also produce both phases when the
+Graph remains available. Existing error events are not suppressed or changed.
+
+`GraphTransactionTrace` and all nested types are `Codable`:
+
+| Field | Type and meaning |
+|---|---|
+| `diagnosticID` | Caller-supplied `UUID` |
+| `phase` | `.outcome` or `.history` |
+| `startedAt`, `finishedAt` | Wall-clock `Date` boundaries |
+| `outcome` | `.succeeded` or `.failed`, matching method result |
+| `didSave` | Whether the private context save succeeded; can be true if later merge failed |
+| `checkpoints` | Bounded checkpoint array; empty on the history supplement |
+| `errorDomain`, `errorCode` | Optional original NSError identity, without description/userInfo |
+| `history` | Optional history summary, present on the supplement |
+
+Checkpoint fields are `stage`, monotonic `elapsed` seconds from entry,
+optional `inserted`/`updated`/`deleted` staged counts, and optional
+`generationsEqual`. Stages are `.begin`, `.pinned`, `.bodyEnd`,
+`.precommitCompare`, `.saveResult`, `.rollbackResult`, `.finished`.
+Absent stages do not imply success: early failures never enter the body,
+no-op bodies do not save/compare generations, and non-SQLite stores do not run
+the SQLite comparison. `.pinned` indicates completion of context preparation;
+only SQLite contexts actually pin a query generation. `.saveResult` marks a
+successful private save, while `.rollbackResult` records the completed rollback.
+
+History fields are `status` (`.available`/`.unavailable`), `from`, `through`,
+`observedChanges`, `groups`, `truncated`, `isExhaustive`, and optional
+`errorDomain`/`errorCode`. Each group contains optional `author`, `entityName`
+(Core Data schema, not the node's domain type), `operation` and `count`.
+No node payloads, changed values, tombstones, object IDs, or generation-token
+bytes are included.
+
+The history read first counts changes since entry. Above 512 it skips detail
+materialization and returns `available`, `truncated: true`, zero observed changes
+and no groups. This count conservatively includes changes after the outcome.
+Otherwise, detail reads use the wall-clock interval; output is capped at 512
+observed changes, 64 groups and 128 characters per author/schema name. Count
+and detail reads are not atomic; concurrent history can grow between them, so
+these caps are not a hard bound on all internal Core Data work. Truncation is
+flagged. `isExhaustive` is always false: retention, bookkeeping, wall-clock
+adjustments and the non-atomic interval prevent completeness or causal claims.
+
+A zero count with `truncated == true` means details were omitted, not that no
+writes happened. History failures produce an unavailable supplement and never
+change the original transaction result. No retries or alternative conflict
+checks are introduced. Consumers with exhaustive `GraphEvent` switches must
+handle the new diagnostic case. A consumer may correlate terminal application
+state, outcome, and history in any arrival order using the UUID.

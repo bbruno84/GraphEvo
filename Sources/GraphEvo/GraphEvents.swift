@@ -176,6 +176,7 @@ public enum GraphFailure: LocalizedError {
 
 /// A diagnostic event emitted by GraphEvo for the application to handle.
 public enum GraphEvent {
+    case transactionDiagnostic(GraphTransactionTrace)
     case stateChanged(GraphState)
     case warning(GraphWarning)
     case error(GraphFailure)

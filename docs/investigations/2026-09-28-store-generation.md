@@ -119,3 +119,12 @@ separate decisions. No retry or replacement strategy is implemented here.
 - `git diff --check` and `swift package dump-package` passed.
 - Production sources are unchanged from the baseline; no physical-device runner
   or MyHomeBills build was started by this investigation.
+
+## Follow-up: opt-in diagnostic capture
+
+The subsequent implementation adds `transaction(diagnosticID:_:)` and
+`GraphEvent.transactionDiagnostic`, with an outcome followed by an asynchronous
+history supplement. See the [API contract](../api/public-api.md#opt-in-transaction-diagnostics)
+for checkpoint semantics, caps and incomplete-history handling. The original
+transaction API and global generation guard remain unchanged. The diagnostics
+are intended for the next device experiment, not a resolution of its cause.

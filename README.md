@@ -125,6 +125,8 @@ important events and route them to the app logger, assign a `GraphEventDelegate`
 final class GraphEvents: GraphEventDelegate {
     func graph(_ graph: Graph, didReceive event: GraphEvent) {
         switch event {
+        case .transactionDiagnostic(let trace):
+            appLogger.info("Transaction diagnostic: \(trace.diagnosticID), phase: \(trace.phase.rawValue)")
         case .stateChanged(let state):
             appLogger.info("GraphEvo state: \(state)")
         case .warning(let warning):

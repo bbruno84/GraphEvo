@@ -316,3 +316,14 @@ CloudKit IDs from Graph IDs, obtain permanent IDs, save, or request export as a
 side effect of lookup. Identity metadata is not pinned to a snapshot generation
 and is not proof of sync completion. Keep injected mapping tests distinct from
 real cross-device CloudKit verification.
+
+## Opt-in transaction diagnostics
+
+`transaction(diagnosticID:_:)` preserves the original transaction guard and
+result. It queues `GraphEvent.transactionDiagnostic` outcome and then an
+asynchronous history supplement, correlated by the caller's UUID. Never invoke
+the diagnostic delegate from a transaction context/lock scope. Keep summaries
+payload-free and bounded, distinguish truncated/unavailable history from no
+writes, and never infer causal CloudKit bookkeeping from a generation mismatch.
+History is observational, non-atomic and never a replacement concurrency guard.
+The original overload must perform no trace history reads.
