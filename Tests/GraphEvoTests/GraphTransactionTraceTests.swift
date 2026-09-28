@@ -199,6 +199,20 @@ final class GraphTransactionTraceTests: XCTestCase {
         XCTAssertFalse(history.truncated)
     }
 
+    func testHistoryWithOnlyLaterTransactionsReportsEmptyInterval() throws {
+        let graph = fixture()
+        let end = Date().addingTimeInterval(-1)
+        _ = Entity("OutsideInterval", graph: graph)
+        graph.sync()
+        let history = GraphTransactionTraceRecorder.readHistory(
+            coordinator: graph.managedObjectContext.persistentStoreCoordinator,
+            from: end.addingTimeInterval(-1), through: end)
+        XCTAssertEqual(history.status, .available)
+        XCTAssertEqual(history.observedChanges, 0)
+        XCTAssertTrue(history.groups.isEmpty)
+        XCTAssertFalse(history.truncated)
+    }
+
     func testNoOpSucceedsWithoutClaimingASaveOrGenerationComparison() throws {
         let graph = fixture()
         let (events, complete) = observe(graph)

@@ -128,3 +128,13 @@ history supplement. See the [API contract](../api/public-api.md#opt-in-transacti
 for checkpoint semantics, caps and incomplete-history handling. The original
 transaction API and global generation guard remain unchanged. The diagnostics
 are intended for the next device experiment, not a resolution of its cause.
+
+### macOS 14 compatibility
+
+The release CI exposed an Objective-C exception in the history detail request:
+Core Data attempted `doubleValue` on an `NSDate` used in a transaction timestamp
+predicate. Diagnostic reads now use the public `fetchHistory(after:)` date API
+and apply the upper interval boundary in memory. The existing conservative count
+preflight and output limits remain in place. Interval tests cover older, included
+and later transactions, including an interval with only later retained history.
+This changes neither the transaction guard nor its result.

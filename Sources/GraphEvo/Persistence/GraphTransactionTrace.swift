@@ -109,9 +109,10 @@ internal final class GraphTransactionTraceRecorder {
         return context.performAndWait {
             defer { context.reset() }
             do {
-                guard let fetch = NSPersistentHistoryTransaction.fetchRequest else { return unavailable(nil) }
-                fetch.predicate = NSPredicate(format: "timestamp >= %@ AND timestamp <= %@", from as NSDate, through as NSDate)
-                let request = NSPersistentHistoryChangeRequest.fetchHistory(withFetch: fetch)
+                // Use the public date-based request: timestamp predicates with NSDate
+                // constants raise an Objective-C exception on macOS 14. Apply the
+                // upper boundary to the returned transactions below.
+                let request = NSPersistentHistoryChangeRequest.fetchHistory(after: from)
                 guard let countFetch = NSPersistentHistoryChange.fetchRequest else { return unavailable(nil) }
                 let countRequest = NSPersistentHistoryChangeRequest.fetchHistory(after: from)
                 countRequest.fetchRequest = countFetch
