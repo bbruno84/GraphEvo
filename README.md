@@ -58,14 +58,13 @@ The companion demonstration app is maintained separately in the
 
 In Xcode, add a package dependency using
 `https://github.com/bbruno84/GraphEvo.git` and select the `GraphEvo` product.
-The current release candidate is `1.0.0-rc.18`; select that exact version while
-the stable `1.0.0` release is being prepared.
+Select an Up to Next Major Version requirement starting at `1.0.0`.
 
 For a Swift package, add the dependency and product to the relevant target:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/bbruno84/GraphEvo.git", exact: "1.0.0-rc.18")
+    .package(url: "https://github.com/bbruno84/GraphEvo.git", from: "1.0.0")
 ],
 targets: [
     .target(name: "MyApp", dependencies: [

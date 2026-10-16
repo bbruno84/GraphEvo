@@ -7,7 +7,7 @@ This guide shows the minimum path for using GraphEvo in an iOS or macOS app.
 Add `https://github.com/bbruno84/GraphEvo.git` as a Swift package dependency
 and select the `GraphEvo` product. See the
 [installation instructions](../../README.md#-installation-and-first-use)
-for the current release candidate and a `Package.swift` example. Import the module:
+for the `1.0.0` version requirement and a `Package.swift` example. Import the module:
 
 ```swift
 import GraphEvo
