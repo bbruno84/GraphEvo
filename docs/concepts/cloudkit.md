@@ -2,16 +2,18 @@
 
 GraphEvo can use `NSPersistentCloudKitContainer` to synchronize a private
 CloudKit store. Synchronization is optional: without a container identifier,
-the graph remains local. GraphEvo derives the signed build environment
+the graph remains local. GraphEvo resolves the build environment
 internally and keeps Development and Production stores, ledgers, and KVS
 projections separate; the application continues to provide only a
 `GraphStoreConfiguration`.
 
-When the explicit CloudKit environment entitlement is unavailable in a signed
-iOS product, GraphEvo derives Development from `get-task-allow = true` and
-Production from a distribution signature, after verifying that the signed
-iCloud services include CloudKit. Simulator builds remain Development. The
-application does not configure this distinction.
+On iOS, Simulator builds and builds with the `DEBUG` compilation condition use
+Development; device builds without `DEBUG` use Production. GraphEvo does not
+inspect iOS signing entitlements. The app must keep its CloudKit capability and
+signed environment consistent with this build convention. On macOS, GraphEvo
+reads the `com.apple.developer.icloud-container-environment` entitlement and
+fails opening with `cloudKitEnvironmentUnavailable` if it cannot resolve it.
+XCTest uses a simulated Development environment with local containers.
 
 While a migration-enabled Graph is alive, GraphEvo observes external KVS
 changes for that normalized store. Entries include the logical store scope and
@@ -33,6 +35,10 @@ opening a store. The returned copy exposes its read-only `environment` and
 environment-aware URLs. Reject an unexpected environment before any mutation;
 do not infer CloudKit Development from the filename or APNs entitlement.
 This resolves configuration, not account availability or actual mirroring mode.
+Use the returned configuration, or `graph.configuration` after initialization,
+when inspecting environment-dependent paths. Explicit SQLite file URLs are
+preserved; directory-based Development stores use the `-dev.sqlite` suffix and
+do not reuse legacy Production paths.
 
 ```swift
 var configuration = GraphStoreConfiguration()
@@ -52,6 +58,14 @@ As a fallback, GraphEvo reads `GraphCloudKitContainerIdentifier` from
 Info.plist. Precedence is explicit configuration, runtime override, then
 Info.plist.
 
+`Graph(storeURL:)` always opens local persistence, even when a runtime or
+Info.plist identifier is present. Use `Graph(configuration:)` for CloudKit.
+The process permits one independent CloudKit store at a time; compatible Graph
+instances for the same SQLite store reuse its registered context/container.
+An independent second CloudKit store fails with `cloudKitGraphAlreadyActive`;
+an incompatible configuration for a registered store fails with
+`incompatibleRegisteredStore`.
+
 ## When CloudKit is unavailable
 
 GraphEvo can open a regular local store as a fallback. The app receives
@@ -59,10 +73,16 @@ GraphEvo can open a regular local store as a fallback. The app receives
 This keeps the app usable, but data created during fallback is not necessarily
 synchronized.
 
+Fallback handles a CloudKit container's store-loading error. It does not replace
+the earlier environment, compatibility, or registry checks, and a later import
+or export failure does not automatically reopen the graph locally. Failure to
+open the local fallback is reported through failed readiness. Account status
+notifications are informational and do not themselves select persistence mode.
+
 Observe states through `GraphEventDelegate` and, when needed for the legacy
 contract, `GraphCloudStatusDelegate`.
 
-## Remote store purge
+## Local replica reset and remote purge
 
 For a user-requested rebuild **from** CloudKit, use the separate pre-open
 `Graph.resetLocalStore(configuration:beforeReset:)` API after arranging a
@@ -129,7 +149,11 @@ func graph(_ graph: Graph, didReceive event: GraphEvent) {
 ```
 
 
-## CloudKit upload diagnostics
+## CloudKit setup and upload diagnostics
+
+Container setup events are exposed as `.stateChanged(.cloudSetup(...))`, using
+`GraphCloudSetupState.started` and `.finished`. A successful setup event does
+not establish that imports or exports have completed.
 
 The same native container event stream also reports CloudKit exports (uploads).
 GraphEvo forwards their lifecycle through `GraphEventDelegate`:

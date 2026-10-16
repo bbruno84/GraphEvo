@@ -34,8 +34,8 @@ The companion demonstration app is maintained separately in the
 - Core Data graph model with `Entity`, `Relationship`, and `Action`
 - `NSPersistentCloudKitContainer` support with local fallback
 - SQLite stores compatible with existing `GraphEvo_<name>.sqlite` paths
-- Directory-based configuration with a backend-independent canonical path; legacy `Local/...` and `Cloud/...` paths are reused automatically
-- `Graph(storeURL:)` accepts either a directory or an existing SQLite file, preserves an explicit file path, and always opens it as local persistence
+- Directory-based configuration with separate CloudKit Development and Production filenames; eligible legacy paths are reused automatically
+- `Graph(storeURL:)` accepts a directory or SQLite file, including a file not yet created, preserves an explicit file path, and always opens it as local persistence
 - No automatic migration between incompatible models: the app must migrate its store and reopen it at the original path
 - Secure encoding of heterogeneous values through `ValueTransformer`
 - Enabled options: `NSPersistentHistoryTrackingKey`, `NSPersistentStoreRemoteChangeNotificationPostOptionKey`
@@ -49,37 +49,79 @@ The companion demonstration app is maintained separately in the
 ## 📦 Requirements
 
 - iOS 16+
+- macOS 12+
 - Xcode 15.4+
+- Swift 5.9+ package manifest
 - Swift Package Manager
 
-The public module is `GraphEvo`:
+## 📦 Installation and first use
+
+In Xcode, add a package dependency using
+`https://github.com/bbruno84/GraphEvo.git` and select the `GraphEvo` product.
+Select an Up to Next Major Version requirement starting at `1.0.0`.
+
+For a Swift package, add the dependency and product to the relevant target:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/bbruno84/GraphEvo.git", from: "1.0.0")
+],
+targets: [
+    .target(name: "MyApp", dependencies: [
+        .product(name: "GraphEvo", package: "GraphEvo")
+    ])
+]
+```
+
+Import the public module and wait for the store to be ready before creating data:
 
 ```swift
 import GraphEvo
 
+var configuration = GraphStoreConfiguration()
+configuration.name = "Main"
 let graph = Graph(configuration: configuration)
+
+graph.whenReady { result in
+    switch result {
+    case .success(let graph):
+        let user = Entity("User", graph: graph)
+        user[dynamicMember: "name"] = "Ada"
+        graph.sync { success, error in
+            if !success { print(error?.localizedDescription ?? "Save failed") }
+        }
+    case .failure(let error):
+        print(error.localizedDescription)
+    }
+}
 ```
 
 `Graph` remains the name of the main class and the domain concepts exposed by
-the API.
+the API. Keep the graph alive for as long as the application uses its nodes,
+queries, and watchers. See [Getting started](docs/guides/getting-started.md).
 
 The `GraphEvo_` prefix and its persistent internal paths and keys are
 canonical for the new release. Stores created by earlier test versions with
 the `GraphCK_` prefix are not migrated automatically.
 
 GraphEvo does not impose `-Xfrontend` flags or strict-concurrency settings on
-the integrating project. This keeps it consumable by targets using CocoaPods
-or other SwiftPM dependencies with different settings. If the app wants to
-enable concurrency checking, it can set `SWIFT_STRICT_CONCURRENCY` on its own
-targets.
+the integrating project. Applications can configure `SWIFT_STRICT_CONCURRENCY`
+on their own targets. Graph and Node operations must respect their Core Data
+context queues; context-bound objects must not be passed between queues.
 
 ---
 
 ## 🧪 Tests
 
-- The project builds correctly on iOS 16+
-- Tests cover watchers for both local notifications and simulated remote changes
-- Full compatibility with `Entity`, `Relationship`, and `Search`
+CI builds and tests the package on iOS Simulator and macOS. Tests cover the
+public graph API, store opening, migrations, transactions, watchers, and
+simulated remote history. The separate
+[package consumer fixture](IntegrationTests/PackageConsumer/README.md) runs
+on PRs targeting `master` and pushes to `master`.
+
+These checks do not establish live CloudKit synchronization across devices or
+coverage of every supported OS version. See the
+[CloudKit verification scope](docs/concepts/cloudkit.md#verification-scope).
 
 ---
 
@@ -100,21 +142,28 @@ which understands the meaning of its own data.
 To enable synchronization with the private CloudKit database, provide a
 **container identifier**.
 
-1. **Runtime override** (recommended):
+1. **Per-store configuration**:
 
    ```swift
-   Graph.cloudKitContainerIdentifier = "iCloud.com.yourdomain.yourApp"
    var configuration = GraphStoreConfiguration()
    configuration.name = "Main"
+   configuration.cloudKitContainerIdentifier = "iCloud.com.yourdomain.yourApp"
    let graph = Graph(configuration: configuration)
    ```
 
-2. **Info.plist fallback** (optional): add a `String` key named
+2. **Runtime fallback**: set `Graph.cloudKitContainerIdentifier` before opening
+   graphs that do not specify their own identifier.
+
+3. **Info.plist fallback**: add a `String` key named
    `GraphCloudKitContainerIdentifier` with a value such as
    `iCloud.com.yourdomain.yourApp`.
 
 Without an identifier, the store still works in **local** mode without
 synchronization.
+
+The app must configure its CloudKit capabilities and signing. Read the
+[CloudKit guide](docs/concepts/cloudkit.md) for environment selection, local
+fallback, and synchronization diagnostics.
 
 ## 📣 State, warnings, and errors
 
@@ -142,10 +191,12 @@ let graphEvents = GraphEvents()
 graph.eventDelegate = graphEvents
 ```
 
-`GraphReadiness` describes only the technical usability of the store and its
-Core Data context. An application migration error is delivered as
-`GraphFailure.migration`, but does not automatically set readiness to `.failed`
-if the store remains usable.
+By default, application migration errors are delivered as `GraphFailure.migration`
+without failing readiness when the store remains usable. Applications that
+require migrations to succeed before use can set
+`configuration.waitsForApplicationMigrations = true`; migration failures then
+fail readiness. A throwing `preflight` also rejects opening. See
+[Migrations](docs/migrations/overview.md#safety-rules).
 
 Events are delivered on the main thread. States and errors emitted while the
 store is opening are queued until a delegate is assigned. Existing APIs

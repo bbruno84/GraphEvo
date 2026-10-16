@@ -62,7 +62,7 @@ is an explicit file location when the extension is `.sqlite`.
 - `resolvedStoreURL`: the URL actually opened, including legacy-store reuse.
 - `appGroupIdentifier`: may replace a directory for directory-based
   configuration; it does not move an explicit `.sqlite` file.
-- `.inMemory`: uses a temporary database; URLs are calculated but do not point
+- `.inMemory`: uses an in-memory store; URLs are calculated but do not point
   to a persistent file.
 
 When changing this logic, verify at least: a new directory, an existing
@@ -96,7 +96,7 @@ background Core Data work.
 
 ```swift
 let user = Entity("User", graph: graph)
-user["email"] = "ada@example.com"
+user[dynamicMember: "email"] = "ada@example.com"
 user.add(tags: "active")
 
 let note = Entity("Note", graph: graph)
@@ -111,8 +111,7 @@ and coders documented in the API reference for complex values.
 
 ```swift
 let activeUsers = Search<Entity>(graph: graph)
-    .where(.type("User"))
-    .where(.has(tags: "active"))
+    .where(.type("User") && .has(tags: "active"))
     .sync()
 ```
 
@@ -156,7 +155,9 @@ Container identifier precedence is:
 Without an identifier the graph remains local. If CloudKit is unavailable,
 GraphEvo may emit a warning and use a local fallback.
 
-Call `ph_prepareOnLaunchAfterContainerReady()` after the container is ready.
+Graph prepares Persistent History automatically after a successful CloudKit
+open. The public `ph_prepareOnLaunchAfterContainerReady()` helper can be called
+again after readiness; processing and batch methods remain internal.
 Persistent History uses a persisted token and filters local-authored
 transactions to avoid duplicate callbacks on the originating device.
 
@@ -214,9 +215,9 @@ The repository uses three main branch roles:
 
 - `master`: contains only the latest stable release. Hotfix branches start from
   `master` and are merged back through a pull request.
-- `development`: the ongoing integration branch. Feature and bugfix branches
-  start from `development` and are merged back through pull requests.
-- `release/<version>`: created from `development` when the feature freeze is
+- `develop`: the ongoing integration branch. Feature and bugfix branches
+  start from `develop` and are merged back through pull requests.
+- `release/<version>`: created from `develop` when the feature freeze is
   declared. During the release cycle, only bugfixes, stabilization work, and
   release refinements should be merged into this branch.
 
@@ -226,7 +227,7 @@ feature work unless explicitly requested.
 
 Stable releases are promoted from the appropriate release branch into
 `master` through a pull request. Relevant hotfixes and release fixes should be
-forward-merged into `development` when applicable so the branches do not drift.
+forward-merged into `develop` when applicable so the branches do not drift.
 
 ## Git and pull-request workflow
 
