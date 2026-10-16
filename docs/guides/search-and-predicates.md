@@ -13,6 +13,7 @@ let users = Search<Entity>(graph: graph)
 
 The generic type must be a supported node (`Entity`, `Relationship`, or
 `Action`). Without a predicate, the search returns an empty array.
+Use `.where(.type("*"))` to select all types in the chosen node family.
 
 ## Available filters
 
@@ -67,20 +68,28 @@ Search<Entity>(graph: graph)
     }
 ```
 
-`sync()` returns the array immediately. Its optional completion runs on the
-main thread. `async()` starts the search in the background.
+`sync()` waits for the fetch and returns the array. Its optional completion runs
+on the main thread. `async()` schedules the search on the graph's context queue;
+an ordinary Graph uses a main-queue context, so this is not a background-context
+fetch. With an available context, its completion is delivered on the main
+thread; without a context it immediately returns `[]` to the caller's queue.
+Result nodes remain bound to their owning context.
 
-## Pagination
+## Fetch batching and offsets
 
-`Graph` exposes `batchSize` and `batchOffset`, applied to subsequent searches:
+`Graph` exposes `batchSize` and `batchOffset`, applied to subsequent searches as
+Core Data's `fetchBatchSize` and `fetchOffset`:
 
 ```swift
 graph.batchSize = 20
 graph.batchOffset = 40
-let page = Search<Entity>(graph: graph).where(.type("Note")).sync()
+let remainingNotes = Search<Entity>(graph: graph).where(.type("Note")).sync()
 ```
 
-Set `batchSize = 0` to remove the limit.
+`batchSize` controls fetch batching, not the maximum number of returned nodes.
+The example skips 40 matching rows and can return more than 20 nodes. Searches
+do not set a fetch limit or sort descriptors, so these properties do not provide
+stable page-based pagination. `batchSize = 0` uses Core Data's default batching.
 
 ## Combining searches
 

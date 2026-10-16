@@ -4,13 +4,17 @@ This guide shows the minimum path for using GraphEvo in an iOS or macOS app.
 
 ## 1. Add the package
 
-Add the Swift package to the project and import the module:
+Add `https://github.com/bbruno84/GraphEvo.git` as a Swift package dependency
+and select the `GraphEvo` product. See the
+[installation instructions](../../README.md#-installation-and-first-use)
+for the current release candidate and a `Package.swift` example. Import the module:
 
 ```swift
 import GraphEvo
 ```
 
-GraphEvo requires iOS 16+ or macOS 12+, as declared by `Package.swift`.
+GraphEvo requires iOS 16+ or macOS 12+, as declared by `Package.swift`, with a
+Swift 5.9+ package manifest.
 
 ## 2. Create a configuration
 
@@ -46,17 +50,23 @@ graph.whenReady { result in
 ```
 
 `Graph` may begin opening during initialization, so `whenReady` is the clearest
-way to coordinate UI or initial loading.
+way to coordinate UI or initial loading. Run the following data operations only
+after `.success`, on the graph's context queue (normally the main queue for an
+ordinary Graph). Keep the Graph alive while using its nodes and watchers.
+
+If migrations must succeed before the graph becomes ready, set
+`configuration.waitsForApplicationMigrations = true` before initialization.
+See [Migrations](../migrations/overview.md#safety-rules).
 
 ## 4. Create and save data
 
 ```swift
 let user = Entity("User", graph: graph)
-user["name"] = "Ada Lovelace"
+user[dynamicMember: "name"] = "Ada Lovelace"
 user.add(tags: "active")
 
 let note = Entity("Note", graph: graph)
-note["title"] = "First note"
+note[dynamicMember: "title"] = "First note"
 user.is(relationship: "writes").of(note)
 
 graph.sync { success, error in
@@ -75,12 +85,14 @@ performed in the graph's context.
 
 ```swift
 let notes = Search<Entity>(graph: graph)
-    .where(.type("Note"))
-    .where(.has(tags: "important"))
+    .where(.type("Note") && .has(tags: "important"))
     .sync()
 ```
 
-For more advanced queries, see [Search and predicates](search-and-predicates.md).
+This returns notes tagged `important`. Successive `where` calls combine their
+conditions with OR; use a single compound predicate for AND. To fetch all nodes
+of a family, use `.where(.type("*"))`; a search without a predicate returns no
+results. See [Search and predicates](search-and-predicates.md).
 
 ## 6. Receive events
 

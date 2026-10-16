@@ -26,10 +26,16 @@ The public domain model consists of `Graph`, `Node`, `Entity`, `Relationship`,
 ```swift
 public struct GraphStoreConfiguration {
     public var name: String
-    public var location: URL?
+    public var location: URL
     public var backend: GraphStoreBackend
     public var appGroupIdentifier: String?
     public var cloudKitContainerIdentifier: String?
+    public var requiredGraphModelVersion: Int
+    public var requiredAppDataVersion: Int
+    public var waitsForApplicationMigrations: Bool
+    public private(set) var environment: GraphStoreEnvironment?
+    public init()
+    public func resolvingEnvironment() throws -> GraphStoreConfiguration
 }
 ```
 
@@ -52,9 +58,12 @@ CloudKit stores select the environment automatically; Development stores use a
 environment is exposed as read-only `environment: GraphStoreEnvironment?`
 (`development`, `production`, `local`). Before opening, call
 `try configuration.resolvingEnvironment()` to obtain a normalized copy using
-the same container precedence and signed-environment resolver as Graph and
+the same container precedence and environment resolver as Graph and
 the migration ledger. It does not open or mutate a store; unavailable CloudKit
 environment information throws. Use the returned copy for URL/scope decisions.
+On iOS, Simulator or `DEBUG` builds use Development; other device builds use
+Production. On macOS the CloudKit environment entitlement must be available.
+See [CloudKit configuration](../concepts/cloudkit.md#configuration).
 Applications cannot set the environment. XCTest retains its existing simulated
 Development resolution and does not establish actual CloudKit availability.
 
@@ -106,13 +115,14 @@ Common properties and operations include `name`, `configuration`, `readiness`,
 public enum GraphReadiness {
     case initializing
     case ready
-    case failed(Error)
+    case failed(GraphStoreOpeningError)
 }
 ```
 
 `GraphStoreOpeningError` includes incompatible, unreadable, failed-to-load,
-environment, registry-conflict, and incompatible-registered-store cases. An
-incompatible store is not changed automatically.
+environment, registry-conflict, incompatible-registered-store, and required
+application-migration failure cases. An incompatible store is not changed
+automatically.
 
 ## 4. Nodes and domain objects
 
@@ -206,7 +216,7 @@ is implied by this diagnostic.
 
 `Node` is the common base for all public graph objects. It exposes `graph`,
 `type`, `id`, `createdDate`, dynamic property access through
-`node["key"]`, tags, groups, and `delete()`.
+`node[dynamicMember: "key"]`, tags, groups, and `delete()`.
 
 ### `Entity`
 
@@ -220,7 +230,7 @@ classes.
 
 ```swift
 let user = Entity("User", graph: graph)
-user["email"] = "ada@example.com"
+user[dynamicMember: "email"] = "ada@example.com"
 user.add(tags: "active")
 ```
 
@@ -279,14 +289,18 @@ let users = Search<Entity>(graph: graph).where(filter).sync()
 `Search<T>` supports `Entity`, `Relationship`, and `Action`:
 
 ```swift
-public init(graph: Graph)
+public init(graph: Graph = Graph(configuration: GraphStoreConfiguration()))
 public func `where`(_ predicate: Predicate) -> Search<T>
-public func sync() -> [T]
+public func clear() -> Search<T>
+public func sync(completion: (([T]) -> Void)? = nil) -> [T]
 public func async(completion: @escaping ([T]) -> Void)
 ```
 
 Successive `where` calls are combined with OR. Searches combined with `+` must
 belong to the same graph. A search without a predicate returns an empty array.
+Use `.where(.type("*"))` to fetch all types in the selected node family.
+`batchSize` sets Core Data's fetch batch size, not a result limit; `batchOffset`
+sets the fetch offset. Searches do not impose sorting or stable pagination.
 
 ## 6. Watchers
 
@@ -344,11 +358,14 @@ same `Entity`, `Relationship`, or `Action` wrappers used by legacy Watch.
 Reports contain at least one typed event or unmaterialized deletion reference,
 are immutable, and are delivered on the main thread. They are
 not `Sendable`; their objects remain tied to the Graph managed object context.
-The completion receives `(report, nil)` after a successful delivery. Structural
-failures receive `(nil, error)`. A Persistent History retention gap may produce
-`(report, error)` for best-effort delivery. Materialization failures are
-retryable: no completion is called and the batch delivery token remains
-unchanged. The default source set is `[.local, .cloud]`. Restrict it before
+The completion receives `(report, nil)` after a successful delivery. History
+fetch, token, and processing failures can produce `(nil, error)`. A Persistent
+History retention gap may produce `(report, error)` for best-effort delivery,
+or `(nil, error)` if no retained events remain. Materialization and structural
+validation failures on surviving events are retryable: no completion is called,
+a warning is emitted, and the batch delivery token remains unchanged. Local
+reports omit invalid owners and emit errors without a persistent retry cursor.
+The default source set is `[.local, .cloud]`. Restrict it before
 assigning the completion when only one source is wanted.
 
 Batch reporting and legacy watchers are parallel. Enabling reports does not
@@ -359,6 +376,26 @@ same logical consumer unless duplicate handling is intentional.
 
 ```swift
 public enum GraphPersistenceMode { case local; case cloud; case localFallback }
+public enum GraphState {
+    case readiness(GraphReadiness)
+    case cloudStatus(GraphCloudStatus)
+    case persistenceMode(GraphPersistenceMode)
+    case cloudSetup(GraphCloudSetupState)
+    case cloudImport(GraphCloudImportState)
+    case cloudUpload(GraphCloudUploadState)
+}
+public enum GraphCloudSetupState {
+    case started(GraphCloudSetupEvent)
+    case finished(GraphCloudSetupEvent)
+}
+public struct GraphCloudSetupEvent {
+    public let identifier: UUID
+    public let storeIdentifier: String
+    public let startDate: Date?
+    public let endDate: Date?
+    public let succeeded: Bool
+    public let error: Error?
+}
 public enum GraphEvent {
     case transactionDiagnostic(GraphTransactionTrace)
     case stateChanged(GraphState)
@@ -405,7 +442,9 @@ CloudKit container precedence is explicit configuration, runtime
 `Graph.cloudKitContainerIdentifier`, then the
 `GraphCloudKitContainerIdentifier` Info.plist key. Without an identifier the
 graph remains local. If CloudKit is unavailable, GraphEvo may emit
-`GraphWarning.cloudStoreFallback` and use a local fallback.
+`GraphWarning.cloudStoreFallback` and use a local fallback after a container
+load failure. Earlier environment, compatibility, and registry failures still
+fail opening; later synchronization errors do not switch persistence mode.
 
 `purgeCloudStore(completion:)` is restricted to a loaded CloudKit container and
 uses Apple's purge of records and corresponding managed objects. It does not
@@ -432,13 +471,15 @@ backup verification and preventing replay of historical migration sources.
 
 ```swift
 @objc func ph_prepareOnLaunchAfterContainerReady()
-func processPersistentHistoryForRemoteChange()
-func processPersistentHistoryBatch(completion: @escaping (Bool) -> Void)
 ```
 
-Call the preparation method after the persistent container is ready. GraphEvo
-stores a token, filters local-authored transactions, merges object changes, and
-advances the token after watcher delivery. Corrupt, expired (`134301`), or
+Graph calls the preparation method after a successful CloudKit store open;
+applications may call it again after readiness. Processing and batch methods
+are internal. GraphEvo filters local-authored transactions, merges object
+changes, and persists the processing token before legacy watcher delivery.
+Aggregated reports use a separate delivery token that can remain behind while
+surviving events fail materialization or structural validation.
+Corrupt, expired (`134301`), or
 missing-store (`134501`) tokens are recovered at the current history head and
 reported through `GraphWarning.persistentHistoryRecovery`.
 
@@ -581,7 +622,8 @@ and `internal`/`fileprivate` helpers are not public API contracts. Use the
 3. Create nodes through `Entity(type, graph:)`, mutate properties, and call
    `sync`.
 4. Use `Search` for queries and `Watch` for local/CloudKit callbacks.
-5. Prepare Persistent History after the container opens.
+5. Let Graph prepare Persistent History on CloudKit opening; observe changes
+   through Watch or aggregated reports.
 6. Register migrations before creating the graph and back up before modifying a
    SQLite store.
 7. Handle `GraphStoreOpeningError.incompatibleStore` explicitly; GraphEvo

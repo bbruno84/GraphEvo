@@ -5,6 +5,7 @@ application.
 
 Documents:
 
-- `getting-started.md`
-- `search-and-predicates.md`
-- `watchers.md`
+- [Getting started](getting-started.md)
+- [Search and predicates](search-and-predicates.md)
+- [Watchers](watchers.md)
+- [Structural validation](structural-validation.md)

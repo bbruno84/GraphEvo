@@ -6,8 +6,9 @@ merge. A backup is part of the safety procedure, not merely a debugging tool.
 ## Back up a store
 
 ```swift
+let storeConfiguration = try configuration.resolvingEnvironment()
 let result = try MigrationBackupManager.backupStore(
-    at: configuration.resolvedStoreURL,
+    at: storeConfiguration.resolvedStoreURL,
     migrationID: "add-note-status"
 )
 
@@ -17,6 +18,12 @@ print(result.folderURL)
 For an SQLite store, the main file and, when present, `.sqlite-wal` and
 `.sqlite-shm` files are copied. An overload accepts `configuration` and
 `migration`, deriving the root from the migration itself.
+
+Resolve the environment before selecting a URL so a Development backup targets
+the actual `-dev.sqlite` file. For an already initialized graph, its
+`configuration` is normalized. Stop all writers and close the store before
+copying its SQLite family: this helper copies files and does not coordinate a
+consistent snapshot of a live database.
 
 ## Back up one file
 
@@ -49,7 +56,7 @@ path, date, and file list. The descriptor is saved as `backup-info.json`.
 ```swift
 let backups = try MigrationBackupManager.findBackupsForStore(
     migrationID: "add-note-status",
-    storeURL: configuration.resolvedStoreURL
+    storeURL: storeConfiguration.resolvedStoreURL
 )
 
 if let latest = backups.last {
@@ -61,4 +68,5 @@ if let latest = backups.last {
 ```
 
 Restore overwrites existing files by default. Pass `overwriteExisting: false`
-to leave existing files untouched.
+to leave existing files untouched. Restore only while the store is closed and
+all writers are stopped; never replace a live SQLite store underneath a Graph.

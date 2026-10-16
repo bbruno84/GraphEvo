@@ -6,7 +6,8 @@ CloudKit to watchers.
 
 ## Startup
 
-Call the public method after the persistent container is ready:
+GraphEvo prepares Persistent History automatically after a successful CloudKit
+store open. The public helper can also be called after readiness:
 
 ```swift
 graph.ph_prepareOnLaunchAfterContainerReady()
@@ -17,19 +18,23 @@ the required history.
 
 ## Processing
 
-`processPersistentHistoryForRemoteChange()` queues processing. To process one
-batch with a completion:
-
-```swift
-graph.processPersistentHistoryBatch { processed in
-    print("Batch processed: \(processed)")
-}
-```
+Remote-store notifications and completed CloudKit imports queue processing
+through an internal coordinator. The `processPersistentHistoryForRemoteChange`
+and `processPersistentHistoryBatch` methods are internal implementation details,
+not application APIs. Use `Watch` or `Graph.watchReportCompletion` to consume
+changes.
 
 The general flow is: load the latest token; read subsequent transactions;
 ignore local-authored transactions when appropriate; collect inserted, updated,
-and deleted object IDs; merge changes into the observed context; notify
-watchers; and save the new token only after delivery.
+and deleted object IDs; merge changes into the observed context; save the
+processing token; and notify legacy watchers on the main queue. The processing
+token is persisted after a successful merge, before callback delivery, and does
+not acknowledge application processing.
+
+Aggregated reports have a separate delivery token. Materialization or
+structural validation failures on surviving objects retain that token for a
+later processing request without rewinding the history processing token.
+See [Watchers](../guides/watchers.md#aggregated-reports).
 
 ## Tokens
 
@@ -51,9 +56,9 @@ SQLite files or history tokens.
 The token is stored on disk at a store-associated path and also kept in a local
 backup. With `appGroupIdentifier`, the token path may reside in the App Group.
 
-Token identity is derived from the canonical URL and, when available, the
-persistent store's `NSStoreUUID`. If GraphEvo detects a rebuilt store with a
-new identity, it does not reuse the previous token.
+Token identity uses the persistent store's `NSStoreUUID` when available, with
+the standardized store path as a fallback. If GraphEvo detects a rebuilt store
+with a new identity, it does not reuse the previous token.
 
 The token identifies a processed history position, not a domain object. Do not
 use it to reconstruct entity identity directly.
