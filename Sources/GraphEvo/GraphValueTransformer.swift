@@ -98,6 +98,35 @@ public enum GraphArchiver {
 }
 
 
+/// Captures decoder failures during a synchronous validation read without changing
+/// the transformer's public nil-on-failure behavior. Each context read is scoped
+/// to its executing thread; unrelated reads cannot contribute errors.
+internal enum GraphValueDecodingDiagnostics {
+    private static let key = "GraphEvo.ValueDecodingDiagnostics"
+    private final class Capture {
+        var error: Error?
+    }
+
+    static func checking<T>(_ body: () throws -> T) throws -> T {
+        let dictionary = Thread.current.threadDictionary
+        let previous = dictionary[key]
+        let capture = Capture()
+        dictionary[key] = capture
+        defer {
+            if let previous { dictionary[key] = previous }
+            else { dictionary.removeObject(forKey: key) }
+        }
+        let result = try body()
+        if let error = capture.error { throw error }
+        return result
+    }
+
+    static func record(_ error: Error) {
+        guard let capture = Thread.current.threadDictionary[key] as? Capture else { return }
+        if capture.error == nil { capture.error = error }
+    }
+}
+
 /// A secure value transformer used to archive and unarchive property values in Graph.
 /// Ensures compatibility with `NSPersistentCloudKitContainer` by enforcing a strict class whitelist.
 @objc(GraphValueTransformer)
@@ -116,6 +145,9 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
     
     public override func transformedValue(_ value: Any?) -> Any? {
         guard let data = value as? Data else {
+            if value != nil {
+                GraphValueDecodingDiagnostics.record(GraphArchiverError.unsupported("Expected archived Data while decoding a property"))
+            }
             return nil
         }
 
@@ -140,6 +172,7 @@ public final class GraphValueTransformer: NSSecureUnarchiveFromDataTransformer {
 
             return unarchived
         } catch {
+            GraphValueDecodingDiagnostics.record(error)
             print("❌ [GraphValueTransformer] Unarchiving error: \(error)")
             return nil
         }

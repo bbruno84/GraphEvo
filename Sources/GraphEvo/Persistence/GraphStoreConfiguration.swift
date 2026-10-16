@@ -18,6 +18,25 @@ public struct GraphStoreConfiguration {
     public var cloudKitContainerIdentifier: String? = nil
     public var requiredGraphModelVersion: Int = 1
     public var requiredAppDataVersion: Int = 1
+    /// Opt-in: wait for pre-init work before opening any persistent store and
+    /// fail readiness if any application migration phase fails.
+    public var waitsForApplicationMigrations = false
+
+    /// Internal marker used by `Graph(storeURL:)` to force a directly supplied
+    /// SQLite file to remain local, regardless of global CloudKit settings.
+    internal var disablesCloudKit = false
+    public private(set) var environment: GraphStoreEnvironment? = nil
+
+    /// Returns the same environment-normalized configuration used by Graph
+    /// opening and migration ledgers, without opening or modifying a store.
+    /// The signed environment cannot be overridden by applications.
+    public func resolvingEnvironment() throws -> GraphStoreConfiguration {
+        var result = self
+        result.cloudKitContainerIdentifier = Graph.resolvedCloudKitContainerIdentifier(
+            configuration: self, runtimeOverride: Graph.cloudKitContainerIdentifier)
+        result.environment = try GraphStoreEnvironmentResolver.resolve(configuration: result).get()
+        return result
+    }
 
     /// Public default initializer so this type can be used in default argument values.
     public init() {}
@@ -40,7 +59,10 @@ public struct GraphStoreConfiguration {
     }
 
     /// Nome file dello store.
-    public var storeFilename: String { "GraphEvo_\(name).sqlite" }
+    public var storeFilename: String {
+        let suffix = environment == .development ? "-dev" : ""
+        return "GraphEvo_\(name)\(suffix).sqlite"
+    }
 
     /// Canonical URL of the store.
     ///
@@ -56,7 +78,14 @@ public struct GraphStoreConfiguration {
 
     /// Route (Local vs Cloud) determined by the presence of a CloudKit container.
     public var route: String {
-        cloudKitContainerIdentifier == nil ? "Local/\(name)" : "Cloud/\(name)"
+        guard cloudKitContainerIdentifier != nil else { return "Local/\(name)" }
+        let environmentName: String
+        switch environment {
+        case .development: environmentName = "Development"
+        case .production: environmentName = "Production"
+        default: environmentName = "Unknown"
+        }
+        return "Cloud/\(environmentName)/\(name)"
     }
 
     /// Convenience versions wrapper.
@@ -70,7 +99,7 @@ public struct GraphStoreConfiguration {
     /// upgrading GraphEvo does not silently create an empty store beside an
     /// existing one.
     public var legacyStoreURLs: [URL] {
-        guard !isExplicitStoreFile else { return [] }
+        guard !isExplicitStoreFile, environment != .development else { return [] }
 
         let directLegacy = resolvedLocation.appendingPathComponent("Graph.sqlite")
         let local = resolvedLocation
@@ -109,7 +138,11 @@ public struct GraphStoreConfiguration {
     /// Stable key used by the in-process context registry.
     /// It identifies the resolved store, not just its public route/name.
     internal var storeIdentityKey: String {
-        resolvedStoreURL.standardizedFileURL.path
+        resolvedStoreURL.graphStableFileIdentityPath
+    }
+
+    internal mutating func setResolvedEnvironment(_ environment: GraphStoreEnvironment) {
+        self.environment = environment
     }
 
     private var isExplicitStoreFile: Bool {
@@ -123,6 +156,31 @@ public struct GraphStoreConfiguration {
             self.graphModel = graphModel
             self.appData = appData
         }
+    }
+}
+
+extension URL {
+    /// Canonical file identity that remains stable when the final path does not
+    /// exist yet. Foundation only resolves aliases such as `/private/var` after
+    /// the complete path exists, which can otherwise change a store's runtime
+    /// identity while it is being opened.
+    internal var graphStableFileIdentityPath: String {
+        let fileManager = FileManager.default
+        var existingAncestor = self
+        var missingComponents: [String] = []
+
+        while !fileManager.fileExists(atPath: existingAncestor.path) {
+            let parent = existingAncestor.deletingLastPathComponent()
+            guard parent.path != existingAncestor.path else { break }
+            missingComponents.append(existingAncestor.lastPathComponent)
+            existingAncestor = parent
+        }
+
+        var canonical = existingAncestor.resolvingSymlinksInPath().standardizedFileURL
+        for component in missingComponents.reversed() where !component.isEmpty {
+            canonical.appendPathComponent(component)
+        }
+        return canonical.standardizedFileURL.path
     }
 }
 

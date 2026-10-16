@@ -62,7 +62,7 @@ is an explicit file location when the extension is `.sqlite`.
 - `resolvedStoreURL`: the URL actually opened, including legacy-store reuse.
 - `appGroupIdentifier`: may replace a directory for directory-based
   configuration; it does not move an explicit `.sqlite` file.
-- `.inMemory`: uses a temporary database; URLs are calculated but do not point
+- `.inMemory`: uses an in-memory store; URLs are calculated but do not point
   to a persistent file.
 
 When changing this logic, verify at least: a new directory, an existing
@@ -96,7 +96,7 @@ background Core Data work.
 
 ```swift
 let user = Entity("User", graph: graph)
-user["email"] = "ada@example.com"
+user[dynamicMember: "email"] = "ada@example.com"
 user.add(tags: "active")
 
 let note = Entity("Note", graph: graph)
@@ -111,8 +111,7 @@ and coders documented in the API reference for complex values.
 
 ```swift
 let activeUsers = Search<Entity>(graph: graph)
-    .where(.type("User"))
-    .where(.has(tags: "active"))
+    .where(.type("User") && .has(tags: "active"))
     .sync()
 ```
 
@@ -125,6 +124,26 @@ A watcher is initially stopped. Configure its filter and delegate, then call
 `resume()`. Use `pause()` to suspend it and `clear()` to remove the filter.
 Callbacks distinguish `GraphSource.local` and `GraphSource.cloud`.
 
+For Graph-level batches, assign `Graph.watchReportCompletion` and select sources
+with `Graph.watchReportSources`. Batch reports do not apply Watch predicates,
+are delivered on the main thread, and do not disable legacy callbacks.
+
+`Node.validateStructure()` checks saved local state for Entity, Relationship,
+and Action. Entity scope includes direct edges, their details and endpoints;
+endpoint entities are not traversed recursively. Optional absent references
+are informational. Report delivery uses the same validator: cloud history
+batches retain their delivery token on failure, while local delivery remains
+best-effort. Deleted owners are excluded. The validator does not retry or
+certify import completion. Decoder errors must fail structural validation.
+Retained local deletion records may supersede pending remote events; missing
+rows alone are not deletion evidence. Remote deletions supersede inserts/updates;
+when their typed event cannot be reconstructed, reports expose
+`unmaterializedDeletions` with IDs and causes. Consumers must inspect this array
+even when `events` is empty. `Node.createdDateIfPresent` exposes an absent date;
+`createdDate` uses a read-only `Date.distantPast` fallback. Do not change the Core
+Data model to make that field required. See `docs/guides/structural-validation.md`.
+
+
 ## CloudKit and Persistent History
 
 Container identifier precedence is:
@@ -136,11 +155,26 @@ Container identifier precedence is:
 Without an identifier the graph remains local. If CloudKit is unavailable,
 GraphEvo may emit a warning and use a local fallback.
 
-Call `ph_prepareOnLaunchAfterContainerReady()` after the container is ready.
+Graph prepares Persistent History automatically after a successful CloudKit
+open. The public `ph_prepareOnLaunchAfterContainerReady()` helper can be called
+again after readiness; processing and batch methods remain internal.
 Persistent History uses a persisted token and filters local-authored
 transactions to avoid duplicate callbacks on the originating device.
 
 ## Migrations
+
+`waitsForApplicationMigrations` is an opt-in bootstrap/readiness gate. Preserve
+its default `false` behavior when modifying lifecycle code. `graph.transaction`
+offers public Node APIs on a scoped private context; do not escape the facade,
+perform external writes inside its body, or mistake it for a CloudKit pause.
+
+Completion publication to KVS is best-effort after durable local completion.
+Do not convert a KVS acceptance failure into a migration failure. Keep it pending
+for retry, and never overwrite a newer validated remote projection already
+visible/observed with superseded pending work. Durable ledger failures still
+propagate; KVS provides neither distributed locking nor delivery acknowledgement.
+New remote resets observe KVS before allocating their generation. Local-only
+resets do not consult KVS; publication retries must never rebase their generation.
 
 Register migrations before creating or opening a graph:
 
@@ -181,9 +215,9 @@ The repository uses three main branch roles:
 
 - `master`: contains only the latest stable release. Hotfix branches start from
   `master` and are merged back through a pull request.
-- `development`: the ongoing integration branch. Feature and bugfix branches
-  start from `development` and are merged back through pull requests.
-- `release/<version>`: created from `development` when the feature freeze is
+- `develop`: the ongoing integration branch. Feature and bugfix branches
+  start from `develop` and are merged back through pull requests.
+- `release/<version>`: created from `develop` when the feature freeze is
   declared. During the release cycle, only bugfixes, stabilization work, and
   release refinements should be merged into this branch.
 
@@ -193,7 +227,7 @@ feature work unless explicitly requested.
 
 Stable releases are promoted from the appropriate release branch into
 `master` through a pull request. Relevant hotfixes and release fixes should be
-forward-merged into `development` when applicable so the branches do not drift.
+forward-merged into `develop` when applicable so the branches do not drift.
 
 ## Git and pull-request workflow
 
@@ -272,3 +306,25 @@ When a public signature changes, always update
 [`docs/api/public-api.md`](docs/api/public-api.md). When an operational flow
 changes, update this file and the corresponding guide in `docs/`. Keep
 `README.md` introductory; do not duplicate the complete API reference there.
+
+## CloudKit node identities
+
+Use `graph.cloudRecordID(for:)` or ordered `cloudRecordIDs(for:)` with nodes from
+that facade's own context, on its queue. Scoped transaction/snapshot facades reuse
+the open container. Missing mappings are optional and never cached. Validate
+ownership even for local/fallback stores; misuse is a typed error. Never derive
+CloudKit IDs from Graph IDs, obtain permanent IDs, save, or request export as a
+side effect of lookup. Identity metadata is not pinned to a snapshot generation
+and is not proof of sync completion. Keep injected mapping tests distinct from
+real cross-device CloudKit verification.
+
+## Opt-in transaction diagnostics
+
+`transaction(diagnosticID:_:)` preserves the original transaction guard and
+result. It queues `GraphEvent.transactionDiagnostic` outcome and then an
+asynchronous history supplement, correlated by the caller's UUID. Never invoke
+the diagnostic delegate from a transaction context/lock scope. Keep summaries
+payload-free and bounded, distinguish truncated/unavailable history from no
+writes, and never infer causal CloudKit bookkeeping from a generation mismatch.
+History is observational, non-atomic and never a replacement concurrency guard.
+The original overload must perform no trace history reads.

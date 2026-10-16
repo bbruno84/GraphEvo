@@ -29,14 +29,93 @@ final class StorePathResolutionTests: XCTestCase {
         XCTAssertEqual(configuration.resolvedStoreURL, configuration.storeURL)
     }
 
+    func testDevelopmentEnvironmentUsesSuffixedStoreURL() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "primary"
+        configuration.location = directory
+        configuration.cloudKitContainerIdentifier = "iCloud.example"
+        configuration.setResolvedEnvironment(.development)
+
+        XCTAssertEqual(
+            configuration.storeURL,
+            directory.appendingPathComponent("GraphEvo_primary-dev.sqlite")
+        )
+        XCTAssertTrue(configuration.route.contains("Development"))
+        XCTAssertTrue(configuration.legacyStoreURLs.isEmpty)
+    }
+
+    func testEnvironmentResolverUsesThePlatformEnvironmentWithoutAnAccountCheck() {
+        var configuration = GraphStoreConfiguration()
+        configuration.cloudKitContainerIdentifier = "iCloud.example"
+
+        let development = GraphStoreEnvironmentResolver.resolve(
+            configuration: configuration,
+            entitlementValue: "Development",
+            runningUnderTests: false
+        )
+        let production = GraphStoreEnvironmentResolver.resolve(
+            configuration: configuration,
+            entitlementValue: "Production",
+            runningUnderTests: false
+        )
+
+#if os(macOS)
+        XCTAssertEqual(try? development.get(), .development)
+        XCTAssertEqual(try? production.get(), .production)
+#elseif os(iOS)
+        // iOS intentionally ignores entitlement values because reading them
+        // would require the private SecTask APIs rejected by App Store Connect.
+        XCTAssertEqual(try? development.get(), .development)
+        XCTAssertEqual(try? production.get(), .development)
+#endif
+    }
+
+    func testIOSBuildEnvironmentDistinguishesDevelopmentAndProduction() {
+        XCTAssertEqual(
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: true,
+                isDebugBuild: false
+            ),
+            .development
+        )
+        XCTAssertEqual(
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: false,
+                isDebugBuild: true
+            ),
+            .development
+        )
+        XCTAssertEqual(
+            GraphStoreEnvironmentResolver.environmentForIOSBuild(
+                isSimulator: false,
+                isDebugBuild: false
+            ),
+            .production
+        )
+    }
+
+    func testCloudKitReservationAllowsOnlyOneIndependentStore() {
+        let key = "test-cloud-kit-\(UUID().uuidString)"
+        XCTAssertTrue(GraphContextRegistry.shared.claimCloudKitStore(key: key))
+        XCTAssertFalse(GraphContextRegistry.shared.claimCloudKitStore(key: "other-\(key)"))
+        GraphContextRegistry.shared.releaseCloudKitStore(key: key)
+        XCTAssertTrue(GraphContextRegistry.shared.claimCloudKitStore(key: "other-\(key)"))
+        GraphContextRegistry.shared.releaseCloudKitStore(key: "other-\(key)")
+    }
+
     func testExplicitSQLiteFileIsPreservedExactly() {
         let file = directory.appendingPathComponent("Existing.sqlite")
+        let previousCloudKitIdentifier = Graph.cloudKitContainerIdentifier
+        Graph.cloudKitContainerIdentifier = "iCloud.should-not-be-used"
+        defer { Graph.cloudKitContainerIdentifier = previousCloudKitIdentifier }
+
         let graph = Graph(storeURL: file, migrationEnabled: false)
         let storeKey = graph.configuration.storeIdentityKey
 
         XCTAssertEqual(graph.configuration.storeURL, file)
         XCTAssertEqual(graph.configuration.resolvedStoreURL, file)
         XCTAssertEqual(graph.runtimeStoreURL, file)
+        XCTAssertNil(graph.configuration.cloudKitContainerIdentifier)
 
         // The production registry intentionally owns contexts for reuse. Remove
         // this test's entry before deleting the temporary SQLite sidecars.

@@ -17,7 +17,8 @@ When `location` is a directory, the name produces the canonical
 ## Directory or file?
 
 `location` is interpreted as an explicit file only when its extension is
-`.sqlite`. Otherwise it is treated as a directory.
+`.sqlite`, case-insensitively. Otherwise it is treated as a directory. An
+explicit file need not exist yet; GraphEvo creates it at the supplied path.
 
 ```swift
 // Directory: GraphEvo builds the final name.
@@ -38,6 +39,16 @@ strings manually or pass HTTP URLs to Core Data.
 - `storeURL` is the canonical path calculated from the configuration.
 - `resolvedStoreURL` is the path GraphEvo will actually open.
 
+CloudKit-backed directory stores resolve their build environment automatically.
+Development stores use a `-dev` suffix, while Production keeps the existing
+filename. The environment is independent of the user's iCloud account status.
+Use `try configuration.resolvingEnvironment()` before inspecting these paths,
+or inspect `graph.configuration`, which contains the resolved environment.
+The original configuration value is not mutated by Graph initialization.
+
+`Graph(storeURL:)` opens local persistence and ignores runtime/Info.plist
+CloudKit identifiers. Use `Graph(configuration:)` when CloudKit is required.
+
 The difference matters when a legacy store exists. The canonical path may not
 exist while `resolvedStoreURL` points to a reused legacy path.
 
@@ -53,7 +64,10 @@ addition to the canonical path:
 ```
 
 An explicit `.sqlite` file does not trigger this search; that file is the
-application's authoritative choice.
+application's authoritative choice. CloudKit Development directory stores also
+skip legacy lookup to avoid opening a Production store. For eligible directory
+stores, an existing canonical file wins, followed by the preferred legacy route,
+`Graph.sqlite`, then the alternate route.
 
 ## App Group
 
@@ -83,13 +97,22 @@ consistency, but they do not identify a file that will be retained.
 
 The main errors are `incompatibleStore`, `unreadableStore`, and
 `failedToLoadStore`. For an incompatibility, GraphEvo does not modify the file.
+CloudKit environment and registry conflicts can also prevent opening. A
+throwing `preflight`, or a migration failure when
+`waitsForApplicationMigrations` is enabled, reports `applicationMigrationFailed`.
+With the default migration policy, migration failures are diagnostic events
+and do not automatically fail a usable store. See
+[Migrations](../migrations/overview.md#safety-rules).
 
 ## Saving
 
 - `sync()` saves synchronously;
-- `async()` saves in the background;
+- `async()` schedules a save on the graph's context queue;
 - `clear()` deletes objects and saves;
 - `reset()` resets the context without deleting the file.
 
 For background work, use `newBackgroundContext()` and respect the Core Data
-context's concurrency queue.
+context's concurrency queue. An ordinary Graph uses a main-queue view context,
+so `async()` does not create a background context. Save completions run on the
+main thread. `reset()` discards unsaved changes and invalidates context objects;
+refetch nodes before continuing.
