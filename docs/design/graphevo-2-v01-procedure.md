@@ -94,4 +94,37 @@ accepted conclusions from this procedure.
 - [Sharing Core Data objects between iCloud users](https://developer.apple.com/documentation/coredata/sharing-core-data-objects-between-icloud-users): private/shared store topology and sharing behavior, to be examined in V02 rather than assumed for unshared graphs.
 
 These references motivate the controls; this document contains no experimental
-findings. No account resources have been selected or provisioned by this plan.
+findings. Resource configuration remains local and is excluded from tracked files.
+
+## Current execution scope: one physical iPhone
+
+The maintainer has authorized a dedicated test container in Development and
+testing on one physical iPhone. Other devices are excluded for now. Remote wipe
+authorization is confined to that test container's Development environment;
+it is not a required first step. Do not record personal resource identifiers
+in this document. Confirm runtime access rather than inferring it from signing.
+
+Before the cross-device T0 control, a separately labeled preliminary check may:
+
+1. Validate the signed environment, account availability, and store setup.
+2. Save a small fixed fixture under a fresh runID in a disposable writer store.
+   Record native events and available mapping information, without claiming
+   that a local save or record mapping alone acknowledges an export.
+3. End the writer lifecycle, preferably across an explicit app-process restart,
+   and open a genuinely fresh reader SQLite path. The reader must never insert
+   or restore the expected fixture from local files or application code.
+4. Observe native imports and fetch persisted rows through the owning context.
+   Compare actual fixture values and identities with the recorded expectation.
+5. Retain evidence and report whether this demonstrates an observed round trip
+   into a new local replica on this device, or remains inconclusive.
+
+Keep the expected fixture description separate from database recovery input.
+Never reuse the writer SQLite, sidecars, backups, or migration restoration to
+populate the reader. Release all context-bound objects and mirror owners; an
+app restart must enter only the experiment reader, not GraphProvider.
+
+This check does not satisfy T0's independent-device control. T1–T5 remain gated
+on T0 under this procedure; changing that gate requires an explicit revision
+and a clear account of what evidence would still be missing. Local/unit tests
+and preliminary single-device work can proceed independently. The experiment
+must not be reported as fully verified while cross-device checks are pending.
