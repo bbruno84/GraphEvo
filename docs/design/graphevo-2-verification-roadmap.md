@@ -63,6 +63,9 @@ The [T6 result](results/v01-t6-2026-10-23.md) is inconclusive: an owner-only sha
 request remained pending without a recorded callback result during a clean bounded observation;
 neither the second share nor the reader was reached. Documented share-zone
 semantics must not be presented as demonstrated R01 feasibility.
+A [repeat after reported network recovery](results/v01-t6-network-retry-2026-10-24.md)
+showed the same pending first-share stage with unchanged code. The cause remains
+unidentified; share-stage tracing is needed before further topology trials.
 
 - Compare two independent local stores using the same model and cloud container;
   record supported configurations and the actual cloud mapping without assuming
