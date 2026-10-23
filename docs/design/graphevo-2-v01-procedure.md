@@ -1,7 +1,9 @@
 # V01 — cloud separation verification procedure
 
-Status: T0 implemented and observed on two devices; T1–T5 remain planned.
-See the [T0 result](results/v01-t0-2026-10-23.md) for evidence and limits.
+Status: T0 observed on two devices; T1 rejected by the native framework; T2 not
+launched after that rejection; T3–T5 remain unexecuted. See the
+[T0 result](results/v01-t0-2026-10-23.md) and
+[T1 result](results/v01-t1-2026-10-23.md) for evidence and limits.
 This elaborates V01 of
 [the verification roadmap](graphevo-2-verification-roadmap.md) and requirement R01
 in [the design outline](graphevo-2-outline.md). It selects no v2 topology.

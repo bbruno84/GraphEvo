@@ -238,6 +238,11 @@ before choosing a store, zone, share, or container mapping. If the desired
 separation cannot be achieved with the supported APIs, bring the limitation
 back to discussion before changing the requirement or the synchronization stack.
 
+The [V01 T1 experiment](results/v01-t1-2026-10-23.md) observed native rejection
+of two stores assigned to the same cloud container/private scope within one
+`NSPersistentCloudKitContainer`. R01 remains open: other ownership topologies
+have not been verified, and this result does not establish cloud separation.
+
 Design private and shared data as part of the store topology only after this
 feasibility check. Define the boundary of a shareable graph: root, included
 nodes, relationship and action dependencies, and cycles within that graph.
