@@ -96,10 +96,12 @@ accepted conclusions from this procedure.
 These references motivate the controls; this document contains no experimental
 findings. Resource configuration remains local and is excluded from tracked files.
 
-## Current execution scope: one physical iPhone
+## Device scope and optional single-device preliminary check
 
 The maintainer has authorized a dedicated test container in Development and
-testing on one physical iPhone. Other devices are excluded for now. Remote wipe
+testing on a physical iPhone and iPad, confirmed to use the same iCloud account.
+This supersedes the earlier restriction to one iPhone and allows the original
+T0 control to be attempted. Remote wipe
 authorization is confined to that test container's Development environment;
 it is not a required first step. Do not record personal resource identifiers
 in this document. Confirm runtime access rather than inferring it from signing.
@@ -123,7 +125,8 @@ Never reuse the writer SQLite, sidecars, backups, or migration restoration to
 populate the reader. Release all context-bound objects and mirror owners; an
 app restart must enter only the experiment reader, not GraphProvider.
 
-This check does not satisfy T0's independent-device control. T1–T5 remain gated
+The optional single-device check does not satisfy T0's independent-device control.
+T1–T5 remain gated
 on T0 under this procedure; changing that gate requires an explicit revision
 and a clear account of what evidence would still be missing. Local/unit tests
 and preliminary single-device work can proceed independently. The experiment
