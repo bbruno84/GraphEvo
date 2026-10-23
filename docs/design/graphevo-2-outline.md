@@ -61,8 +61,9 @@ Baseline references:
 
 Goals and agreed requirements:
 
-- Preserve the concepts of Graph, Entity, Relationship, Action, Search, and Watch,
-  while allowing their public contracts to evolve in a major release.
+- Preserve useful graph concepts and query/observation capabilities, while
+  allowing public contracts and abstractions, including Search and Watch,
+  to evolve or be replaced in a major release.
 - Make supported usage safe under Swift 6 language mode and strict concurrency.
 - Provide native asynchronous opening, reads, writes, and change observation.
 - Use async/await wherever the operation involves asynchronous work; use Core
@@ -80,6 +81,10 @@ Goals and agreed requirements:
 - Define an explicit adoption and data-transition strategy after establishing
   the target design.
 - Keep local persistence useful independently of CloudKit.
+- Strengthen querying and reassess observation against general library use
+  cases, without assuming the current Watch abstraction must be retained.
+- Remain independent of the integrating application. Real application needs
+  inform priorities and validation without defining app-specific core contracts.
 
 This planning phase does not authorize changes to production stores, CloudKit
 schemas, deployment targets, or current public behavior. Replacing Core Data,
@@ -91,6 +96,11 @@ The integration boundary is Core Data and `NSPersistentCloudKitContainer`.
 Application-facing models and attachments should not require direct handling of
 CloudKit records, assets, or zones. Platform details may still be necessary for
 configuration, sharing, and diagnostics; any such exposure needs justification.
+
+Use the maintainer's application as one important consumer, alongside small
+independent examples. Favor capabilities justified by the graph model and
+supported persistence stack; avoid both embedding application workflows in the
+core and speculative expansion unrelated to practical use.
 
 ## 4. Proposed architectural direction
 
@@ -105,6 +115,24 @@ Specify identity normalization, compatible configurations, concurrent opening,
 failed opening, release and reopening, and independent stores. Distinguish
 in-process coordination from separate processes accessing an App Group store.
 CloudKit imports and external writers are outside an application actor's control.
+
+### Identity, integrity, consistency, and recovery
+
+These are foundational design areas to resolve, not selected implementations:
+
+- Identity and integrity: distinguish domain identity, local persistence
+  identity, and cloud mapping; define identity scope across graphs and devices.
+  Define deletion rules, dangling references, duplicate identities, and how
+  temporarily incomplete imported structures are represented. Do not assume
+  application identity is interchangeable with a Core Data or CloudKit ID.
+- Conflicts and consistency: state local transaction guarantees, read visibility
+  during writes and imports, and concurrent-edit behavior. Separate what the
+  library controls from eventual mirroring and platform conflict handling.
+  Async/await alone does not establish a consistency model.
+- Lifecycle and recovery: define opening, closing, reopening, account changes,
+  permission loss, synchronization failures, and restore behavior. Expose useful
+  states and errors so a consumer can choose a recovery action without depending
+  on internal context management. Keep destructive recovery explicit.
 
 ### Isolation and graph objects
 
@@ -165,6 +193,35 @@ Evaluate an asynchronous change stream, including ordering, buffering, slow
 consumers, cancellation, replay, and delivery guarantees. Specify how local
 changes and remote history become observations without claiming that a completed
 import means the entire graph is available.
+
+### Query engine and observation
+
+Requirement R05 — stronger graph querying. Explore typed property filters,
+relationship traversal, sorting, pagination, counts, projections, and
+aggregations. These are candidate capabilities to assess, not a commitment to
+implement every query feature. Use representative graph questions to decide
+which operations are valuable and feasible with Core Data.
+
+Distinguish work translated into store queries from graph processing performed
+in memory. Define costs, result consistency, pagination stability, and behavior
+for unsupported expressions; avoid silently materializing an entire graph to
+evaluate a filter. Deep traversal needs explicit bounds and cycle semantics
+before any public contract is accepted.
+
+Reassess Watch without deciding now to retain or remove it. Current consumer
+uses include UI refresh, reacting to remote imports, and triggering data
+processing. Capture these as general needs rather than application workflows:
+
+- Execute a query once and obtain its result.
+- Observe a query result as membership, ordering, or relevant values change.
+- Consume changes for further processing, with an explicit delivery contract.
+
+Evaluate whether these need separate APIs or can share infrastructure while
+preserving distinct guarantees. An observable result is not automatically a
+durable, replayable change log, and a change notification is not proof of cloud
+completion. Assess `AsyncSequence` as a delivery surface alongside ordering,
+coalescing, buffering, cancellation, replay, and idempotent-consumer needs.
+The Watch name and existing callback structure are not requirements for v2.
 
 ### CloudKit and sharing
 
@@ -275,6 +332,8 @@ All entries are open. Proposed directions above are inputs to these decisions.
 | D10 | Can R01 be implemented using supported Apple APIs, and with what isolation guarantees? | Apple documentation/API review and a multi-graph, multi-device prototype covering unshared and shared graphs |
 | D11 | What protocol maps application models, identity, relationships, and actions to the graph? | Typed consumer examples covering read, edit, save, and relationship traversal |
 | D12 | What attachment representation and lifecycle can the selected stack support? | Binary-storage prototype, memory measurements, external-content backup/restore, and cross-device sharing checks |
+| D13 | Which query operations belong in v2, and how are execution cost and unsupported expressions exposed? | Independent typed-query examples, Core Data translation experiments, and traversal/pagination benchmarks |
+| D14 | What identity, integrity, and conflict contracts apply across devices and imports? | Identity round trips, deletion/incomplete-import scenarios, and concurrent-edit tests |
 
 ## 7. Validation scenarios for the specification
 
@@ -303,15 +362,36 @@ The specification should attach observable acceptance criteria to at least:
   and reopening and downgrade limits must be explicit.
 - Any selected compatibility adapters, including explicit rejection of v1
   patterns that cannot preserve v2 isolation and operation guarantees.
+- Queries covering typed filters, related nodes, stable ordering/pagination,
+  counts, and selected aggregations; compare store execution with any explicit
+  in-memory processing and test bounded traversal over cycles.
+- Query observation and change consumption as separate contracts, covering
+  membership changes, reordered results, deletion, remote imports, slow
+  consumers, cancellation, and any selected replay behavior.
+- Identity continuity across devices, deletion integrity, duplicate identities,
+  and temporarily incomplete imported data.
+- Account changes, revoked permissions, failed opening, closing/reopening,
+  and documented recovery paths with actionable errors.
+- Small consumers independent of the maintainer's app, exercising both UI-facing
+  observation and non-UI data processing without application-specific hooks.
+
+Performance and verifiability apply across all areas. Establish representative
+data sets and measurable budgets for query latency, attachment memory use, and
+import/observation processing before accepting performance claims. Keep local
+unit tests, simulated remote history, and real cross-device/account acceptance
+checks explicitly distinct; no single category substitutes for the others.
 
 ## 8. Path from outline to specification
 
 1. Agree on goals, supported application scenarios, and release boundaries.
 2. Audit current ownership and concurrency behavior; reproduce suspected defects.
-3. Compare minimal public API sketches and resolve D01–D04 through a small
-   local-store prototype with multiple handles and a Swift 6 consumer.
-4. Prototype sharing between accounts and use the results to resolve D05 and
-   its implications for identity, persistence, and observation.
+3. Resolve foundational identity, ownership, and consistency questions before
+   building higher-level contracts. Check Apple constraints on graph separation
+   and sharing early, since they may affect these foundations.
+4. Compare minimal public API sketches through focused prototypes with multiple
+   handles, Swift 6 consumers, and sharing between accounts. Build typed models,
+   queries, observation, and attachments on the validated foundations, using
+   independent consumer examples as well as the maintainer's application.
 5. Resolve the remaining decisions, define data-transition paths, and evaluate
    optional compatibility adapters against the target design.
 6. Write the normative specification: API contracts, state transitions, error
