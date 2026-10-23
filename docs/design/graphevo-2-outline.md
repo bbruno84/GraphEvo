@@ -63,6 +63,9 @@ Proposed goals:
 - Provide native asynchronous opening, reads, writes, and change observation.
 - Give each open store an explicit owner and consistent operation coordination.
 - Design user sharing together with graph ownership and CloudKit topology.
+- Keep distinct graphs as separate worlds, including in CloudKit, with no
+  relationships between graphs. This is a requirement whose feasibility must
+  be verified against supported Apple APIs before selecting an implementation.
 - Design APIs and the persistent model around v2 requirements, allowing breaking
   changes independently of the optional v1 compatibility layer.
 - Define an explicit adoption and data-transition strategy after establishing
@@ -114,9 +117,22 @@ import means the entire graph is available.
 
 ### CloudKit and sharing
 
-Design private and shared data as part of the store topology. Define the
-boundary of a shareable graph: root, included nodes, relationship and action
-dependencies, cycles, and links to data outside the share.
+Requirement R01 — graph separation in CloudKit. Distinct graphs must remain
+separate worlds, with no relationships between graphs. The desired cloud
+separation applies both to personal graphs that have never been shared and to
+graphs shared between users. Feasibility with Apple's supported resources,
+particularly `NSPersistentCloudKitContainer`, remains to be verified.
+
+Do not assume that separate SQLite stores produce separate cloud namespaces,
+or that one graph can map to an arbitrary record zone. Verify the available
+isolation boundaries, their constraints, and their behavior across devices
+before choosing a store, zone, share, or container mapping. If the desired
+separation cannot be achieved with the supported APIs, bring the limitation
+back to discussion before changing the requirement or the synchronization stack.
+
+Design private and shared data as part of the store topology only after this
+feasibility check. Define the boundary of a shareable graph: root, included
+nodes, relationship and action dependencies, and cycles within that graph.
 
 Cover owner and participant behavior, invitation creation and acceptance,
 read-only access, leaving, revocation, ownership constraints, offline work,
@@ -170,6 +186,7 @@ All entries are open. Proposed directions above are inputs to these decisions.
 | D07 | Which adoption paths and optional v1 adapters should be supported? | Target-model transition experiments, adapter feasibility, and application adoption examples |
 | D08 | What are the minimum OS, tools, and Swift language versions? | Required API availability and consumer impact assessment |
 | D09 | How are cloud failure, fallback, and account changes represented? | State transitions and recovery scenarios |
+| D10 | Can R01 be implemented using supported Apple APIs, and with what isolation guarantees? | Apple documentation/API review and a multi-graph, multi-device prototype covering unshared and shared graphs |
 
 ## 7. Validation scenarios for the specification
 
