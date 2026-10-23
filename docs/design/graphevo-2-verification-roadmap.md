@@ -59,6 +59,10 @@ scope in one persistent container. T2 was not launched. The
 opening and exporting successfully, followed by a fresh iPad replica recovering
 both A and B. That topology does not satisfy R01's cloud separation; return the
 limitation to discussion before choosing another boundary. T3–T4 remain unexecuted.
+The [T6 result](results/v01-t6-2026-10-23.md) is inconclusive: an owner-only share
+request remained pending without a recorded callback result during a clean bounded observation;
+neither the second share nor the reader was reached. Documented share-zone
+semantics must not be presented as demonstrated R01 feasibility.
 
 - Compare two independent local stores using the same model and cloud container;
   record supported configurations and the actual cloud mapping without assuming

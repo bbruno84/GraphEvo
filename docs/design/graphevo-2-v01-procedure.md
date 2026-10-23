@@ -2,10 +2,12 @@
 
 Status: T0 observed on two devices; T1 rejected by the native framework; T2 not
 launched after that rejection; T5 observed unified fresh-peer recovery;
-T3–T4 remain unexecuted; T6 owner-only shares is authorized and pending. See the
+T3–T4 remain unexecuted; T6 remained pending at its first share callback and is
+inconclusive. See the
 [T0 result](results/v01-t0-2026-10-23.md) and
 [T1 result](results/v01-t1-2026-10-23.md), and
-[T5 result](results/v01-t5-2026-10-23.md) for evidence and limits.
+[T5 result](results/v01-t5-2026-10-23.md), and
+[T6 result](results/v01-t6-2026-10-23.md) for evidence and limits.
 This elaborates V01 of
 [the verification roadmap](graphevo-2-verification-roadmap.md) and requirement R01
 in [the design outline](graphevo-2-outline.md). It selects no v2 topology.
