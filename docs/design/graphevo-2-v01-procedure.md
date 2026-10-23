@@ -2,7 +2,7 @@
 
 Status: T0 observed on two devices; T1 rejected by the native framework; T2 not
 launched after that rejection; T5 observed unified fresh-peer recovery;
-T3–T4 remain unexecuted. See the
+T3–T4 remain unexecuted; T6 owner-only shares is authorized and pending. See the
 [T0 result](results/v01-t0-2026-10-23.md) and
 [T1 result](results/v01-t1-2026-10-23.md), and
 [T5 result](results/v01-t5-2026-10-23.md) for evidence and limits.
@@ -63,8 +63,9 @@ No private API, custom zone injection, or direct CKRecord write is part of V01.
 | T3: recovery order | With new disposable local paths, repeat opening candidate A/B replicas in reversed order; never load one SQLite store through two mirror owners | Determine whether any claimed identity boundary survives recreation and order changes |
 | T4: independent change | Change A-001 on device 1, retaining B-001 as a control | Inspect persisted rows on device 2; distinguish a full replica with filtered queries from separate recovery domains |
 | T5: alternate lifecycle, if justified | If needed, compare separate persistent containers owning distinct store files using the same cloud configuration | Record differences from T1 without treating this as a way to select arbitrary private zones |
+| T6: owner-only shares | Create a new share for each disconnected root graph, without adding other participants; recover on a fresh same-account peer | Verify distinct zones and exact root/child share membership without claiming selective download or separate SQLite stores |
 
-Do not proceed with T1–T5 if T0 has not established a working cloud setup.
+Do not proceed with T1–T6 if T0 has not established a working cloud setup.
 Stop an unsupported configuration on its native error; do not silently fall
 back to local persistence or count an app-side partition as remote isolation.
 Do not deliberately run simultaneous mirror owners for the same SQLite file.
@@ -109,6 +110,48 @@ export, direct CKRecord writes, custom zones, scope changes, or local fallback
 belong to this trial. Record the outcome before choosing further lifecycle or
 selective-recovery experiments.
 
+## T6 revision: graph membership and owner-only shares
+
+After T5's unified recovery, the maintainer authorized a separate sharing-zone
+experiment. Use one private store and one `NSPersistentCloudKitContainer`, with
+two disconnected root objects A/B and their own children. Introduce dedicated
+experimental entity names in new SQLite paths rather than modifying old stores
+or resetting the test cloud schema. Root/child relationships must be optional,
+have inverses, and form no cross-graph or global-catalog connections. Persist
+the fixture and retain a checkpoint before requesting shares.
+
+For each root independently, call the public `share(_:to:completion:)` with
+`to: nil`. Apple's API documentation explicitly describes creating a new shared
+record zone without participants; its deep traversal also includes related
+objects. The experiment adds no participants, sends no invitations, and does
+not use sharing UI. Distinguish the share owner from non-owner participants;
+record public permission without collecting user identities or invitation URLs.
+
+Retain each share callback outcome and returned object-ID membership, then
+inspect all fixture roots/children with `fetchShares(matching:)` and public
+record mappings. Verify that every A object belongs to share/zone A, every B
+object to share/zone B, and the two share IDs and zone identities differ. Read
+the entire run; graph labels must not hide unexpected members. Missing local
+metadata is inconclusive: `fetchShares(matching:)` reads only known shares and
+is not a server discovery or synchronization barrier. No custom zone injection
+or CKRecord CRUD is part of this experiment. Any necessary share persistence
+uses Core Data's supported share APIs, with its exact call sequence retained.
+
+After the writer report is retained and its process terminated, start a reader
+on the same-account iPad in a new private SQLite file. It creates no fixture or
+shares and accepts no invitations. Compare exact roots, children, relationship
+membership, record names, zone identities, share IDs, and owner-only participant
+state. Both graphs may arrive in one local store even if they retain separate
+cloud zones. Report zone separation, logical membership, local store topology,
+and selective recovery as distinct findings.
+
+Use bounded observation windows, fresh context reads, native events, source and
+signature verification, and retained final reports as in earlier trials. Stop
+on an unsupported native configuration or share failure without substituting
+another scope/resource. Missing or partial peer data is inconclusive. This
+trial does not prove cross-user permissions, selective zone download, future
+share lifecycle stability, or production scale; those remain separate checks.
+
 ## Evidence, cleanup, and decision
 
 For each trial retain its exact configuration, local store inventory, fetched
@@ -134,6 +177,8 @@ accepted conclusions from this procedure.
 - [Setting Up Core Data with CloudKit](https://developer.apple.com/documentation/coredata/setting-up-core-data-with-cloudkit): multiple-store configuration; it does not establish the proposed per-graph cloud boundary.
 - [TN3164](https://developer.apple.com/documentation/technotes/tn3164-debugging-the-synchronization-of-nspersistentcloudkitcontainer): system-controlled timing and conflicts from multiple mirror owners for one store.
 - [Sharing Core Data objects between iCloud users](https://developer.apple.com/documentation/coredata/sharing-core-data-objects-between-icloud-users): private/shared store topology and sharing behavior, to be examined in V02 rather than assumed for unshared graphs.
+- [Creating or extending a share](https://developer.apple.com/documentation/coredata/nspersistentcloudkitcontainer/sharemanagedobjects%3Atoshare%3Acompletion%3A): a nil share requests a new zone without participants; related objects are included by traversal.
+- [Fetching known object shares](https://developer.apple.com/documentation/coredata/nspersistentcloudkitcontainer/fetchsharesmatchingobjectids%3Aerror%3A): reads known associations only, without discovering additional zones.
 
 These references motivate the controls; this document contains no experimental
 findings. Resource configuration remains local and is excluded from tracked files.
@@ -168,7 +213,7 @@ populate the reader. Release all context-bound objects and mirror owners; an
 app restart must enter only the experiment reader, not GraphProvider.
 
 The optional single-device check does not satisfy T0's independent-device control.
-T1–T5 remain gated
+T1–T6 remain gated
 on T0 under this procedure; changing that gate requires an explicit revision
 and a clear account of what evidence would still be missing. Local/unit tests
 and preliminary single-device work can proceed independently. The experiment
