@@ -27,3 +27,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
   covering goals, architectural questions, and the path to a specification.
   It does not describe the current public API.
+- [GraphEvo 2 verification roadmap](design/graphevo-2-verification-roadmap.md):
+  experiments to validate framework behavior in GraphEvoDemo before specification.
+- [GraphEvoDemo initial assessment](design/graphevo-demo-initial-assessment.md):
+  source state, existing coverage, build evidence, and laboratory preparation.

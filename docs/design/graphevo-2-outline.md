@@ -383,6 +383,11 @@ checks explicitly distinct; no single category substitutes for the others.
 
 ## 8. Path from outline to specification
 
+Before drafting the normative specification, follow the separate
+[framework verification roadmap](graphevo-2-verification-roadmap.md), starting
+with recovery and assessment of GraphEvoDemo. Experiment outcomes inform the
+decisions below; this outline does not imply those experiments have run.
+
 1. Agree on goals, supported application scenarios, and release boundaries.
 2. Audit current ownership and concurrency behavior; reproduce suspected defects.
 3. Resolve foundational identity, ownership, and consistency questions before
