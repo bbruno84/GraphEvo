@@ -18,6 +18,10 @@ This outline separates observations about v1 from proposed directions and open
 decisions. Each accepted decision should eventually record its rationale,
 alternatives, compatibility impact, and validation criteria.
 
+Accepted direction: v1 compatibility must not constrain the v2 design. Public
+APIs and the persistent model may change. An optional compatibility layer may
+ease adoption where its behavior can be supported safely; its scope remains open.
+
 ## 2. Current baseline
 
 The baseline is `develop` at `4dc0a7f`. This is a source and documentation review,
@@ -59,7 +63,10 @@ Proposed goals:
 - Provide native asynchronous opening, reads, writes, and change observation.
 - Give each open store an explicit owner and consistent operation coordination.
 - Design user sharing together with graph ownership and CloudKit topology.
-- Provide a documented adoption path for applications and existing data.
+- Design APIs and the persistent model around v2 requirements, allowing breaking
+  changes independently of the optional v1 compatibility layer.
+- Define an explicit adoption and data-transition strategy after establishing
+  the target design.
 - Keep local persistence useful independently of CloudKit.
 
 This planning phase does not authorize changes to production stores, CloudKit
@@ -121,21 +128,32 @@ Local readiness, durable save, export, import, and share availability need
 distinct meanings. Define fallback policy explicitly, particularly when shared
 data cannot be opened safely or permissions have changed.
 
-## 5. Compatibility and adoption
+## 5. Adoption and optional compatibility
+
+V1 source compatibility and in-place store compatibility are not requirements
+for the v2 core. Choose the target API and persistent model for correctness,
+concurrency, and sharing first. Document the transition costs and supported
+adoption paths without requiring the new architecture to reproduce v1 internals.
+
+Evaluate an optional compatibility layer separately. It may adapt selected v1
+patterns to the v2 core where their semantics remain safe. It must not weaken
+the isolation model or promise behavior the core cannot provide. Full v1 API
+coverage is not assumed; unsupported patterns may require application changes.
 
 Treat these as separate decisions:
 
 | Compatibility surface | Required investigation |
 |---|---|
-| Source API | Which v1 patterns remain, need adapters, or require application changes? |
-| Local data | Can existing SQLite stores be opened with the same model and metadata? |
-| CloudKit data | Can existing records, zones, identities, and mirroring metadata be retained? |
+| Source API | Which v1 patterns merit an optional adapter, and which require application changes? |
+| Local data | Does the target model permit direct reuse, or require explicit migration or export/import? |
+| CloudKit data | Can existing cloud data be retained, or is a separate cloud transition required? |
 | Operational behavior | What happens to migrations, history cursors, watchers, backups, and reset flows? |
 
 Do not assume that preserving source API names preserves store compatibility,
 or that a compatible local store establishes CloudKit continuity. Define backup,
 failure recovery, and downgrade limits before enabling any transition.
-Incompatible stores must not be silently rewritten or moved.
+Incompatible stores must not be silently rewritten or moved. An API adapter
+does not by itself migrate SQLite or CloudKit data.
 
 ## 6. Decisions to resolve
 
@@ -149,7 +167,7 @@ All entries are open. Proposed directions above are inputs to these decisions.
 | D04 | How are dynamic values typed and transferred? | Supported-value inventory and encoding compatibility review |
 | D05 | What is the shareable unit and how are private/shared stores organized? | Owner/participant prototype and graph-boundary rules |
 | D06 | What guarantees does change observation provide? | Ordering, replay, deletion, and slow-consumer scenarios |
-| D07 | Which v1 compatibility guarantees are retained? | Local-store fixtures, CloudKit continuity checks, and adoption examples |
+| D07 | Which adoption paths and optional v1 adapters should be supported? | Target-model transition experiments, adapter feasibility, and application adoption examples |
 | D08 | What are the minimum OS, tools, and Swift language versions? | Required API availability and consumer impact assessment |
 | D09 | How are cloud failure, fallback, and account changes represented? | State transitions and recovery scenarios |
 
@@ -168,8 +186,11 @@ The specification should attach observable acceptance criteria to at least:
   history and injected identity tests.
 - Sharing between different accounts, including offline edits, read-only
   participants, invitation acceptance, revocation, and account changes.
-- Adoption from a populated v1 local and CloudKit store, with backup and failed
-  transition recovery; reopening and downgrade behavior must be explicit.
+- The selected transition paths from populated v1 local and CloudKit stores,
+  with backup and failed-transition recovery; direct opening is not assumed,
+  and reopening and downgrade limits must be explicit.
+- Any selected compatibility adapters, including explicit rejection of v1
+  patterns that cannot preserve v2 isolation and operation guarantees.
 
 ## 8. Path from outline to specification
 
@@ -179,7 +200,8 @@ The specification should attach observable acceptance criteria to at least:
    local-store prototype with multiple handles and a Swift 6 consumer.
 4. Prototype sharing between accounts and use the results to resolve D05 and
    its implications for identity, persistence, and observation.
-5. Resolve the remaining decisions and document compatibility constraints.
+5. Resolve the remaining decisions, define data-transition paths, and evaluate
+   optional compatibility adapters against the target design.
 6. Write the normative specification: API contracts, state transitions, error
    model, persistence and sharing topology, acceptance criteria, and rollout.
 7. Plan implementation in validated increments, keeping v1 maintenance separate.
