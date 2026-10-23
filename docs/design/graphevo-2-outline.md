@@ -1,7 +1,8 @@
 # GraphEvo 2 — design outline
 
-Status: initial discussion draft. This document is a working outline for the
-future specification, not an approved architecture or a promise of API behavior.
+Status: evolving discussion draft. This document records agreed requirements
+and open design questions for the future specification. It is not an approved
+architecture or a promise of final API behavior.
 
 ## 1. Context and purpose
 
@@ -36,6 +37,9 @@ not a completed concurrency audit or a Swift 6 language-mode build assessment.
 | Sharing | No public sharing lifecycle or shared-store topology is exposed | Define participants, permissions, graph boundaries, and failure behavior |
 | Concurrency API | Saves and readiness use callbacks; queries and scoped transactions are synchronous | Define native asynchronous operations and cancellation semantics |
 | Swift language | Package manifest uses Swift tools 5.9; public nodes remain context-bound and properties use `Any?` | Establish a Swift 6 isolation and value-transfer contract |
+| Context execution | Synchronous searches, saves, and transaction steps use `performAndWait` | Use native asynchronous context access in asynchronous operation paths |
+| Application models | Public properties are accessed dynamically through node facades | Define protocol-based integration for typed application models |
+| Binary content | Transformable property values already allow external binary storage | Add a dedicated attachment contract beyond generic value storage |
 
 The registry already provides meaningful protection. A race between instances
 must be demonstrated with a reproducible scenario before it is recorded as a
@@ -55,12 +59,17 @@ Baseline references:
 
 ## 3. Goals and boundaries
 
-Proposed goals:
+Goals and agreed requirements:
 
 - Preserve the concepts of Graph, Entity, Relationship, Action, Search, and Watch,
   while allowing their public contracts to evolve in a major release.
 - Make supported usage safe under Swift 6 language mode and strict concurrency.
 - Provide native asynchronous opening, reads, writes, and change observation.
+- Use async/await wherever the operation involves asynchronous work; use Core
+  Data's native asynchronous context APIs rather than blocking wrappers.
+- Replace dynamic-member access as the primary application API with typed
+  application models conforming to a GraphEvo protocol.
+- Provide native attachment support through Core Data and its mirroring stack.
 - Give each open store an explicit owner and consistent operation coordination.
 - Design user sharing together with graph ownership and CloudKit topology.
 - Keep distinct graphs as separate worlds, including in CloudKit, with no
@@ -77,6 +86,11 @@ schemas, deployment targets, or current public behavior. Replacing Core Data,
 adopting SwiftData, or implementing a custom CloudKit synchronization engine is
 not an accepted decision. Evaluate a backend change only against concrete
 requirements and migration costs.
+
+The integration boundary is Core Data and `NSPersistentCloudKitContainer`.
+Application-facing models and attachments should not require direct handling of
+CloudKit records, assets, or zones. Platform details may still be necessary for
+configuration, sharing, and diagnostics; any such exposure needs justification.
 
 ## 4. Proposed architectural direction
 
@@ -99,11 +113,48 @@ include an isolated live-object API, scoped read/write access, and transferable
 immutable snapshots. Compare them using the same application scenarios.
 
 Define what may cross a task or actor boundary, how node identities are resolved,
-and how dynamic property values are represented. Context-bound facades must not
+and how application model values are represented. Context-bound facades must not
 escape a scoped operation accidentally. An actor around a container alone does
 not establish these guarantees.
 
+### Typed application models
+
+Requirement R03 — protocol-based model integration. Applications should use
+their own typed models conforming to a GraphEvo protocol, replacing the current
+dynamic-member property API as the primary integration surface. The intended
+result is typed property access and compiler checking in application code.
+
+The protocol name and requirements remain open. Define identity, graph type,
+property encoding and decoding, and the representation of relationships and
+actions. Decide whether models are value snapshots, isolated live objects, or
+scoped representations, and how edits become durable. Do not assume that an
+arbitrary conforming model is `Sendable` or independent of a context.
+
+Explicit conversion is a candidate; macros or generated mapping may reduce
+boilerplate later but are not agreed requirements. Retention of dynamic access
+in an optional v1 adapter is a separate decision.
+
 ### Operations and observations
+
+Requirement R02 — native Swift Concurrency. Use async/await for operations that
+can be managed asynchronously, including opening, queries, writes, transactions,
+and supported cloud/sharing operations. Return values and propagate errors
+directly, using `async throws` where appropriate. Immediate property access and
+pure in-memory operations need not become asynchronous merely for consistency.
+
+Use `try await context.perform { ... }` where appropriate in asynchronous Core
+Data paths. Its closure still executes on the context's queue and is synchronous;
+the caller can suspend while awaiting its result. Do not wrap `performAndWait`
+inside an async method and treat that as a concurrency redesign. Review existing
+cross-context calls and lock ordering; thread-owned locks must not span an
+`await`. Heavy persistence work needs private contexts, and context-bound objects
+must not escape their execution boundary.
+
+Callback adapters may remain internal where Apple only provides callback APIs.
+Their presence does not invalidate an asynchronous contract. Merely naming a
+method `async`, dispatching work, or marking a blocking method `async` does not
+provide that contract. Apple's native asynchronous context API is described in
+[Bring Core Data concurrency to Swift and SwiftUI](https://developer.apple.com/videos/play/wwdc2021/10017/).
 
 Define asynchronous opening and error delivery; read consistency; write commit
 and rollback boundaries; pending-edit ownership; conflict handling; and
@@ -144,6 +195,41 @@ Local readiness, durable save, export, import, and share availability need
 distinct meanings. Define fallback policy explicitly, particularly when shared
 data cannot be opened safely or permissions have changed.
 
+### Native attachments
+
+Requirement R04 — native attachment support. GraphEvo should manage binary
+content through Core Data and `NSPersistentCloudKitContainer`, without requiring
+applications to manage `CKAsset` or implement a separate cloud transfer path.
+Whether attachments are node properties, nodes in their own right, or both
+remains open.
+
+Documentation confirms the following foundation:
+
+- A Core Data binary attribute can expose content as `Data` and enable
+  `allowsExternalBinaryDataStorage`. This allows Core Data to choose external
+  file storage; it does not require every value to be stored externally.
+  See [Apple's attribute documentation](https://developer.apple.com/documentation/coredata/nsattributedescription/allowsexternalbinarydatastorage).
+- The mirroring stack transparently maps variable-length values to CloudKit
+  assets when needed. Local external storage and cloud asset serialization are
+  distinct decisions managed by Apple. See
+  [Reading CloudKit Records for Core Data](https://developer.apple.com/documentation/coredata/reading-cloudkit-records-for-core-data).
+- V1 already enables external binary storage for transformable property values
+  in [Model.swift](../../Sources/GraphEvo/Model.swift); this alone does not provide
+  a public attachment lifecycle.
+
+Explore a dedicated attachment representation with metadata and binary content,
+including import from a file URL, reading, replacement, deletion, and export to
+an application-usable file. A Core Data internal external-storage path must not
+be treated as a stable public file URL. Define filename, content type, ownership,
+temporary export lifetime, and cleanup behavior explicitly.
+
+This is documentation-level feasibility, not a completed implementation test.
+Measure memory and performance for representative file sizes. Verify sharing,
+offline access, replacement, deletion, backup/restore of external content, and
+cancellation behavior. Streaming, selective downloads, cache eviction, and
+per-attachment transfer progress are not established capabilities of this design.
+Local save completion must remain distinct from remote transfer completion.
+
 ## 5. Adoption and optional compatibility
 
 V1 source compatibility and in-place store compatibility are not requirements
@@ -180,13 +266,15 @@ All entries are open. Proposed directions above are inputs to these decisions.
 | D01 | What owns an open store and how is its lifetime managed? | Concurrent-open and multiple-handle lifecycle scenarios |
 | D02 | Are public nodes isolated live objects, scoped facades, snapshots, or a combination? | Small consumer examples compiled with strict concurrency |
 | D03 | What defines a transaction and can its body suspend? | Atomicity, cancellation, conflict, and reentrancy scenarios |
-| D04 | How are dynamic values typed and transferred? | Supported-value inventory and encoding compatibility review |
+| D04 | How are typed model properties encoded and transferred? | Supported-value inventory, strict-concurrency examples, and target-model encoding review |
 | D05 | What is the shareable unit and how are private/shared stores organized? | Owner/participant prototype and graph-boundary rules |
 | D06 | What guarantees does change observation provide? | Ordering, replay, deletion, and slow-consumer scenarios |
 | D07 | Which adoption paths and optional v1 adapters should be supported? | Target-model transition experiments, adapter feasibility, and application adoption examples |
 | D08 | What are the minimum OS, tools, and Swift language versions? | Required API availability and consumer impact assessment |
 | D09 | How are cloud failure, fallback, and account changes represented? | State transitions and recovery scenarios |
 | D10 | Can R01 be implemented using supported Apple APIs, and with what isolation guarantees? | Apple documentation/API review and a multi-graph, multi-device prototype covering unshared and shared graphs |
+| D11 | What protocol maps application models, identity, relationships, and actions to the graph? | Typed consumer examples covering read, edit, save, and relationship traversal |
+| D12 | What attachment representation and lifecycle can the selected stack support? | Binary-storage prototype, memory measurements, external-content backup/restore, and cross-device sharing checks |
 
 ## 7. Validation scenarios for the specification
 
@@ -197,6 +285,13 @@ The specification should attach observable acceptance criteria to at least:
 - Two independent stores, plus an app and extension using the same App Group
   store; explicitly state the guarantees in each case.
 - Swift 6 consumers reading, writing, and observing across actor boundaries.
+- Native async context operations without blocking bridges or locks held across
+  suspension, with error propagation and explicit cancellation outcomes.
+- Typed application models without dynamic-member access, including identity,
+  relationships, persistence round trips, and supported boundary transfers.
+- Attachments of representative sizes, covering import/export, metadata,
+  replacement, deletion, offline reads, backup/restore, and shared access;
+  simulated tests and real-device mirroring checks must be distinguished.
 - Cancellation around commit and observation delivery; conflicts involving
   local writers and remote imports.
 - Private CloudKit synchronization across devices, separately from simulated
