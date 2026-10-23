@@ -240,8 +240,12 @@ back to discussion before changing the requirement or the synchronization stack.
 
 The [V01 T1 experiment](results/v01-t1-2026-10-23.md) observed native rejection
 of two stores assigned to the same cloud container/private scope within one
-`NSPersistentCloudKitContainer`. R01 remains open: other ownership topologies
-have not been verified, and this result does not establish cloud separation.
+`NSPersistentCloudKitContainer`. The subsequent
+[T5 experiment](results/v01-t5-2026-10-23.md) used two independent one-store
+owners with the same model and private cloud destination: a fresh independent
+iPad replica recovered both logical graphs together. Separate local files and
+owners therefore did not satisfy R01 in that trial. R01 remains open; discuss
+other supported boundaries before selecting a topology or changing the stack.
 
 Design private and shared data as part of the store topology only after this
 feasibility check. Define the boundary of a shareable graph: root, included

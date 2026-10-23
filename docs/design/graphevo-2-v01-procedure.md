@@ -1,9 +1,11 @@
 # V01 — cloud separation verification procedure
 
 Status: T0 observed on two devices; T1 rejected by the native framework; T2 not
-launched after that rejection; T3–T5 remain unexecuted. See the
+launched after that rejection; T5 observed unified fresh-peer recovery;
+T3–T4 remain unexecuted. See the
 [T0 result](results/v01-t0-2026-10-23.md) and
-[T1 result](results/v01-t1-2026-10-23.md) for evidence and limits.
+[T1 result](results/v01-t1-2026-10-23.md), and
+[T5 result](results/v01-t5-2026-10-23.md) for evidence and limits.
 This elaborates V01 of
 [the verification roadmap](graphevo-2-verification-roadmap.md) and requirement R01
 in [the design outline](graphevo-2-outline.md). It selects no v2 topology.
@@ -70,6 +72,42 @@ Do not deliberately run simultaneous mirror owners for the same SQLite file.
 The system controls synchronization timing. End each observation window with a
 recorded outcome; a timeout or a missing row alone is inconclusive, not proof of
 separation. A successful event alone is not a complete-fixture assertion.
+
+## T5 revision: separate owners, same cloud destination
+
+After the native T1 rejection, the maintainer authorized T5 with an independent
+fresh-peer stage. T1 and its unexecuted T2 remain unchanged historical trials.
+The new stages use a new runID and new local paths; previous cloud fixtures may
+remain, distinguished by runID rather than deleted as a prerequisite.
+
+The iPhone writer creates two distinct `NSPersistentCloudKitContainer` objects
+in one process. Each owns exactly one distinct SQLite file, uses the identical
+V01 model, and targets the same configured iCloud container and `.private`
+scope. Keep both owners alive throughout the observation window. The T1
+duplicate-destination preflight remains scoped to descriptions within one owner;
+it must not reject the separate-owner experiment or be removed from T1.
+
+Write A-001/A-002 only through owner A and B-001 only through owner B. Retain
+initial and final fresh-context snapshots for each physical store, native events
+attributed to the emitting owner and store, local save results, and available
+record/zone mappings. Reads may filter only by runID, never logicalGraphID.
+Cross-store arrival of an exact fixture written only by the other owner is
+positive evidence against isolation. Missing rows at the end of the window
+remain inconclusive, even if both exports report success.
+
+After retaining the writer report, terminate its process. On the independent
+iPad, launch the T5 reader into a new SQLite path with one mirror owner, the same
+model, cloud destination, account, and runID. It must not insert, restore, or
+copy fixture data. Recovering both A and B in that one fresh replica is positive
+evidence of a unified recovery domain for this tested topology. Compare exact
+values and available record/zone identities with the writer evidence. Absence,
+partial recovery, or a native setup error does not establish isolation.
+
+Verify signed Development entitlements and frozen source provenance before
+hardware execution. Local/injected tests verify orchestration only. No forced
+export, direct CKRecord writes, custom zones, scope changes, or local fallback
+belong to this trial. Record the outcome before choosing further lifecycle or
+selective-recovery experiments.
 
 ## Evidence, cleanup, and decision
 
