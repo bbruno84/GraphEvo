@@ -50,6 +50,9 @@ remain separate from that assessment.
 
 Priority: first framework feasibility experiment; R01 and D01/D10.
 
+The [proposed V01 procedure](graphevo-2-v01-procedure.md) defines controls,
+fixtures, trial order, evidence, and prerequisites. It has not been executed.
+
 - Compare two independent local stores using the same model and cloud container;
   record supported configurations and the actual cloud mapping without assuming
   one store creates one private zone.
