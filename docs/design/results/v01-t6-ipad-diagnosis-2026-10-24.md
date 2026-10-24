@@ -3,7 +3,8 @@
 Status: the laboratory deadlock was reproduced and diagnosed on a physical iPad.
 After correcting event delivery, both owner-only shares were created and
 persisted, and a fresh SQLite replica recovered their exact data and share/zone
-identities on the **same iPad**. Independent-device recovery remains pending.
+identities on the **same iPad**. Independent-device recovery was pending at this stage; the subsequent
+[iPhone reader result](v01-t6-independent-reader-2026-10-24.md) records that follow-up.
 The iPhone was not used in this investigation, as requested by the maintainer.
 
 This follows the [initial inconclusive T6 attempts](v01-t6-2026-10-23.md) and

@@ -4,12 +4,14 @@ Status: T0 observed on two devices; T1 rejected by the native framework; T2 not
 launched after that rejection; T5 observed unified fresh-peer recovery;
 T3–T4 remain unexecuted. T6's initial runs were inconclusive; after an observer
 delivery correction, owner-only zone creation and fresh same-iPad recovery were
-observed. Independent-device T6 remains pending. See the
+observed. The independent iPhone reader subsequently recovered the exact fixture
+and distinct owner-only zones from the iPad writer. See the
 [T0 result](results/v01-t0-2026-10-23.md) and
 [T1 result](results/v01-t1-2026-10-23.md), and
 [T5 result](results/v01-t5-2026-10-23.md), and
 [initial T6 result](results/v01-t6-2026-10-23.md) and
-[T6 iPad diagnosis/result](results/v01-t6-ipad-diagnosis-2026-10-24.md) for evidence and limits.
+[T6 iPad diagnosis/result](results/v01-t6-ipad-diagnosis-2026-10-24.md) and
+[independent T6 reader](results/v01-t6-independent-reader-2026-10-24.md) for evidence and limits.
 This elaborates V01 of
 [the verification roadmap](graphevo-2-verification-roadmap.md) and requirement R01
 in [the design outline](graphevo-2-outline.md). It selects no v2 topology.

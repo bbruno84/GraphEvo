@@ -250,9 +250,12 @@ The [initial T6 owner-only share experiment](results/v01-t6-2026-10-23.md) remai
 inconclusive. Subsequent [iPad diagnosis](results/v01-t6-ipad-diagnosis-2026-10-24.md)
 identified and corrected a laboratory notification-delivery deadlock; two
 owner-only share zones and exact fresh same-device recovery were then observed.
-This supplies concrete evidence for a cloud zone boundary, while independent-device
-recovery, selective synchronization, sharing lifecycle and broader R01 guarantees
-remain unverified. No final sharing topology is selected from this result.
+The subsequent [independent iPhone recovery](results/v01-t6-independent-reader-2026-10-24.md)
+preserved the exact fixture, relationships and zone/share identities from the
+iPad writer. This supplies cross-device evidence for a cloud zone boundary;
+selective synchronization, sharing lifecycle and broader R01 guarantees remain
+unverified. Both graphs recover into one local SQLite. No final sharing topology
+is selected from this result.
 
 Design private and shared data as part of the store topology only after this
 feasibility check. Define the boundary of a shareable graph: root, included

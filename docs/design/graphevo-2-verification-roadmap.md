@@ -68,8 +68,11 @@ showed the same pending first-share stage with unchanged code. The cause remains
 unidentified in those reports. Subsequent
 [iPad tracing and diagnosis](results/v01-t6-ipad-diagnosis-2026-10-24.md) identified
 a laboratory observer wait cycle. Corrected event delivery allowed creation of
-two owner-only zones and exact fresh same-device recovery. Independent-device
-recovery and broader R01 guarantees remain pending.
+two owner-only zones and exact fresh same-device recovery. The subsequent
+[independent iPhone reader](results/v01-t6-independent-reader-2026-10-24.md)
+recovered the exact fixture, relationships and zone/share identities from the
+iPad writer. Initial T6 peer recovery is observed; selective synchronization,
+sharing lifecycle and broader R01 guarantees remain pending.
 
 - Compare two independent local stores using the same model and cloud container;
   record supported configurations and the actual cloud mapping without assuming
