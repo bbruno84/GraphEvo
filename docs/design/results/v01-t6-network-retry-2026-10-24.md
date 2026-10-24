@@ -1,5 +1,9 @@
 # V01 T6 — repeat after reported network recovery
 
+Follow-up: [iPad diagnosis](v01-t6-ipad-diagnosis-2026-10-24.md) reproduced and
+fixed the laboratory observer wait cycle, then observed two owner-only zones
+and fresh same-device recovery. This historical repeat remains inconclusive.
+
 Status: **inconclusive**. After the maintainer reported that the network appeared
 operational again, the same frozen T6 implementation was run with a new fixture
 and local store, without a debugger. The first share stage again retained no

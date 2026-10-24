@@ -246,10 +246,13 @@ owners with the same model and private cloud destination: a fresh independent
 iPad replica recovered both logical graphs together. Separate local files and
 owners therefore did not satisfy R01 in that trial. R01 remains open; discuss
 other supported boundaries before selecting a topology or changing the stack.
-The [T6 owner-only share experiment](results/v01-t6-2026-10-23.md) remained
-inconclusive at the first native share callback. Separate share zones are a
-documented API capability, but their suitability for R01 has not been demonstrated
-by this incomplete run; no sharing topology is selected from it.
+The [initial T6 owner-only share experiment](results/v01-t6-2026-10-23.md) remained
+inconclusive. Subsequent [iPad diagnosis](results/v01-t6-ipad-diagnosis-2026-10-24.md)
+identified and corrected a laboratory notification-delivery deadlock; two
+owner-only share zones and exact fresh same-device recovery were then observed.
+This supplies concrete evidence for a cloud zone boundary, while independent-device
+recovery, selective synchronization, sharing lifecycle and broader R01 guarantees
+remain unverified. No final sharing topology is selected from this result.
 
 Design private and shared data as part of the store topology only after this
 feasibility check. Define the boundary of a shareable graph: root, included

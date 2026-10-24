@@ -2,12 +2,14 @@
 
 Status: T0 observed on two devices; T1 rejected by the native framework; T2 not
 launched after that rejection; T5 observed unified fresh-peer recovery;
-T3–T4 remain unexecuted; T6 remained pending at its first share callback and is
-inconclusive. See the
+T3–T4 remain unexecuted. T6's initial runs were inconclusive; after an observer
+delivery correction, owner-only zone creation and fresh same-iPad recovery were
+observed. Independent-device T6 remains pending. See the
 [T0 result](results/v01-t0-2026-10-23.md) and
 [T1 result](results/v01-t1-2026-10-23.md), and
 [T5 result](results/v01-t5-2026-10-23.md), and
-[T6 result](results/v01-t6-2026-10-23.md) for evidence and limits.
+[initial T6 result](results/v01-t6-2026-10-23.md) and
+[T6 iPad diagnosis/result](results/v01-t6-ipad-diagnosis-2026-10-24.md) for evidence and limits.
 This elaborates V01 of
 [the verification roadmap](graphevo-2-verification-roadmap.md) and requirement R01
 in [the design outline](graphevo-2-outline.md). It selects no v2 topology.
@@ -113,6 +115,13 @@ belong to this trial. Record the outcome before choosing further lifecycle or
 selective-recovery experiments.
 
 ## T6 revision: graph membership and owner-only shares
+
+Native event observation must return promptly on the posting queue and deliver
+report/UI updates asynchronously. Registering a main-queue notification observer
+can deadlock when native sharing waits on work that posts an event. Keep diagnostic
+callback-entry tracing independent of the MainActor, and record debugger pauses
+separately from clean execution. A fresh same-device replica is useful preliminary
+evidence but does not replace the independent-device reader below.
 
 After T5's unified recovery, the maintainer authorized a separate sharing-zone
 experiment. Use one private store and one `NSPersistentCloudKitContainer`, with
