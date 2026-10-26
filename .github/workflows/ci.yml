@@ -5,11 +5,13 @@ on:
     branches:
       - develop
       - master
+      - codex/graphevo-2
       - "release/**"
   push:
     branches:
       - develop
       - master
+      - codex/graphevo-2
       - "release/**"
 
 permissions:
@@ -17,7 +19,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/develop' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/codex/graphevo-2' }}
 
 jobs:
   test:

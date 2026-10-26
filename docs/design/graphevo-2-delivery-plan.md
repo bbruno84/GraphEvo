@@ -31,6 +31,12 @@ After stable release readiness and review, promote 2.0 into `master` and
 PR remains documentation-only. Do not merge it as an implicit implementation
 release. Package distribution details remain to settle before the first alpha.
 
+The CI workflow includes PRs targeting `codex/graphevo-2` and pushes to that
+integration branch, alongside the existing v1/release triggers. Superseded v2
+integration runs may be cancelled; the existing stable-release consumer fixture
+retains its separate scope. Runtime implementation changes must keep the v2
+checks applicable as the package/toolchain evolves.
+
 Each alpha is a coherent usable increment with its model/API revision and
 known limits recorded. Alpha stage numbers below are planning milestones,
 not a promise of one prerelease tag per stage. Remain alpha through stage 8.
