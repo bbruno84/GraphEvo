@@ -1,8 +1,11 @@
 # GraphEvo 2 — design outline
 
-Status: evolving discussion draft. This document records agreed requirements
-and open design questions for the future specification. It is not an approved
-architecture or a promise of final API behavior.
+Status: historical discussion outline, retained as design context. The
+[initial specification](graphevo-2-specification.md),
+[decision register](graphevo-2-decisions.md) and
+[delivery plan](graphevo-2-delivery-plan.md) now carry current decisions and
+working contracts. Unresolved questions and earlier evidence below are not a
+promise of final API behavior.
 
 ## 1. Context and purpose
 
@@ -19,9 +22,14 @@ This outline separates observations about v1 from proposed directions and open
 decisions. Each accepted decision should eventually record its rationale,
 alternatives, compatibility impact, and validation criteria.
 
-Accepted direction: v1 compatibility must not constrain the v2 design. Public
-APIs and the persistent model may change. An optional compatibility layer may
-ease adoption where its behavior can be supported safely; its scope remains open.
+Accepted direction: v1 source compatibility must not constrain the v2 design.
+Public APIs and the persistent model may change. An optional API compatibility
+layer may ease adoption where its behavior can be supported safely. Migration
+of existing v1 data is mandatory, including a defined cloud transition.
+Implementation starts with the current schema as a candidate; it may evolve
+through alpha. Target 2.0 directly via alpha and beta, consolidating schema/API
+after the observation work and before beta. Cloud migration uses a coordinated
+cutover with v1 writes stopped before conversion.
 
 ## 2. Current baseline
 
@@ -78,8 +86,8 @@ Goals and agreed requirements:
   be verified against supported Apple APIs before selecting an implementation.
 - Design APIs and the persistent model around v2 requirements, allowing breaking
   changes independently of the optional v1 compatibility layer.
-- Define an explicit adoption and data-transition strategy after establishing
-  the target design.
+- Design and exercise mandatory v1 data migration alongside the evolving target
+  design; complete and validate it during beta. API adaptation remains optional.
 - Keep local persistence useful independently of CloudKit.
 - Strengthen querying and reassess observation against general library use
   cases, without assuming the current Watch abstraction must be retained.
@@ -315,10 +323,12 @@ Local save completion must remain distinct from remote transfer completion.
 
 ## 5. Adoption and optional compatibility
 
-V1 source compatibility and in-place store compatibility are not requirements
-for the v2 core. Choose the target API and persistent model for correctness,
-concurrency, and sharing first. Document the transition costs and supported
-adoption paths without requiring the new architecture to reproduce v1 internals.
+V1 source compatibility and physical in-place store opening are not requirements
+for the v2 core. Migration of v1 data is required. Start from the current schema
+as a candidate, refine it through alpha, and track the migration implications
+of each change. The transition must preserve user data without requiring the
+new architecture to reproduce v1 internals. Cloud conversion uses a coordinated
+cutover with v1 writes stopped; its technical mechanism still needs validation.
 
 Evaluate an optional compatibility layer separately. It may adapt selected v1
 patterns to the v2 core where their semantics remain safe. It must not weaken
@@ -342,7 +352,9 @@ does not by itself migrate SQLite or CloudKit data.
 
 ## 6. Decisions to resolve
 
-All entries are open. Proposed directions above are inputs to these decisions.
+The table below records the original questions. Consult the current
+[decision register](graphevo-2-decisions.md) for their updated status, working
+directions and implementation milestones.
 
 | ID | Question | Evidence needed before acceptance |
 |---|---|---|
@@ -409,10 +421,11 @@ checks explicitly distinct; no single category substitutes for the others.
 
 ## 8. Path from outline to specification
 
-Before drafting the normative specification, follow the separate
-[framework verification roadmap](graphevo-2-verification-roadmap.md), starting
-with recovery and assessment of GraphEvoDemo. Experiment outcomes inform the
-decisions below; this outline does not imply those experiments have run.
+This section retains the original planning sequence. The initial framework
+verification phase has supplied evidence for the
+[initial specification](graphevo-2-specification.md). Continue targeted
+experiments from the [verification roadmap](graphevo-2-verification-roadmap.md)
+alongside alpha implementation; the execution register records their scope.
 
 1. Agree on goals, supported application scenarios, and release boundaries.
 2. Audit current ownership and concurrency behavior; reproduce suspected defects.

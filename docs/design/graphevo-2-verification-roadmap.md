@@ -1,14 +1,17 @@
 # GraphEvo 2 — framework verification roadmap
 
-Status: experiment plan, before the normative specification. No experiment
-results are implied by this document. See the [design outline](graphevo-2-outline.md)
-for requirements R01–R05 and decisions D01–D14.
+Status: continuing experiment plan. Initial results informed the
+[specification](graphevo-2-specification.md); remaining focused checks continue
+during alpha implementation. No experiment results are implied by this document.
+See the [decision register](graphevo-2-decisions.md) for current D01–D14 status
+and the [delivery plan](graphevo-2-delivery-plan.md) for release gates.
 
 The [execution checklist](graphevo-2-test-checklist.md) tracks individual cases,
 completed evidence and prerequisites. After the initial V01/V02 feasibility
-work, the current pre-specification gate is V03 concurrency, V02.12 realistic
-graph dependencies, and V05 native attachments across accounts. V04/V06–V08
-remain available as local evidence but are not part of this gate.
+work, the initial specification gate covered V03 concurrency, V02.12 realistic
+graph dependencies, and V05 native attachments across accounts. These results
+support initial contracts with explicit gaps; they do not close their entire
+verification areas. V04/V06–V08 accessory results remain local evidence.
 
 ## Purpose and method
 
@@ -214,10 +217,12 @@ Consolidates earlier findings; D07–D09/D14.
 
 - Verify opening failures, unavailable account/service, revoked access, recoverable
   retries, explicit reset, backup restoration, and reopening after interruption.
-- Test selected v1 data-transition options against the candidate target model,
-  distinguishing API adapters, local migration, and cloud continuity.
-- Capture recovery outcomes and downgrade limits without making v1 compatibility
-  a constraint on the target design.
+- Test mandatory v1 data migration against the evolving candidate target model,
+  distinguishing optional API adapters, local migration, and required cloud
+  transition. The selected mode is a coordinated cutover with v1 writes stopped;
+  include pending writes, returning old devices and duplicate prevention.
+- Capture recovery outcomes and downgrade limits without requiring v1 source
+  compatibility or physical in-place opening. Data preservation remains required.
 - Exit: actionable states/errors, explicit destructive boundaries, and supported
   transition options; unresolved cases remain visible in the specification.
 
@@ -229,8 +234,10 @@ Link results to the relevant requirement/decision; leave unexecuted items pendin
 Use measured results to select performance budgets, rather than inventing them
 before representative workloads exist.
 
-Proceed to the specification once the cloud-separation/sharing feasibility,
-V03 ownership/cancellation boundary, realistic shared graph lifetime, and V05
-cross-account file lifecycle are understood. Other unanswered questions may be
-explicitly deferred with scope and rationale. Do not treat a successful demo
-build as completion of this verification roadmap.
+The initial specification gate required cloud-separation/sharing feasibility,
+V03 ownership/cancellation boundaries, realistic shared graph lifetime and V05
+cross-account file lifecycle evidence. The initial specification now records
+working contracts and remaining gaps from those results. Continue unresolved
+checks during the relevant alpha stages and apply the delivery plan's beta gate.
+Deferrals retain scope and rationale. Do not treat a successful demo build as
+completion of this verification roadmap.

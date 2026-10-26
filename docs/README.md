@@ -24,10 +24,19 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
+- [GraphEvo 2 initial specification](design/graphevo-2-specification.md): current
+  requirements and proposed contracts, including mandatory v1 data migration.
+- [GraphEvo 2 delivery plan](design/graphevo-2-delivery-plan.md): alpha sequence,
+  schema/API consolidation and beta/final release gates.
+- [GraphEvo 2 decision register](design/graphevo-2-decisions.md): maintainer
+  decisions, technical proposals and open choices.
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
-  covering goals, architectural questions, and the path to a specification.
-  It does not describe the current public API.
+  retaining the original goals and architectural questions. The specification
+  supersedes it for current decisions; neither describes the v1 public API.
 - [GraphEvo 2 verification roadmap](design/graphevo-2-verification-roadmap.md):
-  experiments to validate framework behavior in GraphEvoDemo before specification.
+  experiments to validate framework behavior in GraphEvoDemo before and during
+  implementation.
+- [GraphEvo 2 execution checklist](design/graphevo-2-test-checklist.md): retained
+  evidence, remaining tests and their scope.
 - [GraphEvoDemo initial assessment](design/graphevo-demo-initial-assessment.md):
   source state, existing coverage, build evidence, and laboratory preparation.

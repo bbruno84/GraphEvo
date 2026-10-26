@@ -1,0 +1,448 @@
+# GraphEvo 2 — initial specification
+
+Status: initial specification, 2026-10-26. No v2 implementation is implied.
+This is the current design entry point; the [outline](graphevo-2-outline.md)
+retains the earlier discussion and the [verification register](graphevo-2-test-checklist.md)
+retains experimental evidence. The [delivery plan](graphevo-2-delivery-plan.md)
+defines implementation order and release gates. The [decision register](graphevo-2-decisions.md)
+separates maintainer decisions, technical proposals and unresolved choices.
+
+**Agreed requirements** record explicit maintainer direction. **Working
+contracts** are technical proposals for implementation and review during alpha.
+**Open decisions** have no selected contract yet. Proposed API names, internal
+types and storage representations may change throughout alpha.
+
+## 1. Product and release boundary
+
+GraphEvo remains an independent Swift graph library built on Core Data and
+`NSPersistentCloudKitContainer`. It supports local persistence without an
+iCloud account and synchronization/sharing when explicitly configured. The
+application supplies its domain models and owns its UI and business workflows.
+GraphEvo owns persistence, graph integrity and its documented synchronization
+integration. UI-specific adapters may sit above the core.
+
+The release is **2.0**, developed through alpha releases followed by beta
+releases. V1 remains a separate maintenance line. There is no requirement to
+ship successive transitional architectures through the 1.x public API.
+
+All eight implementation areas in the delivery plan remain alpha work. Schema
+and API consolidation occurs at the beta gate, after query and observation
+work has tested the foundations. Mandatory v1 data migration is designed and
+exercised throughout alpha, then completed and validated during beta.
+
+Source compatibility is optional. A compatibility adapter may be considered
+after the v2 contracts stabilize; it must preserve their isolation and error
+semantics. **Migration of existing v1 data is mandatory.** Physical in-place
+opening, unchanged internal filenames and unchanged cloud record IDs are not
+assumed migration techniques.
+
+The cloud transition uses a **coordinated cutover**: v1 stops writing before
+conversion. Concurrent v1/v2 writes to the same cloud dataset are not a required
+operating mode. Establishing and verifying that prerequisite is part of the
+migration design, not an assumed capability of the old clients.
+
+## 2. Requirements and traceability
+
+| ID | Agreed requirement | Specification area | Verification |
+|---|---|---|---|
+| R01 | Separate graphs remain independent worlds, including personal cloud graphs and graphs shared with other users; no cross-graph relationships | Sections 3 and 7 | V01, V02 |
+| R02 | Swift 6 support and native async/await wherever asynchronous work is appropriate | Sections 4 and 5 | V03 |
+| R03 | Protocol-based application models replace dynamic-member access as the primary API | Section 6 | V04 |
+| R04 | Native file/attachment lifecycle through Core Data and its mirroring stack | Section 8 | V05 |
+| R05 | Stronger querying with explicit capabilities and costs | Section 9 | V06 |
+| R06 | Store/context ownership and coordination match the resource shared by Graph handles | Sections 4 and 5 | V03, V08 |
+| R07 | Reassess Watch for query observation, remote changes and processing needs | Section 10 | V07 |
+| R08 | Migrate v1 data into v2, including a defined cloud transition and recoverable failures | Section 11 | V08 and dedicated migration fixtures |
+| R09 | Deliver directly as 2.0 through alpha and beta; keep schema flexible through all eight alpha areas | Section 1 and delivery plan | Release gates |
+| R10 | Remain independent of the integrating app; Core Data is the integration boundary | Sections 1, 6 and 7 | Independent sample consumers |
+
+The verification IDs refer to the existing register. A partial observation is
+evidence for a design candidate, not acceptance of its entire requirement.
+
+## 3. Graph semantics, schema and identity
+
+### Agreed requirements
+
+Preserve the domain concepts of Entity, directed Relationship and Action with
+subjects and objects. Tags, groups, node properties and graph structure from v1
+must have a migration destination even if their representation changes.
+
+Use the current persistent schema as the **first candidate**, building the new
+stack and application API against it to discover its limits. Do not design and
+freeze a replacement schema before those uses exist. Alpha may add, change or
+replace structures when a measured requirement justifies it. The single-entity
+V09 laboratory model is evidence about framework behavior, not the selected
+library schema.
+
+### Working contracts
+
+- A logical graph is a membership and sharing boundary. A physical SQLite
+  store is a persistence resource. They are separate concepts even when an
+  early local implementation happens to map them one-to-one.
+- A graph includes its entities, relationships, actions, detail rows and
+  attachments. Dependencies belong to the same graph. A library write rejects
+  a reference to another graph before committing that mutation.
+- Cycles within a graph are supported by the domain model; traversal must be
+  bounded. Sharing validation must include cycles and disconnected members
+  before the graph-membership implementation is accepted.
+- Public logical identity includes graph identity and node identity. It must
+  remain meaningful across reopening and supported device replication; it is
+  distinct from Core Data object IDs, CloudKit mappings and application keys.
+  The storage representation and v1 identity translation remain D14 decisions.
+- Applications may have business keys distinct from library identity. An
+  unrelated record with the same business key is not silently merged.
+- Duplicate logical identities are reported or reconciled by an explicit
+  policy. A uniqueness assertion inside one process is not a distributed lock.
+- Locally committed structure must satisfy the documented graph invariants.
+  Remote imports can expose incomplete structures. Reads must distinguish
+  absent optional data, unresolved dependencies and decoding failure rather
+  than manufacture required values or silently discard invalid objects.
+- Deleting an entity removes its incident directed relationships and membership
+  in action endpoint sets within the same local operation. Other endpoint
+  entities survive. The policy for an action left without endpoints remains
+  provisional; migration must preserve valid existing empty/optional structures.
+  Detail and attachment cleanup must avoid orphaned owned content.
+
+Before beta, publish a schema decision with evidence for each retained or
+changed structure, versioned model identifiers and a complete v1 mapping.
+
+## 4. Resource ownership, lifecycle and isolation
+
+### Working contracts
+
+One process-local runtime owns a compatible open persistence resource set:
+container, store loading, private contexts, operation admission, history
+processing and native observation. Graph handles access that runtime; each
+handle selects a logical graph. Multiple graphs may share the physical runtime
+without sharing logical membership or unsaved edits.
+
+Concurrent compatible opens join one opening operation. An incompatible request
+for an already-owned or overlapping resource set fails explicitly. Resource
+identity includes resolved file locations, backend, model compatibility and
+cloud destination/environment. An in-memory resource has an explicit identity
+instead of being coalesced accidentally by a calculated file URL. URL alias
+handling must be tested; unsupported aliases are rejected or documented rather
+than presented as separate owners of the same file.
+
+Opening is an awaited operation returning a usable handle or a typed error.
+Its successful result means local persistence is usable in the reported mode;
+it does not mean cloud recovery, share preparation or graph import is complete.
+Expose separate local lifecycle, synchronization and access states.
+
+Releasing/closing one handle invalidates that handle and its subscriptions,
+without invalidating another live handle. Final runtime shutdown stops new work,
+drains admitted commits, stops observers and detaches stores. A stale handle
+rejects new work. Reset, graph deletion and store destruction are distinct,
+explicit operations with their affected scopes identified.
+
+The runtime is not globally MainActor-isolated. Core Data work stays on its
+context queue; supported async paths use native asynchronous context execution.
+Do not implement them by wrapping `performAndWait` in an async declaration.
+Thread-owned locks never span suspension points. Any callback bridge must
+handle completion, errors and lifetime exactly once, and document synchronous
+native work that it cannot make nonblocking by adding a continuation.
+
+The public default is immutable transferable model values, IDs and query
+descriptors. Context-bound mutation/read adapters are confined to their operation
+scope. Managed objects and contexts are implementation details; they never
+become Sendable by assertion or escape to another task. Application model
+conformance alone does not confer Sendable conformance.
+
+An actor/registry protects only participating writers in its process. Remote
+imports and other processes require separate conflict and visibility policies.
+App Group app/extension access is an explicit support decision before beta,
+backed by iOS tests if included. The macOS two-process probe is not that proof.
+
+## 5. Reads, transactions, cancellation and failures
+
+### Working contracts
+
+| Operation | Successful completion means | Failure/cancellation boundary |
+|---|---|---|
+| Open | Local resources usable in the reported configuration/mode | No silent replacement of an incompatible store |
+| Read | A decoded result from the documented local read view | Missing, unresolved and invalid data are distinguishable |
+| Local transaction | Its mutation was durably saved in the target local store | Roll back its own unsaved edits on a pre-commit failure |
+| Share operation | The named native sharing step reached its reported state | Partial preparation is visible and reconciled explicitly |
+| Observe | Initial/current state or documented change information delivered | Delivery does not acknowledge cloud convergence |
+| Close | This handle released; final runtime close also drained/detached | Does not discard another handle's admitted work |
+
+A local transaction targets one graph and one store. Its scoped body is
+synchronous and throwing, even though admission/execution is awaited. External
+I/O is prepared beforehand and the state is revalidated inside the transaction.
+There is no suspension, nested transaction, independent save or externally
+visible side effect inside that body. Results crossing isolation boundaries
+are safe values. A failed operation cannot leak pending edits into the next
+operation or save another handle's uncommitted state.
+
+Participating local writes are serialized per physical writer resource. An
+actor suspended while awaiting `context.perform` is not itself a transaction
+lock. Admission/shutdown and context execution must enforce the policy together.
+Serialization does not imply serializable transactions against remote imports.
+Read-view consistency, stale-write checking and the external conflict policy
+must be selected and tested before beta; disjoint-edit convergence does not
+settle same-property conflicts. Do not rerun arbitrary transaction bodies
+automatically after a conflict.
+
+Cancellation observed before the operation commits prevents the pending write
+where the operation can still cooperate. Carry the caller's cancellation
+signal explicitly into native work when necessary. Once saving has begun,
+cancellation may not prevent commit. After a known durable save, return the
+committed outcome rather than a cancellation error implying rollback.
+Interruption with an uncertain outcome requires reconciliation by operation
+identity/state; it must not trigger blind replay.
+
+Ordinary transactions make no atomic guarantee spanning CloudKit export,
+share assignment, invitation delivery or multiple stores. Membership preparation
+may require native asynchronous steps outside the local transaction. Those
+steps need separate progress/outcome and recovery rules, especially when an
+earlier step already persisted data.
+
+Errors identify the operation and affected scope, and distinguish configuration,
+incompatible store, unavailable/closed resource, ownership mismatch, missing
+data, decoding, integrity, conflict, permission, cloud availability and migration
+failures. Preserve useful underlying errors without including payloads or
+private account/invitation data in default diagnostics. Retry guidance is
+specific; a generic cloud error is not permission to delete and rebuild a store.
+
+## 6. Typed application models
+
+### Working contracts
+
+Applications conform their models to a GraphEvo protocol with explicit mapping
+of logical type, identity, property encoding/decoding and relationship/action
+references. The protocol name, mapping syntax and whether mapping uses one or
+several capabilities remain alpha design choices. No macro is required to use
+the core API; generation may be evaluated later.
+
+Ordinary reads return values detached from a context. Editing a previously read
+value is local application work until it is submitted to an explicit mutation
+operation. Changes are validated against current stored state/selected revision
+policy rather than accidentally saving a stale whole-model replacement.
+Scoped adapters provide graph operations without exposing Managed classes.
+Live context-bound models are not the primary cross-task API.
+
+The mapping contract distinguishes missing property, explicit absence, invalid
+representation and unsupported value type. Decoding errors propagate. The
+supported value/codec matrix must cover v1 values or give a lossless retained
+representation plus an application conversion hook. Unknown logical types or
+keys cannot be silently deleted during migration or a partial typed edit.
+
+Persisted type/property keys are explicit and stable across Swift renames.
+`Codable` is an encoding option, not an automatic promise that all nested fields
+are store-queryable. Model references use graph-aware identities; loading a
+model does not implicitly fetch an unbounded connected graph.
+
+Acceptance examples include a UI consumer and a non-UI consumer, typed round
+trips, failed decoding, partial updates, Entity/Relationship/Action models,
+tags/groups and cross-task transfer without concurrency suppressions.
+
+## 7. Graph separation, mirroring and user sharing
+
+### Agreed requirements and evidence
+
+Distinct graphs remain separate cloud worlds even before inviting another
+user. Apps operate through GraphEvo/Core Data rather than CKRecord/CKAsset
+mutation. Apple-specific configuration, native sharing UI integration and
+diagnostics may require a narrow explicit platform boundary.
+
+The working cloud topology is a runtime with private and shared stores, with
+one owner-only share boundary per personal graph, later inviting users to that
+same graph. V01/V02/V09 support this candidate under tested conditions.
+Separate zones do not promise one local SQLite per graph, selective download,
+independent encryption or unlimited zone count. The final topology still needs
+the actual v1-derived candidate model, including detail rows and cycles.
+
+### Working contracts
+
+- Every member, including properties, tags/groups, edges, actions and files,
+  belongs to its graph's native sharing boundary. Disconnected members are
+  included intentionally; reachability from one business entity is insufficient.
+- A participant-created member is routed to the appropriate shared store and
+  existing share before unsafe links are introduced. The supported insertion
+  procedure is library-owned and tested with exact identity/membership checks.
+  V09's successful array assignment does not erase earlier insertion failures.
+- Expose invitation creation/acceptance, owner/participant role, read/write
+  permission, leave and revocation with distinct outcomes. Native metadata
+  availability may lag; pending is not equivalent to absent or denied.
+- Honor public permission advice before writes. A local save is not evidence
+  that a participant was authorized to publish or that its edit will propagate.
+  Server-side permission changes can race local work and require reconciliation.
+- Distinguish local readiness, local commit, export/import activity, known graph
+  integrity and access state. Do not offer a global synchronized/completed
+  Boolean based on container events or local emptiness.
+- Local-only graphs work without iCloud. For a configured cloud graph, the
+  default proposal is an explicit degraded/unavailable state, preserving its
+  identity and cached data; no silent substitute graph/store is created.
+  Account changes and revoked shared access do not trigger automatic republishing
+  of retained data to a different account. Exact cache/access policy remains D09.
+- The host controls lifecycle integration and native presentation. The library
+  exposes semantic operations and small platform adapters, not app workflows.
+
+Offline/reconnect, permission races, same-property conflicts and account changes
+remain explicit acceptance gaps. A successful bounded recovery is evidence of
+that fixture, not a cloud latency or global-completeness guarantee.
+
+## 8. Files and attachments
+
+### Working contracts
+
+Provide attachment import, metadata/read, replacement, deletion and export
+through Core Data and its mirroring stack. Use a dedicated binary lifecycle;
+whether its storage is a node, property or separate owned detail is decided
+during alpha. An attachment has a graph, an owner/reference policy, a filename,
+content type and stable identity. Shared content follows the graph's access
+boundary. Deleting owned content cleans up references and bytes according to
+the selected ownership policy.
+
+Import/export accepts application file URLs without exposing Core Data's
+internal storage paths. Import reads the selected content rather than retaining
+an unsafe dependency on the source URL. Export has explicit file ownership and
+cleanup: the default proposal is an application-selected destination owned by
+the caller, with any temporary convenience export documented separately.
+Security-scoped URL access and long file I/O are prepared outside write scopes.
+
+Local replacement either preserves the previous committed content or commits
+the new content with corresponding metadata. Remote visibility and multi-row
+metadata/content consistency follow the selected representation and need
+validation; no atomic cross-device file delivery is assumed.
+
+V09 establishes byte/checksum recovery for 512-byte and 10 MiB files across
+accounts, replacement and deletion. It does not establish peak memory,
+streaming, per-file progress, selective download, eviction or offline retention.
+Publish a measured supported envelope before beta; unsupported capabilities
+must be stated rather than simulated by misleading API states.
+
+## 9. Query engine
+
+### Working contracts
+
+Queries are typed descriptions evaluated asynchronously against one logical
+graph. Initial core capabilities are type/identity/property/tag/group filters,
+Boolean composition, deterministic sorting, limits and count. Add relationship
+and action predicates, projections, pagination and selected aggregations during
+alpha based on translation and cost evidence. Exact supported operators/types
+must be listed before beta.
+
+Composition has one explicit meaning: a descriptor contains an explicit
+Boolean expression; successive filters combine with AND in the proposed v2
+API, while OR is requested explicitly. This differs from v1's successive-where
+behavior and must be highlighted in migration/API-adapter guidance.
+
+No unsupported expression silently falls back to fetching the entire graph.
+Reject it with a capability error or require explicit bounded in-memory work.
+Related-node predicates must include graph scope. Traversal specifies direction,
+depth/work bounds, cycle handling and duplicate semantics. Stable ordering uses
+a deterministic identity tie-breaker.
+
+The initial pagination proposal is cursor-based current-state pagination.
+Intervening edits can change later results; it is not a frozen multi-page
+snapshot. Snapshot pagination is a separate capability if adopted. Query
+results identify the promised local view rather than implying cloud completeness.
+
+## 10. Observation and the future of Watch
+
+### Agreed requirement and working contracts
+
+Retain the three consumer needs: one-shot queries, updated query results, and
+changes used for processing. The Watch name and current delegates are optional.
+Share infrastructure where useful while documenting each delivery contract.
+
+The default query-observation proposal is an AsyncSequence of immutable current
+results: initial fetch, subsequent relevant refreshes and explicit termination.
+Bounded buffering may coalesce superseded states because this API represents
+current state. Cancellation releases its resources; resubscription fetches a
+new current result. Related properties that affect membership/order/value must
+invalidate correctly, not only direct changes to the fetched entity.
+
+Processing changes is separate from coalesced query state. Before beta decide
+whether v2 supports durable replay or only a bounded live feed plus explicit
+rescan. If durable processing is included, specify consumer identity, cursor
+persistence, acknowledgement, retained-history gaps, deletion reconstruction,
+retry and idempotency. Do not promise exactly-once side effects. If replay is
+deferred, document the limitation and the application's recovery route.
+
+Observation states include invalid/undecodable/incomplete imported data and
+unmaterialized deletions where relevant. A token or notification cannot certify
+that a whole graph has arrived. Callbacks/stream continuations are not invoked
+under persistence locks or inside mutation scopes in a way that permits reentry.
+
+## 11. Mandatory v1 data migration and recovery
+
+### Agreed requirement
+
+Every supported v1 data format has a documented path into the final v2 model.
+Start with the current supported v1 release/develop baseline, freeze named source
+model fixtures early, and identify any older supported variants before beta.
+An unchanged-schema alpha must not be represented as proof of final migration.
+
+Migration preserves logical graphs, node kinds/types, values and their encoding
+meaning, tags, groups, valid optional/absent values and timestamps, directed
+links, action endpoints and owned binary content. Unsupported legacy codecs or
+corrupt structures produce actionable findings and an explicit conversion or
+retention policy; they are never silently skipped. Library migration cannot
+infer arbitrary application business semantics.
+
+V1 node IDs currently incorporate a Core Data URI component. Rebuilding a store
+may change them. Inventory their application use and provide retained logical
+IDs or an explicit graph-scoped old-to-new identity mapping. Do not promise
+unchanged physical object/cloud IDs as a substitute for logical preservation.
+Source identity and translated references must be verified together.
+
+### Working migration protocol
+
+1. Identify source model/version, graph scope, codecs, cloud environment and
+   transition policy. Refuse ambiguous sources without overwriting them.
+2. Establish controlled source access and a supported consistent backup,
+   including external content. Copying an actively mirrored SQLite directory
+   is not a defined backup. Byte-preservation claims require testing on the
+   actual backup/inspection path.
+3. Prepare the destination and durable migration journal with source identity,
+   transformation version, progress and identity mapping. Recovery must tolerate
+   interruption without blindly repeating already-applied effects.
+4. Transform and verify values and topology, including unknown-but-preserved
+   keys, action endpoints, attachment bytes and duplicate identity detection.
+   Validation is semantic, not just equal row counts.
+5. Activate only a validated destination. Document replacement/reopen mechanics,
+   source retention, failure recovery and rollback boundaries.
+6. Complete the separately designed cloud transition and replica recovery.
+   Distinguish local validation from remote replication evidence. Retire source
+   data only under the documented transition policy.
+
+This protocol allows a validated compatible reuse path or a staged conversion;
+it does not preselect export/import or in-place mutation. Cleanup, cancellation
+and resumption have explicit phases. Observational KVS metadata is not a
+distributed migration lock or a cross-device commit acknowledgement.
+
+Cloud migration must account for existing v1 records in the old cloud layout,
+repeated migration on other devices, duplicate prevention, late v1 writers,
+missing local cloud data and fresh v2 replica recovery. The agreed mode is a
+coordinated cutover: v1 stops writing before conversion. Define how the host
+establishes the cutover, reconciles pending source writes and handles an offline
+old device returning later. Neither a local flag nor a container export event
+proves that all old devices have stopped or that the source is complete. Until
+the cutover prerequisites are satisfied, expose migration as pending/blocked
+rather than activating a destination as if it were complete. Concurrent normal
+v1/v2 writing is not a requirement; late-writer recovery still needs a policy.
+Cloud continuity is mandatory as a supported transition outcome; unchanged
+zones/record IDs or zero downtime are not assumed. Do not automatically create
+a fresh empty cloud graph and label that a successful migration.
+
+Beta must complete real representative v1 local/cloud conversions, interruption
+and retry checks, independent-device recovery and application adoption. A
+downgrade is only supported where explicitly documented; restoring a local
+backup cannot undo cloud changes already published. The final 2.0 cannot ship
+with data migration left to an optional API compatibility layer.
+
+## 12. Evidence, scope and completion
+
+Use the existing verification register as the test inventory. Add v2 integration
+acceptance cases alongside direct-framework results. Compile independent UI and
+non-UI consumers in Swift 6; distinguish local/unit, simulated history, simulator
+and physical cross-device/account evidence. Record performance budgets only
+after representative datasets and file sizes are measured.
+
+The [decision register](graphevo-2-decisions.md) owns unresolved choices; the
+[delivery plan](graphevo-2-delivery-plan.md) owns release gates. A new failure
+updates the evidence and affected decision rather than retroactively changing
+a successful experiment's scope. None of these documents changes the current
+v1 public API or authorizes production schema/store conversion.

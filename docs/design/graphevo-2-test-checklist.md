@@ -2,8 +2,10 @@
 
 Status: active verification register, started 2026-10-26. The maintainer
 authorized autonomous laboratory preparation and execution using connected test
-devices. This refines the [roadmap](graphevo-2-verification-roadmap.md); it is not
-the GraphEvo 2 specification or a promise that every candidate API is feasible.
+devices. This refines the [roadmap](graphevo-2-verification-roadmap.md). The
+[initial specification](graphevo-2-specification.md) and
+[delivery plan](graphevo-2-delivery-plan.md) use this evidence; the checklist
+itself is not a promise that every candidate API is feasible.
 
 ## How to read this register
 
@@ -16,7 +18,7 @@ a real cloud row. Every completed row must link to its evidence and limits.
 
 ## Current scope: concurrency, realistic graphs and files
 
-The maintainer selected a pre-specification gate of Swift 6 concurrency and
+The maintainer selected an initial specification gate of Swift 6 concurrency and
 ownership, realistic cross-account graph dependencies, and native file
 transfer. Continue within the supported public NSPersistentCloudKitContainer
 contract, observing application data, public metadata, errors and lifecycle
@@ -144,9 +146,10 @@ it must not be mislabeled a same-account owner-only reader.
 |---|---|---|
 | V08.1 | Open/configuration failures and unavailable services expose actionable states | Accessory partial: native model mismatch/bad-parent errors observed; account/cloud recovery matrix not tested |
 | V08.2 | Interruption, explicit scoped reset and backup restoration | Accessory partial: closed copies/reopen observed; direct read-only metadata changes SHM (known failed guarantee), separate closed-copy inspection preserves originals; interruption/reset pending |
-| V08.3 | Candidate v1 local data transition and optional API adapter | Not run; target-model decision prerequisite |
-| V08.4 | Cloud continuity, downgrade and incompatible-store behavior for a selected transition | Not run; v1 compatibility must not constrain v2 design |
+| V08.3 | Mandatory v1 local data migration; optional source API adapter assessed separately | Not run; inventory/fixtures start with the current schema candidate, migration mapping evolves through alpha and final validation occurs in beta |
+| V08.4 | Required cloud data transition, downgrade and incompatible-store behavior | Not run; coordinated cutover selected with v1 writes stopped before conversion. Pending source writes, late old devices, duplicate prevention and recovery remain to design/test |
 
-Before the specification, reconcile the remaining rows explicitly: either retain
-evidence, explain a verified unsupported capability, or record a deliberate
-deferral and its effect. A green demo suite does not close this register.
+During specification and implementation, reconcile remaining rows explicitly:
+retain evidence, explain a verified unsupported capability, or record a
+deliberate deferral and its effect. Apply the delivery plan's beta gate before
+consolidating the schema/API. A green demo suite does not close this register.
