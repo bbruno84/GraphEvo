@@ -37,6 +37,12 @@ not a promise of one prerelease tag per stage. Remain alpha through stage 8.
 
 ## Alpha sequence
 
+The first [A1 local ownership increment](graphevo-2-store-runtime.md) now lives
+in an internal Swift 6 target, using the current schema. It has awaited
+resource leases, coalesced opens, compatibility checks and drained final close.
+The public Graph facade, mutations and cloud topology are not connected yet;
+this progress does not mark the entire alpha stack or migration gate complete.
+
 | Stage | Work and dependencies | Demonstrable exit | Relevant checks |
 |---|---|---|---|
 | A1 — resource ownership and lifecycle | Build the new runtime, store identity/registry, awaited open/close and private context ownership, using the current schema as first candidate and Swift 6 from the outset | Two compatible handles share resources safely, independent resources remain independent, handle release does not invalidate another handle, and shutdown/reopen work | V03, V08; S4 |

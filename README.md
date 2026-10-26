@@ -50,8 +50,8 @@ The companion demonstration app is maintained separately in the
 
 - iOS 16+
 - macOS 12+
-- Xcode 15.4+
-- Swift 5.9+ package manifest
+- Xcode 16+ on the v2 development line
+- Swift 6+ package manifest and compiler
 - Swift Package Manager
 
 ## 📦 Installation and first use
@@ -108,6 +108,13 @@ GraphEvo does not impose `-Xfrontend` flags or strict-concurrency settings on
 the integrating project. Applications can configure `SWIFT_STRICT_CONCURRENCY`
 on their own targets. Graph and Node operations must respect their Core Data
 context queues; context-bound objects must not be passed between queues.
+
+The v2 development line now includes an internal `GraphEvoRuntime` target
+compiled in Swift 6 language mode. The existing facade and its tests remain
+temporarily in Swift 5 language mode; this is not yet full-library Swift 6
+adoption. The public product remains `GraphEvo`. See the
+[A1 store runtime increment](docs/design/graphevo-2-store-runtime.md) for scope,
+ownership rules and verification.
 
 ---
 

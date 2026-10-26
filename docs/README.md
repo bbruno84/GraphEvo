@@ -30,6 +30,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   schema/API consolidation and beta/final release gates.
 - [GraphEvo 2 decision register](design/graphevo-2-decisions.md): maintainer
   decisions, technical proposals and open choices.
+- [GraphEvo 2 A1 store runtime](design/graphevo-2-store-runtime.md): implemented
+  local ownership foundation, package boundary, lifecycle and verification scope.
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
   retaining the original goals and architectural questions. The specification
   supersedes it for current decisions; neither describes the v1 public API.

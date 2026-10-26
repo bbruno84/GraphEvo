@@ -55,6 +55,12 @@ public struct Model {
   
   /// Constructs the model once.
   private static var __once: () = {
+    Model.managedObjectModel = makeModel()
+  }()
+
+  /// Builds the existing schema without sharing mutable native model caches.
+  /// The v2 runtime creates its model within its own opening operation.
+  package static func makeModel() -> NSManagedObjectModel {
     // Entity
     
     let entityDescription = NSEntityDescription()
@@ -403,8 +409,8 @@ public struct Model {
     relationshipTagDescription.properties = relationshipTagProperties as! [NSPropertyDescription]
     relationshipGroupDescription.properties = relationshipGroupProperties as! [NSPropertyDescription]
     
-    Model.managedObjectModel = NSManagedObjectModel()
-    Model.managedObjectModel?.entities = [
+    let model = NSManagedObjectModel()
+    model.entities = [
       entityDescription,
       entityPropertyDescription,
       entityTagDescription,
@@ -420,5 +426,6 @@ public struct Model {
       actionTagDescription,
       actionGroupDescription
     ]
-  }()
+    return model
+  }
 }
