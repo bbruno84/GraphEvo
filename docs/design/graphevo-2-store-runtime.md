@@ -41,10 +41,10 @@ will use the shared registry through the future Graph facade.
 | Resources | One local SQLite file or an explicitly identified in-memory store per owner |
 | Compatible opening | Reserve separate lease tokens and await one native opening task |
 | Compatibility | Compare resource identity, access mode, schema identifier and entity version hashes; validate factory output against declared hashes |
-| Container/context | One NSPersistentContainer and private context per owner; asynchronous native loading and context execution |
+| Container/context | One NSPersistentContainer per owner; native async performBackgroundTask supplies an operation-scoped private context without transferring a retained context across actor boundaries |
 | Read scope | Package-only synchronous body, Sendable result, no retained pending changes; accidental unsaved mutations are rejected and rolled back |
 | Handle close | Idempotent; concurrent close calls await one outcome; another active handle remains usable |
-| Final close | Stop admission, drain admitted native reads, reset context, detach stores, then release registry ownership |
+| Final close | Stop admission, drain admitted native reads and their context cleanup, detach stores, then release registry ownership |
 | Close cancellation | Cleanup continues even if the close caller is cancelled |
 | Handle deallocation | Initiates best-effort asynchronous release; explicit awaited close gives deterministic cleanup and errors |
 | Reopen during close | Wait for old shutdown before starting another owner |
@@ -52,8 +52,17 @@ will use the shared registry through the future Graph facade.
 | Cancelled open | Do not start a pre-cancelled request; a cancelled waiter releases only its lease after native opening completes; remaining waiters are unaffected |
 | Failed shutdown | Retain ownership and the failure, rejecting subsequent opens rather than creating a second coordinator; destructive recovery/retry is not supplied by A1 |
 
+The Xcode 16.4 SDK does not declare NSManagedObjectContext Sendable. Its first CI
+build rejected a retained actor-owned context passed to async perform, including
+explicit Sendable closures. A1 instead uses native async performBackgroundTask:
+the context is a callback argument confined to that operation, not an actor
+property sent across executors. This requires neither a retroactive context
+conformance nor an unchecked wrapper/preconcurrency suppression. Parallel read
+operations may use different contexts; A2 still needs explicit serialized write
+admission rather than assuming a shared context's queue is a transaction guard.
+
 The runtime diagnostic UUID identifies an owner generation, not a graph or
-node. Snapshots report local ownership only. The context uses an explicit error
+node. Snapshots report local ownership only. Each context uses an explicit error
 merge policy; no cloud conflict policy is selected by this local increment.
 No writes, transaction commits, persistent-history consumer or remote observer
 are introduced yet. A2 must define mutation admission, rollback and cancellation

@@ -8,11 +8,10 @@ struct StoreLifecycleHooks: Sendable {
     var beforeDetach: (@Sendable () async throws -> Void)?
 }
 
-/// One container and one private context. Admission counts cover actor reentrancy.
+/// One container with operation-scoped private contexts. Admission covers actor reentrancy.
 actor StoreResources {
     let id = UUID()
     private let container: NSPersistentContainer
-    private let context: NSManagedObjectContext
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
     private var closing = false
@@ -23,7 +22,6 @@ actor StoreResources {
         self.container = container
         self.resolved = resolved
         self.hooks = hooks
-        context = container.newBackgroundContext()
     }
 
     static func open(
@@ -75,18 +73,7 @@ actor StoreResources {
                 }
             }
         } catch { throw StoreRuntimeError.loadFailed(resolved.url, underlying: error) }
-        let resources = StoreResources(container: container, resolved: resolved, hooks: hooks)
-        await resources.configureContext()
-        return resources
-    }
-
-    private func configureContext() async {
-        let context = context
-        await context.perform { @Sendable in
-            context.name = "GraphEvo.v2.runtime"
-            context.undoManager = nil
-            context.mergePolicy = NSMergePolicy(merge: .errorMergePolicyType)
-        }
+        return StoreResources(container: container, resolved: resolved, hooks: hooks)
     }
 
     /// Internal read boundary. A2 will add the distinct mutation/commit contract.
@@ -100,8 +87,10 @@ actor StoreResources {
             admitted -= 1
             if admitted == 0 { drain?.resume(); drain = nil }
         }
-        let context = context
-        return try await context.perform { @Sendable in
+        return try await container.performBackgroundTask { @Sendable context in
+            context.name = "GraphEvo.v2.runtime"
+            context.undoManager = nil
+            context.mergePolicy = NSMergePolicy(merge: .errorMergePolicyType)
             defer { context.rollback(); context.reset() }
             let value = try body(context)
             guard !context.hasChanges else { throw StoreRuntimeError.mutationInReadScope }
@@ -115,8 +104,6 @@ actor StoreResources {
         if admitted > 0 {
             await withCheckedContinuation { drain = $0 }
         }
-        let context = context
-        await context.perform { @Sendable in context.reset() }
         do {
             try await hooks.beforeDetach?()
             for store in container.persistentStoreCoordinator.persistentStores {

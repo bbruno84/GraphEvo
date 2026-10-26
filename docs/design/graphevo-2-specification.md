@@ -157,8 +157,10 @@ backed by iOS tests if included. The macOS two-process probe is not that proof.
 
 ### A1 implementation decisions
 
-An internal Swift 6 target owns one local resource per entry. The existing Graph
-facade is not rewired yet. Model identity crosses the boundary as immutable
+An internal Swift 6 target owns one local resource per entry. Native async
+container operations supply operation-scoped private contexts, avoiding transfer
+of a retained non-Sendable context on older SDKs. The existing Graph facade is
+not rewired yet. Model identity crosses the boundary as immutable
 hashes and a fresh-model factory, not a cached native model. Compatible callers
 receive independent leases; only the final lease detaches the native store.
 Opening cancellation releases a caller's lease after native loading completes;
