@@ -153,13 +153,18 @@ import Testing
             let node = Entity("legacy", graph: graph)
             node[dynamicMember: "nullable"] = NSNull()
         }
-        await #expect(throws: GraphModelError.self) {
-            try await handle.read { context in
-                let graph = Graph(transactionContext: context, configuration: GraphStoreConfiguration())
-                let node = try #require(Search<Entity>(graph: graph).where(.type("legacy")).sync().first)
-                return try GraphRecordMapper.snapshot(node, id: id) { _ in throw GraphModelError.invalidValue }
+        let explicitOrRejected = try await handle.read { context in
+            let graph = Graph(transactionContext: context, configuration: GraphStoreConfiguration())
+            let node = try #require(Search<Entity>(graph: graph).where(.type("legacy")).sync().first)
+            do {
+                let record = try GraphRecordMapper.snapshot(node, id: id) { _ in throw GraphModelError.invalidValue }
+                // Another SDK may expose NSNull intact; silently omitting its key is never valid.
+                return record.properties["nullable"] == .null
+            } catch GraphModelError.unsupportedLegacyValue(let key) {
+                return key == "nullable"
             }
         }
+        #expect(explicitOrRejected)
         try await handle.close()
     }
 }
