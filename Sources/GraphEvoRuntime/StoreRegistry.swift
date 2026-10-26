@@ -34,6 +34,14 @@ package actor StoreHandle {
         return try await registry.snapshot(key, generation: generation, token: token)
     }
 
+    /// Trusted adapter boundary: the synchronous body must not save or escape its context.
+    package func transaction<Value: Sendable>(
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
+    ) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.transaction(key, generation: generation, token: token, body)
+    }
+
     package func close() async throws {
         if let closeTask { return try await closeTask.value }
         let registry = registry, key = key, generation = generation, token = token
@@ -144,6 +152,15 @@ package actor StoreRegistry {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
         return try await resources.read(body)
+    }
+
+    fileprivate func transaction<Value: Sendable>(
+        _ key: StoreKey, generation: UUID, token: UUID,
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
+    ) async throws -> Value {
+        let entry = try entry(for: key, generation: generation, token: token)
+        let resources = try await entry.opening.value
+        return try await resources.transaction(body)
     }
 
     private func entry(for key: StoreKey, generation: UUID, token: UUID) throws -> Entry {

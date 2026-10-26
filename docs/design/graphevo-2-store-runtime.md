@@ -1,6 +1,9 @@
 # GraphEvo 2 — A1 store runtime increment
 
-Status: implemented local ownership foundation, 2026-10-26. This is library
+Status: implemented local ownership foundation, 2026-10-26.
+A2 extends this baseline: see the [async contract](graphevo-2-async-transactions.md)
+for writes, cancellation and the updated macOS floor. The A1-only descriptions
+below record the original increment. This is library
 source, not another framework laboratory. It implements part of specification
 sections 4–5; the [delivery plan](graphevo-2-delivery-plan.md) keeps later
 transaction, model, sharing and migration work separate.

@@ -81,6 +81,12 @@ replace structures when a measured requirement justifies it. The single-entity
 V09 laboratory model is evidence about framework behavior, not the selected
 library schema.
 
+The [A2 implementation contract](graphevo-2-async-transactions.md) records the
+local runtime behavior, trusted adapter restrictions and cancellation boundaries.
+Public typed scopes remain A3 work; the legacy public opening gateway is not
+connected to this runtime yet. A2 raises macOS to 13 for the native cancellation
+signal lock; iOS remains 16. These provisional floors follow M11.
+
 ### Working contracts
 
 - A logical graph is a membership and sharing boundary. A physical SQLite
