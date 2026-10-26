@@ -82,7 +82,7 @@ actor StoreResources {
 
     private func configureContext() async {
         let context = context
-        await context.perform {
+        await context.perform { @Sendable in
             context.name = "GraphEvo.v2.runtime"
             context.undoManager = nil
             context.mergePolicy = NSMergePolicy(merge: .errorMergePolicyType)
@@ -101,7 +101,7 @@ actor StoreResources {
             if admitted == 0 { drain?.resume(); drain = nil }
         }
         let context = context
-        return try await context.perform {
+        return try await context.perform { @Sendable in
             defer { context.rollback(); context.reset() }
             let value = try body(context)
             guard !context.hasChanges else { throw StoreRuntimeError.mutationInReadScope }
@@ -116,7 +116,7 @@ actor StoreResources {
             await withCheckedContinuation { drain = $0 }
         }
         let context = context
-        await context.perform { context.reset() }
+        await context.perform { @Sendable in context.reset() }
         do {
             try await hooks.beforeDetach?()
             for store in container.persistentStoreCoordinator.persistentStores {
