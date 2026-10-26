@@ -15,7 +15,7 @@ let repositoryName = URL(fileURLWithPath: #filePath)
 let package = Package(
     name: "PackageConsumer",
     platforms: [
-        .macOS(.v12)
+        .macOS(.v13)
     ],
     dependencies: [
         .package(path: "../..")

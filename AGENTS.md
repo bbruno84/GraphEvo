@@ -329,7 +329,7 @@ swift package dump-package
 swift test
 ```
 
-The package declares iOS 16+ and macOS 12+, but some code imports Apple
+The package declares iOS 16+ and macOS 13+, but some code imports Apple
 frameworks available only in the corresponding SDK. If `swift test` fails on a
 macOS runner because of `UIKit` or `PDFKit`, report the limitation without
 changing imports just to make a non-representative local test pass.
@@ -375,3 +375,15 @@ payload-free and bounded, distinguish truncated/unavailable history from no
 writes, and never infer causal CloudKit bookkeeping from a generation mismatch.
 History is observational, non-atomic and never a replacement concurrency guard.
 The original overload must perform no trace history reads.
+
+## GraphEvo 2 async runtime
+
+The package-internal StoreHandle transaction boundary serializes local writers
+per StoreResources owner and drains admitted reads/writes before detachment.
+Adapter closures are synchronous, return Sendable values, and must never save
+independently or escape contexts/nodes. Public typed scopes remain A3 work;
+legacy/v2 ownership exclusion is required before adding a public opening path.
+Cancellation before the final pre-save check rolls back pending edits; after a
+successful save return the committed result even if cancellation was requested.
+Do not replay arbitrary bodies. See
+[the A2 contract](docs/design/graphevo-2-async-transactions.md).

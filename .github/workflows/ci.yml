@@ -6,6 +6,7 @@ on:
       - develop
       - master
       - codex/graphevo-2
+      - "codex/v2-*"
       - "release/**"
   push:
     branches:

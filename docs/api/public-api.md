@@ -14,7 +14,10 @@ import GraphEvo
 ```
 
 - Public module: `GraphEvo`
-- Supported platforms: iOS 16+, macOS 12+
+- Supported platforms: iOS 16+, macOS 13+
+- V2 development: the internal Swift 6 store runtime now supports awaited reads
+  and transactions; these are package implementation boundaries, not new public
+  Graph signatures. See the [A2 contract](../design/graphevo-2-async-transactions.md).
 - Runtime dependencies: none beyond the Apple platform frameworks required by GraphEvo
 - CloudKit backend: `NSPersistentCloudKitContainer` when configured
 

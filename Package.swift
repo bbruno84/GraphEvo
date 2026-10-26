@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "GraphEvo",
     platforms: [
-        .iOS(.v16), .macOS(.v12) // opzionale macOS se ti serve
+        .iOS(.v16), .macOS(.v13)
     ],
     products: [
         .library(name: "GraphEvo", targets: ["GraphEvo"])

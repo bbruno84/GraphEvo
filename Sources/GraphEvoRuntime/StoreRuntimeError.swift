@@ -11,6 +11,7 @@ package enum StoreRuntimeError: Error {
     case loadFailed(URL?, underlying: any Error)
     case shutdownFailed(URL?, underlying: any Error)
     case closedHandle
+    case readOnlyStore
     case mutationInReadScope
 }
 
@@ -26,6 +27,7 @@ extension StoreRuntimeError: LocalizedError {
         case .loadFailed: return "The persistent store could not be loaded."
         case .shutdownFailed: return "The store could not be detached; its runtime ownership is retained."
         case .closedHandle: return "The store handle is closed."
+        case .readOnlyStore: return "The store does not permit transactions."
         case .mutationInReadScope: return "A read operation attempted to change persistent data."
         }
     }

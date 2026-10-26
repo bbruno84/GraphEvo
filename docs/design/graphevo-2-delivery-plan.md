@@ -40,7 +40,7 @@ not a promise of one prerelease tag per stage. Remain alpha through stage 8.
 The first [A1 local ownership increment](graphevo-2-store-runtime.md) now lives
 in an internal Swift 6 target, using the current schema. It has awaited
 resource leases, coalesced opens, compatibility checks and drained final close.
-The public Graph facade, mutations and cloud topology are not connected yet;
+The public Graph facade and cloud topology are not connected yet;
 this progress does not mark the entire alpha stack or migration gate complete.
 
 | Stage | Work and dependencies | Demonstrable exit | Relevant checks |
@@ -54,8 +54,17 @@ this progress does not mark the entire alpha stack or migration gate complete.
 | A7 — queries | Build typed query composition, related-node filters, count/projections, deterministic ordering and selected pagination/aggregations | Capability/cost matrix and representative queries with explicit unsupported cases and bounded traversal | V06; S9 |
 | A8 — observation | Compare/implement one-shot results, observed state and processing needs on A7 and real mirroring | Correct dependency invalidation, local/remote refresh, cancellation, slow-consumer behavior and an explicit live/replay contract; then reconcile schema/API and meet the beta gate | V07; S10–S12 |
 
-S references refer to numbered sections of the specification. A1 is the next
-implementation milestone; it does not require a predesigned frozen v2 schema.
+The [A2 local execution foundation](graphevo-2-async-transactions.md) now adds
+serialized writes, isolated contexts, rollback, pinned SQLite reads and explicit
+cancellation/commit boundaries. Its Swift 6 consumer regression is package-internal.
+The independent public consumer exit moves to A3, where typed model scopes can
+hide native context capabilities without introducing an interim untyped API.
+Legacy/v2 opening exclusion is still required before exposing that public path.
+A2 uses a temporary stacked PR against A1 while A1 awaits merge; retarget it to
+v2 integration after A1 merges. The production integration destination is unchanged.
+
+S references refer to numbered sections of the specification. A1 supplies the first
+implementation foundation; it does not require a predesigned frozen v2 schema.
 A1/A2 are two increments of the same stack foundation, not independent runtime
 architectures. A3 needs an initial identity/mapping proposal, not a premature
 commitment to its final storage representation. Schema changes retain their
