@@ -20,9 +20,9 @@ observed failure of this fixture/run, not proof that the public participant-add
 capability is unsupported. Apple's
 [WWDC21 sharing session](https://developer.apple.com/videos/play/wwdc2021/10015/)
 explicitly describes permitted participants adding records to shared zones.
-A new minimal supported-API fixture should compare normal relationship/save
-with explicit assignment to the existing share before the v2 contract relies
-on participant-created graph members.
+A [new supported-API fixture](v02-participant-explicit-members-2026-10-26.md)
+subsequently succeeded with explicit assignment to the existing share. This
+does not explain or erase the relationship/save-only crash in the first run.
 
 The new run was `308AF787-A134-45F1-BAE5-3CE8709FBEE9`, initial mutation
 case `5A4B187D-E5A2-4C0B-B81C-79362CC5783C`, and separate read-only
