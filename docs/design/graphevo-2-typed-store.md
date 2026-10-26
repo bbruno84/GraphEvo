@@ -212,3 +212,10 @@ attempting to return GraphReadScope from read failed with its missing Sendable
 conformance, confirming that ordinary consumers cannot transfer the scope as a
 result. Manifest and diff checks passed. The earlier unreadable-store regression
 was corrected to preserve the existing v1 error classification.
+
+
+Two additional model golden-format tests verify exact version-1 envelope bytes
+and reject unknown envelope versions; all 18 model tests passed after adding
+these fixtures. CI initialization also selects the configured Xcode globally,
+runs first-launch setup and boots the dedicated simulator before testing; bounded
+retries cover only CoreSimulator service startup, never failing test bodies.
