@@ -134,8 +134,10 @@ not establish behavior on every supported runtime or certify the legacy facade
 under Swift 6. Thread Sanitizer checks add local race detection, not proof of
 remote-import, app/extension or distributed transaction safety.
 
-CI uses macOS 15 with Xcode 16.4 selected for a Swift 6-capable package build,
-with PR/push coverage for the v2 integration branch. That installation is listed
+CI uses macOS 15 with Xcode 16.4 and an iPhone 16 / iOS 18.5 Simulator selected
+for a Swift 6-capable package build, with PR/push coverage for the v2 integration
+branch. The initial old iPhone 15/latest destination was absent on that runner;
+the selected pair is present in its destination inventory. Xcode's installation is listed
 in the official [runner image inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md).
 The simulator test runner must execute the runtime test target as well as legacy
 tests; a successful build or zero-test invocation is not runtime acceptance.
