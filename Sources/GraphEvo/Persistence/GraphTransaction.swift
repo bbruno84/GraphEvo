@@ -233,6 +233,11 @@ extension Graph {
             // snapshot computation, so an unsaved edit cannot be overwritten.
             try view.performAndWait {
                 try rejectPendingChanges(in: view, checkpoint: "beforeCommit")
+                let deletedObjectIDs = context.performAndWait {
+                    context.processPendingChanges()
+                    return context.deletedObjects.map(\.objectID).filter { !$0.isTemporaryID }
+                }
+                let reportDeletions = watchEventCoordinator?.captureTransactionDeletions(deletedObjectIDs) ?? []
                 let affectedIDs = context.performAndWait {
                     context.deletedObjects.isEmpty ? [] :
                         context.updatedObjects.union(context.deletedObjects).map(\.objectID)
@@ -280,6 +285,7 @@ extension Graph {
                     // SQLite regression tests verify this finalization adds no
                     // second persistent-history transaction.
                     try Self.finalizePersistedDeletions(in: view, ids: deletedIDs)
+                    watchEventCoordinator?.deliverTransaction(savedObjectIDs, deletions: reportDeletions)
                 }
             }
         } catch {

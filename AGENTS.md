@@ -127,6 +127,12 @@ Callbacks distinguish `GraphSource.local` and `GraphSource.cloud`.
 For Graph-level batches, assign `Graph.watchReportCompletion` and select sources
 with `Graph.watchReportSources`. Batch reports do not apply Watch predicates,
 are delivered on the main thread, and do not disable legacy callbacks.
+Successful private `Graph.transaction` saves also enqueue local reports after
+public-context merge/finalization. Report wrappers belong to the public context;
+callbacks run asynchronously on main outside transaction scopes, with no order
+guarantee relative to worker return. Failed/no-op transactions emit no batch.
+Do not redeliver merged deletions on a later ordinary save or local-authored
+transactions through the cloud history path. See `docs/guides/watchers.md`.
 
 `Node.validateStructure()` checks saved local state for Entity, Relationship,
 and Action. Entity scope includes direct edges, their details and endpoints;

@@ -186,6 +186,18 @@ Automatic merging stays enabled; CloudKit imports are not suspended. A failure
 during finalization is propagated even though the private commit has succeeded;
 callers must retain their idempotent retry semantics.
 
+A successful private save and public-context merge/finalization also deliver a
+`.local` `GraphWatchReport` on the original public Graph, subject to
+`watchReportSources` and the existing best-effort materialization/validation
+rules. Wrappers belong to the public context; deletions are captured there
+before commit. Delivery is always asynchronous on the main thread, outside
+transaction scopes. It follows a main-thread transaction's return, but has no
+ordering guarantee relative to a worker caller's return. No report is emitted
+for no-op, rollback, rejected or failed transactions, or empty event batches.
+Both transaction overloads share this behavior; legacy Watch delivery and
+local-author filtering of cloud history remain unchanged. See
+[Watchers](../guides/watchers.md#aggregated-reports).
+
 Pending view changes also emit `GraphFailure.transaction(underlying:diagnostics:)`
 through `GraphEventDelegate`, while still throwing the original
 `GraphTransactionError.pendingUserChanges` (NSError code 1). The error now has a

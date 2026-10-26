@@ -56,6 +56,40 @@ internal final class GraphWatchEventCoordinator {
         cloudDelivery.prepare(startingAfter: token)
     }
 
+    // Called on the public context queue before the private save removes rows.
+    // Resolve IDs here: no private-context objects enter the public report.
+    internal func captureTransactionDeletions(_ ids: [NSManagedObjectID]) -> [GraphWatchEventEnvelope] {
+        guard let graph, graph.watchReportCompletion != nil,
+              graph.watchReportSources.contains(.local), let context else { return [] }
+        return materialize(transactionObjects(ids, in: context),
+                           operation: .delete, source: .local)
+    }
+
+    // Called after the successful save, merge and deletion finalization, on the
+    // public context queue. Always defer the callback beyond transaction scopes.
+    internal func deliverTransaction(_ ids: [AnyHashable: Any], deletions: [GraphWatchEventEnvelope]) {
+        guard let graph, graph.watchReportCompletion != nil,
+              graph.watchReportSources.contains(.local), let context else { return }
+        let inserted = transactionObjects(ids[NSInsertedObjectsKey] as? [NSManagedObjectID] ?? [], in: context)
+        let updated = transactionObjects(ids[NSUpdatedObjectsKey] as? [NSManagedObjectID] ?? [], in: context)
+        let deletedURIs = Set((ids[NSDeletedObjectsKey] as? [NSManagedObjectID] ?? [])
+            .map { $0.uriRepresentation().absoluteString })
+        deliverReport(materialize(inserted, operation: .insert, source: .local) +
+                      materialize(updated, operation: .update, source: .local) +
+                      deletions.filter { deletedURIs.contains($0.objectURI) },
+                      source: .local, deferred: true)
+    }
+
+    private func transactionObjects(_ ids: [NSManagedObjectID], in context: NSManagedObjectContext) -> [NSManagedObject] {
+        ids.compactMap { id in
+            do { return try context.existingObject(with: id) }
+            catch {
+                graph?.emit(.error(.watchEventMaterialization(source: .local, underlying: error)))
+                return nil
+            }
+        }
+    }
+
     private func installObservers(context: NSManagedObjectContext) {
         let center = NotificationCenter.default
         observers.append(center.addObserver(
@@ -106,10 +140,14 @@ internal final class GraphWatchEventCoordinator {
             source: .local
         )
 
-        var deleted = pendingLocalDeletions
+        // Merges can also emit ObjectsDidChange deletions. Only this save's
+        // actual deleted IDs belong to its local batch.
+        let savedDeletions = managedObjects(notification.userInfo?[NSDeletedObjectsKey])
+        let savedDeletionURIs = Set(savedDeletions.map { $0.objectID.uriRepresentation().absoluteString })
+        var deleted = pendingLocalDeletions.filter { savedDeletionURIs.contains($0.objectURI) }
         pendingLocalDeletions.removeAll()
         let capturedURIs = Set(deleted.map(\.objectURI))
-        let fallbackDeleted = managedObjects(notification.userInfo?[NSDeletedObjectsKey])
+        let fallbackDeleted = savedDeletions
             .filter { !capturedURIs.contains($0.objectID.uriRepresentation().absoluteString) }
         deleted.append(contentsOf: materialize(fallbackDeleted, operation: .delete, source: .local))
 
@@ -165,7 +203,7 @@ internal final class GraphWatchEventCoordinator {
         }
     }
 
-    private func deliverReport(_ envelopes: [GraphWatchEventEnvelope], source: GraphSource) {
+    private func deliverReport(_ envelopes: [GraphWatchEventEnvelope], source: GraphSource, deferred: Bool = false) {
         guard let graph,
               graph.watchReportSources.contains(source),
               graph.watchReportCompletion != nil,
@@ -190,7 +228,7 @@ internal final class GraphWatchEventCoordinator {
             let report = GraphWatchReport(graph: graph, source: source, events: ordered.map(\.event), structuralValidationResults: results)
             graph.watchReportCompletion?(report, nil)
         }
-        if Thread.isMainThread {
+        if Thread.isMainThread && !deferred {
             deliver()
         } else {
             DispatchQueue.main.async(execute: deliver)

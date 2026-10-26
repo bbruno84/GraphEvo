@@ -75,7 +75,26 @@ Graph-level events for its source; it does not use any `Watch` predicate.
 
 Local reports use a context save as their boundary. Deletions are captured
 before the save so the report can retain the same typed Graph wrappers used by
-legacy callbacks. Cloud reports use one Persistent History processing cycle as
+legacy callbacks. A successful `Graph.transaction` private save also produces a
+local batch after its public-context merge and deletion finalization succeed.
+The report identifies the original public Graph; all typed wrappers belong to
+its context, including deletion wrappers captured there before commit. No
+private-context Node escapes through a report. Property payloads (including
+binary media), tags, groups, relationships and actions use the existing event
+and best-effort structural-validation rules. Failures emit the existing local
+materialization error; surviving valid events can still be delivered.
+
+Transaction reports are always queued asynchronously on the main thread, outside
+transaction context scopes. A main-thread transaction returns before delivery;
+on a worker queue there is no promised ordering between callback and return.
+Treat commit completion and application admission of a report as separate steps.
+No batch is sent for a no-op, rollback, rejected transaction, failed save/merge,
+or a commit without representable events. `watchReportSources` still applies.
+Technical deletion-finalization saves do not produce another batch, and a later
+ordinary save does not repeat merged deletions. Local-authored history remains
+excluded from cloud batches. Legacy `Watch` delivery is unchanged.
+
+Cloud reports use one Persistent History processing cycle as
 their boundary.
 They use a separate per-store delivery token: the Core Data Persistent History
 processing token advances independently, while a materialization failure leaves
