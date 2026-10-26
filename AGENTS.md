@@ -257,6 +257,9 @@ Existing public API examples and compatibility rules in this file describe v1.
 For deliberate v2 changes, follow the
 [v2 specification](docs/design/graphevo-2-specification.md) and decision register:
 source API compatibility is optional, while migration of v1 data is mandatory.
+V2 OS deployment floors may be raised as technically appropriate; the maintainer
+has removed the v1 OS compatibility constraint. Record the rationale and update
+the supported test matrix instead of treating current manifest floors as frozen.
 Start with the current schema as a candidate; do not freeze a replacement schema
 before exercising the new stack and its features.
 

@@ -95,6 +95,18 @@ In-memory identity is an explicit UUID. Reusing it joins a compatible live
 owner; a different UUID creates an independent store. After final close,
 reusing the UUID creates a new empty resource generation.
 
+The A1 review added a regression for a delayed opening waiter: the first caller
+establishes the new file's identity, the file is replaced, and a second caller
+resumes from its earlier entry snapshot. The second caller must compare with
+the current registered identity, not overwrite it using an initial nil value.
+The corrected post-await check revalidates generation, lease and established
+file identity. Rejected join cleanup leaves the original handle's replacement
+detection intact. This remains a detection check, not an atomic filesystem lock.
+The new regression failed before the fix. After correction, all 31 runtime
+tests passed on the current Mac and iOS 26.5 Simulator; the full macOS run also
+passed the existing 322 tests, and the 31-test Thread Sanitizer run reported no
+races. The initial 30-test results below remain the earlier A1 baseline.
+
 ## Verification and limits
 
 `Tests/GraphEvoRuntimeTests/` exercises the current graph schema, including a
@@ -129,7 +141,9 @@ xcodebuild test -scheme GraphEvo \
   -only-testing:GraphEvoRuntimeTests CODE_SIGNING_ALLOWED=NO
 ```
 
-The deployment floors remain iOS 16/macOS 12. Current host/simulator testing does
+The current A1 deployment floors are provisionally iOS 16/macOS 12. The maintainer
+permits raising v2 minimum OS versions as technically appropriate; v1 deployment
+compatibility is not a design constraint. Current host/simulator testing does
 not establish behavior on every supported runtime or certify the legacy facade
 under Swift 6. Thread Sanitizer checks add local race detection, not proof of
 remote-import, app/extension or distributed transaction safety.

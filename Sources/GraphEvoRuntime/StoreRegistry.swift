@@ -111,7 +111,9 @@ package actor StoreRegistry {
             }
             do {
                 let current = try resolved.fileIdentity()
-                if let previous = entry.fileIdentity, previous != current, let url = resolved.url {
+                guard let registered = entries[resolved.key], registered.generation == entry.generation,
+                      registered.tokens.contains(token) else { throw StoreRuntimeError.closedHandle }
+                if let previous = registered.fileIdentity, previous != current, let url = resolved.url {
                     throw StoreRuntimeError.storeReplaced(url)
                 }
                 if entries[resolved.key]?.generation == entry.generation {

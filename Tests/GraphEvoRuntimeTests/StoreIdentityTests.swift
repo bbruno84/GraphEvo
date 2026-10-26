@@ -4,6 +4,50 @@ import Testing
 @testable import GraphEvoRuntime
 
 @Suite struct StoreIdentityTests {
+    @Test func aLateOpeningWaiterCannotReplaceAnEstablishedFileIdentity() async throws {
+        actor Reservations {
+            private var count = 0
+            func next() -> Int { count += 1; return count }
+        }
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Main.sqlite")
+        let loading = LifecycleGate(), firstReserved = LifecycleGate(), secondReserved = LifecycleGate()
+        await firstReserved.release()
+        let reservations = Reservations()
+        let registry = StoreRegistry(hooks: StoreLifecycleHooks(beforeLoad: { await loading.enter() }, didReserveHandle: {
+            switch await reservations.next() {
+            case 1: await firstReserved.enter()
+            case 2: await secondReserved.enter()
+            default: break
+            }
+        }))
+        let configuration = StoreConfiguration(location: .sqlite(url))
+        let schema = graphSchema()
+        let firstOpening = Task { try await registry.open(configuration, schema: schema) }
+        await loading.waitForArrivals()
+        await firstReserved.waitForArrivals()
+        let secondOpening = Task { try await registry.open(configuration, schema: schema) }
+        await secondReserved.waitForArrivals()
+        await loading.release()
+        let first = try await firstOpening.value
+        _ = try await first.snapshot()
+        try FileManager.default.moveItem(at: url, to: directory.appendingPathComponent("retained.sqlite"))
+        try Data("replacement".utf8).write(to: url)
+        await secondReserved.release()
+        do {
+            let unexpected = try await secondOpening.value
+            Issue.record("A late waiter accepted a replacement file and overwrote the established identity.")
+            try await unexpected.close()
+        } catch StoreRuntimeError.storeReplaced { }
+        await #expect { try await first.snapshot() } throws: { error in
+            if case StoreRuntimeError.storeReplaced = error { return true }
+            return false
+        }
+        try await first.close()
+        #expect(try Data(contentsOf: url) == Data("replacement".utf8))
+    }
+
     @Test func caseAliasesAreCoordinatedBeforeTheFileExists() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

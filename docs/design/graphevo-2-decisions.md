@@ -19,8 +19,9 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 | M08 | Provide native files, improve queries and reassess Watch for all three consumer needs | Feature scope remains library-wide and independent of the current app |
 | M09 | Migrate cloud data through a coordinated cutover: v1 stops writing before conversion | Concurrent v1/v2 writing is not required; pending writes, offline old devices and cutover verification still need a supported recovery policy |
 | M10 | Keep v1 on `develop`, integrate v2 on `codex/graphevo-2` from the planning branch, and use focused `codex/v2-<topic>` PRs into v2 | Alpha tags come from v2 integration; `release/2.0` starts there at beta, with fixes returning to v2. Stable 2.0 is promoted to `master` and `develop` through reviewed PRs |
+| M11 | V2 minimum OS versions may be raised as technically appropriate without inheriting v1 deployment constraints | Choose floors from API/architecture needs and validate their runtime matrix; A1's current iOS 16/macOS 12 declarations are provisional |
 
-M01–M04 and M09–M10 reflect the discussion following the 2026-10-26 laboratory results.
+M01–M04 and M09–M11 reflect the discussion following the 2026-10-26 laboratory results.
 M05–M08 carry forward the initial agreed requirements.
 
 ## Technical decisions under development
@@ -38,7 +39,7 @@ M05–M08 carry forward the initial agreed requirements.
 | D05 — shareable unit/topology | Proposed: complete logical graph; runtime private/shared stores and owner-only personal graph shares | V01/V02/V09 positive under stated conditions; actual schema detail rows/cycles/disconnected members untested | A4/A5 |
 | D06 — observation | Direction agreed: cover one-shot, observed state and processing needs; proposed separate state and processing contracts | Accessory V07 exposed relationship-dependent invalidation gap; durable replay versus live feed/rescan remains open | A8 |
 | D07 — adoption/compatibility | Direction agreed: mandatory data migration, optional source adapter and coordinated cloud cutover | Exact source-version matrix, cutover mechanism and old ID mapping remain open; no requirement for physical in-place reuse | Feasibility A4/A5; design A8; validation beta |
-| D08 — platforms/tools | Swift tools/compiler 6.0 required by the A1 package manifest; internal runtime/tests use language mode 6, legacy facade/tests temporarily mode 5. Deployment floors remain iOS 16/macOS 12 | [A1](graphevo-2-store-runtime.md) specifies CI Xcode 16.4; current host/simulator evidence does not verify every deployment floor or full-library Swift 6 adoption | Confirm minimum-toolchain/runtime matrix before beta |
+| D08 — platforms/tools | Swift tools/compiler 6.0 required by A1; runtime/tests use mode 6, legacy facade/tests temporarily mode 5. Current OS floors are provisionally iOS 16/macOS 12 and may be raised under M11 | [A1](graphevo-2-store-runtime.md) specifies CI Xcode 16.4; deployment selection follows technical needs, with an explicit runtime matrix and no v1 OS compatibility constraint | Select and verify minimum-toolchain/runtime matrix before beta |
 | D09 — availability/recovery | Proposed: explicit local/cloud/access states, no silent substitute for a configured cloud graph | Account switching, permission loss and cached shared-data access policy need dedicated scenarios | A4/A5, consolidated A8 |
 | D10 — cloud separation | Direction agreed; owner-only share-zone route is the working candidate | Separate stores did not isolate cloud data; V01 independent recovery and V09 support zones. Selective download/zone scale are not established | A4 |
 | D11 — model protocol | Direction agreed; proposed explicit mapping, stable keys and ordinary model values | Exact protocol(s), reference syntax, patch/revision behavior and boilerplate need consumer examples | A3, reviewed A7/A8 |

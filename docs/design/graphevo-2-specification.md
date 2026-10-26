@@ -23,6 +23,11 @@ application supplies its domain models and owns its UI and business workflows.
 GraphEvo owns persistence, graph integrity and its documented synchronization
 integration. UI-specific adapters may sit above the core.
 
+V2 minimum OS versions may be raised as needed for the chosen architecture and
+APIs. The v1 deployment floors are not a compatibility requirement. Record the
+technical rationale and test matrix when selecting a new floor; compiler/SDK
+requirements and deployment availability remain separate decisions.
+
 The release is **2.0**, developed through alpha releases followed by beta
 releases. V1 remains a separate maintenance line. There is no requirement to
 ship successive transitional architectures through the 1.x public API.
@@ -168,6 +173,10 @@ it does not cancel other waiters. A failed shutdown retains ownership and its
 error until an explicit future recovery policy can handle it. Explicit close is
 awaited; deallocation initiates best-effort release. See the A1 document for
 file alias rules, failure boundaries and acceptance evidence.
+
+After an opening suspension, revalidate the current registry generation, lease
+and any established file identity. A snapshot taken before file creation must
+not overwrite a fingerprint established by another completed opening waiter.
 
 ## 5. Reads, transactions, cancellation and failures
 
