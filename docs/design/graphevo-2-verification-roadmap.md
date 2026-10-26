@@ -94,8 +94,11 @@ Depends on V01 findings; D05/D09/D10/D14.
 
 The [initial V02 procedure](graphevo-2-v02-procedure.md) defines a bounded
 owner/participant control using an iPad and a different-account iPhone XR,
-authorized on 2026-10-26. Instrumentation and hardware verification remain
-separate; no cross-account result is implied by that preparation.
+authorized on 2026-10-26. The [initial hardware result](results/v02-cross-account-smoke-2026-10-26.md)
+records private A invitation/acceptance, exact recovery in the XR shared store,
+a participant edit recovered by the owner, unchanged owner-only B, and reopening
+on both sides. This minimal root/child control leaves the broader V02 matrix
+and GraphEvo facade integration open.
 
 - Use two accounts and a graph containing entities, relationships, actions, and
   dependencies; test invitation, acceptance, subsequent edits, and relaunch.

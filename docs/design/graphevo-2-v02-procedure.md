@@ -1,6 +1,7 @@
 # V02 — initial cross-account sharing control
 
-Status: preparation authorized on 2026-10-26; no cross-account result yet.
+Status: initial control observed on 2026-10-26; see the
+[cross-account result](results/v02-cross-account-smoke-2026-10-26.md).
 This is the first bounded control within [V02](graphevo-2-verification-roadmap.md),
 not acceptance of its full permission, lifecycle or conflict matrix.
 

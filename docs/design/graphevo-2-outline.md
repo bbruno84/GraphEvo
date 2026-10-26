@@ -257,6 +257,13 @@ selective synchronization, sharing lifecycle and broader R01 guarantees remain
 unverified. Both graphs recover into one local SQLite. No final sharing topology
 is selected from this result.
 
+The [initial V02 cross-account control](results/v02-cross-account-smoke-2026-10-26.md)
+subsequently observed private invitation/acceptance of A into a participant shared
+store, an edit recovered by the owner, unchanged owner-only B, and reopening on
+both sides. This is a minimal framework root/child fixture; full GraphEvo
+dependencies, permission enforcement, revocation and broader lifecycle behavior
+remain unverified. It does not establish selective download or a final topology.
+
 Design private and shared data as part of the store topology only after this
 feasibility check. Define the boundary of a shareable graph: root, included
 nodes, relationship and action dependencies, and cycles within that graph.
