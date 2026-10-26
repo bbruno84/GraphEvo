@@ -4,6 +4,11 @@ Status: experiment plan, before the normative specification. No experiment
 results are implied by this document. See the [design outline](graphevo-2-outline.md)
 for requirements R01–R05 and decisions D01–D14.
 
+The [execution checklist](graphevo-2-test-checklist.md) tracks individual cases,
+completed evidence and prerequisites. It makes the still-open V01 incremental
+membership check explicit rather than treating the V02 existing-node edit as
+equivalent coverage.
+
 ## Purpose and method
 
 Use GraphEvoDemo as a laboratory to learn what Core Data and
@@ -113,6 +118,12 @@ and GraphEvo facade integration open.
 ### V03 — concurrency, ownership, and local transactions
 
 R02 and D01–D04/D14; may run locally while cloud prerequisites are arranged.
+
+The [initial local probe](results/v03-local-concurrency-2026-10-26.md) compiles a
+standalone direct Core Data package in Swift 6 with complete checking. Eight
+local tests exercise explicit owner coalescing, private-context read/modify/save,
+rollback, close/reopen and selected cancellation boundaries. This is partial
+macOS evidence; it neither certifies GraphEvo v1 nor completes V03.
 
 - Build a Swift 6 language-mode consumer with complete concurrency checking.
 - Exercise native asynchronous context access, two handles to one store,
