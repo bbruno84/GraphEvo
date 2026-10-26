@@ -7,7 +7,9 @@ for requirements R01–R05 and decisions D01–D14.
 The [execution checklist](graphevo-2-test-checklist.md) tracks individual cases,
 completed evidence and prerequisites. It makes the still-open V01 incremental
 membership check explicit rather than treating the V02 existing-node edit as
-equivalent coverage.
+equivalent coverage. Current execution is focused on V01/V02 functional graph
+sharing within the supported public API contract; local probes in later areas
+are accessory evidence and their further investigation is paused.
 
 ## Purpose and method
 
@@ -78,6 +80,10 @@ two owner-only zones and exact fresh same-device recovery. The subsequent
 recovered the exact fixture, relationships and zone/share identities from the
 iPad writer. Initial T6 peer recovery is observed; selective synchronization,
 sharing lifecycle and broader R01 guarantees remain pending.
+The [incremental follow-up](results/v01-incremental-membership-2026-10-26.md)
+subsequently observed relationship/save-only addition, edit, deletion, pinned
+identities and three fresh cloud replicas on the same iPad. The independent
+same-account peer was disconnected, so that part remains open.
 
 - Compare two independent local stores using the same model and cloud container;
   record supported configurations and the actual cloud mapping without assuming

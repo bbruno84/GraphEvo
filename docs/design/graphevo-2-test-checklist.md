@@ -14,11 +14,26 @@ external condition; other independent checks continue. **Rejected** records an
 unsupported tested native configuration. A local/injected test never completes
 a real cloud row. Every completed row must link to its evidence and limits.
 
-Execution order: close the missing V01 incremental-membership check first, then
-the V02 permission/lifecycle matrix, then concurrency and the remaining local
-prototypes. Local work may proceed while a device/network prerequisite is absent.
-Unexpected results get their own minimal reproduction; do not silently add a
-workaround and report the original experiment as successful.
+## Current scope: supported graph sharing
+
+After the maintainer's 2026-10-26 clarification, active execution is focused on
+whether graph ownership and sharing requirements can be implemented within the
+supported public NSPersistentCloudKitContainer contract: incremental members,
+chosen-graph sharing, permission-aware application writes, revocation, leaving
+and coherent recovery. Observe application data, public metadata, errors and
+lifecycle outcomes; do not reverse-engineer framework internals.
+
+V03–V08 remain a future backlog. Local exploratory probes already performed
+are accessory evidence, not prerequisites or acceptance gates for the sharing
+choice. Do not expand them while the sharing feasibility question is pending.
+When native permission advice is available, the application is expected to
+honor it before mutation; a deliberately bypassed guard is a diagnostic control,
+not the intended GraphEvo write path.
+
+Close the missing V01 incremental-membership check first, then the focused V02
+permission/lifecycle cases. Keep same-device and independent-device conclusions
+separate. Unexpected application-visible results may get a bounded public-API
+reproduction when needed to decide whether the objective is achievable.
 
 Use the authorized Development container and synthetic fixtures. Preserve prior
 evidence, user configuration and ordinary app data. Revoke/delete only disposable
@@ -44,11 +59,11 @@ PRs as a side effect of laboratory execution.
 | V01.1 | Working same-account cross-device mirroring control | Observed; [T0](results/v01-t0-2026-10-23.md) |
 | V01.2 | Two same-scope stores in one container; two independent one-store containers | First configuration rejected, second unified cloud recovery; [T1](results/v01-t1-2026-10-23.md), [T5](results/v01-t5-2026-10-23.md) |
 | V01.3 | Disconnected A/B owner-only shares retain separate zones on a fresh independent same-account peer | Observed; [T6](results/v01-t6-independent-reader-2026-10-24.md) |
-| V01.4 | After share creation, add A-003 linked to A-root and edit A-001 using relationship/save only; preserve A zone and all B data | Not run — next experiment; no hidden explicit-share fallback |
-| V01.5 | Recover the added node, edit and inverse links from cloud into a new replica; compare exact identities | Not run; same-device fresh-store evidence must remain separate from an independent same-account peer |
-| V01.6 | Delete A-003, recover its absence and corrected inverse links; preserve B and surviving identities | Not run; retain before/after evidence, not absence alone |
-| V01.7 | Reopen the existing writer and fresh reader after the mutations without replaying writes or creating shares | Not run |
-| V01.8 | If automatic membership fails, separately test explicit assignment to an existing share | Conditional; retain the original outcome unchanged |
+| V01.4 | After share creation, add A-003 linked to A-root and edit A-001 using relationship/save only; preserve A zone and all B data | Observed on iPad; [incremental result](results/v01-incremental-membership-2026-10-26.md); no explicit-share fallback |
+| V01.5 | Recover the added node, edit and inverse links from cloud into a new replica; compare exact identities | Partial: fresh same-iPad replica matched exact six-member state; independent same-account peer prerequisite |
+| V01.6 | Delete A-003, recover its absence and corrected inverse links; preserve B and surviving identities | Partial: retained added/deleted snapshots and fresh same-iPad cloud recovery observed; independent same-account peer pending |
+| V01.7 | Reopen the existing writer and fresh reader after the mutations without replaying writes or creating shares | Observed on iPad: original writer reopened and new deleted-phase cloud reader matched; no replay |
+| V01.8 | If automatic membership fails, separately test explicit assignment to an existing share | Conditional, not needed for the observed automatic membership path; no such fallback executed |
 | V01.9 | Delete/recreate a disposable graph zone while another graph remains usable | Not run; scoped experiment fixture only |
 | V01.10 | Assess supported selective recovery/download and zone-count constraints | Not run; current same-owner replicas import A+B into one SQLite |
 
@@ -66,11 +81,11 @@ it must not be mislabeled a same-account owner-only reader.
 | V02.2 | Participant edits an existing A node; owner recovers edit; both sides reopen existing stores | Observed in initial control; owner used a newly launched container |
 | V02.3 | Owner adds/edits/deletes graph members after sharing; participant recovers exact graph and identities | Not run |
 | V02.4 | Participant adds/deletes permitted members; owner recovers exact dependencies | Not run |
-| V02.5 | Read-only participant: observe permission, test write behavior and owner state, then restore read-write | Not run; UI refusal alone is not native enforcement evidence |
-| V02.6 | Owner revokes a participant; participant observes state/removal, B unaffected | Not run; disposable share only |
+| V02.5 | Read-only participant: observe permission, application write guard and owner state | Partial: native canUpdateRecord false observed; deliberate guard-bypass saved locally while owner stayed unchanged in a bounded window; [result](results/v02-readonly-replica-2026-10-26.md). Supported application path must honor permission advice; no internal enforcement investigation planned |
+| V02.6 | Owner revokes a participant; participant observes state/removal, B unaffected | Observed: owner revocation removed A from the same open XR container; owner A/B retained; [result](results/v02-revocation-2026-10-26.md) |
 | V02.7 | Participant leaves a disposable share; owner retains graph, re-invitation/re-acceptance assessed separately | Not run |
-| V02.8 | Already-open owner/participant containers observe remote changes and permissions without relaunch | Not run; initial V02 does not prove live/background delivery |
-| V02.9 | Fresh local replica after acceptance recovers the existing share without duplicate invitation or seed data | Not run; distinct from reopening |
+| V02.8 | Already-open owner/participant containers observe remote changes and permissions without relaunch | Partial: revocation removed A from an already-open XR; other live changes/background delivery remain unverified; [result](results/v02-revocation-2026-10-26.md) |
+| V02.9 | Fresh local replica after acceptance recovers the existing share without duplicate invitation or seed data | Observed on XR with new private/shared stores and existing read-only share; [result](results/v02-readonly-replica-2026-10-26.md) |
 | V02.10 | Offline durable edits and recovery after connectivity restoration | Not run; controllable connectivity prerequisite |
 | V02.11 | Concurrent same-property and disjoint edits; conflicts and eventual graph integrity | Not run; retain both local durable states and reconciliation outcome |
 | V02.12 | Graph dependencies containing entity/relationship/action equivalents, cycles and optional references | Not run; current root/child fixture is narrower |
@@ -94,17 +109,17 @@ it must not be mislabeled a same-account owner-only reader.
 
 | ID | Check | Status / evidence |
 |---|---|---|
-| V04.1 | Minimal protocol-based application model mapping without dynamic-member access | Not run; depends on V03 findings |
-| V04.2 | Identity, optional/scalar/property round trips and unsupported/decoding errors | Not run |
-| V04.3 | Relationships/actions, edits/deletion and scope lifetime | Not run |
-| V04.4 | Value snapshots versus live/scoped models; actor transfer and justified Sendable contracts | Not run |
+| V04.1 | Minimal protocol-based application model mapping without dynamic-member access | Accessory partial: one fixed-shape ordinary-value protocol mapping observed locally; [accessory local results](results/local-model-files-queries-observation-2026-10-26.md); further work paused |
+| V04.2 | Identity, optional/scalar/property round trips and unsupported/decoding errors | Accessory partial: identity/string/optional/integer and decoder errors observed locally; broader type matrix paused |
+| V04.3 | Relationships/actions, edits/deletion and scope lifetime | Accessory partial: one parent/inverse deletion and cross-graph application guard observed; relationship/action facades not tested |
+| V04.4 | Value snapshots versus live/scoped models; actor transfer and justified Sendable contracts | Accessory partial: immutable Sendable values compiled; live/scoped model comparison not run |
 
 ## V05 — attachments
 
 | ID | Check | Status / evidence |
 |---|---|---|
-| V05.1 | Binary attribute with external storage permitted; filename/content type, byte-exact local reopen/export | Not run |
-| V05.2 | Replacement/deletion/rollback/cancellation and backups including external content | Not run |
+| V05.1 | Binary attribute with external storage permitted; filename/content type, byte-exact local reopen/export | Accessory local: byte-exact small/10 MiB round trips with external storage permitted; physical storage choice not inferred; [accessory local results](results/local-model-files-queries-observation-2026-10-26.md) |
+| V05.2 | Replacement/deletion/rollback/cancellation and backups including external content | Accessory partial: replacement/deletion/rollback and closed whole-directory copy observed; cancellation/live backup not tested |
 | V05.3 | Same-account and cross-account shared-graph transfer; byte/checksum equality and offline reads | Not run |
 | V05.4 | Representative file-size envelope, peak memory and latency | Not run; report measurements, not invented limits |
 | V05.5 | Actual exposed availability/progress, streaming/eviction/selective-download capabilities | Not run; unsupported capabilities must remain explicit |
@@ -113,8 +128,8 @@ it must not be mislabeled a same-account owner-only reader.
 
 | ID | Check | Status / evidence |
 |---|---|---|
-| V06.1 | Typed predicates, relationship filters, sorting, count and projections | Not run |
-| V06.2 | Stable pagination with duplicate sort keys and intervening writes | Not run |
+| V06.1 | Typed predicates, relationship filters, sorting, count and projections | Accessory partial: native relationship predicate/count/sum/projections observed locally; no final typed query API |
+| V06.2 | Stable pagination with duplicate sort keys and intervening writes | Accessory partial: keyset ties/insert-before-cursor observed; moving current state, not arbitrary-write snapshot stability |
 | V06.3 | Aggregations, cycles and bounded traversals; unsupported expressions | Not run |
 | V06.4 | Store execution versus in-memory traversal; latency/object count/memory by dataset size | Not run |
 | V06.5 | Visibility under local writes and remote imports, including incomplete structures | Not run |
@@ -123,9 +138,9 @@ it must not be mislabeled a same-account owner-only reader.
 
 | ID | Check | Status / evidence |
 |---|---|---|
-| V07.1 | One-shot queries, live results and processing streams as separate consumers | Not run |
-| V07.2 | Membership/value/order/deletion changes, including relationship-dependent membership | Not run |
-| V07.3 | Slow consumers, buffering/coalescing, cancellation and resubscription | Not run |
+| V07.1 | One-shot queries, live results and processing streams as separate consumers | Accessory partial: local one-shot fetch and newest-state stream compared; durable processing not tested |
+| V07.2 | Membership/value/order/deletion changes, including relationship-dependent membership | Accessory partial: direct value/order/deletion updates observed; related-property membership invalidation gap retained, not satisfied; [accessory local results](results/local-model-files-queries-observation-2026-10-26.md) |
+| V07.3 | Slow consumers, buffering/coalescing, cancellation and resubscription | Accessory partial: bounded newest-state coalescing and cancellation/resubscription observed locally; not durable delivery |
 | V07.4 | Duplicate events, history tokens, relaunch and any proposed replay behavior | Not run |
 | V07.5 | Durable processing versus current-state observation; local and real remote scenarios | Not run; no exactly-once or cloud-completion inference from callbacks |
 
@@ -133,8 +148,8 @@ it must not be mislabeled a same-account owner-only reader.
 
 | ID | Check | Status / evidence |
 |---|---|---|
-| V08.1 | Open/configuration failures and unavailable services expose actionable states | Partial preflight evidence in V01/V02; full recovery matrix not run |
-| V08.2 | Interruption, explicit scoped reset and backup restoration | Not run; preserve source fixture and evidence |
+| V08.1 | Open/configuration failures and unavailable services expose actionable states | Accessory partial: native model mismatch/bad-parent errors observed; account/cloud recovery matrix not tested |
+| V08.2 | Interruption, explicit scoped reset and backup restoration | Accessory partial: closed copies/reopen observed; direct read-only metadata changes SHM (known failed guarantee), separate closed-copy inspection preserves originals; interruption/reset pending |
 | V08.3 | Candidate v1 local data transition and optional API adapter | Not run; target-model decision prerequisite |
 | V08.4 | Cloud continuity, downgrade and incompatible-store behavior for a selected transition | Not run; v1 compatibility must not constrain v2 design |
 
