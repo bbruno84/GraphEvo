@@ -7,12 +7,29 @@ Status: initial plan, 2026-10-26. Read with the
 ## Release policy
 
 Develop directly toward 2.0 through alpha and beta releases. Keep v1 fixes on
-the v1 integration/maintenance line. Use the existing `codex/graphevo-2-design`
-branch as the planning parent; implementation work uses focused child branches
-and reviewed changes. The permanent v2 integration branch name and package
-distribution arrangement are implementation setup decisions, not new shared
-branches created by this document. Do not mix v2 breaking work into routine v1
-releases or merge the planning PR as an implicit implementation release.
+the v1 integration/maintenance line. The agreed branch layout is:
+
+| Branch | Purpose and PR destination |
+|---|---|
+| `develop` | V1 integration and maintenance until stable 2.0 promotion; v1 work returns here |
+| `codex/graphevo-2-design` | Specification/planning parent; its documentation-only PR continues to target `develop` |
+| `codex/graphevo-2` | V2 integration, initially branched from the planning branch with the agreed documents |
+| `codex/v2-<topic>` | Focused work from v2 integration, with PRs back to `codex/graphevo-2`; first increment `codex/v2-store-runtime` |
+| `release/2.0` | Created from v2 integration at the beta gate, accepting stabilization fixes |
+| `master` | Latest stable release, promoted through a release PR |
+
+Alpha tags identify reviewed commits on `codex/graphevo-2`; beta tags identify
+commits on `release/2.0`. Creating `release/2.0` from v2 integration is an explicit
+exception to the normal v1 rule of branching releases from `develop`, recorded
+in [AGENTS.md](../../AGENTS.md). Do not create the release branch or publish tags
+as a side effect of preparing the integration/feature branches.
+
+Assess relevant v1 fixes individually for forward-porting to the new
+architecture. V2 release corrections return to the v2 integration branch.
+After stable release readiness and review, promote 2.0 into `master` and
+`develop`; unfinished v2 code does not enter the v1 integration line. The design
+PR remains documentation-only. Do not merge it as an implicit implementation
+release. Package distribution details remain to settle before the first alpha.
 
 Each alpha is a coherent usable increment with its model/API revision and
 known limits recorded. Alpha stage numbers below are planning milestones,

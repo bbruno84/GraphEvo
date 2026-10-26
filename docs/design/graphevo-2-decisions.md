@@ -18,8 +18,9 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 | M07 | Support Swift 6, native asynchronous operations and protocol-based application models | Replace context-bound dynamic-member usage as the primary application integration |
 | M08 | Provide native files, improve queries and reassess Watch for all three consumer needs | Feature scope remains library-wide and independent of the current app |
 | M09 | Migrate cloud data through a coordinated cutover: v1 stops writing before conversion | Concurrent v1/v2 writing is not required; pending writes, offline old devices and cutover verification still need a supported recovery policy |
+| M10 | Keep v1 on `develop`, integrate v2 on `codex/graphevo-2` from the planning branch, and use focused `codex/v2-<topic>` PRs into v2 | Alpha tags come from v2 integration; `release/2.0` starts there at beta, with fixes returning to v2. Stable 2.0 is promoted to `master` and `develop` through reviewed PRs |
 
-M01–M04 and M09 reflect the discussion following the 2026-10-26 laboratory results.
+M01–M04 and M09–M10 reflect the discussion following the 2026-10-26 laboratory results.
 M05–M08 carry forward the initial agreed requirements.
 
 ## Technical decisions under development

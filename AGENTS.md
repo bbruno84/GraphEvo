@@ -211,23 +211,50 @@ review its license and preserve the required notices.
 
 ## Branching model
 
-The repository uses three main branch roles:
+The repository maintains separate v1 and v2 integration lines while GraphEvo 2
+is developed:
 
 - `master`: contains only the latest stable release. Hotfix branches start from
   `master` and are merged back through a pull request.
-- `develop`: the ongoing integration branch. Feature and bugfix branches
-  start from `develop` and are merged back through pull requests.
-- `release/<version>`: created from `develop` when the feature freeze is
-  declared. During the release cycle, only bugfixes, stabilization work, and
-  release refinements should be merged into this branch.
+- `develop`: v1 integration and maintenance until the 2.0 stable promotion.
+  Ordinary v1 feature and bugfix branches start here and return through PRs.
+- `codex/graphevo-2-design`: the specification and planning branch. Its existing
+  PR remains documentation-only and targets `develop`.
+- `codex/graphevo-2`: the v2 integration branch, initially created from the
+  planning branch with the agreed specification. Breaking v2 implementation
+  work belongs here, not in the v1 `develop` line.
+- `codex/v2-<topic>`: focused v2 feature/fix branches created from
+  `codex/graphevo-2`, with PRs targeting `codex/graphevo-2`. The first runtime
+  increment uses `codex/v2-store-runtime`.
+- `release/<version>`: ordinary v1 release branches start from `develop` at
+  feature freeze. **Exception for 2.0:** create `release/2.0` from
+  `codex/graphevo-2` only after all alpha areas, including observation, meet the
+  beta gate. Release branches accept stabilization fixes and refinements.
+
+Publish alpha tags from reviewed v2 integration commits and beta tags from
+`release/2.0`; a branch setup or successful build is not a release request.
+Keep schema/API evolution within alpha and require documented migration for
+incompatible adopted beta data. See the
+[v2 delivery plan](docs/design/graphevo-2-delivery-plan.md).
+
+Existing public API examples and compatibility rules in this file describe v1.
+For deliberate v2 changes, follow the
+[v2 specification](docs/design/graphevo-2-specification.md) and decision register:
+source API compatibility is optional, while migration of v1 data is mandatory.
+Start with the current schema as a candidate; do not freeze a replacement schema
+before exercising the new stack and its features.
 
 The historical branch `rebase/graphMHB-base` must be retained as project
 history. Do not delete, rename, rewrite, or use it as a base for ordinary
 feature work unless explicitly requested.
 
 Stable releases are promoted from the appropriate release branch into
-`master` through a pull request. Relevant hotfixes and release fixes should be
-forward-merged into `develop` when applicable so the branches do not drift.
+`master` through a pull request. During parallel v1/v2 work, assess v1 fixes
+individually for forward-porting to v2; the refactor may need a different
+implementation. V2 release fixes return to `codex/graphevo-2` and must not bring
+unfinished v2 code into the v1 `develop` branch. Promote the final stable 2.0
+release to both `master` and `develop` through reviewed PRs; do not merge merely
+to set up branches.
 
 ## Git and pull-request workflow
 
@@ -241,8 +268,9 @@ on shared or release branches unless explicitly requested.
    git fetch --prune
    ```
 
-2. Create a dedicated descriptive branch, such as
-   `codex/docs-agents-workflow` or `codex/fix-store-resolution`.
+2. Create a dedicated descriptive branch from the applicable integration line,
+   such as `codex/docs-agents-workflow`, `codex/fix-store-resolution`, or
+   `codex/v2-store-runtime`. Verify the PR targets the correct integration line.
 3. Keep the change focused; do not include unrelated files or formatting.
 4. Update code, tests, and documentation together when they describe one
    behavior. Commit messages should explain intent, for example:
