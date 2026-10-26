@@ -31,7 +31,7 @@ Data internals.
 
 | Check | XR participant | iPad owner |
 |---|---|---|
-| Observation window | 180 seconds, 86/86 snapshots empty | 180 seconds, 85 snapshots with exact A/B5 |
+| Observation window | 180 seconds, 86/86 snapshots empty | 180 seconds, 85 object samples; final A/B5 with exact values and identities |
 | Old share URL metadata | Matching share/owner/container; `privateUser`, read-write, `pending` before and after | Matching share/container; owner role |
 | Share participants from Core Data | No imported A or B | A: owner `accepted`, XR `pending`; B: owner only |
 | Local store identity | New private/shared pair, disjoint from the prior pair | Original private/shared pair reused |
@@ -42,7 +42,11 @@ The owner-side metadata read reported `ownerMatches = false` for the
 `ownerIdentity.userRecordID` comparison while its share ID/container matched
 and its role was owner. The XR metadata matched owner, share and container.
 This discrepancy was retained without assigning a cause and was not used to
-classify the participant status.
+classify the participant status. The owner opening snapshot had all five
+objects before share metadata became available; the final snapshot included
+the complete expected shares. The report retains the opening and final
+snapshots and counts the intermediate samples, rather than preserving every
+intermediate owner share state.
 Both processes detached stores and were explicitly stopped after final report
 retention. The old URL still returned metadata, so this result is **not** a
 claim that the invitation ceased to exist. Apple documents that accepted
