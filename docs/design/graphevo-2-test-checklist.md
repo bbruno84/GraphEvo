@@ -14,26 +14,20 @@ external condition; other independent checks continue. **Rejected** records an
 unsupported tested native configuration. A local/injected test never completes
 a real cloud row. Every completed row must link to its evidence and limits.
 
-## Current scope: supported graph sharing
+## Current scope: concurrency, realistic graphs and files
 
-After the maintainer's 2026-10-26 clarification, active execution is focused on
-whether graph ownership and sharing requirements can be implemented within the
-supported public NSPersistentCloudKitContainer contract: incremental members,
-chosen-graph sharing, permission-aware application writes, revocation, leaving
-and coherent recovery. Observe application data, public metadata, errors and
-lifecycle outcomes; do not reverse-engineer framework internals.
+The maintainer selected a pre-specification gate of Swift 6 concurrency and
+ownership, realistic cross-account graph dependencies, and native file
+transfer. Continue within the supported public NSPersistentCloudKitContainer
+contract, observing application data, public metadata, errors and lifecycle
+outcomes without reverse-engineering framework internals. Query, Watch and
+v1-transition decisions follow after a candidate model is selected.
 
-V03–V08 remain a future backlog. Local exploratory probes already performed
-are accessory evidence, not prerequisites or acceptance gates for the sharing
-choice. Do not expand them while the sharing feasibility question is pending.
-When native permission advice is available, the application is expected to
-honor it before mutation; a deliberately bypassed guard is a diagnostic control,
-not the intended GraphEvo write path.
-
-Close the missing V01 incremental-membership check first, then the focused V02
-permission/lifecycle cases. Keep same-device and independent-device conclusions
-separate. Unexpected application-visible results may get a bounded public-API
-reproduction when needed to decide whether the objective is achievable.
+The V09 direct-framework fixture is a new disposable model and run. It does
+not change the earlier V01/V02 stores or turn local probe results into cloud
+evidence. Keep same-device and independent-device conclusions separate.
+Unexpected results need a bounded public-API reproduction before shaping the
+GraphEvo 2 design.
 
 Use the authorized Development container and synthetic fixtures. Preserve prior
 evidence, user configuration and ordinary app data. Revoke/delete only disposable
@@ -87,23 +81,23 @@ it must not be mislabeled a same-account owner-only reader.
 | V02.8 | Already-open owner/participant containers observe remote changes and permissions without relaunch | Partial positive: revocation and owner deletion reached an already-open XR; explicit participant addition/deletion reached an already-open owner. Owner addition was absent for the first 90 seconds but recovered after reopen. Normal participant insertion crashed before a cloud result. [revocation](results/v02-revocation-2026-10-26.md), [mutations](results/v02-incremental-shared-members-2026-10-26.md), [explicit path](results/v02-participant-explicit-members-2026-10-26.md) |
 | V02.9 | Fresh local replica after acceptance recovers the existing share without duplicate invitation or seed data | Observed on XR with new private/shared stores and existing read-only share; [result](results/v02-readonly-replica-2026-10-26.md) |
 | V02.10 | Offline durable edits and recovery after connectivity restoration | Not run; controllable connectivity prerequisite |
-| V02.11 | Concurrent same-property and disjoint edits; conflicts and eventual graph integrity | Not run; retain both local durable states and reconciliation outcome |
-| V02.12 | Graph dependencies containing entity/relationship/action equivalents, cycles and optional references | Not run; current root/child fixture is narrower |
+| V02.11 | Concurrent same-property and disjoint edits; conflicts and eventual graph integrity | Partial: [V09](results/v09-shared-graph-files-2026-10-26.md) coordinated disjoint edits converged on both accounts with graph integrity retained. Same-property conflicts and merge policy remain untested |
+| V02.12 | Graph dependencies containing entity/relationship/action equivalents, cycles and optional references | Partial: [V09 result](results/v09-shared-graph-files-2026-10-26.md) observed initial cross-account recovery, participant addition of Entity/Relationship/Action equivalents, edit, owner deletion and independent XR recovery with exact A zone/B control. Cycles and optional missing endpoints remain untested |
 | V02.13 | Account unavailability/change and state exposure | Prerequisite: controllable account fixture; no unattended sign-out of personal devices |
 
 ## V03 — Swift 6 concurrency, ownership and transactions
 
 | ID | Check | Status / evidence |
 |---|---|---|
-| V03.1 | Direct Core Data consumer builds in Swift 6 with complete concurrency checking | Observed locally on current macOS; [initial V03 probe](results/v03-local-concurrency-2026-10-26.md); iOS not tested |
+| V03.1 | Direct Core Data consumer builds in Swift 6 with complete concurrency checking | Observed on current macOS and iOS Simulator: 11 tests pass in Swift 6; [initial V03 probe](results/v03-local-concurrency-2026-10-26.md), [follow-up](results/v03-cancellation-process-2026-10-26.md). Physical iOS app integration pending |
 | V03.2 | Async context access returns safe values/IDs; no managed-object transfer between executors | Partial: immutable values and 100 concurrent private-context increments observed in initial V03 |
 | V03.3 | Two handles to one canonical store share an explicit ownership policy; independent stores remain independent | Partial: explicit registry coalescing and independent URLs observed; v1/native ownership, alias edge cases and release policy not certified |
 | V03.4 | Transaction commit, thrown error/rollback and pending-edit ownership | Partial: deliberate rollback and clean next save observed; application-model/scoped contract pending |
-| V03.5 | Cancellation before work, during work and around commit; distinguish cancellation from rollback | Partial: explicit pre-enqueue check, native-only pre-cancelled save and post-commit cancellation observed; queued/native-work windows pending |
-| V03.6 | Close/reopen/invalidation while tasks are pending; main-thread responsiveness | Partial: durable close/reopen and closed-owner rejection observed; pending-work stress and responsiveness pending |
+| V03.5 | Cancellation before work, during work and around commit; distinguish cancellation from rollback | Partial: [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) shows native work does not inherit caller cancellation; explicit pre-commit signal rolls back, while post-commit cancellation does not. Queued-before-execution window pending |
+| V03.6 | Close/reopen/invalidation while tasks are pending; main-thread responsiveness | Partial: [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) shows an already-running save finishes before close and survives reopen; broader pending-work stress and responsiveness pending |
 | V03.7 | Native sharing invocation timing versus callback completion; evaluate off-main context ownership | Partial: [T6](results/v01-t6-ipad-diagnosis-2026-10-24.md) proves synchronous work despite callbacks; off-main design not run |
-| V03.8 | Concurrent remote import and local edits with explicit merge policy | Not run |
-| V03.9 | App/extension access to one App Group store across processes | Not run; requires an extension consumer, not two in-process handles |
+| V03.8 | Concurrent remote import and local edits with explicit merge policy | Partial: [V09](results/v09-shared-graph-files-2026-10-26.md) coordinated disjoint edits at a common future start on two accounts; both independently recovered the combined graph. Remote import/save overlap and same-object conflict policy remain unverified |
+| V03.9 | App/extension access to one App Group store across processes | Partial local control: [two macOS processes](results/v03-cancellation-process-2026-10-26.md) exposed duplicate insertion and Core Data merge error 133020 without distributed ownership. Physical iOS App Group/extension test remains unrun |
 
 ## V04 — typed application models
 
@@ -120,8 +114,8 @@ it must not be mislabeled a same-account owner-only reader.
 |---|---|---|
 | V05.1 | Binary attribute with external storage permitted; filename/content type, byte-exact local reopen/export | Accessory local: byte-exact small/10 MiB round trips with external storage permitted; physical storage choice not inferred; [accessory local results](results/local-model-files-queries-observation-2026-10-26.md) |
 | V05.2 | Replacement/deletion/rollback/cancellation and backups including external content | Accessory partial: replacement/deletion/rollback and closed whole-directory copy observed; cancellation/live backup not tested |
-| V05.3 | Same-account and cross-account shared-graph transfer; byte/checksum equality and offline reads | Not run |
-| V05.4 | Representative file-size envelope, peak memory and latency | Not run; report measurements, not invented limits |
+| V05.3 | Same-account and cross-account shared-graph transfer; byte/checksum equality and offline reads | Partial: [V09 result](results/v09-shared-graph-files-2026-10-26.md) observed owner-to-XR 512-byte and 10 MiB recovery, participant replacement and deletion recovered by owner, with exact checksum and A share identity. Same-account and offline file reads not run |
+| V05.4 | Representative file-size envelope, peak memory and latency | Partial: [V09 result](results/v09-shared-graph-files-2026-10-26.md) records 512-byte/10 MiB sizes and observed replacement/deletion recovery windows; peak memory not measured |
 | V05.5 | Actual exposed availability/progress, streaming/eviction/selective-download capabilities | Not run; unsupported capabilities must remain explicit |
 
 ## V06 — query engine

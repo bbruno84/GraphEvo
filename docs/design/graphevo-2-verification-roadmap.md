@@ -5,11 +5,10 @@ results are implied by this document. See the [design outline](graphevo-2-outlin
 for requirements R01–R05 and decisions D01–D14.
 
 The [execution checklist](graphevo-2-test-checklist.md) tracks individual cases,
-completed evidence and prerequisites. It makes the still-open V01 incremental
-membership check explicit rather than treating the V02 existing-node edit as
-equivalent coverage. Current execution is focused on V01/V02 functional graph
-sharing within the supported public API contract; local probes in later areas
-are accessory evidence and their further investigation is paused.
+completed evidence and prerequisites. After the initial V01/V02 feasibility
+work, the current pre-specification gate is V03 concurrency, V02.12 realistic
+graph dependencies, and V05 native attachments across accounts. V04/V06–V08
+remain available as local evidence but are not part of this gate.
 
 ## Purpose and method
 
@@ -121,6 +120,11 @@ and GraphEvo facade integration open.
 - Exit: an owner/participant behavior matrix and supported sharing boundary;
   no assumption that a share corresponds to one local SQLite file.
 
+The direct-framework V09 graph/file laboratory in GraphEvoDemo exercises a
+disposable Entity/Relationship/Action-equivalent fixture with A and B in
+separate shares. It tests application-visible structure, CloudKit record/share
+identity and participant mutations before any GraphEvo 2 model is selected.
+
 ### V03 — concurrency, ownership, and local transactions
 
 R02 and D01–D04/D14; may run locally while cloud prerequisites are arranged.
@@ -172,6 +176,10 @@ R04 and D12; local checks first, then the V02 sharing topology.
 - Exit: supported lifecycle and measured envelope, not a universal file-size or
   memory guarantee. No direct CKAsset transfer path is assumed.
 
+V09 uses a binary Core Data attribute with external storage allowed, metadata
+and SHA-256 verification. Small and 10 MiB synthetic files cross the same
+private share as graph A. Physical storage layout is deliberately not inspected.
+
 ### V06 — query capability and cost
 
 R05 and D04/D13; use V04 examples when available, with controlled fixtures.
@@ -221,7 +229,8 @@ Link results to the relevant requirement/decision; leave unexecuted items pendin
 Use measured results to select performance budgets, rather than inventing them
 before representative workloads exist.
 
-Proceed to the specification once the cloud-separation/sharing feasibility is
-understood and the chosen foundations have been exercised. Other unanswered
-questions may be explicitly deferred with scope and rationale. Do not treat a
-successful demo build as completion of this verification roadmap.
+Proceed to the specification once the cloud-separation/sharing feasibility,
+V03 ownership/cancellation boundary, realistic shared graph lifetime, and V05
+cross-account file lifecycle are understood. Other unanswered questions may be
+explicitly deferred with scope and rationale. Do not treat a successful demo
+build as completion of this verification roadmap.
