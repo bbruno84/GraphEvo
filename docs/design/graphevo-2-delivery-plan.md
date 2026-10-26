@@ -70,6 +70,13 @@ architectures. A3 needs an initial identity/mapping proposal, not a premature
 commitment to its final storage representation. Schema changes retain their
 rationale and test fixtures so higher-level features can challenge earlier choices.
 
+The [first A3 increment](graphevo-2-application-models.md) implements transferable
+model/record contracts, explicit values and patches, with a package-only adapter
+and public Swift 6 model consumer. It does not complete typed public CRUD,
+persisted identity, ownership exclusion or the mandatory v1 value migration.
+A1 and A2 are reviewed and merged (#70/#71); the bootstrap CI PR #69 was closed
+as superseded. Further A3 work starts from the integrated v2 branch.
+
 ## Migration throughout alpha
 
 Migration is a parallel workstream rather than a task first discovered after

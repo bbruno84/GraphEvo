@@ -32,6 +32,10 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   decisions, technical proposals and open choices.
 - [GraphEvo 2 A1 store runtime](design/graphevo-2-store-runtime.md): implemented
   local ownership foundation, package boundary, lifecycle and verification scope.
+- [GraphEvo 2 A2 async operations](design/graphevo-2-async-transactions.md):
+  local serialized transactions, cancellation/commit boundary and read semantics.
+- [GraphEvo 2 A3 model contracts](design/graphevo-2-application-models.md): first
+  protocol/value/patch increment, schema bridge evidence and remaining public scopes.
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
   retaining the original goals and architectural questions. The specification
   supersedes it for current decisions; neither describes the v1 public API.

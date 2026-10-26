@@ -387,3 +387,15 @@ Cancellation before the final pre-save check rolls back pending edits; after a
 successful save return the committed result even if cancellation was requested.
 Do not replay arbitrary bodies. See
 [the A2 contract](docs/design/graphevo-2-async-transactions.md).
+
+## GraphEvo 2 model contracts
+
+GraphEvoModel compiles detached GraphModel/GraphRecord/value/patch contracts in
+Swift 6; GraphEvo exposes explicit aliases through its existing product. The
+package-only GraphRecordMapper uses Node facades on the current scoped context.
+It requires explicit identity mapping, propagates decoder errors and converts
+all changed values before editing. Null, UUID and encoded-payload writes and
+structural endpoint edits are rejected until lossless storage/resolution exists.
+Do not claim that value IDs are already persisted or expose a v2 store opener
+before resolving legacy ownership exclusion. See
+[the A3 contract](docs/design/graphevo-2-application-models.md).

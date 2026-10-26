@@ -85,6 +85,8 @@ jobs:
 
       - name: Check diff formatting
         run: git diff --check
+      - name: Run Swift 6 model consumer
+        run: swift run --package-path IntegrationTests/PackageConsumer ModelConsumer
 
   package-consumer:
     name: Package consumer integration fixture
@@ -103,7 +105,7 @@ jobs:
           swift --version
 
       - name: Run package consumer fixture
-        run: swift run --package-path IntegrationTests/PackageConsumer
+        run: swift run --package-path IntegrationTests/PackageConsumer PackageConsumer
 
       - name: Check diff formatting
         run: git diff --check

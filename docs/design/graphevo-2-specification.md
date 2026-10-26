@@ -237,12 +237,19 @@ specific; a generic cloud error is not permission to delete and rebuild a store.
 
 ## 6. Typed application models
 
+The [first A3 increment](graphevo-2-application-models.md) supplies GraphModel,
+GraphRecord, graph-aware value IDs, explicit values and partial patches through
+the public GraphEvo product. A package adapter exercises the current schema;
+public opening/CRUD scopes, persisted IDs and complete codec migration remain
+pending. Null currently fails the candidate native bridge rather than being
+silently treated as a missing key. These alpha contracts are subject to revision.
+
 ### Working contracts
 
 Applications conform their models to a GraphEvo protocol with explicit mapping
 of logical type, identity, property encoding/decoding and relationship/action
-references. The protocol name, mapping syntax and whether mapping uses one or
-several capabilities remain alpha design choices. No macro is required to use
+references. The first candidate uses GraphModel with GraphPropertyValue conversions; the
+protocol naming and capability split remain alpha design choices. No macro is required to use
 the core API; generation may be evaluated later.
 
 Ordinary reads return values detached from a context. Editing a previously read

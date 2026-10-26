@@ -834,3 +834,58 @@ change the original transaction result. No retries or alternative conflict
 checks are introduced. Consumers with exhaustive `GraphEvent` switches must
 handle the new diagnostic case. A consumer may correlate terminal application
 state, outcome, and history in any arrival order using the UUID.
+
+
+## GraphEvo 2 alpha model contracts
+
+The following additive types are available through `import GraphEvo`. They are
+implemented in the Swift 6 GraphEvoModel target and do not open a store. The v1
+Graph API above is still the only public opening gateway. See the
+[A3 guide](../design/graphevo-2-application-models.md) for scope and limitations.
+
+- `GraphID(rawValue: UUID = UUID())`: Sendable, Hashable, Codable graph identity;
+  read-only `rawValue`.
+- `GraphNodeID(graphID: GraphID, rawValue: UUID = UUID())`: Sendable, Hashable,
+  Codable node identity; read-only `graphID` and `rawValue`.
+- `GraphNodeKind`: `.entity`, `.relationship`, `.action`.
+- `GraphEndpoints`: `.entity`, `.relationship(subject: GraphNodeID?, object:
+  GraphNodeID?)`, `.action(subjects: Set<GraphNodeID>, objects: Set<GraphNodeID>)`;
+  read-only `kind`.
+- `GraphValue`: `.null`, `.boolean(Bool)`, `.integer(Int64)`,
+  `.unsignedInteger(UInt64)`, `.floatingPoint(Double)`, `.decimal(Decimal)`,
+  `.string(String)`, `.data(Data)`, `.date(Date)`, `.url(URL)`, `.uuid(UUID)`,
+  `.array([GraphValue])`, `.object([String: GraphValue])`,
+  `.encoded(GraphEncodedValue)`; Sendable and Equatable.
+- `GraphEncodedValue(codec: String, version: UInt, data: Data) throws`: read-only
+  codec/version/data; unknown codecs retain bytes without implicit execution.
+- `GraphPropertyValue: Sendable`: `var graphValue: GraphValue { get }` and
+  `init(graphValue: GraphValue) throws`. Conformances: GraphValue,
+  GraphEncodedValue, String, Bool, Int, Int64, UInt64, Double, Decimal, Data,
+  Date, URL, UUID, and conditional Optional, Array and string-keyed Dictionary.
+- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:) throws`:
+  read-only fields; endpoints defaults to `.entity`, properties/tags/groups to
+  empty and creation date to nil. Type/property keys must be nonempty and
+  references must have the same graph ID.
+- `GraphRecord.value<Value: GraphPropertyValue>(for:as:) throws -> Value`:
+  defaults `as` to Value.self; missing keys and failed typed decoding differ.
+- `GraphModel: Sendable`: read-only `id: GraphNodeID`; static `graphType: String`
+  and `graphKind: GraphNodeKind`; `init(graphRecord: GraphRecord) throws` and
+  `graphRecord() throws -> GraphRecord`.
+- `GraphRecord.init<Model: GraphModel>(_ model: Model) throws` and
+  `decoded<Model: GraphModel>(as: Model.Type = Model.self) throws -> Model`:
+  checked mapping validates type, kind and identity.
+- `GraphPropertyChange`: `.set(GraphValue)` and `.remove`; setting null is
+  distinct from removing a property in the detached contract.
+- `GraphRecordPatch(id:properties:addingTags:removingTags:addingGroups:
+  removingGroups:endpoints:) throws`: defaults all changes to empty/unchanged;
+  read-only matching fields. `applying(to: GraphRecord) throws -> GraphRecord`
+  preserves unknown fields and metadata, rejecting identity/kind conflicts.
+- `GraphModelError`: `invalidRecord(String)`, `invalidValue`,
+  `missingProperty(String)`, `propertyDecodingFailed(String, underlying: Error)`,
+  `unexpectedType`, `unexpectedKind`, `identityMismatch`, `crossGraphReference`,
+  `conflictingPatch`, `unsupportedLegacyValue(String)`; LocalizedError.
+
+These detached values do not establish persistent membership, resolve endpoint
+existence, run codecs or commit edits. Public v2 scopes, durable ID persistence,
+legacy translation and null/codec storage remain incomplete. Never apply a stale
+encoded model as a whole-record replacement that drops unknown properties.
