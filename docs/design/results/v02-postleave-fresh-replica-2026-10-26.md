@@ -38,6 +38,11 @@ Data internals.
 | Writes or acceptance | None | None |
 
 No operation, snapshot, metadata-read, event or trace errors were recorded.
+The owner-side metadata read reported `ownerMatches = false` for the
+`ownerIdentity.userRecordID` comparison while its share ID/container matched
+and its role was owner. The XR metadata matched owner, share and container.
+This discrepancy was retained without assigning a cause and was not used to
+classify the participant status.
 Both processes detached stores and were explicitly stopped after final report
 retention. The old URL still returned metadata, so this result is **not** a
 claim that the invitation ceased to exist. Apple documents that accepted
