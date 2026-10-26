@@ -89,14 +89,18 @@ it must not be mislabeled a same-account owner-only reader.
 
 ## V03 — Swift 6 concurrency, ownership and transactions
 
+The [A1 runtime increment](graphevo-2-store-runtime.md) now adds library-level
+local ownership evidence alongside the standalone probes. It is package-internal
+and does not yet replace the legacy public Graph facade or implement writes.
+
 | ID | Check | Status / evidence |
 |---|---|---|
-| V03.1 | Direct Core Data consumer builds in Swift 6 with complete concurrency checking | Observed on current macOS and iOS Simulator: 11 tests pass in Swift 6; [initial V03 probe](results/v03-local-concurrency-2026-10-26.md), [follow-up](results/v03-cancellation-process-2026-10-26.md). Physical iOS app integration pending |
+| V03.1 | Direct Core Data consumer builds in Swift 6 with complete concurrency checking | Observed: [A1 runtime](graphevo-2-store-runtime.md) and its 30 tests compile in Swift 6 and pass on current macOS/iOS Simulator; its macOS Thread Sanitizer run reported no races. Legacy facade remains mode 5. Earlier [V03 probe](results/v03-local-concurrency-2026-10-26.md) and [follow-up](results/v03-cancellation-process-2026-10-26.md) retain their separate 11-test scope. Physical integration/minimum runtime matrix pending |
 | V03.2 | Async context access returns safe values/IDs; no managed-object transfer between executors | Partial: immutable values and 100 concurrent private-context increments observed in initial V03 |
-| V03.3 | Two handles to one canonical store share an explicit ownership policy; independent stores remain independent | Partial: explicit registry coalescing and independent URLs observed; v1/native ownership, alias edge cases and release policy not certified |
+| V03.3 | Two handles to one canonical store share an explicit ownership policy; independent stores remain independent | Partial: [A1](graphevo-2-store-runtime.md) verifies concurrent lease coalescing, independent memory IDs, schema/access conflict rejection, symlink/case/missing-path rules and independent close. Public graph integration, legacy/v2 exclusion and multi-store/cloud sets remain pending |
 | V03.4 | Transaction commit, thrown error/rollback and pending-edit ownership | Partial: deliberate rollback and clean next save observed; application-model/scoped contract pending |
 | V03.5 | Cancellation before work, during work and around commit; distinguish cancellation from rollback | Partial: [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) shows native work does not inherit caller cancellation; explicit pre-commit signal rolls back, while post-commit cancellation does not. Queued-before-execution window pending |
-| V03.6 | Close/reopen/invalidation while tasks are pending; main-thread responsiveness | Partial: [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) shows an already-running save finishes before close and survives reopen; broader pending-work stress and responsiveness pending |
+| V03.6 | Close/reopen/invalidation while tasks are pending; main-thread responsiveness | Partial: [A1](graphevo-2-store-runtime.md) drains admitted native reads, orders reopen after final detach, releases deallocated handles and retains failed-shutdown ownership. Earlier [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) covers a probe save; A1 does not implement commits. Broader stress/responsiveness pending |
 | V03.7 | Native sharing invocation timing versus callback completion; evaluate off-main context ownership | Partial: [T6](results/v01-t6-ipad-diagnosis-2026-10-24.md) proves synchronous work despite callbacks; off-main design not run |
 | V03.8 | Concurrent remote import and local edits with explicit merge policy | Partial: [V09](results/v09-shared-graph-files-2026-10-26.md) coordinated disjoint edits at a common future start on two accounts; both independently recovered the combined graph. Remote import/save overlap and same-object conflict policy remain unverified |
 | V03.9 | App/extension access to one App Group store across processes | Partial local control: [two macOS processes](results/v03-cancellation-process-2026-10-26.md) exposed duplicate insertion and Core Data merge error 133020 without distributed ownership. Physical iOS App Group/extension test remains unrun |

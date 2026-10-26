@@ -1,6 +1,8 @@
 # GraphEvo 2 — initial specification
 
-Status: initial specification, 2026-10-26. No v2 implementation is implied.
+Status: initial specification, 2026-10-26. The
+[A1 runtime increment](graphevo-2-store-runtime.md) implements the first local
+ownership foundation; other working contracts are not implied to be implemented.
 This is the current design entry point; the [outline](graphevo-2-outline.md)
 retains the earlier discussion and the [verification register](graphevo-2-test-checklist.md)
 retains experimental evidence. The [delivery plan](graphevo-2-delivery-plan.md)
@@ -152,6 +154,18 @@ An actor/registry protects only participating writers in its process. Remote
 imports and other processes require separate conflict and visibility policies.
 App Group app/extension access is an explicit support decision before beta,
 backed by iOS tests if included. The macOS two-process probe is not that proof.
+
+### A1 implementation decisions
+
+An internal Swift 6 target owns one local resource per entry. The existing Graph
+facade is not rewired yet. Model identity crosses the boundary as immutable
+hashes and a fresh-model factory, not a cached native model. Compatible callers
+receive independent leases; only the final lease detaches the native store.
+Opening cancellation releases a caller's lease after native loading completes;
+it does not cancel other waiters. A failed shutdown retains ownership and its
+error until an explicit future recovery policy can handle it. Explicit close is
+awaited; deallocation initiates best-effort release. See the A1 document for
+file alias rules, failure boundaries and acceptance evidence.
 
 ## 5. Reads, transactions, cancellation and failures
 

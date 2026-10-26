@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -15,11 +15,21 @@ let package = Package(
     targets: [
         .target(
             name: "GraphEvo",
-            dependencies: [],
+            dependencies: ["GraphEvoRuntime"],
             path: "Sources/GraphEvo",
             swiftSettings: [
-                .define("GRAPHEVO_IOS16")
+                .define("GRAPHEVO_IOS16"),
+                .swiftLanguageMode(.v5)
             ]
+        ),
+        .target(
+            name: "GraphEvoRuntime",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "GraphEvoRuntimeTests",
+            dependencies: ["GraphEvoRuntime", "GraphEvo"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // .target(
         //     name: "GraphEvoMigration",
@@ -30,7 +40,8 @@ let package = Package(
             name: "GraphEvoTests",
             dependencies: ["GraphEvo"],
             path: "Tests/GraphEvoTests",
-            resources: [.process("Resources")]
+            resources: [.process("Resources")],
+            swiftSettings: [.swiftLanguageMode(.v5)]
         )
         // .testTarget(
         //     name: "GraphEvoMigrationTests",

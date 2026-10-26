@@ -35,7 +35,23 @@ The complete public API reference is in
 | `Sources/GraphEvo/Migration/` | Migrations, ledger, backups, and logging |
 | `Sources/GraphEvo/Tools/` | Merge, deduplication, and diagnostics |
 | `Sources/GraphEvo/Transformer/` | Safe encoding of heterogeneous values |
+| `Sources/GraphEvoRuntime/` | V2 package-internal Swift 6 store ownership and lifecycle |
 | `Tests/GraphEvoTests/` | Functional and regression tests |
+| `Tests/GraphEvoRuntimeTests/` | V2 ownership, aliases, lease lifecycle and current-schema integration |
+
+On the v2 line the manifest requires Swift tools 6.0. The runtime and its tests
+compile in Swift 6 mode; legacy facade/test targets temporarily remain in Swift
+5 mode. There is one public product. The package-only runtime is not a raw Core
+Data application API. Use a fresh `Model.makeModel()` factory through
+`GraphRuntimeSchema.current`; do not concurrently hash/copy `Model.create()`'s
+cached native model. A1 does not authorize simultaneous legacy/v2 ownership of
+one file. Before exposing that integration, retire the old gateway or coordinate
+ownership exclusion explicitly. See
+[A1 runtime scope](docs/design/graphevo-2-store-runtime.md).
+
+The final lease retains registry ownership until native detachment succeeds.
+A shutdown failure must not remove that entry or permit another owner. Caller
+cancellation must not cancel other opening waiters or abandon close cleanup.
 
 ## Architectural rules
 
