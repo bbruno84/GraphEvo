@@ -3,7 +3,7 @@
 Status: **partial functional result**. Reinvitation, pending acceptance and
 exact A recovery succeeded. Participant-side leaving removed A through the
 public shared-store purge API. Owner A/B data remained intact, but the owner's
-public share snapshot still listed the participant at both bounded checks.
+public share snapshot still listed the participant as **pending**, rather than removing it, at both bounded checks.
 The complete owner-only post-leave condition is unverified.
 
 ## Public API procedure
@@ -44,13 +44,20 @@ a second fresh owner process observed for another 120 seconds. Both retained
 all five exact A/B objects, values, links, record and share identities on
 the same owner stores. B's public share remained owner-only. A's public
 `CKShare` snapshot retained two participants, rather than the expected owner
-alone, at the end of **both** windows. The lab reported its unmet
+alone, at the end of **both** windows. The XR entry's public acceptance
+status changed from `accepted` (raw value 2 before leaving) to `pending`
+(raw value 1 in both owner checks). The owner therefore observed a status
+transition, but not removal of the entry. The raw values were checked
+against the public `CKShare.ParticipantAcceptanceStatus` enum; no participant
+identity is included in this document. The lab reported its unmet
 postcondition as `V02Error:5`; it did not repeat invitation, acceptance,
 purge or object deletion.
 
-This is an observed limitation of the tested workflow. It does not show that
-the XR still has access after its local purge, nor establish a deadline or
-explain how the framework updates the owner's participant list. The
+This is an observed limitation of the tested workflow. A `pending` entry does
+not prove the XR still has accepted access, but it raises a separate question:
+can the old invitation URL be used to join again without a new owner action?
+No acceptance replay was attempted. The result also establishes no deadline
+or causal explanation for the owner's participant-list update. The
 [Apple sharing guide](https://developer.apple.com/documentation/coredata/sharing-core-data-objects-between-icloud-users)
 describes stopping participation but specifies no deadline for owner-side
 share metadata visibility. A future application flow must avoid claiming
@@ -74,7 +81,7 @@ Intervals are UTC on 2026-10-26:
 | owner-reinvite | 08:10:34–08:11:41 | `fe292208471928210d48cddea286853b26ab724847ab9c6f8e5ab0ece600c0ae` | Share persisted; A/B retained |
 | participant-reaccept | 08:12:41–08:12:49 | `6c2def36965f26b67d1245457d18eebd99fee2cd1f2f105a3017f1c80d88cc15` | Pending invitation accepted; A3 exact, B absent |
 | participant-leave | 08:13:05–08:14:09 | `e8be392ba88c45822127d6d30aae82b5467329a9e9ff985339c35cb03e7964ed` | Shared-store purge returned; A3→A0 |
-| owner-verify-leave | 08:14:17–08:14:52 | `2d4889d79cc2fea731ef26876d3d33fbe45b0b93500c2b747a2d8d3e3fb1cd24` | A/B retained; A list still two |
+| owner-verify-leave | 08:14:17–08:14:52 | `2d4889d79cc2fea731ef26876d3d33fbe45b0b93500c2b747a2d8d3e3fb1cd24` | A/B retained; XR entry still present, now pending |
 | owner-verify-leave retry | 08:15:48–08:17:50 | `56b1bcb72f36bcc92dc869bc44c49e7579d4a28b354792a24c62d56286e7f23e` | Same public result after longer window |
 
 The first three stages had no errors. Both owner verification reports explicitly
