@@ -36,6 +36,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   local serialized transactions, cancellation/commit boundary and read semantics.
 - [GraphEvo 2 A3 model contracts](design/graphevo-2-application-models.md): first
   protocol/value/patch increment, schema bridge evidence and remaining public scopes.
+- [GraphEvo 2 typed local store](design/graphevo-2-typed-store.md): persisted
+  identities, scoped public CRUD, gateway ownership and backed-up local adoption.
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
   retaining the original goals and architectural questions. The specification
   supersedes it for current decisions; neither describes the v1 public API.

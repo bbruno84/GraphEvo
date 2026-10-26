@@ -14,9 +14,9 @@ swift run --package-path IntegrationTests/PackageConsumer PackageConsumer
 
 The second executable is a non-UI Swift 6 model consumer. It imports only the
 public GraphEvo product, maps an ordinary Sendable application model, transfers
-its record across tasks and the main actor, and applies a partial edit while
-retaining an unknown encoded field. It does not open a v2 database; the public
-opening/mutation gateway is a later A3 increment.
+its values across tasks and the main actor, and performs typed SQLite CRUD,
+including a partial edit retaining an unknown encoded field, awaited close/reopen
+with stable identities, and deletion through the public v2 gateway.
 
 ```bash
 swift run --package-path IntegrationTests/PackageConsumer ModelConsumer

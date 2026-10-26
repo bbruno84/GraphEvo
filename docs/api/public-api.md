@@ -839,8 +839,8 @@ state, outcome, and history in any arrival order using the UUID.
 ## GraphEvo 2 alpha model contracts
 
 The following additive types are available through `import GraphEvo`. They are
-implemented in the Swift 6 GraphEvoModel target and do not open a store. The v1
-Graph API above is still the only public opening gateway. See the
+implemented in the Swift 6 GraphEvoModel target and do not open a store. The typed GraphStore opening gateway is described below; legacy Graph remains
+available for v1 stores. See the
 [A3 guide](../design/graphevo-2-application-models.md) for scope and limitations.
 
 - `GraphID(rawValue: UUID = UUID())`: Sendable, Hashable, Codable graph identity;
@@ -889,3 +889,77 @@ These detached values do not establish persistent membership, resolve endpoint
 existence, run codecs or commit edits. Public v2 scopes, durable ID persistence,
 legacy translation and null/codec storage remain incomplete. Never apply a stale
 encoded model as a whole-record replacement that drops unknown properties.
+
+
+## GraphEvo 2 typed local persistence
+
+All types below are available through `import GraphEvo` and compile in Swift 6.
+See [the typed store guide](../design/graphevo-2-typed-store.md) for identity,
+layout, complexity, adoption and migration limits.
+
+`GraphStore` is a Sendable actor with:
+
+```swift
+static func open(at url: URL) async throws -> GraphStore
+static func inMemory() async throws -> GraphStore
+static func adoptLocalV1Store(at url: URL, backupRoot: URL) async throws
+    -> (store: GraphStore, report: GraphV1AdoptionReport)
+nonisolated let id: GraphID
+nonisolated func makeNodeID() -> GraphNodeID
+func close() async throws
+func read<Value: Sendable>(
+    _ body: @escaping @Sendable (GraphReadScope) throws -> Value
+) async throws -> Value
+func transaction<Value: Sendable>(
+    _ body: @escaping @Sendable (GraphMutation) throws -> Value
+) async throws -> Value
+func fetch<Model: GraphModel>(
+    _ id: GraphNodeID, as type: Model.Type = Model.self
+) async throws -> Model?
+func fetchAll<Model: GraphModel>(_ type: Model.Type) async throws -> [Model]
+@discardableResult func insert<Model: GraphModel>(_ model: Model) async throws -> GraphNodeID
+func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) async throws -> Model
+func delete(_ id: GraphNodeID) async throws
+```
+
+`GraphReadScope` is a context-confined class without Sendable conformance. Its
+initializer and native context are not public. It has `graphID: GraphID`,
+`record(for: GraphNodeID) throws -> GraphRecord?`, synchronous `fetch(_:as:)`
+and `fetchAll(_:)` counterparts of the actor methods. It expires after the body.
+
+`GraphMutation` is a final subclass with synchronous throwing methods:
+
+```swift
+@discardableResult func insert<Model: GraphModel>(_ model: Model) throws -> GraphNodeID
+@discardableResult func insert(_ record: GraphRecord) throws -> GraphNodeID
+func patch(_ patch: GraphRecordPatch) throws -> GraphRecord
+func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) throws -> Model
+func delete(_ id: GraphNodeID) throws
+```
+
+Bodies do not suspend. Insert entities before referencing them. A failed body
+rolls back; a failed typed patch validates before editing even if its error is
+caught in the body. Partial updates preserve unknown properties. Entity deletion
+removes incident relationships and action membership while retaining other
+entities and valid empty actions. New IDs are persisted in reserved detail
+properties; they are not derived from local URI paths. `fetchAll` has a stable UUID
+ordering but currently builds a linear index; the A7 query engine is pending.
+
+`GraphV1AdoptionReport` has read-only Sendable `graphID: GraphID`,
+`nodeIDs: [String: GraphNodeID]` and `backupURL: URL?`. The map keys are original
+v1 facade IDs. Repeated adoption returns retained identities and nil backupURL.
+Adoption requires a quiescent current-schema local source with all legacy/native
+writers closed; it backs up SQLite and present sidecars before identity edits.
+It does not perform cloud cutover, convert every legacy codec or migrate an
+incompatible native model.
+
+`GraphStoreError: Error, LocalizedError` distinguishes `closed`, `ownershipConflict`, `expiredScope`,
+`foreignGraph`, `duplicateIdentity`, `corruptIdentity`, `missingNode`,
+`unresolvedReference`, `legacyStoreRequiresAdoption`, `unsupportedLayout`,
+`reservedName`, and `persistence(underlying: Error)`. Model errors and caller body
+errors retain their own types. Cancellation retains the A2 pre/post-save contract.
+
+The legacy `GraphStoreOpeningError` also adds `runtimeOwnershipConflict(URL)`
+and `requiresV2Runtime(URL)`: legacy readiness fails when a typed owner is active
+or an adopted typed-layout store requires the new API. Retained native contexts
+retain legacy ownership; dropping a facade alone is not proof of store closure.

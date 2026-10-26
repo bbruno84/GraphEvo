@@ -73,6 +73,7 @@ package actor StoreRegistry {
         var shutdown: Task<Void, any Error>?
     }
 
+    private let owner = UUID()
     private var entries: [StoreKey: Entry] = [:]
     private let hooks: StoreLifecycleHooks
 
@@ -103,8 +104,8 @@ package actor StoreRegistry {
                     throw StoreRuntimeError.storeReplaced(url)
                 }
             } else {
-                let hooks = hooks
-                let opening = Task.detached { try await StoreResources.open(resolved, schema: schema, hooks: hooks) }
+                let hooks = hooks, owner = owner
+                let opening = Task.detached { try await StoreResources.open(resolved, schema: schema, hooks: hooks, owner: owner) }
                 entries[resolved.key] = Entry(resolved: resolved, schema: schema, opening: opening, fileIdentity: identity)
             }
             let token = UUID()

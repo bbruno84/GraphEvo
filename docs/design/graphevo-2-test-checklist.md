@@ -123,6 +123,13 @@ durable identity translation and full value migration remain incomplete.
 | V04.3 | Relationships/actions, edits/deletion and scope lifetime | Accessory partial: one parent/inverse deletion and cross-graph application guard observed; relationship/action facades not tested |
 | V04.4 | Value snapshots versus live/scoped models; actor transfer and justified Sendable contracts | Accessory partial: immutable Sendable values compiled; live/scoped model comparison not run |
 
+The [A3 typed store continuation](graphevo-2-typed-store.md) additionally exercises
+persistent local graph/node IDs, public typed CRUD and scopes, full new-value
+envelopes, current-schema local adoption/backups, cyclic references, endpoint
+patches, deletion preserving empty actions, ownership exclusion and UI-state
+transfer. This extends V04 locally; cloud identity/membership, full legacy source
+conversion and the deployment-floor runtime matrix remain separate pending work.
+
 ## V05 — attachments
 
 | ID | Check | Status / evidence |

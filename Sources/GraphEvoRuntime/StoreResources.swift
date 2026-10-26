@@ -14,6 +14,7 @@ struct StoreLifecycleHooks: Sendable {
 /// One container with operation-scoped private contexts. Admission covers actor reentrancy.
 actor StoreResources {
     let id = UUID()
+    private let gateway: StoreGatewayLease
     private let container: NSPersistentContainer
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
@@ -23,7 +24,8 @@ actor StoreResources {
     private var admitted = 0
     private var drain: CheckedContinuation<Void, Never>?
 
-    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks) {
+    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateway: StoreGatewayLease) {
+        self.gateway = gateway
         self.container = container
         self.resolved = resolved
         self.hooks = hooks
@@ -32,8 +34,10 @@ actor StoreResources {
     static func open(
         _ resolved: ResolvedStore,
         schema: StoreSchema,
-        hooks: StoreLifecycleHooks
+        hooks: StoreLifecycleHooks,
+        owner: UUID
     ) async throws -> StoreResources {
+        let gateway = try StoreGatewayLease.acquire(resolved.configuration, owner: owner)
         try await hooks.beforeLoad?()
         let model = schema.makeModel()
         guard !schema.identifier.isEmpty, !schema.entityVersionHashes.isEmpty,
@@ -78,7 +82,7 @@ actor StoreResources {
                 }
             }
         } catch { throw StoreRuntimeError.loadFailed(resolved.url, underlying: error) }
-        return StoreResources(container: container, resolved: resolved, hooks: hooks)
+        return StoreResources(container: container, resolved: resolved, hooks: hooks, gateway: gateway)
     }
 
     /// Trusted adapter boundary: bodies return values and must never save or escape contexts.
@@ -183,6 +187,7 @@ actor StoreResources {
             for store in container.persistentStoreCoordinator.persistentStores {
                 try container.persistentStoreCoordinator.remove(store)
             }
+            gateway.release()
         } catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
     }
 }

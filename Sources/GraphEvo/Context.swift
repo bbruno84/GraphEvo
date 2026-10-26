@@ -24,6 +24,8 @@
  */
 
 import CoreData
+import GraphEvoRuntime
+import ObjectiveC
 
 // Unique author per device for filtering local writes in Persistent History
 enum GraphDeviceAuthor {
@@ -86,6 +88,18 @@ internal extension Graph {
     let storeKey = configuration.storeIdentityKey
     let storeExistedBeforeOpen = FileManager.default.fileExists(atPath: storeURL.path)
     runtimeStoreURL = storeURL
+    let gateway: StoreGatewayLease?
+    do { gateway = type == NSSQLiteStoreType ? try StoreGatewayLease.legacy(at: storeURL) : nil }
+    catch {
+      if case StoreRuntimeError.configurationConflict = error {
+        failStoreOpening(.runtimeOwnershipConflict(storeURL))
+      } else if storeExistedBeforeOpen {
+        failStoreOpening(.unreadableStore(storeURL, underlying: error))
+      } else {
+        failStoreOpening(.failedToLoadStore(storeURL, underlying: error))
+      }
+      return
+    }
 
     if type == NSSQLiteStoreType,
        storeExistedBeforeOpen {
@@ -142,6 +156,7 @@ internal extension Graph {
         failStoreOpening(.incompatibleRegisteredStore(storeURL))
         return
       }
+      if let coordinator = cached.persistentStoreCoordinator { retainGateway(gateway, on: coordinator) }
       managedObjectContext = cached
       contextRegistryKey = storeKey
       persistentContainer = GraphContextRegistry.shared.container(for: storeKey)
@@ -185,6 +200,7 @@ internal extension Graph {
       cloudKitRegistryClaimed = true
       contextRegistryKey = storeKey
       let container = GraphStoreContainerFactory.makeCloud(name: name, storeURL: storeURL, configuration: configuration)
+      retainGateway(gateway, on: container.persistentStoreCoordinator)
       self.persistentContainer = container
       self.installCloudSyncEventObserverIfNeeded(for: container)
 
@@ -196,6 +212,7 @@ internal extension Graph {
           emit(.warning(.cloudStoreFallback(underlying: error)))
           // Fallback: try a plain local NSPersistentContainer (no CloudKit) instead of crashing.
           let plain = GraphStoreContainerFactory.makeLocal(name: name, storeURL: storeURL, configuration: configuration)
+      retainGateway(gateway, on: plain.persistentStoreCoordinator)
           
           plain.loadPersistentStores { [unowned self] (desc, plainError) in
             if let plainError = plainError {
@@ -281,6 +298,7 @@ internal extension Graph {
       }
     } else {
       let container = GraphStoreContainerFactory.makeLocal(name: name, storeURL: storeURL, configuration: configuration)
+      retainGateway(gateway, on: container.persistentStoreCoordinator)
 
       container.loadPersistentStores { [unowned self] (desc, error) in
         if let error = error {
@@ -366,6 +384,30 @@ internal extension Graph {
   func storeDidOpenSuccessfully() {
     guard case .initializing = readiness else { return }
 
+    if let context = managedObjectContext {
+      do {
+        let converted = try context.performAndWait { () -> Bool in
+          let request = NSFetchRequest<NSFetchRequestResult>(entityName: ModelIdentifier.entityName)
+          request.predicate = NSPredicate(format: "type == %@", "__graphevo_v2.graph")
+          return try context.count(for: request) > 0
+        }
+        if converted {
+          if let key = contextRegistryKey { GraphContextRegistry.shared.removeStore(forKey: key) }
+          if let container = persistentContainer {
+            for store in container.persistentStoreCoordinator.persistentStores {
+              try container.persistentStoreCoordinator.remove(store)
+            }
+            try releaseDetachedLegacyGateway(container.persistentStoreCoordinator)
+          }
+          failStoreOpening(.requiresV2Runtime(runtimeStoreURL ?? configuration.resolvedStoreURL))
+          return
+        }
+      } catch {
+        failStoreOpening(.unreadableStore(configuration.resolvedStoreURL, underlying: error))
+        return
+      }
+    }
+
     if let managedObjectContext {
       watchEventCoordinator = GraphWatchEventCoordinator(graph: self, context: managedObjectContext)
     }
@@ -433,4 +475,25 @@ internal extension Graph {
       runtimeStoreURL = runtimeStoreURL ?? configuration.resolvedStoreURL
     }
   }
+}
+
+private enum GatewayAssociation {
+    private static let identity = NSObject()
+    static var key: UnsafeRawPointer { UnsafeRawPointer(Unmanaged.passUnretained(identity).toOpaque()) }
+}
+
+private func retainGateway(_ gateway: StoreGatewayLease?, on coordinator: NSPersistentStoreCoordinator) {
+    guard let gateway else { return }
+    objc_setAssociatedObject(coordinator, GatewayAssociation.key, gateway, .OBJC_ASSOCIATION_RETAIN)
+}
+
+/// Releases only an explicitly detached legacy coordinator during controlled local handoff.
+/// Retained old contexts must not be reattached outside the owning opening gateway.
+package func releaseDetachedLegacyGateway(_ coordinator: NSPersistentStoreCoordinator) throws {
+    guard coordinator.persistentStores.isEmpty else {
+        throw StoreRuntimeError.invalidConfiguration("The legacy coordinator must be detached before ownership handoff.")
+    }
+    let lease = objc_getAssociatedObject(coordinator, GatewayAssociation.key) as? StoreGatewayLease
+    lease?.release()
+    objc_setAssociatedObject(coordinator, GatewayAssociation.key, nil, .OBJC_ASSOCIATION_RETAIN)
 }

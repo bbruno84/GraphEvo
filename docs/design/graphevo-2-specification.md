@@ -83,8 +83,8 @@ library schema.
 
 The [A2 implementation contract](graphevo-2-async-transactions.md) records the
 local runtime behavior, trusted adapter restrictions and cancellation boundaries.
-Public typed scopes remain A3 work; the legacy public opening gateway is not
-connected to this runtime yet. A2 raises macOS to 13 for the native cancellation
+A3 now connects typed public scopes through the
+[local typed store](graphevo-2-typed-store.md), with legacy/runtime ownership exclusion. A2 raises macOS to 13 for the native cancellation
 signal lock; iOS remains 16. These provisional floors follow M11.
 
 ### Working contracts
@@ -240,9 +240,11 @@ specific; a generic cloud error is not permission to delete and rebuild a store.
 The [first A3 increment](graphevo-2-application-models.md) supplies GraphModel,
 GraphRecord, graph-aware value IDs, explicit values and partial patches through
 the public GraphEvo product. A package adapter exercises the current schema;
-public opening/CRUD scopes, persisted IDs and complete codec migration remain
-pending. Null currently fails the candidate native bridge rather than being
-silently treated as a missing key. These alpha contracts are subject to revision.
+the [A3 continuation](graphevo-2-typed-store.md) adds public scoped CRUD,
+persisted graph/node IDs, a versioned value envelope and current-schema local
+v1 adoption with backup. The plain legacy bridge retains its null restriction;
+the typed path preserves explicit null. Complete source/codec and cloud migration
+remain pending. These alpha contracts are subject to revision.
 
 ### Working contracts
 

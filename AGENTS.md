@@ -399,3 +399,19 @@ structural endpoint edits are rejected until lossless storage/resolution exists.
 Do not claim that value IDs are already persisted or expose a v2 store opener
 before resolving legacy ownership exclusion. See
 [the A3 contract](docs/design/graphevo-2-application-models.md).
+
+## GraphEvo 2 typed local store
+
+GraphStore and its non-Sendable GraphReadScope/GraphMutation scopes compile in
+Swift 6 in GraphEvoStore. The Graph target supplies only a scoped Node-facade
+adapter. Layout a3.1 stores UUID identities and versioned property envelopes in
+reserved __graphevo_v2. detail properties without changing the native model.
+Do not derive IDs from Core Data URIs or silently regenerate corrupt IDs.
+Legacy and runtime native coordinators acquire incompatible gateway leases;
+retained legacy contexts retain ownership. Release a detached legacy lease only
+after verifying the coordinator has no stores, never during a reset/reopen gap.
+The new public path supports explicit null/UUID/encoded values; the plain legacy
+GraphRecordMapper restrictions above still apply to that older adapter.
+Current-schema local adoption requires stopped external/v1 writers and a backup
+before identity edits. It does not establish a cloud cutover. See
+[typed local operations](docs/design/graphevo-2-typed-store.md).

@@ -1,6 +1,9 @@
 # GraphEvo 2 — A3 application model contracts
 
-Status: first A3 increment, 2026-10-26. A1 (#70) and A2 (#71) were reviewed,
+Status: historical first A3 increment, 2026-10-26. The
+[typed store continuation](graphevo-2-typed-store.md) now implements persisted
+local IDs, public scoped CRUD, property envelopes and explicit v1 local adoption.
+The first-increment limitations below record that earlier boundary. A1 (#70) and A2 (#71) were reviewed,
 passed both platform checks and merged into `codex/graphevo-2` before this work.
 The redundant CI bootstrap PR #69 was closed as superseded. This branch starts
 from integrated commit `611bbff67c2ec4f37effdbbb5d7f238a7d29fe2c`.

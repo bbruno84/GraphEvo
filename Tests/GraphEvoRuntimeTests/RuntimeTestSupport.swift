@@ -84,4 +84,5 @@ actor LifecycleGate {
     for store in container.persistentStoreCoordinator.persistentStores {
         try container.persistentStoreCoordinator.remove(store)
     }
+    try releaseDetachedLegacyGateway(container.persistentStoreCoordinator)
 }
