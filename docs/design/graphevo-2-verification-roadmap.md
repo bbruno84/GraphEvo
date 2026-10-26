@@ -1,0 +1,243 @@
+# GraphEvo 2 — framework verification roadmap
+
+Status: continuing experiment plan. Initial results informed the
+[specification](graphevo-2-specification.md); remaining focused checks continue
+during alpha implementation. No experiment results are implied by this document.
+See the [decision register](graphevo-2-decisions.md) for current D01–D14 status
+and the [delivery plan](graphevo-2-delivery-plan.md) for release gates.
+
+The [execution checklist](graphevo-2-test-checklist.md) tracks individual cases,
+completed evidence and prerequisites. After the initial V01/V02 feasibility
+work, the initial specification gate covered V03 concurrency, V02.12 realistic
+graph dependencies, and V05 native attachments across accounts. These results
+support initial contracts with explicit gaps; they do not close their entire
+verification areas. V04/V06–V08 accessory results remain local evidence.
+
+## Purpose and method
+
+Use GraphEvoDemo as a laboratory to learn what Core Data and
+`NSPersistentCloudKitContainer` support before committing to the v2 architecture.
+Keep two kinds of experiment distinguishable: direct framework experiments that
+isolate Apple behavior, and GraphEvo integration experiments that exercise the
+library. Current v1 behavior must not be mistaken for a framework limitation.
+
+Use disposable stores and a dedicated CloudKit Development configuration with
+synthetic data. Never repurpose production stores or purge production zones.
+Account-specific identifiers remain local configuration, not tracked files.
+Do not change the demo's normal graph-opening gateway to accommodate experiments;
+define a separate, explicit experiment boundary when implementation begins.
+
+Each experiment must have a reproducible fixture, an observable expected
+outcome, and a retained result. Record the tested OS/toolchain and hardware,
+source revisions (including local changes), model/configuration, data volume,
+steps, errors, relevant diagnostics, and cleanup. Avoid payloads or account
+identifiers in committed evidence. Repeat relevant scenarios after relaunch.
+
+Classify conclusions as documented, observed under stated conditions,
+unsupported, inconclusive, or blocked. Successful local tests do not prove cloud
+synchronization. An import/export event alone does not certify graph completeness.
+Unexpected results should be reproduced in a minimal framework case before
+being attributed to Apple or used to redesign GraphEvo.
+
+## Verification sequence
+
+### V00 — recover and assess GraphEvoDemo
+
+Initial inventory and build evidence are recorded in the
+[demo assessment](graphevo-demo-initial-assessment.md). Runtime and cloud checks
+remain separate from that assessment.
+
+- Inventory the local checkout, uncommitted work, branch, dependency revision,
+  targets, schemes, feature coverage, tests, entitlements, and identity setup.
+- Check build and available tests without overwriting existing work or changing
+  the selected GraphEvo dependency just to obtain a passing result.
+- Identify reusable screens, fixtures, diagnostics, and missing laboratory tools.
+- Exit: a bounded assessment distinguishes inspected code, successful checks,
+  failures, and untested runtime/cloud behavior. Propose recovery work separately.
+
+### V01 — cloud separation of independent graphs
+
+Priority: first framework feasibility experiment; R01 and D01/D10.
+
+The [V01 procedure](graphevo-2-v01-procedure.md) defines controls, fixtures, trial
+order, evidence, and prerequisites. The [T0 control result](results/v01-t0-2026-10-23.md)
+records recovery on two physical devices. The [T1 result](results/v01-t1-2026-10-23.md)
+records native rejection of two stores with the same cloud container/private
+scope in one persistent container. T2 was not launched. The
+[T5 result](results/v01-t5-2026-10-23.md) records two separate one-store owners
+opening and exporting successfully, followed by a fresh iPad replica recovering
+both A and B. That topology does not satisfy R01's cloud separation; return the
+limitation to discussion before choosing another boundary. T3–T4 remain unexecuted.
+The [T6 result](results/v01-t6-2026-10-23.md) is inconclusive: an owner-only share
+request remained pending without a recorded callback result during a clean bounded observation;
+neither the second share nor the reader was reached. Documented share-zone
+semantics must not be presented as demonstrated R01 feasibility.
+A [repeat after reported network recovery](results/v01-t6-network-retry-2026-10-24.md)
+showed the same pending first-share stage with unchanged code. The cause remains
+unidentified in those reports. Subsequent
+[iPad tracing and diagnosis](results/v01-t6-ipad-diagnosis-2026-10-24.md) identified
+a laboratory observer wait cycle. Corrected event delivery allowed creation of
+two owner-only zones and exact fresh same-device recovery. The subsequent
+[independent iPhone reader](results/v01-t6-independent-reader-2026-10-24.md)
+recovered the exact fixture, relationships and zone/share identities from the
+iPad writer. Initial T6 peer recovery is observed; selective synchronization,
+sharing lifecycle and broader R01 guarantees remain pending.
+The [incremental follow-up](results/v01-incremental-membership-2026-10-26.md)
+subsequently observed relationship/save-only addition, edit, deletion, pinned
+identities and three fresh cloud replicas on the same iPad. The independent
+same-account peer was disconnected, so that part remains open.
+
+- Compare two independent local stores using the same model and cloud container;
+  record supported configurations and the actual cloud mapping without assuming
+  one store creates one private zone.
+- Create distinguishable graphs A and B without sharing either. Check whether
+  each remains independently identifiable and accessible on another device and
+  after a fresh local replica. Keep graph identity distinct from local filenames.
+- Determine whether supported APIs provide the required cloud boundary, what
+  data each store imports, and whether opening/removing one affects the other.
+- Investigate alternative supported mappings only as needed, documenting their
+  provisioning, lifecycle, scale, and platform constraints.
+- Exit: state which separation guarantees are supported, which are only logical,
+  and which remain unavailable or unverified. Return any incompatibility with
+  R01 to discussion before selecting a topology or changing the sync stack.
+
+### V02 — sharing between separate accounts
+
+Depends on V01 findings; D05/D09/D10/D14.
+
+The [initial V02 procedure](graphevo-2-v02-procedure.md) defines a bounded
+owner/participant control using an iPad and a different-account iPhone XR,
+authorized on 2026-10-26. The [initial hardware result](results/v02-cross-account-smoke-2026-10-26.md)
+records private A invitation/acceptance, exact recovery in the XR shared store,
+a participant edit recovered by the owner, unchanged owner-only B, and reopening
+on both sides. This minimal root/child control leaves the broader V02 matrix
+and GraphEvo facade integration open.
+
+- Use two accounts and a graph containing entities, relationships, actions, and
+  dependencies; test invitation, acceptance, subsequent edits, and relaunch.
+- Verify owner/participant store placement and graph identity on each device.
+- Test read-only permission, offline edits, concurrent edits, revocation, leaving,
+  and account changes, with an unrelated graph as an isolation control.
+- Record what is removed locally and remotely and which errors/states are
+  observable. No cross-graph relationships are allowed.
+- Exit: an owner/participant behavior matrix and supported sharing boundary;
+  no assumption that a share corresponds to one local SQLite file.
+
+The direct-framework V09 graph/file laboratory in GraphEvoDemo exercises a
+disposable Entity/Relationship/Action-equivalent fixture with A and B in
+separate shares. It tests application-visible structure, CloudKit record/share
+identity and participant mutations before any GraphEvo 2 model is selected.
+
+### V03 — concurrency, ownership, and local transactions
+
+R02 and D01–D04/D14; may run locally while cloud prerequisites are arranged.
+
+The [initial local probe](results/v03-local-concurrency-2026-10-26.md) compiles a
+standalone direct Core Data package in Swift 6 with complete checking. Eight
+local tests exercise explicit owner coalescing, private-context read/modify/save,
+rollback, close/reopen and selected cancellation boundaries. This is partial
+macOS evidence; it neither certifies GraphEvo v1 nor completes V03.
+
+- Build a Swift 6 language-mode consumer with complete concurrency checking.
+- Exercise native asynchronous context access, two handles to one store,
+  independent stores, private-context reads/writes, and pending-edit ownership.
+- Test conflicts, rollback, cancellation around commit, context invalidation,
+  closing/reopening, and concurrent remote imports where applicable.
+- Separately verify app/extension access to an App Group store; in-process
+  coordination is not evidence of cross-process serialization.
+- Measure main-thread responsiveness and expose unsafe object transfers or
+  lock ordering. Do not hold thread-owned locks across suspension.
+- Exit: supported isolation/transaction contracts and reproducible failures;
+  distinguish local durability from export completion.
+
+### V04 — typed application model integration
+
+Depends on V03 isolation findings; R03 and D02/D04/D11/D14.
+
+- Compare small protocol-based mappings with ordinary application models,
+  without requiring dynamic-member access or introducing macros first.
+- Round-trip identity, optional and supported property types, relationships,
+  actions, edits, deletion, and decoding errors.
+- Test transfer across actors only for representations with a justified
+  `Sendable` contract. Compare live/scoped models and value snapshots as needed.
+- Exit: consumer examples and mapping tradeoffs; no final protocol signature
+  is required at this stage.
+
+### V05 — native attachments
+
+R04 and D12; local checks first, then the V02 sharing topology.
+
+- Use a dedicated binary attribute with external storage permitted and explicit
+  filename/content-type metadata. Compare small and representative large files.
+- Test import, read, export, replacement, deletion, rollback, cancellation, and
+  backup/restore including externally stored content; never rely on internal
+  external-storage paths as public URLs.
+- Measure peak memory and latency; verify byte equality or checksums after local
+  reopen and real cross-device import, including shared graphs and offline reads.
+- Determine which availability/transfer states the stack actually exposes.
+  Streaming, selective download, eviction, and per-file progress remain questions.
+- Exit: supported lifecycle and measured envelope, not a universal file-size or
+  memory guarantee. No direct CKAsset transfer path is assumed.
+
+V09 uses a binary Core Data attribute with external storage allowed, metadata
+and SHA-256 verification. Small and 10 MiB synthetic files cross the same
+private share as graph A. Physical storage layout is deliberately not inspected.
+
+### V06 — query capability and cost
+
+R05 and D04/D13; use V04 examples when available, with controlled fixtures.
+
+- Evaluate typed filters, relationship predicates, sorting, stable pagination,
+  counts, projections, and candidate aggregations.
+- Distinguish store execution from explicit in-memory traversal; include cycles,
+  bounded depth, unsupported expressions, and incomplete imported structures.
+- Measure latency, fetched object counts, and memory across increasing data sets.
+  Check result visibility under local writes and remote imports.
+- Exit: a capability/cost matrix that identifies feasible operations and limits,
+  without promising every candidate query feature.
+
+### V07 — observation and the future of Watch
+
+Depends on V03/V06 and real remote scenarios from V02; D06.
+
+- Compare one-shot queries, updated query results, and streams of changes used
+  for processing. Exercise both UI and non-UI consumers independent of the app.
+- Verify membership, value, ordering, and deletion updates for local and remote
+  changes; include relationships whose changes affect query membership.
+- Test slow consumers, buffering/coalescing, cancellation/resubscription,
+  duplicate notifications, relaunch, and any proposed replay contract.
+- Separate observation of current state from durable event delivery; do not
+  infer exactly-once processing or cloud completion from notifications.
+- Exit: evidence for keeping, replacing, or splitting Watch. Neither its name
+  nor its current callback API is a prerequisite.
+
+### V08 — lifecycle, recovery, and v1 transition feasibility
+
+Consolidates earlier findings; D07–D09/D14.
+
+- Verify opening failures, unavailable account/service, revoked access, recoverable
+  retries, explicit reset, backup restoration, and reopening after interruption.
+- Test mandatory v1 data migration against the evolving candidate target model,
+  distinguishing optional API adapters, local migration, and required cloud
+  transition. The selected mode is a coordinated cutover with v1 writes stopped;
+  include pending writes, returning old devices and duplicate prevention.
+- Capture recovery outcomes and downgrade limits without requiring v1 source
+  compatibility or physical in-place opening. Data preservation remains required.
+- Exit: actionable states/errors, explicit destructive boundaries, and supported
+  transition options; unresolved cases remain visible in the specification.
+
+## Evidence and specification gate
+
+For each Vxx, retain a short result with question, fixture, environment, procedure,
+observations, supporting Apple references, limitations, and design implications.
+Link results to the relevant requirement/decision; leave unexecuted items pending.
+Use measured results to select performance budgets, rather than inventing them
+before representative workloads exist.
+
+The initial specification gate required cloud-separation/sharing feasibility,
+V03 ownership/cancellation boundaries, realistic shared graph lifetime and V05
+cross-account file lifecycle evidence. The initial specification now records
+working contracts and remaining gaps from those results. Continue unresolved
+checks during the relevant alpha stages and apply the delivery plan's beta gate.
+Deferrals retain scope and rationale. Do not treat a successful demo build as
+completion of this verification roadmap.
