@@ -4,9 +4,9 @@ Status: alpha implementation candidate. Read with section 9 of the
 [specification](graphevo-2-specification.md), [typed stores](graphevo-2-typed-store.md)
 [A6 attachments](graphevo-2-attachments.md) and the
 [retained results](results/a7-retained-graph-queries-2026-10-27.md). The native schema and stored
-layouts are unchanged. A7 is initially stacked on A6 PR #75; its temporary PR
-base is `codex/v2-native-files`. Retarget to `codex/graphevo-2` after A6 is
-reviewed/merged. No A6 merge is implied by this stack.
+layouts are unchanged. A6 PR #75 was reviewed and merged into
+`codex/graphevo-2`; A7 PR #76 now targets that integration branch and includes
+its merge commit. The original stack has been reconciled without rewriting history.
 
 ## Descriptor and execution contract
 
