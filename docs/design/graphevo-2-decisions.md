@@ -72,6 +72,10 @@ evidence narrows its alternatives or its product impact requires direction.
 
 ## Decision change discipline
 
+The [post-alpha checklist](graphevo-2-post-alpha-checklist.md) tracks closure
+of cross-cutting decisions and their release validation, including M12
+attachment costs. Keep it aligned when resolving D01–D14 or O01–O06.
+
 When a proposal becomes an implementation decision, record its rationale,
 alternatives, affected contracts, evidence and remaining limitations. Keep
 experimental success separate from a supported release guarantee. A schema

@@ -28,6 +28,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   requirements and proposed contracts, including mandatory v1 data migration.
 - [GraphEvo 2 delivery plan](design/graphevo-2-delivery-plan.md): alpha sequence,
   schema/API consolidation and beta/final release gates.
+- [GraphEvo 2 post-alpha checklist](design/graphevo-2-post-alpha-checklist.md):
+  end-of-alpha decisions and beta/stable validation follow-ups across all increments.
 - [GraphEvo 2 decision register](design/graphevo-2-decisions.md): maintainer
   decisions, technical proposals and open choices.
 - [GraphEvo 2 A1 store runtime](design/graphevo-2-store-runtime.md): implemented

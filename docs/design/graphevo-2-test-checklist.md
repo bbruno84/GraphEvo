@@ -169,6 +169,9 @@ conversion and the deployment-floor runtime matrix remain separate pending work.
 | V08.3 | Mandatory v1 local data migration; optional source API adapter assessed separately | Not run; inventory/fixtures start with the current schema candidate, migration mapping evolves through alpha and final validation occurs in beta |
 | V08.4 | Required cloud data transition, downgrade and incompatible-store behavior | Not run; coordinated cutover selected with v1 writes stopped before conversion. Pending source writes, late old devices, duplicate prevention and recovery remain to design/test |
 
+Use the [post-alpha checklist](graphevo-2-post-alpha-checklist.md) to track
+release follow-ups across increments; retain detailed experimental results here.
+
 During specification and implementation, reconcile remaining rows explicitly:
 retain evidence, explain a verified unsupported capability, or record a
 deliberate deferral and its effect. Apply the delivery plan's beta gate before

@@ -145,6 +145,10 @@ requirement; settle the supported alpha-to-beta path before external adoption.
 
 ## Beta entry gate
 
+Track outstanding consolidation decisions and beta acceptance in the
+[post-alpha checklist](graphevo-2-post-alpha-checklist.md). Keep its B/R gates
+updated with each increment; it does not postpone A8 or migration feasibility.
+
 Enter beta only when:
 
 1. All eight areas have been implemented or have a precise agreed scope. An

@@ -495,6 +495,10 @@ with data migration left to an optional API compatibility layer.
 
 ## 12. Evidence, scope and completion
 
+The [post-alpha checklist](graphevo-2-post-alpha-checklist.md) consolidates
+remaining end-of-alpha decisions and beta/stable acceptance work. Update it
+when introducing or closing an implementation follow-up.
+
 Use the existing verification register as the test inventory. Add v2 integration
 acceptance cases alongside direct-framework results. Compile independent UI and
 non-UI consumers in Swift 6; distinguish local/unit, simulated history, simulator

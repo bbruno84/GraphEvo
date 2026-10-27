@@ -488,3 +488,11 @@ checks through trusted scope metadata; no context or managed object escapes.
 A8 must add explicit dependency invalidation; these APIs do not imply observation
 or durable processing. Attachment representation costs are deferred to the agreed
 end-of-alpha review; do not silently redesign file ownership during query work.
+
+## V2 consolidation follow-ups
+
+Keep the [post-alpha checklist](docs/design/graphevo-2-post-alpha-checklist.md)
+updated when a v2 increment introduces or resolves a deferred check. Link
+closure evidence and retain its actual scope. B items gate beta entry; R items
+gate stable 2.0. A8 implementation and migration feasibility still belong before
+beta; mandatory v1 data migration cannot be deferred beyond stable release.
