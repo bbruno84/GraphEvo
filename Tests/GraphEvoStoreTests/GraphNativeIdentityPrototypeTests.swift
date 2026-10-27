@@ -141,6 +141,13 @@ import Testing
             try endpoint.setPrototypeIdentity(nil)
             #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: actionID) }
             context.rollback()
+            endpoint[dynamicMember: GraphTypedStoreAdapter.stageKey] = UUID().uuidString
+            #expect(endpoint[dynamicMember: GraphTypedStoreAdapter.stageKey] != nil)
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: actionID) }
+            context.rollback()
+            endpoint[dynamicMember: GraphTypedStoreAdapter.graphKey] = fixture.b.rawValue.uuidString
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: actionID) }
+            context.rollback()
             #expect(try GraphNativeIdentityPrototype.record(context, id: actionID) == expected)
             #expect(!context.hasChanges)
         }

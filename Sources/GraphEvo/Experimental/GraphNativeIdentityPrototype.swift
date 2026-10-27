@@ -175,6 +175,11 @@ package enum GraphNativeIdentityPrototype {
             } else { request.predicate = NSPredicate(format: "%K == %@ AND %K != nil", graphAttribute, graphID.rawValue.uuidString, nodeAttribute) }
             request.affectedStores = context.persistentStoreCoordinator?.persistentStores
             request.includesPendingChanges = true
+            request.returnsObjectsAsFaults = false
+            // Prefetch topology only; endpoint property bodies must remain untouched.
+            if name == ModelIdentifier.entityName { request.relationshipKeyPathsForPrefetching = ["actionObjectSet"] }
+            else if name == ModelIdentifier.actionName { request.relationshipKeyPathsForPrefetching = ["subjectSet", "objectSet"] }
+            else { request.relationshipKeyPathsForPrefetching = ["subject", "object"] }
             for object in try context.fetch(request) {
                 switch object {
                 case let value as ManagedEntity: result.append(Entity(managedNode: value))
@@ -195,12 +200,18 @@ package enum GraphNativeIdentityPrototype {
         return node
     }
 
-    private static func validateNode(_ node: Node, id: GraphNodeID, root: Entity, membership: Action) throws {
+    private static func validateNode(_ node: Node, id: GraphNodeID, root: Entity, membership: Action,
+                                     metadata: GraphRuntimeMetadata? = nil) throws {
+        func value(_ key: String) -> Any? {
+            // Pending inverse/property edits use the facade's complete local view.
+            if let metadata, !node.node.hasChanges { return metadata.value(for: node, key: key) }
+            return node[dynamicMember: key]
+        }
         guard !node.type.hasPrefix(GraphTypedStoreAdapter.prefix),
               node.runtimeObjectID.persistentStore === root.runtimeObjectID.persistentStore,
-              node[dynamicMember: GraphTypedStoreAdapter.graphKey] as? String == id.graphID.rawValue.uuidString,
-              UUID(uuidString: node[dynamicMember: GraphTypedStoreAdapter.idKey] as? String ?? "") == id.rawValue else { throw GraphStoreError.corruptIdentity }
-        guard node[dynamicMember: GraphTypedStoreAdapter.stageKey] == nil else { throw GraphStoreError.pendingNativeOperation }
+              value(GraphTypedStoreAdapter.graphKey) as? String == id.graphID.rawValue.uuidString,
+              UUID(uuidString: value(GraphTypedStoreAdapter.idKey) as? String ?? "") == id.rawValue else { throw GraphStoreError.corruptIdentity }
+        guard value(GraphTypedStoreAdapter.stageKey) == nil else { throw GraphStoreError.pendingNativeOperation }
         if let entity = node as? Entity {
             guard entity.actionsWhenObject.contains(where: { $0.sharesBackingObject(with: membership) }) else { throw GraphStoreError.corruptIdentity }
         } else if let action = node as? Action {
@@ -235,7 +246,9 @@ package enum GraphNativeIdentityPrototype {
                 guard result.updateValue(candidate, forKey: key) == nil else { throw GraphStoreError.duplicateIdentity }
             }
         }
-        for (key, candidate) in result { try validateNode(candidate, id: key, root: root, membership: membership) }
+        let metadata = try GraphRuntimeMetadata(nodes: Array(result.values),
+            keys: [GraphTypedStoreAdapter.graphKey, GraphTypedStoreAdapter.idKey, GraphTypedStoreAdapter.stageKey], context: context)
+        for (key, candidate) in result { try validateNode(candidate, id: key, root: root, membership: membership, metadata: metadata) }
         return result
     }
 
