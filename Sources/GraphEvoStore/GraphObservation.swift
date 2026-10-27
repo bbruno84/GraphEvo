@@ -65,14 +65,14 @@ package final class GraphObservationControl: Sendable {
     }
     private let state = OSAllocatedUnfairLock(initialState: State())
     package init() {}
-    package func install(_ worker: Task<Void, Never>, refresh: @escaping @Sendable () -> Void,
+    package func install(_ worker: Task<Void, Never>?, refresh: @escaping @Sendable () -> Void,
                          finish: @escaping @Sendable () -> Void) {
         let cancelled = state.withLock { state in
             guard !state.cancelled else { return true }
             state.worker = worker; state.refresh = refresh; state.finish = finish
             return false
         }
-        if cancelled { worker.cancel(); finish() }
+        if cancelled { worker?.cancel(); finish() }
     }
     package func refresh() { state.withLock { $0.refresh }?() }
     package func cancel() {

@@ -99,6 +99,11 @@ public actor GraphStore {
         catch { throw Self.translate(error) }
     }
 
+    /// Admission only; used by the explicit observation laboratory without opening another feed.
+    package func observationAdmission() async throws {
+        do { _ = try await handle.snapshot() } catch { throw Self.translate(error) }
+    }
+
     public nonisolated func makeNodeID() -> GraphNodeID { GraphNodeID(graphID: id) }
 
     public func close() async throws {

@@ -75,3 +75,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [C02b native identity results](design/results/c02b-native-identities-2026-10-27.md):
   selective reads/patches, retained endpoint regressions, bounded topology and
   metadata batching, explicit integrity costs and remaining migration/cloud gates.
+
+- [C04a shared observation experiment](design/graphevo-2-shared-observation-experiment.md):
+  exact-descriptor grouping, per-consumer decoding/cancellation, unchanged broad
+  invalidation and a startup/update CPU/memory matrix.

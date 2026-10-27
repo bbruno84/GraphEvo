@@ -1,0 +1,48 @@
+# C04a — shared observation refresh experiment
+
+Status: isolated opt-in laboratory after #82 (`ed1a430`). Default observe,
+publisher, change signals, schema, budgets and native invalidation remain unchanged.
+Use the default current model, not C02b's native identity model, to isolate costs.
+
+## Candidate and contract
+
+One explicit GraphSharedObservationLab belongs to one GraphStore handle. Share
+only structurally equal validated first-page descriptors: concrete Swift model
+type, graph type/kind, predicate, ordering, limit and every budget dimension.
+Different handles/graphs/models/budgets do not share. There is no global registry,
+last-result replay or persistent cache. A join requests a new read and cannot
+receive a read that started before its registration. Native source registration
+precedes returning from subscribe. Account changes end the group with a visible
+failure; close ends the owning handle's groups, not sibling handles.
+
+One native query produces immutable records/local view, then each subscriber runs
+its application decoder independently. A decoder failure is subscriber-local;
+native query failures are visible and can recover on the next broad invalidation.
+Per-consumer newest-state buffering, cancellation and Combine demand remain.
+The last consumer retires/cancels its worker and native source. Callbacks and
+application-value destruction never run under a coordinator lock. Only detached
+Sendable values cross tasks. No leases, contexts or native objects are cached.
+
+This first candidate retains broad invalidation for relationships/actions/files,
+store notifications and refresh. It does not attempt dependency-based suppression,
+cross-handle sharing, per-node events or durable processing. Consumers of the same
+execution share scopeID/diagnostics (one actual local read), not a fabricated view
+per delivery. Diagnostic execution counters count work, not delivered mailboxes.
+
+## Matrix
+
+| Check | Evidence |
+|---|---|
+| Equivalence | Two equal descriptors share scopeID on explicit refresh; different filter/order/limit/budget/model/handle/graph remain separate |
+| Local state | Other-handle edits, relationship/action endpoint/tag changes, order/limit movement, file replacement, deletion and newest-state rescan |
+| Failure | Native query failure and recovery; per-consumer decode failure; account switch during a read; closed-handle admission |
+| Lifetime | Individual cancellation/drop, cancel/join races, last-consumer cleanup, late join during an in-flight read, handle close and sibling survival |
+| Combine | Cold demand starts subscription, independent cancellation/demand, shared native work through the unchanged Combine adapter |
+| Cost | Fresh Release processes; same seed/source/layout; 1/8/32 equal and mixed queries, scalar and file-bearing graphs; startup separate from update wave; native read counts, time and sampled whole-process RSS |
+| Exit | Retain failed candidates/results; repeat representative cases independently; assess single-observer overhead and sharing gains before public integration |
+
+Use bounded fixtures outside Git. Do not run timing beside builds/tests or compare
+silently different storage/query/validation contracts. CI functional smoke uses no
+latency threshold. Synthetic/native notification tests are not cross-account
+CloudKit evidence. Native synchronization, representative workloads and all
+post-alpha migration/schema/observation gates remain open.

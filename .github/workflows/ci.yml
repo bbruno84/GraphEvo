@@ -107,6 +107,12 @@ jobs:
       - name: Run Swift 6 model consumer
         run: swift run --package-path IntegrationTests/PackageConsumer ModelConsumer
 
+      - name: Validate shared observation laboratory (functional smoke only)
+        run: |
+          swift build -c release --product ObservationCostProbe
+          OBSERVATION_PROBE_BIN="$(swift build -c release --show-bin-path)"
+          python3 Experiments/SharedObservation/run.py --executable "$OBSERVATION_PROBE_BIN/ObservationCostProbe" --output "$RUNNER_TEMP/graphevo-c04-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --cases small --counts 1,8 --repetitions 1
+
       - name: Validate native identity laboratory (functional smoke only)
         run: |
           swift build -c release --product IdentityLookupProbe

@@ -11,6 +11,7 @@ package struct StoreInvalidation: Sendable {
 package struct StoreInvalidationFeed: Sendable {
     package let stream: StoreInvalidationSequence
     package let refresh: @Sendable () -> Void
+    package let cancel: @Sendable () -> Void
 }
 
 /// Resolve the account guard at consumption, not from a potentially stale publication snapshot.
@@ -33,6 +34,7 @@ package struct StoreInvalidationSequence: AsyncSequence, Sendable {
             return accountChanged() ? StoreInvalidation(reason: .accountChange) : value
         }
     }
+    package var accountHasChanged: Bool { accountChanged() }
     package func makeAsyncIterator() -> AsyncIterator { AsyncIterator(raw: raw.makeAsyncIterator(), accountChanged: accountChanged) }
 }
 
@@ -64,7 +66,11 @@ package final class StoreInvalidationHub: Sendable {
         let stream = StoreInvalidationSequence(raw: pair.stream, accountChanged: { [weak self] in
             self?.state.withLock { $0.accountChanged } ?? false
         })
-        return StoreInvalidationFeed(stream: stream, refresh: { [weak self] in self?.refresh(id) })
+        return StoreInvalidationFeed(stream: stream, refresh: { [weak self] in self?.refresh(id) }, cancel: { [weak self] in self?.cancel(id) })
+    }
+    private func cancel(_ id: UUID) {
+        let continuation = state.withLock { $0.subscribers.removeValue(forKey: id)?.continuation }
+        continuation?.finish()
     }
     private func remove(_ id: UUID) { _ = state.withLock { $0.subscribers.removeValue(forKey: id) } }
     private func refresh(_ id: UUID) {

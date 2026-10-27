@@ -594,3 +594,18 @@ view; retain staged, missing, duplicate and raw-mismatched endpoint regressions.
 The internal executable adds a package scheme: use `GraphEvo-Package` for Xcode
 package tests. Keep its `@main` source out of a file named `main.swift` for Xcode
 16 compatibility.
+
+
+## C04a shared observation laboratory
+
+The [C04a contract](docs/design/graphevo-2-shared-observation-experiment.md) keeps
+public observe/publisher behavior unchanged. Group only exact validated query
+shapes/budgets and concrete model types within one explicit laboratory/handle.
+Share immutable query records, not application model construction. Late joins
+require a new read; no replay cache or cross-handle lease is permitted. Keep broad
+relationship/action/file/native invalidation. The last cancellation must retire
+worker and native source atomically against new joins; finish/delivery and value
+destruction occur outside locks. Account changes supersede in-flight reads.
+Injected sources/checkpoints are deterministic local tests, not CloudKit proof.
+Keep baseline/sample counts, startup overhead and mixed-query outcomes even if
+they regress. Default schemas, observer APIs and query budgets are not changed.
