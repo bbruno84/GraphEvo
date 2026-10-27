@@ -263,3 +263,11 @@ Sources: A6 backup contract, specification S11, V05/V08.
   source/auxiliary/ledger protection and mandatory v1 mapping before adoption.
 - [ ] Check high-degree Relationship/Action reference costs and indexing/storage
   trade-offs; Entity-only latency is insufficient for graph-wide acceptance.
+
+- [x] Measure the local C02b native-column candidates, including 500-reference
+  actions and a second independent campaign. The [retained result](results/c02b-native-identities-2026-10-27.md)
+  includes both regressing intermediate resolvers; integrated C02 gates above
+  remain open.
+- [ ] Carry the changed-owner facade fallback and staged/raw-mismatched endpoint
+  regressions into integrated metadata/import tests on supported SDKs. A batched
+  property fetch must never hide newly inserted metadata from the local view.

@@ -28,7 +28,7 @@ sampled peak. Full graph integrity is explicitly and separately measured.
 Both use the normal runtime owner, leases, queues, query-generation pin and
 commit guards through GraphStore operations. A package-only laboratory opener
 selects the prototype adapter; default public openers never select it. Baseline
-operations retain global validation; prototype calls use target/reference checks.
+operations retain full-inventory routing/format validation; prototype calls use target/reference checks.
 They are not equivalent production APIs. Never report the ratio as a ready-to-ship
 GraphStore speedup. The configured index is not proof of a particular SQL plan.
 
@@ -39,3 +39,10 @@ assignment, pair-store conversion and runtime leases need integrated acceptance.
 Do not point this runner at real app/cloud stores, retry consumed stages or
 commit generated stores/logs. The source/destination and copied auxiliaries stay
 outside Git. Successful conversion of this alpha layout is not full v1 migration.
+
+The [retained result](../../docs/design/results/c02b-native-identities-2026-10-27.md)
+includes two rejected high-degree resolvers. The final candidate batches UUIDs and
+selected endpoint metadata, prefetches topology without property bodies, and uses
+the facade local view for changed owners. Whole-graph validation additionally
+snapshots all payloads and is stronger than one baseline public record read.
+Use the aggregate `GraphEvo-Package` Xcode scheme to run package tests.

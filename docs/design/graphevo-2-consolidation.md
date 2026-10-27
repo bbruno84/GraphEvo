@@ -105,3 +105,18 @@ and full reads are faster. Four-small-file disk usage increases; list/read memor
 indexed identities, real storage envelopes and migration remain open. Observation
 benefits from cheaper queries without introducing C04 shared work. This evidence
 does not authorize an automatic integration, beta entry or schema freeze.
+
+
+## Native identity lookup experiment
+
+[C02b](graphevo-2-native-identity-experiment.md) compares optional native UUID
+columns with/without a configured index using normal runtime scopes. The
+[local evidence](results/c02b-native-identities-2026-10-27.md) selects columns
+with bounded endpoint identity/metadata batches and topology prefetch as the next
+integration candidate. Entity point reads/patches improve substantially; the
+500-reference action improves only after two retained regressing variants.
+A configured index adds a smaller gain on these sizes. Default schema/openers
+remain unchanged. Missing-column absence, import/old-writer semantics,
+private/shared conversion, native sharing and mandatory v1 migration remain
+C02 gates; this local result does not freeze the schema. C04 observer work is the
+next independent cost investigation after review of this candidate.

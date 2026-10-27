@@ -69,3 +69,12 @@ property rows for referenced owners. Do not prefetch property sets or endpoint
 payload bodies. Changed owners retain facade reads for pending inverse/property
 edits; no metadata cache survives the operation. Missing/duplicate/raw-mismatched
 and staged endpoint regressions must continue passing.
+
+
+The [executed local result](results/c02b-native-identities-2026-10-27.md) retains
+all three resolver campaigns and a separate confirmation. Native columns with
+bounded identity/metadata batches and topology prefetch are the next integration
+candidate. The baseline inventories/validates unrelated routing/format metadata;
+explicit `validateAll` additionally snapshots and validates every payload. Do not
+present those validation scopes as equivalent. All integrated cloud/import/v1
+migration gates remain open.

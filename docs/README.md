@@ -71,3 +71,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   evidence, remaining tests and their scope.
 - [GraphEvoDemo initial assessment](design/graphevo-demo-initial-assessment.md):
   source state, existing coverage, build evidence, and laboratory preparation.
+
+- [C02b native identity results](design/results/c02b-native-identities-2026-10-27.md):
+  selective reads/patches, retained endpoint regressions, bounded topology and
+  metadata batching, explicit integrity costs and remaining migration/cloud gates.
