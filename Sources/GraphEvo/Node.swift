@@ -172,6 +172,14 @@ public class Node: NSObject, Codable {
 
   package var runtimeTypeIfPresent: String? { node.value(forKey: "type") as? String }
 
+  /// Scoped adapter projection; skip unrequested values before invoking their native transformer.
+  /// The caller must already own this facade's context queue.
+  package func runtimeProperties(including keys: Set<String>) -> [String: Any] {
+    node.propertySet.reduce(into: [:]) { result, property in
+      if keys.contains(property.name) { result[property.name] = property.object }
+    }
+  }
+
   package var runtimeObjectID: NSManagedObjectID { node.objectID }
 
   package func sharesBackingObject(with other: Node) -> Bool { node === other.node }

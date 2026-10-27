@@ -28,6 +28,8 @@ def main():
     parser.add_argument("--executable", type=Path, required=True, help="Built Release CostProbe executable")
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--cases", help="Optional comma-separated case names")
+    parser.add_argument("--expect-unrelated-large-files-success", action="store_true",
+                        help="Explicit M03 contract: unrelated queries no longer decode file bodies; baseline keeps its expected refusal")
     args = parser.parse_args()
     repository = HERE.parent.parent.resolve()
     output = args.output.resolve()
@@ -40,6 +42,7 @@ def main():
     output.mkdir(parents=True)
     metadata = {"platform": platform.platform(), "python": platform.python_version(),
                 "executable": str(args.executable.resolve()), "repetitions": args.repetitions,
+                "expectUnrelatedLargeFilesSuccess": args.expect_unrelated_large_files_success,
                 "libraryRevision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repository, text=True).strip(),
                 "dirtySource": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=repository, text=True).strip()),
                 "harnessSHA256": {str(path.relative_to(HERE)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -57,7 +60,7 @@ def main():
         if result.returncode or len(lines) != 1:
             raise RuntimeError(f'{case["name"]}/{name} failed; retain its fixture/log and do not replay the seed')
         row = json.loads(lines[0])
-        expected_budget_error = case["name"] == "four-large-files" and operation in ("query", "count", "project") and budget == 32*1024**2
+        expected_budget_error = not args.expect_unrelated_large_files_success and case["name"] == "four-large-files" and operation in ("query", "count", "project") and budget == 32*1024**2
         if (row.get("error") == "budgetExceeded(propertyBytes)") != expected_budget_error or (row.get("error") and not expected_budget_error):
             raise RuntimeError(f'Unexpected outcome in {case["name"]}/{name}: {row.get("error")}')
         row.update(repetition=repetition, label=name)

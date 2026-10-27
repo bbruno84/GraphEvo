@@ -1161,7 +1161,7 @@ rather than an import replay. A locally committed result is distinct from export
 or independent replica recovery.
 
 The alpha buffers complete content and accepts empty files through 10 MiB.
-Listing metadata currently also decodes/checks content. Streaming, per-file
+Listing split metadata does not decode/verify the body; old envelopes retain full validation. Streaming, per-file
 progress, eviction, selective download, a persistent offline-retention guarantee
 and distributed replacement conflict resolution are unsupported.
 
@@ -1212,6 +1212,12 @@ includes native node rows across the resource group; only selected-graph
 application records are evaluated. Every query currently uses explicit bounded
 inventory plus memory evaluation. No SQL/native-count optimization or silent
 fallback is claimed. Opening/catalog costs are outside a query allowance.
+On the M03 experiment branch, complete model results materialize all properties
+of the requested type/kind. Other types and count/projection/aggregate/traversal
+operations materialize descriptor-referenced keys, including nested related
+predicates and sort/aggregate/projection dependencies. Skipped payloads are not
+validated by unrelated queries. Explicit body references remain charged before
+decoding; full file reads and sharing integrity still verify complete content.
 
 `GraphQueryPredicate: Sendable, Equatable` is indirect and supports:
 

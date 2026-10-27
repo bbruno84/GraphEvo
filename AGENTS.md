@@ -480,8 +480,13 @@ Read the [A7 contract](docs/design/graphevo-2-queries.md) before changing query
 execution. Descriptors require explicit candidate allowance; current encoded
 properties use bounded native inventory plus memory evaluation, never a silent
 fallback. Candidate allowance includes all local native node rows in the resource
-group; only scoped application records enter evaluation. Charge payload before
-typed envelope decoding and reject limits without partial output. This is not
+group; only scoped application records enter evaluation. Charge consulted payload before
+typed envelope decoding and reject limits without partial output. The M03
+experiment retains full node identity/membership/endpoint/format-list inventory
+but selects descriptor-referenced properties for non-returned types and
+non-record operations. Collect nested related predicates, sort/projection and
+aggregate keys; full model-type results retain all fields. Do not certify
+skipped payloads or evade a budget on an explicitly requested body. This is not
 a total memory/time or SQL-I/O bound. Preserve AND composition, literal strings,
 missing/null distinction, exact numeric cases and UUID ordering tie-breaks.
 Cursors bind graph/descriptor, are current-state values and never certify a
@@ -543,3 +548,13 @@ membership/identity/format checks, typed errors and query allowances. C02a is
 not complete selective lookup, file-content separation or a shared-observer
 engine. Retain A's insertion regression and B's observer-memory trade-off in
 comparisons; read-only device evidence is not new native-assignment coverage.
+
+
+## Cost matrix binary envelope experiment
+
+M02 encodes top-level GraphValue.data with a distinct binary magic, version and
+big-endian declared byte length. Keep legacy JSON decoding and nested/opaque
+payload semantics; reject unsupported versions and truncated/extended bodies.
+No alpha downgrade support or automatic rewrite is implied. See the
+[matrix](docs/design/graphevo-2-experiment-matrix.md). Native synchronization,
+full content checksum checks and mandatory v1 migration remain binding.

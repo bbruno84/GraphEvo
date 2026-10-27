@@ -64,11 +64,15 @@ A budget is therefore not a result count or a promise of graph-selective I/O.
 Before decoding typed property envelopes, the implementation charges user keys,
 raw Data lengths, UTF-8 strings/type/unique tag-group names, and a small structural
 allowance for legacy values/containers. Diagnostics expose propertyBytesCharged,
-not physical store size or exact allocated bytes. All selected-graph records are
-currently snapshotted, including nonmatching model types and attachment content.
-This is visible work, bounded by the supplied allowance, rather than an implicit
-optimization. Attachment storage/ownership remains unchanged; representation
-costs will be assessed at the agreed end-of-alpha review.
+not physical store size or exact allocated bytes. On the matrix experiment branch,
+M03 retains full identity/membership/endpoint inventory but materializes only
+query-referenced property keys on non-returned model types and non-record
+operations. References include nested related predicates, sort, projection and
+aggregate keys. All properties remain materialized for the requested model
+type/kind when returning complete records. Skipped payloads are not validated or
+certified by an unrelated query. Explicit file-body references still load/charge
+that value; complete file reads and sharing integrity keep full validation.
+Budgets remain unchanged. See the [matrix](graphevo-2-experiment-matrix.md).
 
 Steps bound predicate visits, relationship/action inspections, endpoint visits,
 ordering and aggregation work. They are logical work units, not CPU instructions

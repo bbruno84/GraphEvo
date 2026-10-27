@@ -61,12 +61,13 @@ package enum GraphTypedStoreAdapter {
                 try checkCancellation()
                 try GraphQueryValidation.request(request, graphID: graphID)
                 let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
+                let propertyPlan = GraphQueryPropertyPlan(request)
                 var remaining = request.budget.maximumPropertyBytes
                 var records: [GraphRecord] = []
                 for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
                     try checkCancellation()
                     guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
-                    records.append(try session.snapshot(node, id: id) { raw in
+                    records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node))) { raw in
                         try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
                         for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
                         for (key, value) in raw.properties where !key.hasPrefix(prefix) {
@@ -382,11 +383,11 @@ package enum GraphTypedStoreAdapter {
             return id
         }
 
-        func snapshot(_ node: Node, id: GraphNodeID, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
-            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil, referenceID: referenceID)
+        func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
+            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil, propertyKeys: propertyKeys, referenceID: referenceID)
             try charging?(raw)
             var properties = raw.properties.filter { !$0.key.hasPrefix(prefix) }
-            for key in try encodedKeys(node) {
+            for key in try encodedKeys(node) where propertyKeys == nil || propertyKeys!.contains(key) {
                 guard let value = properties[key], case .data(let data) = value else { throw GraphStoreError.corruptIdentity }
                 properties[key] = try GraphValueCodec.decode(data)
             }
