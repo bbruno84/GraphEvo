@@ -79,3 +79,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [C04a shared observation experiment](design/graphevo-2-shared-observation-experiment.md):
   exact-descriptor grouping, per-consumer decoding/cancellation, unchanged broad
   invalidation and a startup/update CPU/memory matrix.
+
+- [C04a shared observation results](design/results/c04a-shared-observation-2026-10-27.md):
+  repeated startup/update wall/CPU/RSS comparisons, execution attempts versus
+  delivered views, retained preflight correction and remaining adoption gates.

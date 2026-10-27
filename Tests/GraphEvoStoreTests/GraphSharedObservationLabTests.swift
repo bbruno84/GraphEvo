@@ -18,6 +18,18 @@ private actor ObservationReadGate {
     func release() { permits.continuation.yield(()) }
 }
 
+private struct FailableDecodedItem: GraphModel {
+    static let graphType = ObservedItem.graphType
+    static let graphKind: GraphNodeKind = .entity
+    let record: GraphRecord
+    var id: GraphNodeID { record.id }
+    init(graphRecord: GraphRecord) throws {
+        if graphRecord.properties["decode"] == .string("fail") { throw ObservationTestFailure() }
+        record = graphRecord
+    }
+    func graphRecord() throws -> GraphRecord { record }
+}
+
 private struct IndependentlyDecodedItem: GraphModel {
     static let graphType = ObservedItem.graphType
     static let graphKind: GraphNodeKind = .entity
@@ -175,6 +187,35 @@ private struct IndependentlyDecodedItem: GraphModel {
         #expect(await lab.diagnostics.activeGroups == 0)
         #expect(hub.subscriberCount == 0)
         try await graph.close()
+    }
+
+    @Test func applicationDecoderFailuresRecoverWithoutContaminatingAnotherModel() async throws {
+        let graph = try await GraphStore.inMemory(), lab = GraphSharedObservationLab(graph: graph), id = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: ObservedItem.graphType, properties: ["decode": .string("good")])) }
+        let query = GraphQuery<FailableDecodedItem>(budget: try GraphQueryBudget(maximumCandidates: 256))
+        let a = try await lab.observe(query), b = try await lab.observe(query), ordinary = try await lab.observe(observationQuery())
+        var left = a.makeAsyncIterator(), right = b.makeAsyncIterator()
+        #expect(await left.next() != nil); #expect(await right.next() != nil)
+        _ = try await waitForObservation(ordinary) { $0.items.count == 1 }
+        #expect(await lab.diagnostics.activeGroups == 2)
+        try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: id, properties: ["decode": .set(.string("fail"))])) }
+        for observation in [a,b] {
+            var iterator = observation.makeAsyncIterator()
+            var failed = false
+            while let state = await iterator.next() { if case .failure(let error) = state { #expect(error is ObservationTestFailure); failed = true; break } }
+            #expect(failed)
+        }
+        _ = try await waitForObservation(ordinary) { $0.items.first?.record.properties["decode"] == .string("fail") }
+        try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: id, properties: ["decode": .set(.string("recovered"))])) }
+        for observation in [a,b] {
+            var recovered = false
+            for await state in observation {
+                if case .value(let value) = state, value.items.first?.record.properties["decode"] == .string("recovered") { recovered = true; break }
+            }
+            #expect(recovered)
+            observation.cancel()
+        }
+        ordinary.cancel(); try await graph.close()
     }
 
     @Test func nativeStoreNotificationsRefreshWithoutReusingAnOldView() async throws {

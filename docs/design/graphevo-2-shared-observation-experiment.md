@@ -1,6 +1,6 @@
 # C04a — shared observation refresh experiment
 
-Status: isolated opt-in laboratory after #82 (`ed1a430`). Default observe,
+Status: local matrix and confirmation measured; opt-in laboratory after #82 (`ed1a430`). Default observe,
 publisher, change signals, schema, budgets and native invalidation remain unchanged.
 Use the default current model, not C02b's native identity model, to isolate costs.
 
@@ -22,7 +22,8 @@ native query failures are visible and can recover on the next broad invalidation
 Per-consumer newest-state buffering, cancellation and Combine demand remain.
 The last consumer retires/cancels its worker and native source. Callbacks and
 application-value destruction never run under a coordinator lock. Only detached
-Sendable values cross tasks. No leases, contexts or native objects are cached.
+Sendable values cross tasks. Observations retain their existing graph handle as
+before; no additional lease, native context or managed object is cached.
 
 This first candidate retains broad invalidation for relationships/actions/files,
 store notifications and refresh. It does not attempt dependency-based suppression,
@@ -54,3 +55,14 @@ workers so arbitrary application construction cannot block shared refresh. Both
 bounded input and public output mailboxes are newest-only; there is no replay to
 new subscribers. Refreshing one member can refresh all equal-descriptor members.
 Source/callback checkpoints are injectable only for deterministic local tests.
+
+
+## Executed result
+
+The [retained comparison](results/c04a-shared-observation-2026-10-27.md) contains
+300 full-matrix and 120 independent confirmation rows, plus both 12-row screens.
+Exact-query update waves improve substantially; initial subscription, single and
+mixed workloads do not gain comparable savings. Keep this as the candidate for
+review, with broad invalidation and independent decoder workers. Public adoption,
+heavy-decoder/slow-consumer envelopes, device-native account/import behavior and
+all observation/schema/migration gates remain open.

@@ -284,3 +284,9 @@ Sources: A6 backup contract, specification S11, V05/V08.
 - [ ] Retain broad relationship/action/file invalidation until narrower dependency
   tracking independently demonstrates correctness. No replay cache or silent
   budget/view widening is accepted by local performance alone.
+
+- [x] Retain C04a local matrix and independent confirmation: [results](results/c04a-shared-observation-2026-10-27.md).
+  Exact-query gains do not settle single/mixed workload overhead or public adoption.
+- [ ] Assess startup fan-out/model-decoder churn and heavy/slow application models
+  before public integration. New subscribers deliberately request fresh reads and
+  can refresh existing equal-query subscribers; shared view semantics remain explicit.
