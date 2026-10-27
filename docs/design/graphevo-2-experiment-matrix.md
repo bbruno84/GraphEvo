@@ -48,13 +48,15 @@ and mandatory v1 migration remain separate gates unless explicitly tested here.
 
 ## Outcome checkpoint
 
-The [retained result](results/cost-matrix-2026-10-27.md) records 946 new local
-measurements, 477 local tests, 18 sanitizer tests, all 14 physical lifecycle
-stages and two final read-only query stages. Preferred direction for review:
+The [retained result](results/cost-matrix-2026-10-27.md) records 1,510 new local
+measurements, 477 local tests, 18 sanitizer tests, two complete 14-stage physical lifecycles (including the final build)
+and six read-only query stages across corrected reader builds. Preferred direction for review:
 M02 binary payloads plus M03b native-filtered property dependencies. Four-large-file
-scalar queries succeed at the original allowance in 28–29 ms / about 17 MiB.
-Full reads improve, no-file queries retain their cost, and four-small-file disk
-usage increases. Native listing memory, real content/storage envelope, selective
+scalar queries succeed at the original allowance in about 31 ms / 17 MiB.
+Full reads improve; final graph routing makes no-file queries moderately slower,
+and four-small-file disk usage increases. The earlier foreign-metadata isolation
+failure and doubled seed checkpoint are retained; the final reader filters routing
+first and preserves tiny-owner fallback. Native listing memory, real content/storage envelope, selective
 identity indexing, conflict/offline/account cases and mandatory migration remain
 open. No integration/merge or schema freeze is implied. Compatibility-only fixture corrections have been revalidated locally (477 tests
 and 18 sanitizer tests). Final PR CI remains a separate M08 acceptance check.

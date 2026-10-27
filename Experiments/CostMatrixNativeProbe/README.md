@@ -37,3 +37,9 @@ The final M03b build adds one-use `matrix-query-owner` / `matrix-query-peer`
 read-only stages on the retained completed fixture. They verify typed query,
 count and metadata projection under 32 KiB, empty A, exact retained B content
 on owner, and B absence on the other account. They do not replay the lifecycle.
+
+
+Read-only stages may also use the explicitly supported `-fixed` / `-threshold`
+aliases as new tickets for successive corrected builds; they remain read-only.
+A complete final write revalidation instead uses a fresh run UUID and repeats
+the entire bootstrap/lifecycle on new graphs. Do not relaunch consumed writes.
