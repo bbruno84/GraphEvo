@@ -156,6 +156,8 @@ actor StoreResources {
             try Task.checkCancellation()
             return try await container.performBackgroundTask { @Sendable context in
                 Self.prepare(context, configuration: configuration, container: container)
+                let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
+                context.userInfo[StoreNativeContext.cancellationKey] = check
                 defer { context.rollback(); context.reset() }
                 try cancellation.check()
                 if sqlite { try context.setQueryGenerationFrom(.current) }
@@ -182,6 +184,8 @@ actor StoreResources {
             let hooks = hooks, configuration = resolved.configuration, container = container
             return try await container.performBackgroundTask { @Sendable context in
                 Self.prepare(context, configuration: configuration, container: container)
+                let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
+                context.userInfo[StoreNativeContext.cancellationKey] = check
                 defer { context.rollback(); context.reset() }
                 try cancellation.check()
                 let value = try body(context)

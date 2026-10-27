@@ -1,0 +1,219 @@
+# GraphEvo 2 — end-of-alpha and release checklist
+
+Status: open consolidation register, 2026-10-27. This collects follow-ups from
+A1–A7 and the specification so they survive individual PRs. It complements the
+[delivery plan](graphevo-2-delivery-plan.md), [decision register](graphevo-2-decisions.md)
+and [experimental evidence register](graphevo-2-test-checklist.md).
+
+## How to close an item
+
+All boxes start open: existing evidence is input, not a claim that its broader
+release gate passed. Each closure must link the decision or result, tested
+revision, dataset, platform/device/account scope and remaining limitations.
+Keep local regression, injected failures and physical mirroring evidence distinct.
+Update this register whenever an increment introduces or resolves a follow-up.
+
+**B** means settle and demonstrate the supported contract before entering beta.
+**R** means complete acceptance during beta, before stable 2.0. A B decision may
+leave enumerated R validation work. An optional capability may be explicitly
+excluded with its user impact and recovery route documented; an unchecked box
+is not an agreed deferral. Mandatory data migration cannot be excluded.
+
+A8 observation still belongs to alpha. Its implementation and the migration
+feasibility review are prerequisites to consolidation, not work postponed by
+calling this a post-alpha checklist. No release branch or tag follows from
+creating this document.
+
+## PA01 — schema, identities and application models
+
+- [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported
+  API/schema with the specification before freezing them for beta.
+- [ ] **B** Settle durable graph/node identity, reference and membership rules,
+  ownership/deletion closure, incomplete imports, empty actions and valid absent
+  endpoints (D04, D11, D14, O05); distinguish incomplete from corrupt data.
+- [ ] **B** Inventory legacy codecs, unknown keys, null/absent values and opaque
+  payloads; define lossless destinations and explicit conversion errors.
+- [ ] **B** Record the migration effect of each persistent representation change,
+  including logical metadata even when native model hashes stay unchanged.
+- [ ] **R** Verify identity/reference/value preservation on independent replicas
+  and migrated fixtures, including details, tags, groups and timestamps.
+
+Sources: [model contracts](graphevo-2-application-models.md),
+[typed store](graphevo-2-typed-store.md), specification S3/S6/S11.
+
+## PA02 — runtime, concurrency and platform support
+
+- [ ] **B** Select minimum OS/toolchain and supported process topology (O02/O03).
+  Decide app/extension concurrent App Group access explicitly; a process-local
+  registry does not establish cross-process safety.
+- [ ] **B** Audit the complete distributed Swift 6 boundary, including legacy
+  targets still in Swift 5 mode, Sendable/isolation, context escape, public
+  imports and independent UI/non-UI consumers; document retained limitations.
+- [ ] **B** Reconcile read consistency, local serialization, remote import/save
+  overlap, same-property conflicts and cancellation/commit outcomes. Disjoint
+  edit convergence does not establish conflict semantics.
+- [ ] **R** Stress admitted/queued work, shutdown/reopen, independent leases,
+  paired resource aliases/replacements, failed-load cleanup/quarantine and
+  main-thread responsiveness under representative concurrency and payloads.
+- [ ] **R** Run appropriate sanitizer/regression checks and physical runtime
+  coverage on the selected OS matrix; verify new async paths avoid blocking
+  bridges and retain explicit cancellation checks.
+
+Sources: [A1](graphevo-2-store-runtime.md),
+[A2](graphevo-2-async-transactions.md), V03/V08.
+
+## PA03 — graph separation, accounts and native sharing
+
+- [ ] **B** Publish account-unavailable/sign-out/switch/restriction and cached-data
+  access rules, including revocation and offline retention. Prevent exposing or
+  exporting an old account's data through a new account's session.
+- [ ] **B** Define supported graph/zone scale, quotas and recovery limits; do not
+  infer selective graph download or unlimited zones from isolation tests.
+- [ ] **B** Settle native sharing presentation/adapters and invitation transport,
+  recipient/container binding, errors and host responsibilities. Protect
+  invitation/account capabilities and keep diagnostics payload-free.
+- [ ] **R** Repeat supported mutations, fresh recovery and relaunch/offline/
+  background scenarios on same-account and different-account replicas using
+  the selected model; verify the control graph remains unchanged.
+- [ ] **R** Exercise simultaneous structural writers, conflicting additions and
+  replacements, stale permission metadata, read-only access reduction,
+  revoke/reinvite/leave and owner deletion. Library permission rejection alone
+  does not certify arbitrary native/server write enforcement.
+
+Sources: [A4](graphevo-2-graph-separation.md),
+[A5](graphevo-2-user-sharing.md), V01/V02/V09, D09/D10.
+
+## PA04 — interrupted native operations and recovery
+
+- [ ] **B** Publish supported reconcile/abandon/cleanup behavior for pending local
+  intents, including missing owners/mappings and inaccessible graphs; never
+  blindly replay native assignment or treat a local ledger as a distributed lock.
+- [ ] **R** Inject interruption at each operation phase, native callback failure
+  after partial persistence, divergence and post-commit journal cleanup failure;
+  verify idempotent recovery without losing another operation's intent.
+- [ ] **R** Cover permission loss, revocation and owner disappearance during
+  shared insertion/file assignment, including retained staged bytes and safe
+  cleanup. Pending intents must be resolved before a blocked leave/purge.
+- [ ] **R** Verify journal/resource recovery after relaunch and independent peer
+  observation; preserve useful bounded diagnostics when recovery remains pending.
+
+Sources: A5 recovery contract and [A6](graphevo-2-attachments.md).
+The existing physical assignment interruption is evidence for one window only.
+
+## PA05 — native files: agreed cost review and acceptance
+
+- [ ] **B** Perform M12's representation/cost review while retaining the accepted
+  identity and ownership model as its starting point. Measure envelope decoding,
+  full-content listing, copies, peak memory, latency and storage with representative
+  content/sizes/graph counts; select representation and supported size envelope.
+- [ ] **B** Decide whether query/list costs require metadata separation or schema
+  changes. Document actual availability and unsupported streaming/progress/
+  eviction/selective-download behavior rather than promising these capabilities.
+- [ ] **R** Cover security-scoped document providers, source changes/removal,
+  cancellation/temp cleanup, atomic export to existing/dangling destinations,
+  permission loss, and file I/O outside managed context scopes.
+- [ ] **R** Verify exact bytes/metadata/revisions after offline/relaunch/import,
+  concurrent remote replacements, pending assets and owner/dependency deletion
+  across Entity, Relationship and Action, including rollback.
+- [ ] **R** Confirm measured resource limits on supported physical devices and
+  varied real content. Existing repeated-byte 512-byte/10-MiB probes and sampled
+  whole-process peaks are not a production memory/performance guarantee.
+
+Sources: [A6 contract](graphevo-2-attachments.md),
+[A6 evidence](results/a6-native-attachments-2026-10-27.md), M12, V05/V09.
+
+## PA06 — query semantics, execution costs and pagination
+
+- [ ] **B** Review A7's bounded native inventory plus memory strategy with many
+  graphs, selective queries and file-heavy records. Measure decoding of unrelated
+  scoped properties, native candidate amplification and index opportunities;
+  choose a supported production envelope and explicit capability matrix.
+- [ ] **B** Finalize AND composition, literal strings, null/missing, numeric
+  precision, ordering, count/projection/aggregate and traversal semantics with
+  application adaptation examples. Decide scope of optional grouped aggregates,
+  Decimal sums, portable cursors and deeper traversal; do not silently add them.
+- [ ] **B** Publish budget/cancellation and moving-page guarantees. Candidate,
+  payload and logical-step allowances do not bound all RAM, time or SQL I/O;
+  opening/catalog work is outside the query allowance.
+- [ ] **R** Test sort-key changes, duplicate keys, inserts/deletes around cursors,
+  mismatched descriptors/graphs and page-local read views; verify documented
+  repeats/omissions rather than claim frozen multi-page snapshots.
+- [ ] **R** Cover decoder failures, exact numeric limits/overflow/nonfinite values,
+  aggregate homogeneity, projections, cycles, budget boundaries, cancellation,
+  fairness and close under representative local/remote datasets.
+
+Sources: [A7 contract](graphevo-2-queries.md),
+[A7 evidence](results/a7-retained-graph-queries-2026-10-27.md), V06.
+
+## PA07 — observation and processing
+
+- [ ] **B** Complete A8's three consumer contracts: one-shot results, observed
+  current state and change processing. Resolve live feed/rescan versus durable
+  replay (O04), with explicit application recovery if replay is excluded.
+- [ ] **B** Demonstrate dependency invalidation for related-node/action filters,
+  ordering, membership and attachments; close the retained V07 relationship gap.
+- [ ] **B** Specify buffering/coalescing, slow consumers, cancellation, resource
+  release, resubscription and error/incomplete-import delivery.
+- [ ] **R** Validate real remote edits/deletions, access/account changes, relaunch,
+  pending work and close. If durable replay is selected, validate cursor retention,
+  acknowledgements, duplicate delivery and history-gap recovery.
+- [ ] **R** Verify query/observation behavior on migrated fixtures and the real
+  application. No event, mapping or save callback establishes cloud completion
+  or exactly-once processing.
+
+Sources: specification S10, V07, D06/O04; A8 evidence must be added here.
+
+## PA08 — mandatory v1 local and cloud migration
+
+- [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
+  end-to-end feasibility on representative populated v1 copies: all node kinds,
+  topology, optional forms, values, binary content and old-to-new identity mapping.
+- [ ] **B** Establish the coordinated cloud cutover mechanism (O01): v1 writers
+  stopped, pending source writes reconciled, incomplete local sources detected,
+  returning offline old clients handled, duplicate conversion prevented. KVS or
+  a local flag is not a distributed fence or delivery acknowledgement.
+- [ ] **B** Define source protection, durable migration phases, semantic validation,
+  activation/reopen, retry and downgrade boundaries; enumerate remaining beta work.
+  Do not silently convert incompatible originals or activate an empty cloud graph.
+- [ ] **R** Complete tooling and convert representative real local/cloud stores,
+  including unknown legacy payload handling and independent fresh replica recovery.
+  Verify identity/topology/content, not only row counts.
+- [ ] **R** Interrupt/cancel/fail each phase; verify resumability, idempotence,
+  duplicate prevention, retained source data and rejection of invalid destinations.
+  Test pending writes and returning old devices under the chosen cutover policy.
+
+Sources: specification S11, delivery plan migration workstream, V08, D07/M02/M09.
+API compatibility remains optional; data migration is a stable-release gate.
+
+## PA09 — backups, restoration and retention
+
+- [ ] **B** Define consistent closed/quiescent backup prerequisites and whole-content
+  inventory, including external bytes, both native resources, auxiliary files and
+  operation ledgers; identify existing narrow migration backup callers to replace.
+- [ ] **R** Wire complete backups into actual conversion/recovery paths and verify
+  bytes/checksums and successful reopen, interrupted copies/restores and protected
+  source preservation. SQLite/WAL/SHM copying alone is insufficient for files.
+- [ ] **R** Validate restoration of mirrored resource groups against existing cloud
+  state and document limits. A local restore is not cloud rollback; current
+  whole-directory copy evidence does not establish mirrored restore correctness.
+- [ ] **R** Verify retention and cleanup of source stores, failed destinations,
+  migration mappings and staged operations according to documented recovery policy.
+
+Sources: A6 backup contract, specification S11, V05/V08.
+
+## PA10 — integration, distribution and release evidence
+
+- [ ] **B** Publish alpha-to-beta store reuse/migration/disposal policy (O06) before
+  external adoption, plus schema/API revisions, supported limits and known failures.
+- [ ] **B** Reconcile D01–D14 and O01–O06 against these items and the experiment
+  register: retain exact evidence scopes and record explicit decisions for exclusions.
+- [ ] **R** Adopt v2 in the real application while retaining independent consumers;
+  exercise its actual data, UI responsiveness, migration, queries and observation.
+- [ ] **R** Validate SPM/Release distribution, external Swift 6 consumers, minimum
+  toolchain/OS CI and public examples; preserve v1 guidance and license notices.
+- [ ] **R** Run acceptance on the exact release revision; retain device/account,
+  dataset and diagnostic scope, unresolved findings and supported recovery routes.
+  Debug seams must remain absent from Release and diagnostics must expose no payloads.
+- [ ] **R** Review release notes, incompatible-beta migration paths and downgrade
+  boundaries; verify mandatory migration and all selected acceptance gates before
+  the release PRs/tags described in the delivery plan.

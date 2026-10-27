@@ -40,6 +40,7 @@ package struct GraphStoreAdapter: Sendable {
     package let insert: @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void
     package let patch: @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord
     package let delete: @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void
+    package let query: (@Sendable (NSManagedObjectContext, GraphID, GraphQueryRequest) throws -> GraphQueryOutput)?
 
     package init(
         initialize: @escaping @Sendable (NSManagedObjectContext, URL?) throws -> GraphV1AdoptionReport,
@@ -47,10 +48,11 @@ package struct GraphStoreAdapter: Sendable {
         fetchAll: @escaping @Sendable (NSManagedObjectContext, GraphID, String, GraphNodeKind) throws -> [GraphRecord],
         insert: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void,
         patch: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord,
-        delete: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void
+        delete: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void,
+        query: (@Sendable (NSManagedObjectContext, GraphID, GraphQueryRequest) throws -> GraphQueryOutput)? = nil
     ) {
         self.initialize = initialize; self.fetch = fetch; self.fetchAll = fetchAll
-        self.insert = insert; self.patch = patch; self.delete = delete
+        self.insert = insert; self.patch = patch; self.delete = delete; self.query = query
     }
 }
 

@@ -42,7 +42,29 @@ package enum GraphTypedStoreAdapter {
             },
             insert: { context, graphID, record in try Session(context, graphID, database: database).insert(record) },
             patch: { context, graphID, patch in try Session(context, graphID, database: database).patch(patch) },
-            delete: { context, graphID, id in try Session(context, graphID, database: database).delete(id) }
+            delete: { context, graphID, id in try Session(context, graphID, database: database).delete(id) },
+            query: { context, graphID, request in
+                let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
+                try checkCancellation()
+                try GraphQueryValidation.request(request, graphID: graphID)
+                let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
+                var remaining = request.budget.maximumPropertyBytes
+                var records: [GraphRecord] = []
+                for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+                    try checkCancellation()
+                    guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
+                    records.append(try session.snapshot(node, id: id) { raw in
+                        try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
+                        for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
+                        for (key, value) in raw.properties where !key.hasPrefix(prefix) {
+                            try GraphQueryStoredCost.charge(key.utf8.count, remaining: &remaining)
+                            try GraphQueryStoredCost.charge(value, remaining: &remaining)
+                        }
+                    })
+                }
+                return try GraphQueryEvaluation(request: request, graphID: graphID, records: records, checkCancellation: checkCancellation)
+                    .execute(nativeCandidates: session.nativeCandidateCount, propertyBytesCharged: request.budget.maximumPropertyBytes - remaining)
+            }
         )
     }
 
@@ -149,6 +171,18 @@ package enum GraphTypedStoreAdapter {
         return nodes
     }
 
+    static func boundedNodes(_ graph: Graph, limit: Int) throws -> [Node] {
+        var nodes: [Node] = []
+        func add(_ batch: [Node]) throws {
+            guard batch.count <= limit - nodes.count else { throw GraphQueryError.budgetExceeded(.candidates) }
+            nodes += batch
+        }
+        try add(Search<Entity>(graph: graph).runtimeLimitedNodes(limit + 1))
+        try add(Search<Relationship>(graph: graph).runtimeLimitedNodes(limit - nodes.count + 1))
+        try add(Search<Action>(graph: graph).runtimeLimitedNodes(limit - nodes.count + 1))
+        return nodes
+    }
+
     private static func initialize(_ context: NSManagedObjectContext, backupRoot: URL?) throws -> GraphV1AdoptionReport {
         try GraphValueDecodingDiagnostics.checking {
             let graph = facade(context)
@@ -215,16 +249,18 @@ package enum GraphTypedStoreAdapter {
         let graphID: GraphID
         var nodes: [GraphNodeID: Node] = [:]
         let database: Bool
+        private(set) var nativeCandidateCount = 0
         var root: Entity?
         var membership: Action?
 
-        init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false) throws {
+        init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false, maximumCandidates: Int? = nil) throws {
             graph = facade(context)
             self.context = context
             self.graphID = graphID
             self.database = database
             try GraphValueDecodingDiagnostics.checking {
-                let all = try allNodes(graph)
+                let all = try maximumCandidates.map { try boundedNodes(graph, limit: $0) } ?? allNodes(graph)
+                nativeCandidateCount = all.count
                 let roots = all.filter { $0.runtimeTypeIfPresent == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
                 guard roots.count == 1, let selected = roots[0] as? Entity,
                       selected[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
@@ -327,8 +363,9 @@ package enum GraphTypedStoreAdapter {
             return id
         }
 
-        func snapshot(_ node: Node, id: GraphNodeID) throws -> GraphRecord {
+        func snapshot(_ node: Node, id: GraphNodeID, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
             let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil, referenceID: referenceID)
+            try charging?(raw)
             var properties = raw.properties.filter { !$0.key.hasPrefix(prefix) }
             for key in try encodedKeys(node) {
                 guard let value = properties[key], case .data(let data) = value else { throw GraphStoreError.corruptIdentity }

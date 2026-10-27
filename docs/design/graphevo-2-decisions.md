@@ -20,9 +20,11 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 | M09 | Migrate cloud data through a coordinated cutover: v1 stops writing before conversion | Concurrent v1/v2 writing is not required; pending writes, offline old devices and cutover verification still need a supported recovery policy |
 | M10 | Keep v1 on `develop`, integrate v2 on `codex/graphevo-2` from the planning branch, and use focused `codex/v2-<topic>` PRs into v2 | Alpha tags come from v2 integration; `release/2.0` starts there at beta, with fixes returning to v2. Stable 2.0 is promoted to `master` and `develop` through reviewed PRs |
 | M11 | V2 minimum OS versions may be raised as technically appropriate without inheriting v1 deployment constraints | Choose floors from API/architecture needs and validate their runtime matrix; A1's current iOS 16/macOS 12 declarations are provisional |
+| M12 | Keep A6's attachment identity/ownership approach and assess representation costs at alpha completion | The maintainer accepted the model; defer file-cost redesign while completing queries/observation, then consolidate schema/API before beta |
 
 M01–M04 and M09–M11 reflect the discussion following the 2026-10-26 laboratory results.
-M05–M08 carry forward the initial agreed requirements.
+M05–M08 carry forward the initial agreed requirements. M12 records the
+2026-10-27 attachment discussion and cost-review timing.
 
 ## Technical decisions under development
 
@@ -44,7 +46,7 @@ M05–M08 carry forward the initial agreed requirements.
 | D10 — cloud separation | Direction agreed; owner-only share-zone route is the working candidate | Separate stores did not isolate cloud data; V01 independent recovery and V09 support zones. Selective download/zone scale are not established | A4 |
 | D11 — model protocol | First candidate implemented: GraphModel/GraphPropertyValue, detached records, explicit keys and partial patches | [A3 contracts](graphevo-2-application-models.md) have public Swift 6 consumer and package SQLite tests; typed public CRUD and persisted local IDs are implemented in the [continuation](graphevo-2-typed-store.md); remaining legacy codecs and remote identity still need validation | A3, reviewed A7/A8 |
 | D12 — attachments | A6 alpha candidate: dedicated owned lifecycle over one native transformable content value | A6 selects exclusive same-graph ownership, unchanged native model, a 10-MiB buffered limit and closed whole-directory copies. V09 remains separate surrogate evidence; account/cache, larger-file and conflict envelopes remain release work | A6 |
-| D13 — queries | Proposed typed descriptors, explicit Boolean composition, deterministic order and no silent whole-graph fallback | Capability matrix, supported aggregations/traversal and pagination/read-view guarantees remain open | A7 |
+| D13 — queries | A7 alpha typed descriptors with explicit bounded inventory/memory strategy, Boolean composition and deterministic order | [A7 candidate](graphevo-2-queries.md) supplies an explicit bounded strategy, scalar capability matrix, related predicates/BFS, projections/aggregations and moving cursors; indexing/production envelopes remain consolidation work | A7 |
 | D14 — identity/integrity/conflicts | Proposed graph-scoped durable logical IDs, explicit incomplete structures and no blind transaction replay | A3 stores graph/node UUIDs in reserved detail rows and maps old facade IDs during backed-up local adoption. Replica recovery is unverified. V09 disjoint edits converged; same-property conflicts and imported deletion races remain open | Initial A3/A4; consolidated A8 |
 
 The current specification also proposes AND for successive query filters,
@@ -69,6 +71,10 @@ work. Bring a choice back when
 evidence narrows its alternatives or its product impact requires direction.
 
 ## Decision change discipline
+
+The [post-alpha checklist](graphevo-2-post-alpha-checklist.md) tracks closure
+of cross-cutting decisions and their release validation, including M12
+attachment costs. Keep it aligned when resolving D01–D14 or O01–O06.
 
 When a proposal becomes an implementation decision, record its rationale,
 alternatives, affected contracts, evidence and remaining limitations. Keep

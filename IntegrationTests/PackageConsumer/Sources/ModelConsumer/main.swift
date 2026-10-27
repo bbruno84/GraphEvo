@@ -36,6 +36,13 @@ private struct Profile: GraphModel {
         let updated = try await store.patch(patch, as: Profile.self)
         let name = await MainActor.run { updated.displayName }
         guard name == "Grace" else { throw GraphModelError.invalidValue }
+        let descriptor = GraphQuery<Profile>(budget: try GraphQueryBudget(maximumCandidates: 128))
+            .where(.property("display_name", .beginsWith, .string("Gra")))
+            .sorted(by: [GraphQuerySort(.property("display_name"))]).limit(1)
+        let queryResult = try await store.query(descriptor)
+        guard queryResult.items.map(\.displayName) == ["Grace"],
+              try await store.count(descriptor).value == 1,
+              try await store.project(descriptor, properties: ["display_name"]).rows.count == 1 else { throw GraphModelError.invalidValue }
         try await store.close()
         let reopened = try await GraphStore.open(at: url)
         let retained = try await reopened.read { try $0.record(for: profile.id) }
