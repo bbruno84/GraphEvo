@@ -162,11 +162,14 @@ package enum GraphNativeIdentityPrototype {
         return (root, membership)
     }
 
-    private static func fetch(_ context: NSManagedObjectContext, graphID: GraphID, nodeID: UUID? = nil) throws -> [Node] {
+    private static func fetch(_ context: NSManagedObjectContext, graphID: GraphID, nodeID: UUID? = nil, nodeIDs: [UUID]? = nil) throws -> [Node] {
         var result: [Node] = []
         for name in kinds {
             let request = NSFetchRequest<NSManagedObject>(entityName: name)
-            if let nodeID {
+            if let nodeIDs {
+                request.predicate = NSPredicate(format: "%K == %@ AND %K IN %@", graphAttribute, graphID.rawValue.uuidString, nodeAttribute, nodeIDs.map(\.uuidString))
+                request.fetchLimit = nodeIDs.count * 2 + 1
+            } else if let nodeID {
                 request.predicate = NSPredicate(format: "%K == %@ AND %K == %@", graphAttribute, graphID.rawValue.uuidString, nodeAttribute, nodeID.uuidString)
                 request.fetchLimit = 2
             } else { request.predicate = NSPredicate(format: "%K == %@ AND %K != nil", graphAttribute, graphID.rawValue.uuidString, nodeAttribute) }
@@ -188,6 +191,11 @@ package enum GraphNativeIdentityPrototype {
         let matches = try fetch(context, graphID: id.graphID, nodeID: id.rawValue)
         guard matches.count <= 1 else { throw GraphStoreError.duplicateIdentity }
         guard let node = matches.first else { return nil }
+        try validateNode(node, id: id, root: root, membership: membership)
+        return node
+    }
+
+    private static func validateNode(_ node: Node, id: GraphNodeID, root: Entity, membership: Action) throws {
         guard !node.type.hasPrefix(GraphTypedStoreAdapter.prefix),
               node.runtimeObjectID.persistentStore === root.runtimeObjectID.persistentStore,
               node[dynamicMember: GraphTypedStoreAdapter.graphKey] as? String == id.graphID.rawValue.uuidString,
@@ -201,7 +209,34 @@ package enum GraphNativeIdentityPrototype {
             guard edge.subject != nil || edge.object != nil,
                   !(edge.subject?.sharesBackingObject(with: root) == true && edge.object != nil) else { throw GraphStoreError.corruptIdentity }
         }
-        return node
+    }
+
+    /// Batch every endpoint identity across all node kinds; duplicate IDs must not hide behind a kind filter.
+    private static func references(_ context: NSManagedObjectContext, node: Node, id: GraphNodeID,
+                                   root: Entity, membership: Action) throws -> [GraphNodeID: Node] {
+        let entities: [Entity]
+        if let edge = node as? Relationship { entities = [edge.subject, edge.object].compactMap { $0 } }
+        else if let action = node as? Action { entities = action.subjects + action.objects }
+        else { return [:] }
+        var ids = Set<UUID>()
+        for entity in entities where !entity.sharesBackingObject(with: root) {
+            guard entity.node.value(forKey: graphAttribute) as? String == id.graphID.rawValue.uuidString,
+                  let text = entity.node.value(forKey: nodeAttribute) as? String, let uuid = UUID(uuidString: text) else { throw GraphStoreError.unresolvedReference }
+            ids.insert(uuid)
+        }
+        let ordered = ids.sorted { $0.uuidString < $1.uuidString }
+        var result: [GraphNodeID: Node] = [:]
+        let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
+        for offset in stride(from: 0, to: ordered.count, by: 128) {
+            try checkCancellation()
+            for candidate in try fetch(context, graphID: id.graphID, nodeIDs: Array(ordered[offset..<min(offset + 128, ordered.count)])) {
+                guard let text = candidate.node.value(forKey: nodeAttribute) as? String, let uuid = UUID(uuidString: text) else { throw GraphStoreError.corruptIdentity }
+                let key = GraphNodeID(graphID: id.graphID, rawValue: uuid)
+                guard result.updateValue(candidate, forKey: key) == nil else { throw GraphStoreError.duplicateIdentity }
+            }
+        }
+        for (key, candidate) in result { try validateNode(candidate, id: key, root: root, membership: membership) }
+        return result
     }
 
     /// Target/reference validation only; unrelated corruption requires validateAll, unlike the public adapter.
@@ -209,6 +244,7 @@ package enum GraphNativeIdentityPrototype {
         try GraphValueDecodingDiagnostics.checking {
             let (root, membership) = try anchors(context, graphID: id.graphID)
             guard let node = try checkedNode(context, id: id, root: root, membership: membership) else { return nil }
+            let endpoints = try references(context, node: node, id: id, root: root, membership: membership)
             let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: root) { entity in
                 guard let graph = entity.node.value(forKey: graphAttribute) as? String,
                       graph == id.graphID.rawValue.uuidString,
@@ -216,7 +252,7 @@ package enum GraphNativeIdentityPrototype {
                     throw GraphStoreError.unresolvedReference
                 }
                 let reference = GraphNodeID(graphID: id.graphID, rawValue: uuid)
-                guard let target = try checkedNode(context, id: reference, root: root, membership: membership),
+                guard let target = endpoints[reference],
                       target is Entity, target.sharesBackingObject(with: entity) else { throw GraphStoreError.unresolvedReference }
                 return reference
             }

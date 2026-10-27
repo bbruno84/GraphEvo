@@ -116,6 +116,37 @@ import Testing
         try close(container)
     }
 
+    @Test @MainActor func batchedActionReferencesPreserveEndpointsAndRejectPendingDuplicateOrMissingIdentity() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try await seed(root)
+        let database = try await GraphDatabase.open(at: fixture.source), graph = try await database.openGraph(fixture.a)
+        let ids = (0..<130).map { _ in graph.makeNodeID() }, actionID = graph.makeNodeID()
+        let expected = try GraphRecord(id: actionID, type: "wide", endpoints: .action(subjects: Set(ids), objects: Set(ids)), createdDate: Date(timeIntervalSince1970: 1_700_000_000))
+        try await graph.transaction { scope in
+            for id in ids { try scope.insert(GraphRecord(id: id, type: "endpoint")) }
+            try scope.insert(expected)
+        }
+        try await graph.close(); try await database.close()
+        let destination = try await convert(root, fixture: fixture, indexed: true), container = try open(destination, indexed: true)
+        try await container.performBackgroundTask { @Sendable context in
+            defer { context.rollback(); context.reset() }
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a); try context.save(); context.reset()
+            #expect(try GraphNativeIdentityPrototype.record(context, id: actionID) == expected)
+            let session = try GraphTypedStoreAdapter.Session(context, fixture.a, database: true)
+            let endpoint = try #require(session.nodes[ids[129]])
+            let otherAction = try #require(session.nodes[fixture.records[3].id])
+            try otherAction.setPrototypeIdentity(ids[129])
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: actionID) }
+            context.rollback()
+            try endpoint.setPrototypeIdentity(nil)
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: actionID) }
+            context.rollback()
+            #expect(try GraphNativeIdentityPrototype.record(context, id: actionID) == expected)
+            #expect(!context.hasChanges)
+        }
+        try close(container)
+    }
+
     @Test @MainActor func duplicateColumnsMissingColumnsForeignEndpointsAndGlobalValidationAreVisible() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let fixture = try await seed(root), destination = try await convert(root, fixture: fixture, indexed: true)
