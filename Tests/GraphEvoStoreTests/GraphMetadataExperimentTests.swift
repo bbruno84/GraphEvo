@@ -65,7 +65,7 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
         let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         context.persistentStoreCoordinator = coordinator
         let ids = [GraphID(), GraphID()]
-        try await context.perform {
+        try await context.perform { @Sendable in
             let facade = GraphTypedStoreAdapter.facade(context)
             for (store, id) in zip(context.persistentStoreCoordinator!.persistentStores, ids) {
                 let root = Entity(GraphTypedStoreAdapter.rootType, graph: facade)
@@ -131,7 +131,7 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
         let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         context.persistentStoreCoordinator = coordinator
         let ids = [GraphID(), GraphID()]
-        try await context.perform {
+        try await context.perform { @Sendable in
             let facade = GraphTypedStoreAdapter.facade(context)
             for (index, id) in ids.enumerated() {
                 let root = Entity(GraphTypedStoreAdapter.rootType, graph: facade)
