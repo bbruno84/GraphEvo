@@ -22,3 +22,18 @@ Report all one-use failures, pending intents and recovery separately. Never
 blindly replay a failed mutation, reset the CloudKit schema or inspect private
 native bookkeeping. Timing/RSS for this probe is descriptive device-stage cost,
 not the independent local Release benchmark or an offline/conflict guarantee.
+
+
+For autonomous continuation after the explicitly launched seed/identity stages,
+run `python3 Experiments/CostMatrixNativeProbe/run.py --run UUID --output
+/tmp/new-external-evidence`. It reserves each subsequent launch, transfers
+protected run-bound transports (including exact replacement metadata), polls
+bounded reports, and aborts without replay on any failure. The output directory
+must be new. A missing initial report is not authority to repeat a write; retain
+its launch logs and investigate. A separate verified read-only relaunch may
+resume observation without resubmitting a mutation.
+
+The final M03b build adds one-use `matrix-query-owner` / `matrix-query-peer`
+read-only stages on the retained completed fixture. They verify typed query,
+count and metadata projection under 32 KiB, empty A, exact retained B content
+on owner, and B absence on the other account. They do not replay the lifecycle.

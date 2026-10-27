@@ -4,7 +4,7 @@ import Foundation
 package struct GraphQueryPropertyPlan {
     private let definition: GraphQueryDefinition
     private let fullRecords: Bool
-    private let keys: Set<String>
+    package let referencedKeys: Set<String>
 
     package init(_ request: GraphQueryRequest) {
         definition = request.definition
@@ -29,12 +29,12 @@ package struct GraphQueryPropertyPlan {
             switch aggregate { case .sum(let key), .minimum(let key), .maximum(let key): needed.insert(key) }
         case .count, .traversal: fullRecords = false
         }
-        keys = needed
+        referencedKeys = needed
     }
 
     /// Nil means complete payloads for returned models. Other nodes retain every referenced key.
     package func properties(type: String, kind: GraphNodeKind) -> Set<String>? {
         if fullRecords && type == definition.type && kind == definition.kind { return nil }
-        return keys
+        return referencedKeys
     }
 }

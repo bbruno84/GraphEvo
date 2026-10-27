@@ -558,3 +558,11 @@ payload semantics; reject unsupported versions and truncated/extended bodies.
 No alpha downgrade support or automatic rewrite is implied. See the
 [matrix](docs/design/graphevo-2-experiment-matrix.md). Native synchronization,
 full content checksum checks and mandatory v1 migration remain binding.
+
+M03b also filters requested native property rows before reading their values,
+using Session-confined explicit-store batches with pending changes. Complete
+model-type records still use complete snapshots. Keep native transformer-error
+capture active across property fetch/value access and evaluation; a requested
+legacy decoder failure must not silently become an absent value. The unique
+native-transformer probe must distinguish skipped-body reads from requested
+failures. No row index may survive its query/scope.

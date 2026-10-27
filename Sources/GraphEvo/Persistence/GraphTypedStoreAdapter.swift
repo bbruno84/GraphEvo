@@ -57,27 +57,31 @@ package enum GraphTypedStoreAdapter {
                 }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
             },
             query: { context, graphID, request in
-                let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
-                try checkCancellation()
-                try GraphQueryValidation.request(request, graphID: graphID)
-                let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
-                let propertyPlan = GraphQueryPropertyPlan(request)
-                var remaining = request.budget.maximumPropertyBytes
-                var records: [GraphRecord] = []
-                for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+                try GraphValueDecodingDiagnostics.checking {
+                    let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
                     try checkCancellation()
-                    guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
-                    records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node))) { raw in
-                        try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
-                        for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
-                        for (key, value) in raw.properties where !key.hasPrefix(prefix) {
-                            try GraphQueryStoredCost.charge(key.utf8.count, remaining: &remaining)
-                            try GraphQueryStoredCost.charge(value, remaining: &remaining)
-                        }
-                    })
+                    try GraphQueryValidation.request(request, graphID: graphID)
+                    let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
+                    let propertyPlan = GraphQueryPropertyPlan(request)
+                    let partial = session.nodes.values.filter { propertyPlan.properties(type: $0.type, kind: session.kind($0)) != nil }
+                    let propertyRows = try GraphRuntimeMetadata(nodes: partial, keys: propertyPlan.referencedKeys, context: context, minimumPersistedOwners: 0)
+                    var remaining = request.budget.maximumPropertyBytes
+                    var records: [GraphRecord] = []
+                    for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+                        try checkCancellation()
+                        guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
+                        records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node)), propertyRows: propertyRows) { raw in
+                            try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
+                            for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
+                            for (key, value) in raw.properties where !key.hasPrefix(prefix) {
+                                try GraphQueryStoredCost.charge(key.utf8.count, remaining: &remaining)
+                                try GraphQueryStoredCost.charge(value, remaining: &remaining)
+                            }
+                        })
+                    }
+                    return try GraphQueryEvaluation(request: request, graphID: graphID, records: records, checkCancellation: checkCancellation)
+                        .execute(nativeCandidates: session.nativeCandidateCount, propertyBytesCharged: request.budget.maximumPropertyBytes - remaining)
                 }
-                return try GraphQueryEvaluation(request: request, graphID: graphID, records: records, checkCancellation: checkCancellation)
-                    .execute(nativeCandidates: session.nativeCandidateCount, propertyBytesCharged: request.budget.maximumPropertyBytes - remaining)
             }
         )
     }
@@ -383,8 +387,16 @@ package enum GraphTypedStoreAdapter {
             return id
         }
 
-        func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
-            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil, propertyKeys: propertyKeys, referenceID: referenceID)
+        func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, propertyRows: GraphRuntimeMetadata? = nil, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
+            let projected: [String: Any]? = propertyKeys.flatMap { keys in
+                propertyRows.map { rows in
+                    keys.reduce(into: [:]) { values, key in
+                        if let value = rows.value(for: node, key: key) { values[key] = value }
+                    }
+                }
+            }
+            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil,
+                propertyKeys: propertyKeys, projectedProperties: projected, referenceID: referenceID)
             try charging?(raw)
             var properties = raw.properties.filter { !$0.key.hasPrefix(prefix) }
             for key in try encodedKeys(node) where propertyKeys == nil || propertyKeys!.contains(key) {

@@ -146,3 +146,12 @@ A8 will reuse these descriptors for observation with explicit dependency
 invalidation and slow-consumer/cancellation semantics; this increment adds no
 watcher or processing-replay promise. V1 data migration remains mandatory, with
 query AND/string/null/numeric differences recorded for application adaptation.
+
+
+M03b filters native property rows by the complete dependency set before reading
+values, in explicit-store batches including pending changes. The lookup remains
+query/context scoped, uses no persistent cache, and preserves complete model
+snapshots. Transformer-error capture surrounds lookup and execution so requested
+malformed legacy values cannot become silently absent. This reduces native body
+faults as well as value-codec work; it is still not a hard memory/I/O bound or
+native indexed identity/query engine.
