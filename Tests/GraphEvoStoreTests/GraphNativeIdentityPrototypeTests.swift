@@ -1,0 +1,193 @@
+import CoreData
+import CryptoKit
+import Foundation
+import Testing
+@testable import GraphEvo
+
+@Suite(.timeLimit(.minutes(2))) struct GraphNativeIdentityPrototypeTests {
+    private struct Fixture: Sendable { let a: GraphID; let b: GraphID; let records: [GraphRecord]; let source: URL }
+    private func directory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("NativeIdentity-\(UUID())")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true); return url
+    }
+    private func seed(_ root: URL) async throws -> Fixture {
+        let source = root.appendingPathComponent("Source/Graph.sqlite")
+        let database = try await GraphDatabase.open(at: source), a = try await database.createGraph(), b = try await database.createGraph()
+        let first = a.makeNodeID(), second = a.makeNodeID(), edge = a.makeNodeID(), action = a.makeNodeID(), foreign = GraphNodeID(graphID: b.id, rawValue: first.rawValue)
+        let opaque = try GraphEncodedValue(codec: "future", version: 9, data: Data([0, 255]))
+        try await a.transaction { scope in
+            try scope.insert(GraphRecord(id: first, type: "item", properties: ["name": .string("original"), "nil": .null,
+                "opaque": .encoded(opaque), "bytes": .data(Data([0, 255])), "uuid": .uuid(UUID())], tags: ["tag"], groups: ["group"], createdDate: Date(timeIntervalSince1970: 1_700_000_000)))
+            try scope.insert(GraphRecord(id: second, type: "item"))
+            try scope.insert(GraphRecord(id: edge, type: "edge", endpoints: .relationship(subject: first, object: second)))
+            try scope.insert(GraphRecord(id: action, type: "action", endpoints: .action(subjects: [first], objects: [second])))
+        }
+        try await b.transaction { try $0.insert(GraphRecord(id: foreign, type: "foreign")) }
+        let input = root.appendingPathComponent("input.bin"); try Data(repeating: 173, count: 512).write(to: input)
+        let file = try await a.importAttachment(from: input, ownedBy: first)
+        let records = try await a.read { scope in try [first, second, edge, action, file.id].map { try #require(try scope.record(for: $0)) } }
+        try await a.close(); try await b.close(); try await database.close()
+        return Fixture(a: a.id, b: b.id, records: records, source: source)
+    }
+    private func convert(_ root: URL, fixture: Fixture, indexed: Bool) async throws -> URL {
+        let copy = root.appendingPathComponent("Copy")
+        try await GraphStoreBackup.copyClosedDirectory(from: fixture.source.deletingLastPathComponent(), to: copy)
+        let destination = root.appendingPathComponent("Candidate.sqlite")
+        try await Task.detached { try GraphNativeIdentityPrototype.migrateCopy(from: copy.appendingPathComponent("Graph.sqlite"), to: destination, indexed: indexed) }.value
+        return destination
+    }
+    private func open(_ url: URL, indexed: Bool) throws -> NSPersistentContainer {
+        GraphValueTransformer.register()
+        let container = NSPersistentContainer(name: "IdentityPrototype", managedObjectModel: GraphNativeIdentityPrototype.makeModel(indexed: indexed))
+        _ = try container.persistentStoreCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: url,
+            options: [NSMigratePersistentStoresAutomaticallyOption: false, NSInferMappingModelAutomaticallyOption: false])
+        return container
+    }
+    private func close(_ container: NSPersistentContainer) throws {
+        for store in container.persistentStoreCoordinator.persistentStores { try container.persistentStoreCoordinator.remove(store) }
+    }
+
+    @Test func defaultModelIsUnchangedAndNativeColumnsAreOptionalWithNoUniquenessConstraint() {
+        let hashes = Model.makeModel().entityVersionHashesByName
+        let prototype = GraphNativeIdentityPrototype.makeModel(indexed: true)
+        #expect(prototype.entityVersionHashesByName != hashes)
+        #expect(Model.makeModel().entityVersionHashesByName == hashes)
+        for name in [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName] {
+            let entity = prototype.entitiesByName[name]!
+            #expect(entity.attributesByName[GraphNativeIdentityPrototype.graphAttribute]?.isOptional == true)
+            #expect(entity.attributesByName[GraphNativeIdentityPrototype.nodeAttribute]?.isOptional == true)
+            #expect(entity.indexes.count == 1 && entity.uniquenessConstraints.isEmpty)
+        }
+    }
+
+    @Test(arguments: [false, true]) @MainActor func explicitConversionBackfillPreservesAllRecordsAndSource(indexed: Bool) async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try await seed(root), before = SHA256.hash(data: try Data(contentsOf: fixture.source))
+        let destination = try await convert(root, fixture: fixture, indexed: indexed)
+        #expect(SHA256.hash(data: try Data(contentsOf: fixture.source)) == before)
+        let container = try open(destination, indexed: indexed)
+        try await container.performBackgroundTask { @Sendable context in
+            defer { context.rollback(); context.reset() }
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: fixture.records[0].id) }
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
+            context.rollback()
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: fixture.records[0].id) }
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.b)
+            try context.save(); context.reset()
+            for expected in fixture.records { #expect(try GraphNativeIdentityPrototype.record(context, id: expected.id) == expected) }
+            #expect(try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.a) == 5)
+            #expect(try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.b) == 1)
+            #expect(try GraphNativeIdentityPrototype.record(context, id: GraphNodeID(graphID: fixture.b, rawValue: fixture.records[0].id.rawValue))?.type == "foreign")
+            #expect(try GraphNativeIdentityPrototype.record(context, id: GraphNodeID(graphID: fixture.a)) == nil)
+            #expect(!context.hasChanges)
+        }
+        try close(container)
+        let original = try await GraphDatabase.open(at: fixture.source), graph = try await original.openGraph(fixture.a)
+        #expect(try await graph.read { try $0.record(for: fixture.records[0].id) } == fixture.records[0])
+        try await graph.close(); try await original.close()
+        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: destination)
+        #expect(!Model.makeModel().isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata))
+    }
+
+    @Test @MainActor func pendingPatchesInsertsDeletesAndRollbackPreserveLocalViewAndUnknownFields() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try await seed(root), destination = try await convert(root, fixture: fixture, indexed: true)
+        let container = try open(destination, indexed: true)
+        try await container.performBackgroundTask { @Sendable context in
+            defer { context.rollback(); context.reset() }
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a); try context.save()
+            let original = fixture.records[0]
+            let patch = try GraphRecordPatch(id: original.id, properties: ["name": .set(.string("updated")), "added": .set(.null)])
+            #expect(try GraphNativeIdentityPrototype.patch(context, patch) == patch.applying(to: original))
+            #expect(try GraphNativeIdentityPrototype.record(context, id: original.id)?.properties["opaque"] == original.properties["opaque"])
+            let newID = GraphNodeID(graphID: fixture.a)
+            try GraphNativeIdentityPrototype.insert(context, GraphRecord(id: newID, type: "pending"))
+            let session = try GraphTypedStoreAdapter.Session(context, fixture.a, database: true)
+            let nativeID = try #require(session.nodes[newID]?.runtimeObjectID)
+            #expect(try GraphNativeIdentityPrototype.record(context, id: newID)?.id == newID)
+            #expect(session.nodes[newID]?.runtimeObjectID == nativeID)
+            try session.delete(newID)
+            #expect(try GraphNativeIdentityPrototype.record(context, id: newID) == nil)
+            context.rollback()
+            #expect(try GraphNativeIdentityPrototype.record(context, id: original.id) == original)
+            #expect(try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.a) == 5)
+        }
+        try close(container)
+    }
+
+    @Test @MainActor func duplicateColumnsMissingColumnsForeignEndpointsAndGlobalValidationAreVisible() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try await seed(root), destination = try await convert(root, fixture: fixture, indexed: true)
+        let container = try open(destination, indexed: true)
+        try await container.performBackgroundTask { @Sendable context in
+            defer { context.rollback(); context.reset() }
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.b); try context.save()
+            let owner = fixture.records[0].id, edgeID = fixture.records[2].id
+            let facade = GraphTypedStoreAdapter.facade(context)
+            let foreign = try #require(Search<Entity>(graph: facade).where(.type("foreign")).sync().first)
+            let edge = try #require(Search<Relationship>(graph: facade).where(.type("edge")).sync().first)
+            edge.object = foreign
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: edgeID) }
+            context.rollback()
+            let session = try GraphTypedStoreAdapter.Session(context, fixture.a, database: true)
+            let node = try #require(session.nodes[owner])
+            let action = try #require(session.nodes[fixture.records[3].id])
+            try action.setPrototypeIdentity(owner)
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: owner) }
+            context.rollback()
+            try node.setPrototypeIdentity(nil)
+            #expect(try GraphNativeIdentityPrototype.record(context, id: owner) == nil)
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.a) }
+            context.rollback()
+            node[dynamicMember: GraphTypedStoreAdapter.idKey] = UUID().uuidString
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: owner) }
+            // The file's missing owner or the mismatched column may be visited first.
+            #expect(throws: (any Error).self) { try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.a) }
+            context.rollback()
+            // Unrelated raw identity damage remains an explicit full-validation responsibility.
+            let other = try #require(GraphTypedStoreAdapter.Session(context, fixture.a, database: true).nodes[fixture.records[1].id])
+            other[dynamicMember: GraphTypedStoreAdapter.idKey] = owner.rawValue.uuidString
+            #expect(try GraphNativeIdentityPrototype.record(context, id: owner)?.id == owner)
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.a) }
+        }
+        try close(container)
+    }
+}
+
+extension GraphNativeIdentityPrototypeTests {
+    @Test func laboratoryAdapterRetainsRuntimeLeasesSerializedWritesAndRollback() async throws {
+        struct Abort: Error {}
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let database = try await GraphNativeIdentityPrototype.openLab(at: root.appendingPathComponent("Graph.sqlite"), indexed: true)
+        let graph = try await database.createGraph(), sibling = try await database.openGraph(graph.id), id = graph.makeNodeID()
+        try await graph.transaction { scope in
+            try scope.insert(GraphRecord(id: id, type: "live", properties: ["counter": .integer(0), "unknown": .string("retain")]))
+            #expect(try scope.record(for: id)?.id == id)
+        }
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    try await sibling.transaction { scope in
+                        guard let record = try scope.record(for: id), case .integer(let count) = record.properties["counter"] else { throw Abort() }
+                        _ = try scope.patch(GraphRecordPatch(id: id, properties: ["counter": .set(.integer(count + 1))]))
+                    }
+                }
+            }
+            try await group.waitForAll()
+        }
+        #expect(try await graph.read { try $0.record(for: id)?.properties["counter"] } == .integer(8))
+        await #expect(throws: Abort.self) {
+            try await graph.transaction { scope throws -> Void in
+                _ = try scope.patch(GraphRecordPatch(id: id, properties: ["unknown": .remove])); throw Abort()
+            }
+        }
+        #expect(try await graph.read { try $0.record(for: id)?.properties["unknown"] } == .string("retain"))
+        try await graph.close(); try await database.close()
+        #expect(try await sibling.read { try $0.record(for: id)?.id } == id)
+        await #expect(throws: (any Error).self) { try await GraphDatabase.open(at: root.appendingPathComponent("Graph.sqlite")) }
+        try await sibling.close()
+        await #expect(throws: GraphStoreError.self) { try await GraphDatabase.open(at: root.appendingPathComponent("Graph.sqlite")) }
+    }
+}

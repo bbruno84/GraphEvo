@@ -571,3 +571,17 @@ For database Sessions, route native owners by graphID before fetching any
 per-graph ID/format/staging metadata. Do not rely on deferred native transformer
 execution: older Core Data can transform fetched values eagerly. Preserve the
 full native candidate count while excluding foreign per-graph payload rows.
+
+
+## C02b local native identity laboratory
+
+The [C02b contract](docs/design/graphevo-2-native-identity-experiment.md) defines a
+package-only model/opener experiment. Never select it from default public opens,
+automatically migrate an incompatible file or activate a partial backfill. It
+uses normal runtime ownership/scopes but validates point targets/references;
+full graph integrity is explicit and separately timed. Missing columns/old
+writers/cloud imports remain integration gates, not proof of node absence.
+Protect the closed source directory and migrate only an owned disposable copy
+to a new destination. Native UUIDs come from archived logical IDs, never local
+URIs or CloudKit mappings. No uniqueness constraint or cloud acceptance is
+inferred from configured local indexes. Retain action fan-out costs and failures.
