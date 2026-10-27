@@ -93,7 +93,9 @@ no managed object/context reaches the consumer and no downstream callback runs
 under a persistence lock or mutation scope.
 
 A native account-change hint is sticky for the lifetime of that runtime owner;
-ordinary save/manual refresh hints cannot overwrite it. Query observation emits
+ordinary save/manual refresh hints cannot mask it. Consumption rechecks the
+current account guard, because an ordinary publisher may already have captured
+a pre-change snapshot before delivering outside its lock. Query observation emits
 `GraphObservationError.accountChanged` and ends rather than starting another
 cached query. The host must stop displaying old state and re-establish its
 account/store access policy. Already in-flight/buffered values are not revoked.
@@ -129,7 +131,9 @@ operators/schedulers such as receive(on:) may introduce their own queues outside
 this allowance; consumers must select appropriate buffering/throttling there.
 
 The adapter serializes value/completion delivery on a private queue and never
-invokes downstream while holding its state lock. It accepts added/reentrant
+invokes downstream while holding its state lock. Subscriber and pending-value
+release also occurs outside that lock, including cancellation and completion,
+because application deinitializers can synchronously reenter the subscription. It accepts added/reentrant
 demand and cancellation; a callback already admitted may settle after concurrent
 cancellation. A finishing stream may discard a pending value without demand to
 deliver completion. Startup/descriptor errors terminate with Combine failure;

@@ -231,3 +231,8 @@ related-query observers transitioned empty → pinned parent → empty without
 polling/resubscription; B's exact attachment control stayed unchanged. This
 closes the related dependency gap for that candidate/scenario, not the entire
 V07 replay/background/account matrix. Full local tests: 462; targeted TSan: 12.
+
+A8 review adds regressions for an account hint masked by a delayed ordinary
+publication and synchronous subscriber-deinit cancellation. See the result's
+review follow-up; these local concurrency checks do not extend hardware
+account-switch/replay coverage.

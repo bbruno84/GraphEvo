@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import GraphEvoRuntime
 
@@ -34,6 +35,20 @@ import Testing
         var second = next.stream.makeAsyncIterator()
         #expect(await second.next()?.reason == .accountChange)
         hub.finish()
+    }
+
+    @Test func stalePublicationCannotMaskAnAccountChangeAtConsumption() async throws {
+        let accountChanged = OSAllocatedUnfairLock(initialState: false)
+        let raw = AsyncStream<StoreInvalidation>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let sequence = StoreInvalidationSequence(raw: raw.stream, accountChanged: { accountChanged.withLock { $0 } })
+        // Reproduce publication A taking its ordinary-hint snapshot before B changes account,
+        // then yielding A after B's account hint. The raw newest buffer now holds the stale hint.
+        accountChanged.withLock { $0 = true }
+        raw.continuation.yield(StoreInvalidation(reason: .accountChange))
+        raw.continuation.yield(StoreInvalidation(reason: .contextSave))
+        var iterator = sequence.makeAsyncIterator()
+        #expect(await iterator.next()?.reason == .accountChange)
+        raw.continuation.finish()
     }
 
     @Test func consumerCancellationRemovesItsRegistration() async throws {

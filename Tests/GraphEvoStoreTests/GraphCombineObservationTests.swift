@@ -32,6 +32,33 @@ private final class DemandSubscriber<Value: Sendable>: Subscriber, @unchecked Se
     var received: Int { state.withLock { $0.received } }
 }
 
+/// Retain the upstream independently so subscriber deinit can synchronously cancel it again.
+private final class ReentrantSubscription: Sendable {
+    private struct Captured: @unchecked Sendable { let value: any Subscription }
+    private let state = OSAllocatedUnfairLock<Captured?>(initialState: nil)
+    func set(_ subscription: any Subscription) {
+        let captured = Captured(value: subscription)
+        state.withLock { $0 = captured }
+    }
+    func cancel() {
+        let captured = state.withLock { $0 }
+        captured?.value.cancel()
+    }
+}
+private final class DeinitCancellingSubscriber: Subscriber {
+    typealias Input = GraphQueryState<ObservedItem>
+    typealias Failure = any Error
+    private let upstream: ReentrantSubscription
+    private let didDeinit: @Sendable () -> Void
+    init(upstream: ReentrantSubscription, didDeinit: @escaping @Sendable () -> Void) {
+        self.upstream = upstream; self.didDeinit = didDeinit
+    }
+    func receive(subscription: any Subscription) { upstream.set(subscription) }
+    func receive(_ input: Input) -> Subscribers.Demand { .none }
+    func receive(completion: Subscribers.Completion<any Error>) {}
+    deinit { upstream.cancel(); didDeinit() }
+}
+
 @Suite(.timeLimit(.minutes(1))) struct GraphCombineObservationTests {
     @Test func demandStartsColdObservationAndCancellationDoesNotCloseTheGraph() async throws {
         let graph = try await GraphStore.inMemory(), descriptor = try observationQuery()
@@ -71,6 +98,18 @@ private final class DemandSubscriber<Value: Sendable>: Subscriber, @unchecked Se
         var completed = second.completions.stream.makeAsyncIterator()
         #expect(await completed.next() == true)
         second.cancel()
+    }
+
+    @Test func cancellationReleasesSubscriberOutsideTheLockAllowingReentrantDeinit() async throws {
+        let graph = try await GraphStore.inMemory(), upstream = ReentrantSubscription()
+        let released = OSAllocatedUnfairLock(initialState: false)
+        // Only the adapter retains this temporary subscriber after the handshake.
+        graph.publisher(for: try observationQuery()).subscribe(DeinitCancellingSubscriber(upstream: upstream) {
+            released.withLock { $0 = true }
+        })
+        upstream.cancel()
+        #expect(released.withLock { $0 })
+        try await graph.close()
     }
 
     @Test func invalidDescriptorTerminatesPublisherWithFailure() async throws {

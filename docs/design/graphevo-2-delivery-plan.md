@@ -35,6 +35,16 @@ Each alpha is a coherent usable increment with its model/API revision and
 known limits recorded. Alpha stage numbers below are planning milestones,
 not a promise of one prerelease tag per stage. Remain alpha through stage 8.
 
+## Integration checkpoint — 2026-10-27
+
+| Area | Current status |
+|---|---|
+| A1–A7 | Reviewed and merged into `codex/graphevo-2` through PRs #70–#76: runtime, async scopes, models/typed CRUD, graph boundaries, user sharing, files and queries |
+| A8 | PR #77 contains async current state, Combine and live rescan hints, with actual cross-account dependency/deletion evidence; review adds two concurrency fixes and regressions. It remains unmerged pending integration |
+| Consolidation | Open: schema/API and cost review, stable processing choice, account/conflict/recovery envelope, platform/process scope and alpha-store policy |
+| Migration | Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
+| Beta | Not declared. Eight implementation candidates do not alone satisfy the entry gate below |
+
 ## Alpha sequence
 
 The first [A1 local ownership increment](graphevo-2-store-runtime.md) now lives

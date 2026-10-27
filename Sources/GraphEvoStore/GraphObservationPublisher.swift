@@ -43,7 +43,7 @@ private final class GraphObservationSubscription<Value: Sendable>: Subscription,
     }
     private enum Delivery: Sendable {
         case value(GraphObservationDownstream<Value>, Value)
-        case completion(GraphObservationDownstream<Value>, Subscribers.Completion<any Error>)
+        case completion(GraphObservationDownstream<Value>, Subscribers.Completion<any Error>, retiring: Value?)
         case none
     }
     private let state: OSAllocatedUnfairLock<State>
@@ -90,11 +90,24 @@ private final class GraphObservationSubscription<Value: Sendable>: Subscription,
         if cancelled { worker.cancel() }
     }
     private func offer(_ value: Value) {
-        state.withLock { if $0.downstream != nil { $0.pending = value } }
+        let previous = state.withLock { state -> Value? in
+            guard state.downstream != nil else { return nil }
+            let previous = state.pending
+            state.pending = value
+            return previous
+        }
+        // Releasing arbitrary downstream values can run application deinitializers.
+        withExtendedLifetime(previous) {}
         schedule()
     }
     private func complete(_ completion: Subscribers.Completion<any Error>) {
-        state.withLock { if $0.downstream != nil { $0.completion = completion } }
+        let previous = state.withLock { state -> Subscribers.Completion<any Error>? in
+            guard state.downstream != nil else { return nil }
+            let previous = state.completion
+            state.completion = completion
+            return previous
+        }
+        withExtendedLifetime(previous) {}
         schedule()
     }
     private func schedule() {
@@ -114,9 +127,10 @@ private final class GraphObservationSubscription<Value: Sendable>: Subscription,
                     return .value(downstream, value)
                 }
                 if let completion = state.completion {
+                    let retired = state.pending
                     state.downstream = nil; state.pending = nil; state.completion = nil; state.worker = nil
                     state.scheduled = false
-                    return .completion(downstream, completion)
+                    return .completion(downstream, completion, retiring: retired)
                 }
                 state.scheduled = false; return .none
             }
@@ -124,18 +138,22 @@ private final class GraphObservationSubscription<Value: Sendable>: Subscription,
             case .value(let downstream, let value):
                 let extra = downstream.receive(value)
                 if extra > .none { request(extra) }
-            case .completion(let downstream, let completion): downstream.receive(completion: completion); return
+            case .completion(let downstream, let completion, let retired):
+                withExtendedLifetime(retired) { downstream.receive(completion: completion) }
+                return
             case .none: return
             }
         }
     }
     func cancel() {
-        let worker = state.withLock { state in
-            let worker = state.worker
+        let retired = state.withLock { state in
+            let retired = state
             state.worker = nil; state.downstream = nil; state.pending = nil; state.completion = nil
-            return worker
+            return retired
         }
-        worker?.cancel()
+        retired.worker?.cancel()
+        // Subscribers and queued values may reenter cancel/request from deinit.
+        withExtendedLifetime(retired) {}
     }
     deinit { cancel() }
 }

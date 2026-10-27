@@ -79,3 +79,29 @@ and transient refresh failures do not certify complete import. Multiple observer
 currently repeat bounded full-query evaluation; representative costs, downstream
 Combine scheduler buffering and the beta-entry consolidation remain in the
 [post-alpha checklist](../graphevo-2-post-alpha-checklist.md).
+
+## Review follow-up
+
+Review of the initial A8 head identified two concurrency defects beyond the
+retained foreground device scenarios:
+
+- An ordinary publication/refresh can capture accountChanged = false under the
+  hub lock, pause, and deliver after an account-change hint. Newest-one buffering
+  could then hide the account hint. The package sequence now checks the current
+  sticky guard at consumption; the regression injects this exact stale-buffer
+  ordering without requiring a real account change.
+- Combine cancellation released the last subscriber reference under its state
+  lock. Subscriber deinit can synchronously cancel/request again, deadlocking
+  that lock. Cancellation now retires state outside the lock; replacement and
+  completion likewise retire pending values outside it. A temporary subscriber
+  that cancels again from deinit exercises the regression.
+
+These corrections do not change the public API, model or processing scope.
+The original physical run did not test these windows and was not replayed.
+Review verification is recorded separately in the PR; original 462/12 totals
+above describe the initial implementation evidence.
+
+The corrected review source passes 464 macOS tests (322 legacy, 60 runtime,
+61 store, 21 model) and 14 targeted Thread Sanitizer tests without a reported
+race. The prior physical evidence remains scoped to its original working build;
+no new account-switch or destructive-stage hardware result is claimed.
