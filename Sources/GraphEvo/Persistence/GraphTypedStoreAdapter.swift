@@ -6,6 +6,8 @@ import GraphEvoStore
 package enum GraphTypedStoreAdapter {
     static let prefix = "__graphevo_v2."
     static let rootType = prefix + "graph"
+    static let membersType = prefix + "members"
+    static let databaseVersion = "a4.1"
     static let graphKey = prefix + "graphID"
     static let idKey = prefix + "nodeID"
     static let legacyKey = prefix + "legacyID"
@@ -13,20 +15,102 @@ package enum GraphTypedStoreAdapter {
     static let layoutKey = prefix + "layout"
     static let layoutVersion = "a3.1"
 
-    package static let current = GraphStoreAdapter(
-        initialize: { try initialize($0, backupRoot: $1) },
-        fetch: { context, graphID, id in try Session(context, graphID).record(id) },
-        fetchAll: { context, graphID, type, kind in
-            let session = try Session(context, graphID)
-            return try session.nodes.compactMap { id, node -> GraphRecord? in
-                guard node.type == type, session.kind(node) == kind else { return nil }
-                return try session.snapshot(node, id: id)
-            }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
-        },
-        insert: { context, graphID, record in try Session(context, graphID).insert(record) },
-        patch: { context, graphID, patch in try Session(context, graphID).patch(patch) },
-        delete: { context, graphID, id in try Session(context, graphID).delete(id) }
+    package static let current = makeAdapter(database: false)
+    package static let database = GraphDatabaseAdapter(
+        graph: makeAdapter(database: true),
+        catalog: { try catalog($0) },
+        create: { try createGraph($0, id: $1) },
+        upgrade: { try upgrade($0, backupRoot: $1) }
     )
+
+    private static func makeAdapter(database: Bool) -> GraphStoreAdapter {
+        GraphStoreAdapter(
+            initialize: { context, backup in
+                guard !database else { throw GraphStoreError.unsupportedLayout }
+                return try initialize(context, backupRoot: backup)
+            },
+            fetch: { context, graphID, id in try Session(context, graphID, database: database).record(id) },
+            fetchAll: { context, graphID, type, kind in
+                let session = try Session(context, graphID, database: database)
+                return try session.nodes.compactMap { id, node -> GraphRecord? in
+                    guard node.type == type, session.kind(node) == kind else { return nil }
+                    return try session.snapshot(node, id: id)
+                }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
+            },
+            insert: { context, graphID, record in try Session(context, graphID, database: database).insert(record) },
+            patch: { context, graphID, patch in try Session(context, graphID, database: database).patch(patch) },
+            delete: { context, graphID, id in try Session(context, graphID, database: database).delete(id) }
+        )
+    }
+
+    private static func catalog(_ context: NSManagedObjectContext) throws -> [GraphID] {
+        try GraphValueDecodingDiagnostics.checking {
+            let all = try allNodes(facade(context))
+            if all.isEmpty { return [] }
+            let roots = all.filter { $0.type == rootType }
+            guard !roots.isEmpty else { throw GraphStoreError.legacyStoreRequiresAdoption }
+            var ids = Set<GraphID>()
+            for root in roots {
+                guard root is Entity, root[dynamicMember: layoutKey] as? String == databaseVersion,
+                      let text = root[dynamicMember: graphKey] as? String, let uuid = UUID(uuidString: text) else {
+                    throw GraphStoreError.unsupportedLayout
+                }
+                guard ids.insert(GraphID(rawValue: uuid)).inserted else { throw GraphStoreError.duplicateIdentity }
+            }
+            return ids.sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
+        }
+    }
+
+    /// Validates the selected local graph before requesting its native share boundary.
+    package static func mirroringRoot(_ context: NSManagedObjectContext, id: GraphID) throws -> Entity {
+        let session = try Session(context, id, database: true)
+        for (nodeID, node) in session.nodes { _ = try session.snapshot(node, id: nodeID) }
+        guard let root = session.root else { throw GraphStoreError.corruptIdentity }
+        return root
+    }
+
+    package static func nativeMembers(_ context: NSManagedObjectContext, id: GraphID) throws -> [NSManagedObjectID] {
+        let session = try Session(context, id, database: true)
+        guard let root = session.root, let membership = session.membership else { throw GraphStoreError.corruptIdentity }
+        for (nodeID, node) in session.nodes { _ = try session.snapshot(node, id: nodeID) }
+        return ([root, membership] + Array(session.nodes.values)).flatMap(\.runtimeOwnedObjectIDs)
+    }
+
+    private static func createGraph(_ context: NSManagedObjectContext, id: GraphID) throws {
+        guard !(try catalog(context)).contains(id) else { throw GraphStoreError.duplicateIdentity }
+        let graph = facade(context)
+        let root = Entity(rootType, graph: graph)
+        root[dynamicMember: graphKey] = id.rawValue.uuidString
+        root[dynamicMember: layoutKey] = databaseVersion
+        let membership = Action(membersType, graph: graph)
+        membership[dynamicMember: graphKey] = id.rawValue.uuidString
+        membership.add(subjects: root)
+    }
+
+    private static func upgrade(_ context: NSManagedObjectContext, backupRoot: URL) throws -> [GraphID] {
+        let graph = facade(context), all = try allNodes(graph)
+        if all.filter({ $0.type == rootType }).allSatisfy({ $0[dynamicMember: layoutKey] as? String == databaseVersion }),
+           !all.isEmpty { return try catalog(context) }
+        guard let root = all.first(where: { $0.type == rootType }) as? Entity,
+              let text = root[dynamicMember: graphKey] as? String, let uuid = UUID(uuidString: text),
+              let url = context.persistentStoreCoordinator?.persistentStores.first?.url else {
+            throw GraphStoreError.legacyStoreRequiresAdoption
+        }
+        let id = GraphID(rawValue: uuid), session = try Session(context, GraphID(rawValue: uuid))
+        _ = try MigrationBackupManager.backupStore(at: url, migrationID: "GraphEvo2-A3-to-A4", rootOverride: backupRoot)
+        let membership = Action(membersType, graph: graph)
+        membership[dynamicMember: graphKey] = text
+        membership.add(subjects: root)
+        for node in session.nodes.values {
+            if let entity = node as? Entity { membership.add(objects: entity) }
+            else if let action = node as? Action { action.add(subjects: root) }
+            else if let relationship = node as? Relationship, relationship.subject == nil, relationship.object == nil {
+                relationship.subject = root
+            }
+        }
+        root[dynamicMember: layoutKey] = databaseVersion
+        return [id]
+    }
 
     private static func facade(_ context: NSManagedObjectContext) -> Graph {
         let graph = Graph(transactionContext: context, configuration: GraphStoreConfiguration())
@@ -107,17 +191,28 @@ package enum GraphTypedStoreAdapter {
         let graph: Graph
         let graphID: GraphID
         var nodes: [GraphNodeID: Node] = [:]
+        let database: Bool
+        var root: Entity?
+        var membership: Action?
 
-        init(_ context: NSManagedObjectContext, _ graphID: GraphID) throws {
+        init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false) throws {
             graph = facade(context)
             self.graphID = graphID
+            self.database = database
             try GraphValueDecodingDiagnostics.checking {
                 let all = try allNodes(graph)
-                let roots = all.filter { $0.type == rootType }
-                guard roots.count == 1, roots[0] is Entity,
-                      roots[0][dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
-                      roots[0][dynamicMember: layoutKey] as? String == layoutVersion else { throw GraphStoreError.corruptIdentity }
-                for node in all where node.type != rootType {
+                let roots = all.filter { $0.type == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
+                guard roots.count == 1, let selected = roots[0] as? Entity,
+                      selected[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
+                      selected[dynamicMember: layoutKey] as? String == (database ? databaseVersion : layoutVersion) else { throw GraphStoreError.corruptIdentity }
+                root = selected
+                if database {
+                    let candidates = all.filter { $0.type == membersType && $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString }
+                    guard candidates.count == 1, let action = candidates[0] as? Action else { throw GraphStoreError.corruptIdentity }
+                    membership = action
+                }
+                for node in all where node.type != rootType && (!database || node.type != membersType) {
+                    if database, node[dynamicMember: graphKey] as? String != graphID.rawValue.uuidString { continue }
                     guard !node.type.hasPrefix(prefix),
                           node[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
                           let text = node[dynamicMember: idKey] as? String, let uuid = UUID(uuidString: text) else {
@@ -126,6 +221,23 @@ package enum GraphTypedStoreAdapter {
                     let id = GraphNodeID(graphID: graphID, rawValue: uuid)
                     _ = try encodedKeys(node)
                     guard nodes.updateValue(node, forKey: id) == nil else { throw GraphStoreError.duplicateIdentity }
+                }
+                if database { try validateMembership() }
+            }
+        }
+
+        private func validateMembership() throws {
+            guard let root, let membership, membership.subjects.count == 1,
+                  membership.subjects[0].sharesBackingObject(with: root) else { throw GraphStoreError.corruptIdentity }
+            let expected = Set(nodes.filter { $0.value is Entity }.map(\.key))
+            guard Set(try membership.objects.map(referenceID)) == expected else { throw GraphStoreError.corruptIdentity }
+            for node in nodes.values {
+                if let action = node as? Action {
+                    guard action.subjects.contains(where: { $0.sharesBackingObject(with: root) }) else { throw GraphStoreError.corruptIdentity }
+                } else if let edge = node as? Relationship {
+                    if edge.subject?.sharesBackingObject(with: root) == true {
+                        guard edge.object == nil else { throw GraphStoreError.corruptIdentity }
+                    } else if edge.subject == nil && edge.object == nil { throw GraphStoreError.corruptIdentity }
                 }
             }
         }
@@ -151,7 +263,7 @@ package enum GraphTypedStoreAdapter {
         }
 
         func snapshot(_ node: Node, id: GraphNodeID) throws -> GraphRecord {
-            let raw = try GraphRecordMapper.snapshot(node, id: id, referenceID: referenceID)
+            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil, referenceID: referenceID)
             var properties = raw.properties.filter { !$0.key.hasPrefix(prefix) }
             for key in try encodedKeys(node) {
                 guard let value = properties[key], case .data(let data) = value else { throw GraphStoreError.corruptIdentity }
@@ -194,12 +306,12 @@ package enum GraphTypedStoreAdapter {
 
         func setEndpoints(_ node: Node, subjects: [Entity], objects: [Entity]) {
             if let relationship = node as? Relationship {
-                relationship.subject = subjects.first
+                relationship.subject = subjects.first ?? (database && objects.isEmpty ? root : nil)
                 relationship.object = objects.first
             } else if let action = node as? Action {
                 action.remove(subjects: action.subjects)
                 action.remove(objects: action.objects)
-                action.add(subjects: subjects)
+                action.add(subjects: subjects + (database ? root.map { [$0] } ?? [] : []))
                 action.add(objects: objects)
             }
         }
@@ -216,6 +328,7 @@ package enum GraphTypedStoreAdapter {
             case .action: node = Action(record.type, graph: graph)
             }
             stamp(node, id: record.id)
+            if database, let entity = node as? Entity { membership?.add(objects: entity) }
             node[dynamicMember: formatsKey] = values.keys.sorted()
             for (key, value) in values { node[dynamicMember: key] = value }
             node.add(tags: Array(record.tags))

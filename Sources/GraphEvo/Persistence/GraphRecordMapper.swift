@@ -5,17 +5,23 @@ import Foundation
 /// Identity mapping is supplied explicitly; this does not derive durable IDs from local URIs.
 package enum GraphRecordMapper {
     package static func snapshot(
-        _ node: Node, id: GraphNodeID,
+        _ node: Node, id: GraphNodeID, excludingRoot root: Entity? = nil,
         referenceID: (Entity) throws -> GraphNodeID
     ) throws -> GraphRecord {
         try GraphValueDecodingDiagnostics.checking {
             let endpoints: GraphEndpoints
             switch node {
             case let relationship as Relationship:
-                endpoints = .relationship(subject: try relationship.subject.map(referenceID),
+                let subject = relationship.subject.flatMap { candidate in
+                    root.map { candidate.sharesBackingObject(with: $0) } == true ? nil : candidate
+                }
+                endpoints = .relationship(subject: try subject.map(referenceID),
                                           object: try relationship.object.map(referenceID))
             case let action as Action:
-                endpoints = .action(subjects: Set(try action.subjects.map(referenceID)),
+                let subjects = action.subjects.filter { candidate in
+                    root.map { candidate.sharesBackingObject(with: $0) } != true
+                }
+                endpoints = .action(subjects: Set(try subjects.map(referenceID)),
                                     objects: Set(try action.objects.map(referenceID)))
             case _ as Entity:
                 endpoints = .entity

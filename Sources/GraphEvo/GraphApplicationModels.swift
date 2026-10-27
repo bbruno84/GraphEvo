@@ -1,4 +1,4 @@
-import GraphEvoModel
+@_exported public import GraphEvoModel
 
 // The public product remains GraphEvo; model contracts are compiled in Swift 6.
 public typealias GraphID = GraphEvoModel.GraphID

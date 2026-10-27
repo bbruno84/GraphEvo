@@ -11,6 +11,7 @@ public enum GraphStoreError: Error {
     case duplicateIdentity
     case corruptIdentity
     case missingNode
+    case missingGraph
     case unresolvedReference
     case legacyStoreRequiresAdoption
     case unsupportedLayout
@@ -58,6 +59,10 @@ public actor GraphStore {
 
     private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) {
         self.id = id; self.handle = handle; self.adapter = adapter
+    }
+
+    package static func attached(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) -> GraphStore {
+        GraphStore(id: id, handle: handle, adapter: adapter)
     }
 
     package static func open(configuration: StoreConfiguration, schema: StoreSchema, adapter: GraphStoreAdapter,
@@ -124,7 +129,7 @@ public actor GraphStore {
 
     public func delete(_ id: GraphNodeID) async throws { try await transaction { try $0.delete(id) } }
 
-    private static func translate(_ error: any Error) -> any Error {
+    package static func translate(_ error: any Error) -> any Error {
         guard let runtime = error as? StoreRuntimeError else { return error }
         switch runtime {
         case .closedHandle: return GraphStoreError.closed
@@ -143,6 +148,7 @@ extension GraphStoreError: LocalizedError {
         case .foreignGraph: return "The node belongs to another graph."
         case .duplicateIdentity: return "The graph contains a duplicate logical node identity."
         case .corruptIdentity: return "The graph's persisted identity metadata is invalid."
+        case .missingGraph: return "The requested logical graph is not present in the local catalog."
         case .missingNode: return "The requested graph node does not exist."
         case .unresolvedReference: return "A graph endpoint does not resolve to an entity in this graph."
         case .legacyStoreRequiresAdoption: return "The local v1 store requires explicit adoption with a backup."

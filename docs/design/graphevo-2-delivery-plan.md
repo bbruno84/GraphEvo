@@ -48,8 +48,8 @@ this progress does not mark the entire alpha stack or migration gate complete.
 | A1 — resource ownership and lifecycle | Build the new runtime, store identity/registry, awaited open/close and private context ownership, using the current schema as first candidate and Swift 6 from the outset | Two compatible handles share resources safely, independent resources remain independent, handle release does not invalidate another handle, and shutdown/reopen work | V03, V08; S4 |
 | A2 — async operations and transactions | Complete safe value reads, isolated mutation scopes, serialized writes, errors and cancellation on A1 | A non-UI Swift 6 consumer reads/writes without context escape; rollback, cancellation and admitted-work shutdown have tested outcomes | V03; S4–S5 |
 | A3 — application models | Implement protocol-based typed mapping for Entity, Relationship and Action, identity/references, tags/groups and explicit edits | A small independent consumer creates, reads, edits and deletes a typed graph without dynamic-member access; decoding and scope errors are visible | V04, V03; S3, S6 |
-| A4 — graph separation and mirroring | Apply the candidate membership model to the new runtime, private/shared topology and personal graph share boundaries; revise schema only where required | Two personal graphs retain separate cloud boundaries on an independent replica, including detail rows and mutations; local readiness/import integrity stay distinct | V01, V02.12, V03.8; S3, S7 |
-| A5 — user sharing | Add invitation/acceptance, owner/participant writes, permissions, leave/revocation and recovery on A4 | Different-account devices recover and mutate one complete graph without leaking the control graph; partial native operations are diagnosed/recoverable | V02; S5, S7 |
+| A4 — graph separation and mirroring | Apply the candidate membership model to the new runtime and owner-private personal graph share boundaries; introduce the shared-store pair with A5 participant routing; revise schema only where required | Two personal graphs retain separate cloud boundaries on an independent replica, including detail rows and mutations; local readiness/import integrity stay distinct | V01, V02.12, V03.8; S3, S7 |
+| A5 — user sharing | Add private/shared resource ownership and routing, invitation/acceptance, owner/participant writes, permissions, leave/revocation and recovery on A4 | Different-account devices recover and mutate one complete graph without leaking the control graph; partial native operations are diagnosed/recoverable | V02; S5, S7 |
 | A6 — files | Implement attachment ownership, metadata, import/read/replace/delete/export and whole-content backup with A4/A5 | Exact binary lifecycle and cross-account recovery with a measured memory/size envelope; no internal file paths exposed | V05; S8 |
 | A7 — queries | Build typed query composition, related-node filters, count/projections, deterministic ordering and selected pagination/aggregations | Capability/cost matrix and representative queries with explicit unsupported cases and bounded traversal | V06; S9 |
 | A8 — observation | Compare/implement one-shot results, observed state and processing needs on A7 and real mirroring | Correct dependency invalidation, local/remote refresh, cancellation, slow-consumer behavior and an explicit live/replay contract; then reconcile schema/API and meet the beta gate | V07; S10–S12 |
@@ -84,6 +84,14 @@ pre-edit backup and retained old-ID mapping. A standalone typed SQLite consumer
 and main-actor UI-state example exercise the public path. Local functionality is
 implemented; replica identity, complete legacy codec/source conversion, migration
 cutover and cloud membership still require later stages and beta validation.
+
+The [A4 owner-private implementation](graphevo-2-graph-separation.md) adds a
+multi-graph catalog, hidden native membership using the current schema, explicit
+backed-up a3.1→a4.1 local upgrade and native owner-only share preparation/mapping
+inspection. The shared-store resource pair is staged with A5 participant routing;
+personal graph boundaries require only the private resource. This does not defer
+user sharing or weaken its exit. Keep the [hardware evidence](results/a4-native-membership-2026-10-27.md)
+separate from local regression tests and from native partial-operation recovery.
 
 ## Migration throughout alpha
 

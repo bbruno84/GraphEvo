@@ -885,10 +885,11 @@ available for v1 stores. See the
   `unexpectedType`, `unexpectedKind`, `identityMismatch`, `crossGraphReference`,
   `conflictingPatch`, `unsupportedLegacyValue(String)`; LocalizedError.
 
-These detached values do not establish persistent membership, resolve endpoint
-existence, run codecs or commit edits. Public v2 scopes, durable ID persistence,
-legacy translation and null/codec storage remain incomplete. Never apply a stale
-encoded model as a whole-record replacement that drops unknown properties.
+These detached values alone do not establish persistent membership, resolve
+endpoint existence or commit edits. The typed persistence scopes below supply
+identity, reference checks and value envelopes. Complete legacy translation and
+cloud cutover remain unfinished. Never apply a stale encoded model as a
+whole-record replacement that drops unknown properties.
 
 
 ## GraphEvo 2 typed local persistence
@@ -956,7 +957,7 @@ It does not perform cloud cutover, convert every legacy codec or migrate an
 incompatible native model.
 
 `GraphStoreError: Error, LocalizedError` distinguishes `closed`, `ownershipConflict`, `expiredScope`,
-`foreignGraph`, `duplicateIdentity`, `corruptIdentity`, `missingNode`,
+`foreignGraph`, `duplicateIdentity`, `corruptIdentity`, `missingNode`, `missingGraph`,
 `unresolvedReference`, `legacyStoreRequiresAdoption`, `unsupportedLayout`,
 `reservedName`, and `persistence(underlying: Error)`. Model errors and caller body
 errors retain their own types. Cancellation retains the A2 pre/post-save contract.
@@ -965,3 +966,50 @@ The legacy `GraphStoreOpeningError` also adds `runtimeOwnershipConflict(URL)`
 and `requiresV2Runtime(URL)`: legacy readiness fails when a typed owner is active
 or an adopted typed-layout store requires the new API. Retained native contexts
 retain legacy ownership; dropping a facade alone is not proof of store closure.
+
+## V2 alpha graph catalog and personal mirroring
+
+`GraphDatabase` is a public actor exposed through `import GraphEvo`. Its factories
+and operations are:
+
+```swift
+static func open(at url: URL) async throws -> GraphDatabase
+static func inMemory() async throws -> GraphDatabase
+static func upgradeLocalA3Store(at url: URL, backupRoot: URL) async throws -> GraphDatabase
+static func openMirrored(at url: URL, containerIdentifier: String) async throws -> GraphDatabase
+func graphIDs() async throws -> [GraphID]
+func createGraph() async throws -> GraphStore
+func openGraph(_ id: GraphID) async throws -> GraphStore
+func close() async throws
+func prepareMirroring(for id: GraphID) async throws -> GraphMirrorBoundary
+func inspectMirroring(for id: GraphID) async throws -> GraphMirrorMembership
+```
+
+Each graph has its own persisted identity and independent lease. The local
+catalog uses a4.1; standalone A3 factories remain a3.1. Upgrade is explicit,
+backed up and preserves application IDs. `GraphStoreError.missingGraph` means
+that the requested graph is not in the current local catalog. Closed/configuration
+errors use the same public translation as `GraphStore`.
+
+The mirrored factory opens an owner-private native resource with no local
+fallback. Share preparation sends no invitation and requires an owner-only
+share. `GraphMirrorBoundary: Sendable, Equatable` contains read-only
+`graphID: GraphID`, `zoneName: String`, `shareRecordName: String`.
+`GraphMirrorMembership: Sendable, Equatable` contains read-only `graphID`,
+`boundary: GraphMirrorBoundary?`, `nativeObjectCount: Int`,
+`pendingMappingCount: Int`, `unexpectedZoneCount: Int`, including owned native
+detail rows. Inspection does not request export. A missing boundary or mapping
+is pending, not proof of absence. Neither result certifies remote graph recovery.
+
+`GraphMirroringError: Error` distinguishes `localDatabase`,
+`preparationPending`, `invalidOwnerOnlyShare`, and `missingNativeResponse`.
+Native framework errors retain their type. A durable request with unavailable
+share metadata does not retry creation; ambiguous requests need a later recovery
+path. Local opening/catalog presence do not guarantee a complete imported graph.
+See the [A4 guide](../design/graphevo-2-graph-separation.md) for membership,
+cancellation, integrity and the staged private/shared topology.
+
+GraphEvo reexports its model/store modules at the product facade so clients
+using `MemberImportVisibility` can resolve contextual enum cases and members
+with one `import GraphEvo`. The external Swift 6 consumer enables that feature
+when the compiler supports it.

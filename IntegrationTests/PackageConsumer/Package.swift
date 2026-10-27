@@ -12,6 +12,11 @@ let repositoryName = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
     .lastPathComponent
 
+var modelConsumerSettings: [SwiftSetting] = [.swiftLanguageMode(.v6)]
+#if compiler(>=6.1)
+modelConsumerSettings.append(.enableUpcomingFeature("MemberImportVisibility"))
+#endif
+
 let package = Package(
     name: "PackageConsumer",
     platforms: [
@@ -31,7 +36,7 @@ let package = Package(
         .executableTarget(
             name: "ModelConsumer",
             dependencies: [.product(name: "GraphEvo", package: repositoryName)],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: modelConsumerSettings
         )
     ]
 )

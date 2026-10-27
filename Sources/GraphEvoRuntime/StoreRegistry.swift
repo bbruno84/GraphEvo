@@ -29,6 +29,11 @@ package actor StoreHandle {
         Task { try? await registry.release(key, generation: generation, token: token) }
     }
 
+    package func newLease() async throws -> StoreHandle {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.retain(key, generation: generation, token: token)
+    }
+
     package func snapshot() async throws -> StoreRuntimeSnapshot {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         return try await registry.snapshot(key, generation: generation, token: token)
@@ -40,6 +45,14 @@ package actor StoreHandle {
     ) async throws -> Value {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         return try await registry.transaction(key, generation: generation, token: token, body)
+    }
+
+    /// Native framework operations retain admission and the writer gate through their completion.
+    package func nativeOperation<Value: Sendable>(
+        _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
+    ) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.nativeOperation(key, generation: generation, token: token, body)
     }
 
     package func close() async throws {
@@ -97,7 +110,9 @@ package actor StoreRegistry {
                 }
             }
             if let entry = entries[resolved.key] {
-                guard entry.resolved.configuration.access == resolved.configuration.access, entry.schema.isCompatible(with: schema) else {
+                guard entry.resolved.configuration.access == resolved.configuration.access,
+                      entry.resolved.configuration.cloudKitContainerIdentifier == resolved.configuration.cloudKitContainerIdentifier,
+                      entry.schema.isCompatible(with: schema) else {
                     throw StoreRuntimeError.configurationConflict(resolved.url)
                 }
                 if let previous = entry.fileIdentity, previous != identity, let url = resolved.url {
@@ -135,6 +150,22 @@ package actor StoreRegistry {
             }
             return StoreHandle(registry: self, key: resolved.key, generation: entry.generation, token: token)
         }
+    }
+
+    fileprivate func nativeOperation<Value: Sendable>(
+        _ key: StoreKey, generation: UUID, token: UUID,
+        _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
+    ) async throws -> Value {
+        let entry = try entry(for: key, generation: generation, token: token)
+        let resources = try await entry.opening.value
+        return try await resources.nativeOperation(body)
+    }
+
+    fileprivate func retain(_ key: StoreKey, generation: UUID, token: UUID) throws -> StoreHandle {
+        _ = try entry(for: key, generation: generation, token: token)
+        let next = UUID()
+        entries[key]?.tokens.insert(next)
+        return StoreHandle(registry: self, key: key, generation: generation, token: next)
     }
 
     fileprivate func snapshot(_ key: StoreKey, generation: UUID, token: UUID) async throws -> StoreRuntimeSnapshot {

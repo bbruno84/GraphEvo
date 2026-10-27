@@ -17,10 +17,12 @@ package enum StoreAccess: Sendable, Equatable {
 package struct StoreConfiguration: Sendable, Equatable {
     package let location: StoreLocation
     package let access: StoreAccess
+    package let cloudKitContainerIdentifier: String?
 
-    package init(location: StoreLocation, access: StoreAccess = .readWrite) {
+    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil) {
         self.location = location
         self.access = access
+        self.cloudKitContainerIdentifier = cloudKitContainerIdentifier
     }
 }
 
@@ -69,7 +71,7 @@ struct ResolvedStore: Sendable {
     init(_ configuration: StoreConfiguration) throws {
         switch configuration.location {
         case .inMemory(let id):
-            guard configuration.access == .readWrite else {
+            guard configuration.access == .readWrite, configuration.cloudKitContainerIdentifier == nil else {
                 throw StoreRuntimeError.invalidConfiguration("A new in-memory store must be writable.")
             }
             key = .inMemory(id)
@@ -102,7 +104,7 @@ struct ResolvedStore: Sendable {
             }
             let path = canonical.path.precomposedStringWithCanonicalMapping
             key = .sqlite(caseSensitive ? path : path.folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX")))
-            self.configuration = StoreConfiguration(location: .sqlite(canonical), access: configuration.access)
+            self.configuration = StoreConfiguration(location: .sqlite(canonical), access: configuration.access, cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier)
             _ = try fileIdentity()
         }
     }

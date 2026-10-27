@@ -1,6 +1,6 @@
 import Foundation
 import GraphEvoRuntime
-import GraphEvoStore
+@_exported public import GraphEvoStore
 
 public typealias GraphStore = GraphEvoStore.GraphStore
 public typealias GraphReadScope = GraphEvoStore.GraphReadScope
@@ -30,5 +30,31 @@ extension GraphStore {
         let (store, report) = try await open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.current,
             adapter: GraphTypedStoreAdapter.current, adoptionBackupRoot: backupRoot)
         return (store, report)
+    }
+}
+
+public typealias GraphDatabase = GraphEvoStore.GraphDatabase
+
+extension GraphDatabase {
+    /// Opens a local multi-graph database without inventing a graph when the catalog is empty.
+    public static func open(at url: URL) async throws -> GraphDatabase {
+        try await open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.current,
+                       adapter: GraphTypedStoreAdapter.database)
+    }
+
+    public static func inMemory() async throws -> GraphDatabase {
+        try await open(configuration: .init(location: .inMemory(UUID())), schema: GraphRuntimeSchema.current,
+                       adapter: GraphTypedStoreAdapter.database)
+    }
+
+    /// Explicit backed-up protocol upgrade. Native schema and application IDs remain unchanged.
+    public static func upgradeLocalA3Store(at url: URL, backupRoot: URL) async throws -> GraphDatabase {
+        guard url.isFileURL, backupRoot.isFileURL, FileManager.default.fileExists(atPath: url.path) else {
+            throw GraphStoreError.legacyStoreRequiresAdoption
+        }
+        let database = try await open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.current,
+            adapter: GraphTypedStoreAdapter.database, allowLegacyLayout: true)
+        do { _ = try await database.upgrade(backupRoot: backupRoot); return database }
+        catch { try await database.close(); throw error }
     }
 }

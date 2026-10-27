@@ -44,6 +44,16 @@ private struct Profile: GraphModel {
         try await reopened.delete(profile.id)
         guard try await reopened.fetchAll(Profile.self).isEmpty else { throw GraphModelError.invalidValue }
         try await reopened.close()
-        print("GraphEvo Swift 6 typed store consumer passed")
+        let database = try await GraphDatabase.inMemory()
+        let first = try await database.createGraph(), control = try await database.createGraph()
+        let member = Profile(id: first.makeNodeID(), displayName: "Independent graph")
+        try await first.insert(member)
+        guard try await control.fetchAll(Profile.self).isEmpty else { throw GraphModelError.invalidValue }
+        try await database.close()
+        guard try await first.fetch(member.id, as: Profile.self)?.displayName == member.displayName else {
+            throw GraphStoreError.missingNode
+        }
+        try await first.close(); try await control.close()
+        print("GraphEvo Swift 6 typed store and graph catalog consumer passed")
     }
 }
