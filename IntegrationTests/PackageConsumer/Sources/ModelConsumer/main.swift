@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import GraphEvo
 
@@ -43,6 +44,13 @@ private struct Profile: GraphModel {
         guard queryResult.items.map(\.displayName) == ["Grace"],
               try await store.count(descriptor).value == 1,
               try await store.project(descriptor, properties: ["display_name"]).rows.count == 1 else { throw GraphModelError.invalidValue }
+        let observation = try await store.observe(descriptor)
+        var observed = observation.makeAsyncIterator()
+        guard case .value(let initial) = await observed.next(), initial.items.first?.displayName == "Grace" else {
+            throw GraphModelError.invalidValue
+        }
+        observation.cancel()
+        try await checkCombine(store, query: descriptor)
         try await store.close()
         let reopened = try await GraphStore.open(at: url)
         let retained = try await reopened.read { try $0.record(for: profile.id) }
@@ -76,4 +84,15 @@ private struct Profile: GraphModel {
         try await first.close(); try await control.close()
         print("GraphEvo Swift 6 typed store and graph catalog consumer passed")
     }
+}
+
+/// Nonisolated consumption avoids inheriting a UI actor into a Combine callback.
+private nonisolated func checkCombine(_ store: GraphStore, query: GraphQuery<Profile>) async throws {
+    let names = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    let token = store.publisher(for: query).sink(receiveCompletion: { _ in names.continuation.finish() }, receiveValue: { state in
+        if case .value(let result) = state, let name = result.items.first?.displayName { names.continuation.yield(name) }
+    })
+    defer { token.cancel(); names.continuation.finish() }
+    var iterator = names.stream.makeAsyncIterator()
+    guard await iterator.next() == "Grace" else { throw GraphModelError.invalidValue }
 }

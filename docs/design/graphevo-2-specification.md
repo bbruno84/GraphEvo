@@ -426,6 +426,14 @@ unmaterialized deletions where relevant. A token or notification cannot certify
 that a whole graph has arrived. Callbacks/stream continuations are not invoked
 under persistence locks or inside mutation scopes in a way that permits reentry.
 
+The [A8 candidate](graphevo-2-observation.md) implements bounded newest-state
+async observation, conservative resource-group dependency invalidation and a
+cold demand-aware Combine adapter. Processing currently offers live rescan
+hints; O04's durable replay choice remains open. Recoverable query errors are
+states, handle close terminates its feeds, and native account-change hints are
+sticky/terminal for query observation. These are alpha contracts, not complete
+account/cache policy, migration feasibility or beta acceptance.
+
 ## 11. Mandatory v1 data migration and recovery
 
 ### Agreed requirement

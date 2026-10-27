@@ -1309,3 +1309,75 @@ before the next cancellation check.
 
 See the [A7 contract](../design/graphevo-2-queries.md) for the capability matrix,
 limits, moving-current-state semantics and retained test scope.
+
+## V2 A8 observation and Combine (alpha)
+
+Read the [A8 contract](../design/graphevo-2-observation.md) for delivery,
+processing limits and lifecycle. These APIs do not change v1 Watch.
+
+```swift
+public enum GraphQueryState<Model: GraphModel>: Sendable {
+    case value(GraphQueryResult<Model>)
+    case failure(any Error)
+}
+public enum GraphObservationError: Error, Sendable { case accountChanged }
+public struct GraphChangeSignal: Sendable {
+    public enum Reason: Sendable {
+        case initial, contextSave, storeChange, nativeOperation, accountChange, refresh
+    }
+    public let graphID: GraphID
+    public let id: UUID
+    public let reason: Reason
+    public var requiresRescan: Bool { get } // Always true; no per-node event/replay position.
+}
+public struct GraphObservation<Value: Sendable>: AsyncSequence, Sendable {
+    public typealias Element = Value
+    public struct AsyncIterator: AsyncIteratorProtocol {
+        public mutating func next() async -> Value?
+    }
+    public func makeAsyncIterator() -> AsyncIterator
+    public func cancel()
+    public func refresh()
+}
+public struct GraphObservationPublisher<Value: Sendable>: Combine.Publisher {
+    public typealias Output = Value
+    public typealias Failure = any Error
+    public func receive<S: Combine.Subscriber>(subscriber: S)
+        where S.Input == Value, S.Failure == Failure
+}
+extension GraphStore {
+    public func observe<Model: GraphModel>(_ query: GraphQuery<Model>)
+        async throws -> GraphObservation<GraphQueryState<Model>>
+    public func changes() async throws -> GraphObservation<GraphChangeSignal>
+    public nonisolated func publisher<Model: GraphModel>(for query: GraphQuery<Model>)
+        -> GraphObservationPublisher<GraphQueryState<Model>>
+    public nonisolated func changePublisher() -> GraphObservationPublisher<GraphChangeSignal>
+}
+```
+
+Each observation initially reads current local state and serially rereads after
+resource-group invalidation, including related-node/action/file dependencies.
+Output is newest-one, may coalesce intermediate states/errors, and may repeat
+an unchanged result after unrelated changes. Cursor-based descriptors are
+rejected; sort/limit describe the current first page. Recoverable errors produce
+failure states and retry on the next hint/manual refresh. Handle close ends its
+observations, retaining other handles. Buffered values may drain on termination.
+Account-change invalidation remains sticky in that runtime: query observation
+emits accountChanged and ends; it does not establish the complete account/cache
+policy. Explicit cancellation, cancellation during iteration or dropping the
+observation and iterator tears down the worker. A retained observation must be
+cancelled when breaking a loop. Refresh is useful after foreground/resume.
+
+Combine is cold per subscriber, starts on first positive demand, uses one
+newest-value pending mailbox and serializes callbacks outside locks on a private
+queue. UI consumers select receive(on:) themselves. Startup errors complete with
+failure; refresh errors are state values. Demand does not throttle native writes
+or mirroring. Cancellation is per subscriber; an admitted callback may finish.
+
+Changes/changePublisher emit only live rescan hints; IDs are ephemeral and are
+neither ordered transaction identities nor durable history cursors. Rescan on
+startup/reconnect and reconcile the application's prior inventory. No per-node
+deletions, durable replay, acknowledgements, exactly-once effects or cloud-import
+completion are supplied. O04 remains a consolidation choice, not a completed
+replay feature. Each observer reruns its own bounded A7 query; total observation
+memory/time/scan costs still require end-of-alpha assessment.

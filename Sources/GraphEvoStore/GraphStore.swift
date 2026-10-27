@@ -92,6 +92,11 @@ public actor GraphStore {
         catch { throw Self.translate(error) }
     }
 
+    package func observationFeed() async throws -> StoreInvalidationFeed {
+        do { return try await handle.invalidationFeed() }
+        catch { throw Self.translate(error) }
+    }
+
     public nonisolated func makeNodeID() -> GraphNodeID { GraphNodeID(graphID: id) }
 
     public func close() async throws {

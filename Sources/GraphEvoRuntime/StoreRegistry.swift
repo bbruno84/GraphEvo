@@ -16,6 +16,7 @@ package actor StoreHandle {
     private let generation: UUID
     private let token: UUID
     private var closeTask: Task<Void, any Error>?
+    private var changeHub: StoreInvalidationHub?
 
     fileprivate init(registry: StoreRegistry, key: StoreKey, generation: UUID, token: UUID) {
         self.registry = registry
@@ -25,6 +26,7 @@ package actor StoreHandle {
     }
 
     deinit {
+        changeHub?.finish(owner: token)
         let registry = registry, key = key, generation = generation, token = token
         Task { try? await registry.release(key, generation: generation, token: token) }
     }
@@ -60,8 +62,17 @@ package actor StoreHandle {
         return try await registry.nativeOperation(key, generation: generation, token: token, body)
     }
 
+    package func invalidationFeed() async throws -> StoreInvalidationFeed {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        let hub = try await registry.invalidationHub(key, generation: generation, token: token)
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        changeHub = hub
+        return hub.subscribe(owner: token)
+    }
+
     package func close() async throws {
         if let closeTask { return try await closeTask.value }
+        changeHub?.finish(owner: token)
         let registry = registry, key = key, generation = generation, token = token
         let task = Task { try await registry.release(key, generation: generation, token: token) }
         closeTask = task
@@ -160,6 +171,13 @@ package actor StoreRegistry {
             }
             return StoreHandle(registry: self, key: resolved.key, generation: entry.generation, token: token)
         }
+    }
+
+    fileprivate func invalidationHub(_ key: StoreKey, generation: UUID, token: UUID) async throws -> StoreInvalidationHub {
+        let entry = try entry(for: key, generation: generation, token: token)
+        let resources = try await entry.opening.value
+        _ = try self.entry(for: key, generation: generation, token: token)
+        return resources.invalidations
     }
 
     fileprivate func nativeOperation<Value: Sendable>(

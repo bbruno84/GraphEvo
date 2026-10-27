@@ -22,6 +22,8 @@ actor StoreResources {
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
     private var eventObserver: NSObjectProtocol?
+    private var changeObservers: [NSObjectProtocol] = []
+    nonisolated let invalidations = StoreInvalidationHub()
     private let setupTracker = StoreCloudSetupTracker()
     private var writerBusy = false
     private var writers: [(UUID, CheckedContinuation<Void, any Error>)] = []
@@ -103,6 +105,7 @@ actor StoreResources {
             description.type = NSSQLiteStoreType
             description.isReadOnly = resolved.configuration.access == .readOnly
             description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
         case .inMemory:
             description = NSPersistentStoreDescription()
             description.type = NSInMemoryStoreType
@@ -114,6 +117,27 @@ actor StoreResources {
     }
 
     private func load() async throws {
+        let hub = invalidations, coordinator = container.persistentStoreCoordinator
+        changeObservers.append(NotificationCenter.default.addObserver(forName: .NSManagedObjectContextDidSave,
+            object: nil, queue: nil) { [weak coordinator] note in
+            // didSave is delivered on the saving context's queue; no context escapes this callback.
+            guard let context = note.object as? NSManagedObjectContext,
+                  let coordinator, context.persistentStoreCoordinator === coordinator else { return }
+            hub.publish(.contextSave)
+        })
+        changeObservers.append(NotificationCenter.default.addObserver(forName: .NSPersistentStoreRemoteChange,
+            object: coordinator, queue: nil) { _ in hub.publish(.storeChange) })
+        if container is NSPersistentCloudKitContainer {
+            changeObservers.append(NotificationCenter.default.addObserver(forName: .CKAccountChanged,
+                object: nil, queue: nil) { _ in hub.publish(.accountChange) })
+            changeObservers.append(NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification,
+                object: container, queue: nil) { note in
+                guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey] as? NSPersistentCloudKitContainer.Event,
+                      event.endDate != nil else { return }
+                // Share metadata can change without a persistent-history transaction.
+                hub.publish(.nativeOperation)
+            })
+        }
         if let cloud = container as? NSPersistentCloudKitContainer {
             let tracker = setupTracker
             eventObserver = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification,
@@ -214,6 +238,7 @@ actor StoreResources {
             defer { releaseWriter() }
             try cancellation.check()
             // Native APIs own their cancellation semantics once started. Await their real outcome.
+            defer { invalidations.publish(.nativeOperation) }
             return try await body(container)
         } onCancel: {
             cancellation.cancel()
@@ -264,6 +289,7 @@ actor StoreResources {
     /// The registry invokes shutdown only once and retains ownership if detachment fails.
     func close() async throws {
         closing = true
+        invalidations.finish()
         await hooks.didBeginClose?()
         if admitted > 0 {
             await withCheckedContinuation { drain = $0 }
@@ -279,6 +305,9 @@ actor StoreResources {
         }
         if let eventObserver { NotificationCenter.default.removeObserver(eventObserver) }
         eventObserver = nil
+        for observer in changeObservers { NotificationCenter.default.removeObserver(observer) }
+        changeObservers.removeAll()
+        invalidations.finish()
         for gateway in gateways { gateway.release() }
     }
 }

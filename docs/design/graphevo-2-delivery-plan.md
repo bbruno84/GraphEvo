@@ -117,6 +117,13 @@ now targets v2 integration with A6 included. The maintainer deferred
 attachment representation costs to end-of-alpha consolidation. A8 observation
 and mandatory migration remain separate work.
 
+The [A8 candidate](graphevo-2-observation.md) adds bounded current-state async
+observation, whole-resource invalidation covering related dependencies, live
+rescan hints and a cold Combine adapter. The three consumer contracts remain
+distinct. O04's durable-processing choice, production cost/account coverage,
+mandatory migration feasibility and the other beta-entry gates remain open;
+this implementation does not declare alpha completion or create a release.
+
 ## Migration throughout alpha
 
 Migration is a parallel workstream rather than a task first discovered after
