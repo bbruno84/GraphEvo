@@ -34,6 +34,11 @@ these measurements do not yet select final representation or supported envelopes
 so PA01/PA05/PA06/PA07 beta gates remain open. Physical/production validation and
 mandatory migration feasibility still require their own evidence.
 
+[C02a](results/c02a-metadata-costs-2026-10-27.md) adds the first measured
+schema-preserving candidate: B improves metadata access while retaining full
+validation, but observer memory, full inventory and new native-write coverage
+remain open. This is progress evidence, not closure of PA05/PA06/PA07.
+
 ## PA01 — schema, identities and application models
 
 - [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported

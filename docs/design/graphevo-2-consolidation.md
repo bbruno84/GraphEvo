@@ -42,6 +42,17 @@ from realistic library/application scenarios and physical devices, not from
 these synthetic desktop medians. Do not replace the independent consumer with
 an app-specific API to meet a benchmark.
 
+## First experiment checkpoint
+
+[C02a](graphevo-2-metadata-experiment.md) compares the baseline with batching all
+reserved metadata (A) and persisted-owner batching (B), without schema/API
+changes or cross-operation caches. The [result](results/c02a-metadata-costs-2026-10-27.md)
+retains 596 timing samples, 469 regression tests, 19 targeted sanitizer tests and
+read-only iPad/XR checks. B is preferred on the experiment branch: identity reads
+and queries improve substantially and A's insertion regression is avoided.
+Observer memory increases in some cases, full inventory remains, and new native
+sharing writes have not been revalidated. C02/C03/C04 gates remain open.
+
 ## Required checks for candidate changes
 
 - Rerun the same C01 fixture matrix and assertions on the integrated candidate.

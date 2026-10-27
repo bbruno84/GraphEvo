@@ -245,3 +245,13 @@ V05/V06/V07 cost evidence with explicit scalar-query budget refusals, file/list
 costs, fresh-process identity reads and one/eight-observer cycles. It does not
 establish physical-device, CloudKit, real-data or supported production limits.
 No semantic test, query allowance or existing schema was relaxed for a timing.
+
+## C02a — reserved metadata experiment
+
+[Baseline/A/B results](results/c02a-metadata-costs-2026-10-27.md) retain 596
+local Release measurements, 469 regression tests and 19 targeted TSan tests.
+B retains batched persisted metadata with per-store routing and pending-owner
+fallback, without removing integrity or budget checks. Read-only checks on the
+retained iPad/XR stores pass, including B's exact file control/isolation. This
+does not certify fresh import/new shared assignment, schema selection or the
+remaining C02–C04/production envelopes; the increased observer memory is retained.

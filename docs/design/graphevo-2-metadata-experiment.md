@@ -28,3 +28,28 @@ but small-fixture seeding regresses and some observer memory peaks grow.
 The next comparison tests batching only persisted owners; detailed retained
 results and the selected experimental candidate will follow without claiming
 that C02 or production/sharing acceptance is complete.
+
+## Variant B — persisted owners and explicit resource routing
+
+Variant B keeps Variant A's metadata reads for persisted owners, separated by
+native node kind and persistent store, in batches of at most 128 owners. Each
+request sets affectedStores explicitly. At most two persisted nodes, temporary
+owners and newly introduced facades use the original lookup; unsaved metadata
+rows on persisted owners remain visible through includesPendingChanges. Native
+values stay lazy, and no index crosses a Session, context or handle boundary.
+
+This addresses the first variant's insertion regression rather than dropping
+validation. Full native candidate inventory, membership/endpoint checks, format
+validation, duplicate-ID detection and A7 budgets are unchanged. It does not
+complete C02's goal of eliminating full inventory or the C03/C04 work.
+
+Additional tests use two independent SQLite resources, persisted-owner pending
+patches, and a unique secure transformer that records/fails reads of another
+graph's metadata. The selected graph must not decode that foreign value while
+reading the foreign graph must visibly exercise the failure. The transformer
+uses Apple's supported [secure transformer family](https://developer.apple.com/documentation/coredata/handling-different-data-types-in-core-data).
+The test-only model/transformer does not alter the library model.
+
+See the [comparison result](results/c02a-metadata-costs-2026-10-27.md) and
+[physical read-only procedure](../../Experiments/C02MetadataProbe/README.md)
+for measured outcomes, limitations and the retained preferred candidate.

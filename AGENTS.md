@@ -526,3 +526,17 @@ costs and synthetic desktop results from supported production envelopes. CI
 runs a functional smoke only, with no timing pass threshold. Candidate metadata/
 binary changes retain accepted file identity/ownership and require migration,
 whole-content backup and actual native sharing validation before selection.
+
+## C02a experimental metadata lookup
+
+The [C02a contract](docs/design/graphevo-2-metadata-experiment.md) describes the
+preferred B variant on the experiment branch. Metadata rows are Session/context
+confined, fetched only for reserved keys, with lazy value access and explicit
+native-store routing. Temporary/new owners and tiny persisted inventories use
+the original facade lookup; include pending edits on persisted owners. Never
+retain the native row index across scopes, cache decoded user values globally,
+obtain permanent IDs or save as a lookup side effect. Preserve full inventory,
+membership/identity/format checks, typed errors and query allowances. C02a is
+not complete selective lookup, file-content separation or a shared-observer
+engine. Retain A's insertion regression and B's observer-memory trade-off in
+comparisons; read-only device evidence is not new native-assignment coverage.
