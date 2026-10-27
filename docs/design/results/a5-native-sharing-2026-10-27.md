@@ -77,7 +77,7 @@ removed on finalization; its new detail remained on the application target.
 
 ## Local checks and remaining scope
 
-The full macOS suite passed 429 tests: 322 legacy, 56 runtime, 33 typed-store and
+The full macOS suite passed 430 tests: 322 legacy, 56 runtime, 34 typed-store and
 18 model tests. Targeted Thread Sanitizer checks passed ten tests covering paired
 resource lifecycle/setup and local journals, without a reported race. The
 independent Swift 6 `ModelConsumer`, package manifest validation and Release

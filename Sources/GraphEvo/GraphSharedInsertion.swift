@@ -367,10 +367,10 @@ extension GraphStore {
     /// New participant members require a native assignment phase before linking to the live graph.
     /// After a partial native failure, inspect status and recover the recorded intent rather than replaying insertion.
     @discardableResult public func insertShared(_ records: [GraphRecord]) async throws -> [GraphNodeID] {
-        guard !records.isEmpty else { return [] }
         let plan = try GraphSharedInsertionPlan(graphID: id, records: records)
         return try await nativeOperation { native in
             let container = try GraphSharingNative.cloud(native)
+            guard !records.isEmpty else { return [] }
             return try await GraphSharedNativeOperation.run(container: container) { _ in plan }.nodeIDs
         }
     }

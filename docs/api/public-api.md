@@ -1071,6 +1071,7 @@ store, with no pending originating-device structural intent.
 Synchronous scopes may edit existing shared detail values, remove details,
 change endpoints or delete existing members. Creating shared nodes or new
 detail rows requires awaited `insertShared`/`patchShared` outside the scope.
+Even an empty shared insertion checks handle lifetime and mirrored configuration.
 The library checks known accepted read/write metadata and native permission
 advice before writes; server changes may race the local save. `patchShared`
 returns a detached record after committing; application-model decoding is a

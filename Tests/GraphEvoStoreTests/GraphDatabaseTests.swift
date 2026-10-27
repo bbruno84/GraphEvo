@@ -23,6 +23,19 @@ private struct CatalogItem: GraphModel {
         return url
     }
 
+    @Test func emptySharedInsertionStillChecksNativeConfigurationAndHandleLifetime() async throws {
+        let database = try await GraphDatabase.inMemory()
+        let graph = try await database.createGraph()
+        await #expect { try await graph.insertShared([]) } throws: { error in
+            if case GraphMirroringError.localDatabase = error { return true }; return false
+        }
+        try await graph.close()
+        await #expect { try await graph.insertShared([]) } throws: { error in
+            if case GraphStoreError.closed = error { return true }; return false
+        }
+        try await database.close()
+    }
+
     @Test func separateGraphsRetainIdentityAndIndependentLeasesThroughReopen() async throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
