@@ -16,7 +16,8 @@ precedes returning from subscribe. Account changes end the group with a visible
 failure; close ends the owning handle's groups, not sibling handles.
 
 One native query produces immutable records/local view, then each subscriber runs
-its application decoder independently. A decoder failure is subscriber-local;
+its application decoder on an independent worker with its own newest-input buffer.
+A slow decoder does not run on the shared native-refresh worker. A decoder failure is subscriber-local;
 native query failures are visible and can recover on the next broad invalidation.
 Per-consumer newest-state buffering, cancellation and Combine demand remain.
 The last consumer retires/cancels its worker and native source. Callbacks and
@@ -46,3 +47,10 @@ silently different storage/query/validation contracts. CI functional smoke uses 
 latency threshold. Synthetic/native notification tests are not cross-account
 CloudKit evidence. Native synchronization, representative workloads and all
 post-alpha migration/schema/observation gates remain open.
+
+The first implementation decoded each recipient sequentially on the fan-out
+worker. Before timing, it was changed to independent per-subscriber decoding
+workers so arbitrary application construction cannot block shared refresh. Both
+bounded input and public output mailboxes are newest-only; there is no replay to
+new subscribers. Refreshing one member can refresh all equal-descriptor members.
+Source/callback checkpoints are injectable only for deterministic local tests.

@@ -39,3 +39,9 @@ They test unrelated body avoidance, not representative media compressibility or
 file-read envelopes. OS caches are uncontrolled. Never run timing alongside
 builds/tests; retain intermediate binaries and rerun representative cases on new
 fixtures before selecting a direction. CI smoke has no timing threshold.
+
+The candidate adds one shared native-refresh worker per group and retains an
+independent decoder/delivery worker per subscriber. Shared raw-input and public
+output mailboxes are both bounded to their newest value. Model construction is
+not multicast. The first serial-decoder implementation was revised before timing;
+its source checkpoint remains in Git without performance claims.

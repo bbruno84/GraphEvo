@@ -38,7 +38,7 @@ private struct IndependentlyDecodedItem: GraphModel {
         let a = try await lab.observe(query), b = try await lab.observe(query)
         _ = try await waitForObservation(a) { _ in true }; _ = try await waitForObservation(b) { _ in true }
         await gate.pause(); a.refresh()
-        var entered = await gate.entered.stream.makeAsyncIterator(); _ = await entered.next()
+        var entered = gate.entered.stream.makeAsyncIterator(); _ = await entered.next()
         try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: id, properties: ["v": .set(.integer(1))])) }
         await gate.release()
         let left = try await waitForObservation(a) { $0.items.first?.record.properties["v"] == .integer(1) }
@@ -123,7 +123,7 @@ private struct IndependentlyDecodedItem: GraphModel {
         let a = try await lab.observe(observationQuery())
         _ = try await waitForObservation(a) { _ in true }
         await gate.pause(); a.refresh()
-        var started = await gate.entered.stream.makeAsyncIterator(); _ = await started.next()
+        var started = gate.entered.stream.makeAsyncIterator(); _ = await started.next()
         let b = try await lab.observe(observationQuery())
         await gate.release()
         let first = try await waitForObservation(a) { _ in true }
@@ -162,7 +162,7 @@ private struct IndependentlyDecodedItem: GraphModel {
             let a = try await lab.observe(query), b = try await lab.observe(query)
             _ = try await value(a, version: 0); _ = try await value(b, version: 0)
             await gate.pause(); a.refresh()
-            var entered = await gate.entered.stream.makeAsyncIterator(); _ = await entered.next()
+            var entered = gate.entered.stream.makeAsyncIterator(); _ = await entered.next()
             try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: id, properties: ["v": .set(.integer(1))])) }
             await gate.release()
             let left = try await value(a, version: 1), right = try await value(b, version: 1)

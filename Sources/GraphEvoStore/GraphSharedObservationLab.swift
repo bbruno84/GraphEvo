@@ -18,6 +18,12 @@ private final class SharedObservationCounters: Sendable {
     var snapshot: GraphSharedObservationSnapshot { state.withLock { $0 } }
 }
 
+private enum SharedObservationInput: Sendable {
+    case snapshot(GraphQueryOutput, GraphQueryLocalView)
+    case failure(any Error)
+}
+private enum SharedDeliveryStatus { case active, closed, accountChanged }
+
 private protocol SharedObservationGroup: AnyObject, Sendable {}
 
 /// Explicit opt-in experiment: exact descriptors on one logical handle only.
@@ -84,7 +90,8 @@ package actor GraphSharedObservationLab {
 private final class SharedTypedObservationGroup<Model: GraphModel>: SharedObservationGroup {
     private struct State: Sendable {
         var closed = false
-        var subscribers: [UUID: AsyncStream<GraphQueryState<Model>>.Continuation] = [:]
+        var subscribers: [UUID: AsyncStream<SharedObservationInput>.Continuation] = [:]
+        var accountChanged = false
         var worker: Task<Void, Never>?
         var refresh: (@Sendable () -> Void)?
         var cancelSource: (@Sendable () -> Void)?
@@ -108,18 +115,54 @@ private final class SharedTypedObservationGroup<Model: GraphModel>: SharedObserv
     func ready() async throws { _ = try await registration.value }
     func subscribe() -> GraphObservation<GraphQueryState<Model>>? {
         let token = UUID(), pair = AsyncStream<GraphQueryState<Model>>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let raw = AsyncStream<SharedObservationInput>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let control = GraphObservationControl()
         pair.continuation.onTermination = { [weak control] _ in control?.cancel() }
+        raw.continuation.onTermination = { [weak self] _ in self?.remove(token) }
         let added = state.withLock { state in
             guard !state.closed else { return false }
-            state.subscribers[token] = pair.continuation
-            return true
+            state.subscribers[token] = raw.continuation; return true
         }
-        guard added else { pair.continuation.finish(); return nil }
+        guard added else { raw.continuation.finish(); pair.continuation.finish(); return nil }
         counters.subscriber(1)
-        control.install(nil, refresh: { [weak self] in self?.requestRefresh() }, finish: { [self] in remove(token) })
+        let worker = Task { [weak self] in
+            defer { pair.continuation.finish() }
+            for await input in raw.stream {
+                guard !Task.isCancelled else { break }
+                switch self?.deliveryStatus(token) ?? .closed {
+                case .closed: return
+                case .accountChanged: pair.continuation.yield(.failure(GraphObservationError.accountChanged)); return
+                case .active: break
+                }
+                let value: GraphQueryState<Model>
+                switch input {
+                case .failure(let error): value = .failure(error)
+                case .snapshot(let output, let view):
+                    do {
+                        let result = try GraphQueryResult(items: output.records.map { try $0.decoded(as: Model.self) },
+                            nextCursor: output.cursor, view: view, diagnostics: output.diagnostics)
+                        value = .value(result)
+                    } catch { value = .failure(error) }
+                }
+                guard !Task.isCancelled else { break }
+                switch self?.deliveryStatus(token) ?? .closed {
+                case .closed: return
+                case .accountChanged: pair.continuation.yield(.failure(GraphObservationError.accountChanged)); return
+                case .active: pair.continuation.yield(value)
+                }
+            }
+        }
+        control.install(worker, refresh: { [weak self] in self?.requestRefresh() }, finish: { [self] in
+            remove(token); pair.continuation.finish()
+        })
         requestRefresh()
         return GraphObservation(stream: pair.stream, control: control)
+    }
+    private func deliveryStatus(_ token: UUID) -> SharedDeliveryStatus {
+        state.withLock { state in
+            if state.accountChanged { return .accountChanged }
+            return !state.closed && state.subscribers[token] != nil ? .active : .closed
+        }
     }
     func start() {
         let registration = registration, graph = graph, query = query, counters = counters, beforeRead = beforeRead
@@ -147,7 +190,7 @@ private final class SharedTypedObservationGroup<Model: GraphModel>: SharedObserv
                         if feed.stream.accountHasChanged {
                             self?.finish(.failure(GraphObservationError.accountChanged)); return
                         }
-                        self?.offer(output, view: view, to: targets)
+                        self?.offer(.snapshot(output, view), to: targets)
                     } catch is CancellationError { break }
                     catch {
                         if case GraphStoreError.closed = error { break }
@@ -176,20 +219,9 @@ private final class SharedTypedObservationGroup<Model: GraphModel>: SharedObserv
     }
     private func requestRefresh() { state.withLock { $0.refresh }?() }
     private func targets() -> Set<UUID> { state.withLock { Set($0.subscribers.keys) } }
-    private func offer(_ value: GraphQueryState<Model>, to targets: Set<UUID>) {
+    private func offer(_ value: SharedObservationInput, to targets: Set<UUID>) {
         let continuations = state.withLock { state in targets.compactMap { state.subscribers[$0] } }
         for continuation in continuations { continuation.yield(value) }
-    }
-    private func offer(_ output: GraphQueryOutput, view: GraphQueryLocalView, to targets: Set<UUID>) {
-        let continuations = state.withLock { state in targets.compactMap { state.subscribers[$0] } }
-        // Application decoders run separately for each consumer, outside synchronization.
-        for continuation in continuations {
-            do {
-                let value = try GraphQueryResult(items: output.records.map { try $0.decoded(as: Model.self) },
-                    nextCursor: output.cursor, view: view, diagnostics: output.diagnostics)
-                continuation.yield(.value(value))
-            } catch { continuation.yield(.failure(error)) }
-        }
     }
     private func remove(_ token: UUID) {
         let removed = state.withLock { $0.subscribers.removeValue(forKey: token) }
@@ -198,10 +230,12 @@ private final class SharedTypedObservationGroup<Model: GraphModel>: SharedObserv
         removed.finish()
         finish(ifEmpty: true)
     }
-    private func finish(_ terminal: GraphQueryState<Model>? = nil, ifEmpty: Bool = false) {
+    private func finish(_ terminal: SharedObservationInput? = nil, ifEmpty: Bool = false) {
         let work = state.withLock { state -> State? in
             guard !state.closed, !ifEmpty || state.subscribers.isEmpty else { return nil }
-            let previous = state; state.closed = true; state.subscribers = [:]; state.worker = nil; state.refresh = nil; state.cancelSource = nil
+            let previous = state
+            if case .failure(let error)? = terminal, error is GraphObservationError { state.accountChanged = true }
+            state.closed = true; state.subscribers = [:]; state.worker = nil; state.refresh = nil; state.cancelSource = nil
             return previous
         }
         guard let work else { return }
