@@ -24,7 +24,12 @@ root.mkdir(parents=True)
 (root/"environment.json").write_text(json.dumps(dict(platform=platform.platform(), revision=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),dirty=bool(subprocess.check_output(["git","status","--porcelain"],text=True).strip()),binarySHA256=hashlib.sha256(binary.read_bytes()).hexdigest(),runnerSHA256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),repetitions=a.repetitions),indent=2))
 rows=[]
 def invoke(args,log):
-    r=subprocess.run([str(binary),*map(str,args)],capture_output=True,text=True,timeout=600)
+    try:
+        r=subprocess.run([str(binary),*map(str,args)],capture_output=True,text=True,timeout=600)
+    except subprocess.TimeoutExpired as error:
+        def output(value): return value.decode(errors="replace") if isinstance(value,bytes) else value or ""
+        log.write_text(output(error.stdout)+output(error.stderr)+"\nStage timed out; preserve this fixture.\n")
+        raise
     log.write_text(r.stdout+r.stderr)
     lines=[x.removeprefix("OBSERVATION_JSON ") for x in r.stdout.splitlines() if x.startswith("OBSERVATION_JSON ")]
     if r.returncode or len(lines)!=1: raise RuntimeError(f"Preserve failed fixture/log {log}; do not replay")

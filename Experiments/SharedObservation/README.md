@@ -23,8 +23,9 @@ Startup creates observers sequentially and waits for each fresh initial state;
 a join always requests a new native read, so shared startup is not expected to
 collapse to one read. The update wave changes one Entity, then every observer
 must receive a new local view with the expected identity/revision. Equal queries
-select that Entity; mixed queries select different Entities and still receive
-broad invalidation. No comparison changes query budgets, decoding or files.
+select that Entity; mixed queries select different Entities plus that changed
+sentinel, so every delivery proves that its read followed this write. They still
+receive broad invalidation. No comparison changes query budgets, decoding or files.
 
 `waveMS` includes the write and all deliveries; `writeMS` and `tailMS` disclose
 that overlap. `waveCPU` is process user+system CPU, not wall time. Memory is a
@@ -45,3 +46,8 @@ independent decoder/delivery worker per subscriber. Shared raw-input and public
 output mailboxes are both bounded to their newest value. Model construction is
 not multicast. The first serial-decoder implementation was revised before timing;
 its source checkpoint remains in Git without performance claims.
+
+The first small screening run used only unchanged mixed-query results and a new
+scopeID, which did not independently prove post-write freshness. Its binary/logs
+remain as a functional preflight; those mixed timings are not acceptance evidence.
+The timed matrix requires the changed sentinel in every result.

@@ -30,14 +30,16 @@ private final class Samples: Sendable {
     func sample() { let bytes = rss(); state.withLock { $0.peak = max($0.peak, bytes); $0.samples += 1 } }
     var result: (UInt64, Int) { state.withLock { ($0.peak, $0.samples) } }
 }
-private func next(_ stream: GraphObservation<GraphQueryState<Item>>, id: GraphNodeID,
-                  after: UUID? = nil, revision: String? = nil) async throws -> GraphQueryResult<Item> {
+private func next(_ stream: GraphObservation<GraphQueryState<Item>>, id: GraphNodeID, changedID: GraphNodeID,
+                  after: UUID? = nil, revision: String = "seed") async throws -> GraphQueryResult<Item> {
     for await state in stream {
         switch state {
         case .failure(let error): throw error
         case .value(let value):
-            guard value.items.count == 1, value.items.first?.id == id else { throw Failure.mismatch }
-            if value.view.scopeID != after, revision == nil || value.items.first?.record.properties["revision"] == .string(revision!) { return value }
+            guard Set(value.items.map(\.id)) == Set([id, changedID]) else { throw Failure.mismatch }
+            guard value.items.filter({ $0.id != changedID }).allSatisfy({ $0.record.properties["revision"] == .string("seed") }) else { throw Failure.mismatch }
+            if value.view.scopeID != after,
+               value.items.first(where: { $0.id == changedID })?.record.properties["revision"] == .string(revision) { return value }
         }
     }
     throw Failure.mismatch
@@ -87,11 +89,12 @@ private func next(_ stream: GraphObservation<GraphQueryState<Item>>, id: GraphNo
         var streams: [(GraphObservation<GraphQueryState<Item>>, GraphNodeID, UUID)] = []
         for index in 0..<count {
             let id = fixture.ids[args[5] == "mixed" ? index : 0]
-            let query = GraphQuery<Item>(budget: try GraphQueryBudget(maximumCandidates: fixture.ids.count * 2 + 100)).where(.id(id) && .tag("active"))
+            let predicate: GraphQueryPredicate = args[5] == "mixed" ? (.id(id) || .id(fixture.ids[0])) : .id(id)
+            let query = GraphQuery<Item>(budget: try GraphQueryBudget(maximumCandidates: fixture.ids.count * 2 + 100)).where(predicate && .tag("active"))
             let observation: GraphObservation<GraphQueryState<Item>>
             if let lab { observation = try await lab.observe(query) }
             else { observation = try await graph.observe(query) }
-            let value = try await next(observation, id: id)
+            let value = try await next(observation, id: id, changedID: fixture.ids[0])
             streams.append((observation,id,value.view.scopeID))
         }
         let startupMS = ms(begin), startupCPU = cpu() - initialCPU
@@ -101,7 +104,7 @@ private func next(_ stream: GraphObservation<GraphQueryState<Item>>, id: GraphNo
         let writeMS = ms(wave), tail = DispatchTime.now().uptimeNanoseconds
         let scopes = try await withThrowingTaskGroup(of: UUID.self, returning: Set<UUID>.self) { group in
             for (stream,id,previous) in streams {
-                group.addTask { try await next(stream, id: id, after: previous, revision: id == fixture.ids[0] ? revision : "seed").view.scopeID }
+                group.addTask { try await next(stream, id: id, changedID: fixture.ids[0], after: previous, revision: revision).view.scopeID }
             }
             var ids = Set<UUID>(); for try await scope in group { ids.insert(scope) }; return ids
         }
