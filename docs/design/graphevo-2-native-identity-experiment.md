@@ -53,3 +53,12 @@ operations use normal GraphStore runtime scopes through the package-only lab
 opener; complete graph validation is measured separately. A missing/corrupt
 column can look absent to point lookup and is caught by full validation: this is
 an explicit integration gate, not an accepted production absence contract.
+
+Reference validation must use bounded identity batches across all native node
+kinds. The first implementation issued three native requests per endpoint and
+regressed badly on a 500-subject/500-object action. The revised probe deduplicates
+endpoint UUIDs and validates batches of at most 128, preserving duplicate detection,
+backing-object equality, raw/native identity and membership checks. A regression
+crosses that batch boundary and rejects pending missing/cross-kind duplicate
+identities. Retain both measurement campaigns; do not accept fast Entity reads
+as evidence for high-degree graph operations.
