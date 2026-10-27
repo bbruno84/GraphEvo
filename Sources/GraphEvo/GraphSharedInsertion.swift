@@ -285,6 +285,8 @@ extension GraphTypedStoreAdapter {
             session.nodes[id] = node
         }
         for record in records {
+            // Native assignment can overlap remote owner deletion; revalidate logical dependencies before linking.
+            try session.validate(record)
             guard let node = found[record.id], session.kind(node) == record.endpoints.kind else { throw GraphStoreError.corruptIdentity }
             let stagedValue = try session.snapshot(node, id: record.id)
             guard stagedValue.properties == record.properties, stagedValue.tags == record.tags,

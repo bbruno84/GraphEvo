@@ -41,7 +41,12 @@ private struct Profile: GraphModel {
         let retained = try await reopened.read { try $0.record(for: profile.id) }
         guard reopened.id == graphID, retained?.id == profile.id,
               retained?.properties["unknown"] == .encoded(future) else { throw GraphStoreError.corruptIdentity }
+        let sourceFile = directory.appendingPathComponent("input.bin")
+        try Data([0, 128, 255]).write(to: sourceFile)
+        let attachment = try await reopened.importAttachment(from: sourceFile, ownedBy: profile.id)
+        guard try await reopened.attachment(attachment.id)?.data == Data([0, 128, 255]) else { throw GraphAttachmentError.incompleteOrInvalidContent }
         try await reopened.delete(profile.id)
+        guard try await reopened.attachment(attachment.id) == nil else { throw GraphAttachmentError.incompleteOrInvalidContent }
         guard try await reopened.fetchAll(Profile.self).isEmpty else { throw GraphModelError.invalidValue }
         try await reopened.close()
         let database = try await GraphDatabase.inMemory()

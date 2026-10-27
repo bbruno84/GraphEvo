@@ -357,6 +357,13 @@ streaming, per-file progress, selective download, eviction or offline retention.
 Publish a measured supported envelope before beta; unsupported capabilities
 must be stated rather than simulated by misleading API states.
 
+The [A6 candidate](graphevo-2-attachments.md) uses one logical attachment Entity
+with a versioned metadata/content value over the unchanged native model. It
+selects exclusive same-graph ownership by any application node, a 10-MiB alpha
+buffered-content envelope, local revision checks and opaque whole-directory
+backups from closed sources. It neither freezes that representation nor changes
+ordinary v1 binary properties into attachments without explicit migration.
+
 ## 9. Query engine
 
 ### Working contracts
