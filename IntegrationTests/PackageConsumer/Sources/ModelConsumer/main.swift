@@ -45,6 +45,14 @@ private struct Profile: GraphModel {
         guard try await reopened.fetchAll(Profile.self).isEmpty else { throw GraphModelError.invalidValue }
         try await reopened.close()
         let database = try await GraphDatabase.inMemory()
+        do {
+            _ = try await database.cloudSetupStatus()
+            throw GraphModelError.invalidValue
+        } catch GraphMirroringError.localDatabase { }
+        do {
+            _ = try await database.pendingSharedOperations()
+            throw GraphModelError.invalidValue
+        } catch GraphMirroringError.localDatabase { }
         let first = try await database.createGraph(), control = try await database.createGraph()
         let member = Profile(id: first.makeNodeID(), displayName: "Independent graph")
         try await first.insert(member)

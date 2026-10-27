@@ -18,11 +18,13 @@ package struct StoreConfiguration: Sendable, Equatable {
     package let location: StoreLocation
     package let access: StoreAccess
     package let cloudKitContainerIdentifier: String?
+    package let sharedStoreURL: URL?
 
-    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil) {
+    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil) {
         self.location = location
         self.access = access
         self.cloudKitContainerIdentifier = cloudKitContainerIdentifier
+        self.sharedStoreURL = sharedStoreURL
     }
 }
 
@@ -54,7 +56,7 @@ enum StoreKey: Hashable, Sendable {
     case inMemory(UUID)
 }
 
-struct FileIdentity: Equatable, Sendable {
+struct FileIdentity: Hashable, Sendable {
     let device: UInt64
     let inode: UInt64
 }
@@ -62,6 +64,7 @@ struct FileIdentity: Equatable, Sendable {
 struct ResolvedStore: Sendable {
     let key: StoreKey
     let configuration: StoreConfiguration
+    private let secondaryResources: [ResolvedStore]
 
     var url: URL? {
         guard case .sqlite(let url) = configuration.location else { return nil }
@@ -71,11 +74,12 @@ struct ResolvedStore: Sendable {
     init(_ configuration: StoreConfiguration) throws {
         switch configuration.location {
         case .inMemory(let id):
-            guard configuration.access == .readWrite, configuration.cloudKitContainerIdentifier == nil else {
+            guard configuration.access == .readWrite, configuration.cloudKitContainerIdentifier == nil, configuration.sharedStoreURL == nil else {
                 throw StoreRuntimeError.invalidConfiguration("A new in-memory store must be writable.")
             }
             key = .inMemory(id)
             self.configuration = configuration
+            secondaryResources = []
         case .sqlite(let url):
             guard url.isFileURL, url.host == nil || url.host == "localhost",
                   url.query == nil, url.fragment == nil,
@@ -104,9 +108,33 @@ struct ResolvedStore: Sendable {
             }
             let path = canonical.path.precomposedStringWithCanonicalMapping
             key = .sqlite(caseSensitive ? path : path.folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX")))
-            self.configuration = StoreConfiguration(location: .sqlite(canonical), access: configuration.access, cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier)
+            let secondary = try configuration.sharedStoreURL.map {
+                try ResolvedStore(StoreConfiguration(location: .sqlite($0), access: configuration.access))
+            }
+            guard secondary?.key != key else {
+                throw StoreRuntimeError.invalidConfiguration("Private and shared stores must use distinct files.")
+            }
+            self.configuration = StoreConfiguration(location: .sqlite(canonical), access: configuration.access,
+                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url)
+            secondaryResources = secondary.map { [$0] } ?? []
             _ = try fileIdentity()
         }
+    }
+
+    var resources: [ResolvedStore] { get throws { [self] + secondaryResources } }
+
+    func resourceIdentities() throws -> [StoreKey: FileIdentity] {
+        var identities: [StoreKey: FileIdentity] = [:]
+        for resource in try resources {
+            if let identity = try resource.fileIdentity() { identities[resource.key] = identity }
+        }
+        return identities
+    }
+
+    func isCompatible(with other: ResolvedStore) throws -> Bool {
+        guard configuration.access == other.configuration.access,
+              configuration.cloudKitContainerIdentifier == other.configuration.cloudKitContainerIdentifier else { return false }
+        return try resources.map(\.key) == other.resources.map(\.key)
     }
 
     /// Reject hard links; SQLite sidecars are path-based and cannot share an alias policy safely.

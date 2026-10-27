@@ -1002,7 +1002,8 @@ detail rows. Inspection does not request export. A missing boundary or mapping
 is pending, not proof of absence. Neither result certifies remote graph recovery.
 
 `GraphMirroringError: Error` distinguishes `localDatabase`,
-`preparationPending`, `invalidOwnerOnlyShare`, and `missingNativeResponse`.
+`preparationPending`, `metadataUnavailable(underlying: any Error)`,
+`invalidOwnerOnlyShare`, and `missingNativeResponse`.
 Native framework errors retain their type. A durable request with unavailable
 share metadata does not retry creation; ambiguous requests need a later recovery
 path. Local opening/catalog presence do not guarantee a complete imported graph.
@@ -1013,3 +1014,91 @@ GraphEvo reexports its model/store modules at the product facade so clients
 using `MemberImportVisibility` can resolve contextual enum cases and members
 with one `import GraphEvo`. The external Swift 6 consumer enables that feature
 when the compiler supports it.
+
+
+## V2 alpha user sharing (A5)
+
+```swift
+extension GraphDatabase {
+    static func openMirrored(privateStoreAt privateURL: URL, sharedStoreAt sharedURL: URL,
+                             containerIdentifier: String) async throws -> GraphDatabase
+    func cloudSetupStatus() async throws -> GraphCloudSetup
+    func sharingIdentity() async throws -> GraphSharingIdentity
+    func invite(_ recipient: GraphSharingIdentity, to id: GraphID,
+                permission: GraphSharePermission = .readWrite) async throws -> GraphInvitation
+    func acceptInvitation(_ invitation: GraphInvitation) async throws
+    func sharingStatus(for id: GraphID) async throws -> GraphSharingStatus
+    func setPermission(_ permission: GraphSharePermission, for recipient: GraphSharingIdentity,
+                       in id: GraphID) async throws
+    func revoke(_ recipient: GraphSharingIdentity, from id: GraphID) async throws
+    func leaveGraph(_ id: GraphID) async throws
+    func pendingSharedOperations() async throws -> [GraphPendingOperation]
+}
+extension GraphStore {
+    @discardableResult func insertShared(_ records: [GraphRecord]) async throws -> [GraphNodeID]
+    @discardableResult func insertShared<Model: GraphModel>(_ model: Model) async throws -> GraphNodeID
+    func patchShared(_ patch: GraphRecordPatch) async throws -> GraphRecord
+    @discardableResult func recoverSharedOperation() async throws -> [GraphNodeID]
+}
+```
+
+The paired factory reserves both explicit resources under one native owner;
+there is no cloud-to-local fallback. Local open and completed native setup are
+separate from export/import and graph integrity. `GraphCloudSetup: Sendable`
+contains `storeCount`, `readyStoreCount`, `latestFailureDomain: String?` and
+`latestFailureCode: Int?`; counts are `Int`. A metadata preflight failure before
+a durable share request can be retried; an ambiguous existing request cannot
+replay share creation.
+
+`GraphSharingIdentity: Sendable, Codable, Equatable` is opaque.
+`GraphInvitation: Sendable, Codable` exposes only `graphID: GraphID`.
+Both values are sensitive; protect transport, bind it to the intended account
+and container, and never log invitations or identity payloads. Codable decoding
+rejects empty recipient IDs and invitation URLs without HTTPS and a host.
+Acceptance completion does not certify graph import.
+
+`GraphSharePermission: String, Sendable, Codable` has `readOnly` and `readWrite`.
+`GraphShareRole: Sendable, Equatable` has `owner`, `participant`, `unknown`.
+`GraphSharingStoreScope: Sendable, Equatable` has `privateStore`, `sharedStore`.
+`GraphSharingStatus: Sendable` exposes read-only `graphID`, `scope`, `role`,
+`permission: GraphSharePermission?`, `accepted: Bool`, `metadataAvailable: Bool`
+and `hasPendingOperation: Bool`. Status is an observation, not authorization
+or synchronization proof. Owner access reduction/status do not require every
+application payload to decode; permission grants validate graph integrity.
+Leaving only purges the participant's exact share zone in the explicit shared
+store, with no pending originating-device structural intent.
+
+Synchronous scopes may edit existing shared detail values, remove details,
+change endpoints or delete existing members. Creating shared nodes or new
+detail rows requires awaited `insertShared`/`patchShared` outside the scope.
+Even an empty shared insertion checks handle lifetime and mirrored configuration.
+The library checks known accepted read/write metadata and native permission
+advice before writes; server changes may race the local save. `patchShared`
+returns a detached record after committing; application-model decoding is a
+separate explicit step. Existing typed synchronous patch retains pre-mutation
+decoding validation.
+
+Structural operations stage unlinked components, assign every owned row to the
+existing share, verify mappings, then finalize graph links locally. A durable
+local journal beside the shared SQLite records partial work. Recovery never
+replays native assignment; missing mappings and divergent state remain pending
+or errors. `GraphSharedOperationKind: Sendable, Equatable` has `insertion` and
+`patch`. `GraphPendingOperation: Sendable` exposes read-only `graphID`,
+`operationID: UUID`, `kind` and `nodeIDs: [GraphNodeID]` (target IDs for patches).
+`pendingSharedOperations()` remains readable while the writer awaits native
+completion and after graph access disappears; it exposes no payload values.
+
+`GraphSharingError: Error` distinguishes `sharedStoreRequired`, `metadataPending`,
+`invalidInvitation`, `invalidParticipant`, `ownerRequired`, `participantRequired`.
+`GraphStoreError` additionally distinguishes `permissionDenied`,
+`sharedInsertionRequiresPreparation` and `pendingNativeOperation`. Native errors
+retain their original type. A failed native operation may already have persisted
+objects; inspect/recover recorded intent rather than resubmitting the mutation.
+
+`MigrationBackupManager.backupStore` additionally copies the optional
+`<SQLite>.graphevo-operations` directory. `BackupDescriptor.files` lists copied
+entries, including this directory when present. Its restore path copies those
+entries recursively. Obtain a quiescent source and back up both resources of a
+pair with their ledgers. Close is not a cloud synchronization barrier.
+See the [A5 contract](../design/graphevo-2-user-sharing.md) for recovery limits,
+permissions, physical evidence and remaining beta gates.

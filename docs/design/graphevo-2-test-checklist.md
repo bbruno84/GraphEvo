@@ -173,3 +173,16 @@ During specification and implementation, reconcile remaining rows explicitly:
 retain evidence, explain a verified unsupported capability, or record a
 deliberate deferral and its effect. Apply the delivery plan's beta gate before
 consolidating the schema/API. A green demo suite does not close this register.
+
+
+### A5 library integration
+
+The [A5 contract](graphevo-2-user-sharing.md) adds actual private/shared runtime
+ownership and participant operations on the v1-derived model, with unchanged
+native hashes. Local tests cover group overlap/aliases/replacement, partial-load
+cleanup/quarantine, intent preservation and backups, codec/delta validation,
+reserved metadata removal and owned-detail transfer. These are separate from
+[physical evidence](results/a5-native-sharing-2026-10-27.md) across the iPad/XR
+accounts. A load, native acceptance, local save or completed setup alone is not
+cross-device evidence. Broader crash/conflict, account-cache and migration gates
+remain open; no native internal metadata-table mutation is part of this path.

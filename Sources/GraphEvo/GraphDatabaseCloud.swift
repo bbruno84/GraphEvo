@@ -13,6 +13,7 @@ public struct GraphMirrorBoundary: Sendable, Equatable {
 public enum GraphMirroringError: Error {
     case localDatabase
     case preparationPending
+    case metadataUnavailable(underlying: any Error)
     case invalidOwnerOnlyShare
     case missingNativeResponse
 }
@@ -25,28 +26,53 @@ extension GraphDatabase {
                        schema: GraphRuntimeSchema.current, adapter: GraphTypedStoreAdapter.database)
     }
 
+    /// Opens one native owner with explicitly reserved private and shared SQLite resources.
+    public static func openMirrored(privateStoreAt privateURL: URL, sharedStoreAt sharedURL: URL,
+                                    containerIdentifier: String) async throws -> GraphDatabase {
+        try await open(configuration: .init(location: .sqlite(privateURL), cloudKitContainerIdentifier: containerIdentifier,
+                                            sharedStoreURL: sharedURL),
+                       schema: GraphRuntimeSchema.current, adapter: GraphTypedStoreAdapter.database)
+    }
+
     /// Prepares an owner-only zone using the public persistent-container sharing API.
     /// A persisted request with unavailable native metadata is pending and must not create another share.
     /// Success confirms share persistence/export only; graph objects and other devices may still be pending.
     public func prepareMirroring(for id: GraphID) async throws -> GraphMirrorBoundary {
-        try await nativeOperation { native in
+        let setup = try await nativeSetup()
+        guard setup.configured else { throw GraphMirroringError.localDatabase }
+        guard setup.storeCount > 0, setup.readyStoreCount == setup.storeCount else {
+            throw GraphMirroringError.metadataUnavailable(underlying: GraphSharingError.metadataPending)
+        }
+        return try await nativeOperation { native in
             guard let container = native as? NSPersistentCloudKitContainer else { throw GraphMirroringError.localDatabase }
             let prepared = try await container.performBackgroundTask { context -> (NSManagedObjectID, Bool) in
+                GraphSharingNative.prepare(context, container: container)
                 let root = try GraphTypedStoreAdapter.mirroringRoot(context, id: id)
+                guard !StoreNativeContext.isShared(root.runtimeObjectID.persistentStore, in: context) else {
+                    throw GraphStoreError.permissionDenied
+                }
                 let requestKey = GraphTypedStoreAdapter.prefix + "shareRequest"
                 let firstRequest = root[dynamicMember: requestKey] == nil
-                if firstRequest {
-                    root[dynamicMember: requestKey] = "requested"
-                    try context.save()
-                }
                 return (root.runtimeObjectID, firstRequest)
             }
             let objectID = prepared.0
+            let mapped: CKShare?
+            do { mapped = try container.fetchShares(matching: [objectID])[objectID] }
+            catch { throw GraphMirroringError.metadataUnavailable(underlying: error) }
             let share: CKShare
-            if let existing = try container.fetchShares(matching: [objectID])[objectID] {
+            if let existing = mapped {
                 share = existing
             } else {
                 guard prepared.1 else { throw GraphMirroringError.preparationPending }
+                try await container.performBackgroundTask { context in
+                    GraphSharingNative.prepare(context, container: container)
+                    let root = try GraphTypedStoreAdapter.mirroringRoot(context, id: id)
+                    let requestKey = GraphTypedStoreAdapter.prefix + "shareRequest"
+                    guard root[dynamicMember: requestKey] == nil else { throw GraphMirroringError.preparationPending }
+                    root[dynamicMember: requestKey] = "requested"
+                    if let store = root.runtimeObjectID.persistentStore { try root.runtimeAssignOwnedObjects(to: store, in: context) }
+                    try context.save()
+                }
                 // Initiate sharing on the root context's queue without escaping its managed object.
                 share = try await withCheckedThrowingContinuation { continuation in
                     container.performBackgroundTask { context in
@@ -103,5 +129,22 @@ extension GraphDatabase {
                                              pendingMappingCount: pending, unexpectedZoneCount: unexpected)
             }
         }
+    }
+}
+
+/// Counts only completed native setup events. It is not an import or synchronization certificate.
+public struct GraphCloudSetup: Sendable {
+    public let storeCount: Int
+    public let readyStoreCount: Int
+    public let latestFailureDomain: String?
+    public let latestFailureCode: Int?
+}
+
+extension GraphDatabase {
+    public func cloudSetupStatus() async throws -> GraphCloudSetup {
+        let status = try await nativeSetup()
+        guard status.configured else { throw GraphMirroringError.localDatabase }
+        return GraphCloudSetup(storeCount: status.storeCount, readyStoreCount: status.readyStoreCount,
+                               latestFailureDomain: status.latestFailureDomain, latestFailureCode: status.latestFailureCode)
     }
 }

@@ -431,3 +431,26 @@ independent replica integrity are separate facts. Inspect every owned detail
 row when validating boundaries. See `docs/design/graphevo-2-graph-separation.md`
 and `Experiments/A4NativeProbe/README.md`. Do not replay reserved probe stages
 or commit generated stores, case envelopes, device logs or local signing files.
+
+
+## V2 paired stores and user sharing
+
+The v2 alpha uses `GraphDatabase` / `GraphStore` / `GraphModel`; legacy facade
+rules above remain applicable to the internal Core Data adapter. Read the
+[A5 contract](docs/design/graphevo-2-user-sharing.md) before changing sharing.
+One native owner reserves both canonical private/shared resources and their
+identities before loading. Retain all claims on failed native detachment.
+Native setup completion, local save, mappings and independent recovery are
+separate evidence; none is a global synchronization certificate.
+
+Use explicit awaited shared insertion/patch for new participant rows; never
+link unassigned objects to an existing shared graph. Keep partial intent in the
+originating shared store's local operation ledger, include it in backups, and
+recover without replaying native share assignment. Never erase another operation
+on a pre-invocation error. Reserved metadata removals are forbidden as well as
+sets. Leave/purge requires the exact participant zone in the explicit shared
+store. Access reduction must not depend on decoding unrelated app payloads.
+Protect account identity/invitation transports and never log their values.
+Real-device probes retain writer owners until independent peer observation;
+closing after local save is not an export barrier. The Debug assignment-pause
+seam is test infrastructure and must remain absent in Release.

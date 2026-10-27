@@ -58,7 +58,9 @@ check on current local state, not a claim that no further import can arrive.
 This is an alpha candidate, not a frozen schema. It adds per-operation indexing
 and membership work; A7 must measure and improve query costs. Shared-store writes
 and native assignment of new participant details require A5 verification rather
-than an assumption that the owner-private insertion path generalizes.
+than an assumption that the owner-private insertion path generalizes. The
+[A5 implementation](graphevo-2-user-sharing.md) now supplies that separate
+participant path, paired ownership and retained hardware evidence.
 
 ## Native personal mirroring
 
@@ -134,3 +136,6 @@ multi-resource reservations, shared-store assignment of every detail row,
 permissions, invite/leave/revocation and ambiguous-operation recovery are still
 required before the user-sharing exit. Account changes and zone quotas also
 remain release validation requirements.
+
+The subsequent [A5 candidate](graphevo-2-user-sharing.md) implements this next
+boundary; the A4 results above retain their original owner-private scope.

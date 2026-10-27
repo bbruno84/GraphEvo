@@ -9,7 +9,7 @@
 import Foundation
 
 /// Manages backup and restoration of files used by migrations.
-/// (store SQLite + WAL/SHM, baseline.zip, ecc).
+/// Includes SQLite + WAL/SHM, optional operation-ledger directories and other artifacts.
 ///
 /// Goals:
 /// - One reusable API for all migrations (`MigrationV1`, baselines, and future migrations).
@@ -40,13 +40,13 @@ public enum MigrationBackupManager {
         public let originalPath: String
         /// Backup creation date.
         public let createdAt: Date
-        /// Names of files copied into the backup folder.
+        /// Names of copied entries, including the optional operation-ledger directory.
         public let files: [String]
     }
 
     // MARK: - Public API
 
-    /// Backs up an SQLite store (main file plus optional -wal and -shm files).
+    /// Backs up a quiescent SQLite store, optional WAL/SHM files and its operation ledger.
     ///
     /// - Parameters:
     ///   - storeURL: URL of the original .sqlite file.
@@ -91,7 +91,7 @@ public enum MigrationBackupManager {
         // Ensure the folder exists.
         try fm.createDirectory(at: backupFolderURL, withIntermediateDirectories: true, attributes: nil)
 
-        // File principali: .sqlite, .sqlite-wal, .sqlite-shm
+        // SQLite files and the optional local native-operation ledger.
         var copiedFiles: [String] = []
 
         func copyIfExists(_ url: URL) throws {
@@ -111,6 +111,7 @@ public enum MigrationBackupManager {
         try copyIfExists(storeURL)
         try copyIfExists(walURL)
         try copyIfExists(shmURL)
+        try copyIfExists(GraphSharedInsertionJournal.folder(for: storeURL))
 
         let descriptor = BackupDescriptor(
             migrationID: migrationID,

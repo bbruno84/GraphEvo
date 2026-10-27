@@ -23,6 +23,19 @@ private struct CatalogItem: GraphModel {
         return url
     }
 
+    @Test func emptySharedInsertionStillChecksNativeConfigurationAndHandleLifetime() async throws {
+        let database = try await GraphDatabase.inMemory()
+        let graph = try await database.createGraph()
+        await #expect { try await graph.insertShared([]) } throws: { error in
+            if case GraphMirroringError.localDatabase = error { return true }; return false
+        }
+        try await graph.close()
+        await #expect { try await graph.insertShared([]) } throws: { error in
+            if case GraphStoreError.closed = error { return true }; return false
+        }
+        try await database.close()
+    }
+
     @Test func separateGraphsRetainIdentityAndIndependentLeasesThroughReopen() async throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -159,6 +172,20 @@ private struct CatalogItem: GraphModel {
         let missing = directory.appendingPathComponent("Missing.sqlite")
         await #expect(throws: GraphStoreError.self) { try await GraphDatabase.upgradeLocalA3Store(at: missing, backupRoot: blocked) }
         #expect(!FileManager.default.fileExists(atPath: missing.path))
+    }
+
+    @Test func removingReservedMetadataInsideACaughtPatchCannotDamageIdentity() async throws {
+        let graph = try await GraphStore.inMemory()
+        let item = CatalogItem(id: graph.makeNodeID(), label: "retained")
+        try await graph.insert(item)
+        try await graph.transaction { scope throws -> Void in
+            for name in ["__graphevo_v2.graphID", "__graphevo_v2.nodeID", "__graphevo_v2.encodedKeys"] {
+                let patch = try GraphRecordPatch(id: item.id, properties: [name: .remove])
+                #expect(throws: GraphStoreError.self) { try scope.patch(patch) }
+            }
+        }
+        #expect(try await graph.fetch(item.id, as: CatalogItem.self)?.label == "retained")
+        try await graph.close()
     }
 
 }

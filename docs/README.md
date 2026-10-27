@@ -40,6 +40,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   identities, scoped public CRUD, gateway ownership and backed-up local adoption.
 - [GraphEvo 2 A4 graph separation](design/graphevo-2-graph-separation.md): catalog,
   hidden membership, personal native zones and explicit local alpha upgrade.
+- [GraphEvo 2 A5 user sharing](design/graphevo-2-user-sharing.md): paired resource
+  ownership, private invitations, participant edits, permissions and durable recovery.
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
   retaining the original goals and architectural questions. The specification
   supersedes it for current decisions; neither describes the v1 public API.
