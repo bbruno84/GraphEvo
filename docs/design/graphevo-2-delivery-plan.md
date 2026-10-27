@@ -40,8 +40,8 @@ not a promise of one prerelease tag per stage. Remain alpha through stage 8.
 | Area | Current status |
 |---|---|
 | A1–A7 | Reviewed and merged into `codex/graphevo-2` through PRs #70–#76: runtime, async scopes, models/typed CRUD, graph boundaries, user sharing, files and queries |
-| A8 | PR #77 contains async current state, Combine and live rescan hints, with actual cross-account dependency/deletion evidence; review adds two concurrency fixes and regressions. It remains unmerged pending integration |
-| Consolidation | Open: schema/API and cost review, stable processing choice, account/conflict/recovery envelope, platform/process scope and alpha-store policy |
+| A8 | Reviewed and merged through PR #77, including both concurrency corrections; async current state, Combine and live rescan hints have retained local and cross-account dependency/deletion evidence |
+| Consolidation | Started with [C01 cost baseline](graphevo-2-consolidation.md): selective access, metadata/content separation and shared observer work are proposed next; schema/API, stable processing and other supported envelopes remain open |
 | Migration | Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
 | Beta | Not declared. Eight implementation candidates do not alone satisfy the entry gate below |
 

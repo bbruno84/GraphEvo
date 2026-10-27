@@ -236,3 +236,12 @@ A8 review adds regressions for an account hint masked by a delayed ordinary
 publication and synchronous subscriber-deinit cancellation. See the result's
 review follow-up; these local concurrency checks do not extend hardware
 account-switch/replay coverage.
+
+## C01 — consolidation cost screen
+
+The [C01 result](results/c01-cost-baseline-2026-10-27.md) retains 182 validated
+local Release samples across eight synthetic SQLite configurations. It extends
+V05/V06/V07 cost evidence with explicit scalar-query budget refusals, file/list
+costs, fresh-process identity reads and one/eight-observer cycles. It does not
+establish physical-device, CloudKit, real-data or supported production limits.
+No semantic test, query allowance or existing schema was relaxed for a timing.

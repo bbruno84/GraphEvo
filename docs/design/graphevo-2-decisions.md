@@ -54,6 +54,13 @@ caller-owned export destinations, entity deletion cleanup of incident edges,
 and separation of handle close from final runtime shutdown. These are technical
 defaults for alpha review, not historical v1 behavior or frozen public APIs.
 
+The [C01 cost review](results/c01-cost-baseline-2026-10-27.md) is evidence for
+D01/D12/D13 and observation execution costs, not a new maintainer decision or
+schema freeze. It supports prototyping selective identity/session access,
+separate attachment metadata/body and shared observation work under the
+[consolidation plan](graphevo-2-consolidation.md). M12's final representation/
+envelope decision remains open after this first local screen.
+
 ## Cross-cutting choices still open
 
 | ID | Choice | Why it matters | Treatment now |
