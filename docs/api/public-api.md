@@ -1136,7 +1136,7 @@ enum GraphStoreBackup {
 Codable metadata is transport data, not authority or proof that bytes are locally
 available. Complete reads verify content, version, identities, owner and checksum.
 On the C03a experimental branch, `attachments(ownedBy:)` validates descriptive
-metadata without loading split content; listing does not certify body availability
+metadata without decoding/verifying split content; listing does not certify body availability
 or integrity. Existing A6 single-envelope files retain full validation on listing.
 Nil denotes an absent local node; incomplete/invalid content or an unavailable
 owner throws. This does not establish permanent cloud absence or corruption.

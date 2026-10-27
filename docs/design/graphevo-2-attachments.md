@@ -34,8 +34,8 @@ Older A6 readers cannot read new split values.
 
 Complete reads and sharing integrity checks validate version, graph/node
 identities, owner, size and checksum. Split metadata listing validates descriptive
-metadata without reading/decoding/hashing the content value; it does not certify
-body availability or integrity. Legacy listing still validates the complete
+metadata without explicitly decoding/hashing the body value; it does not certify
+body availability or integrity. Native faulting/I/O and memory costs remain framework-controlled. Legacy listing still validates the complete
 old envelope. Missing or mismatched content fails on full reads and integrity
 checks, including during a partial import, without establishing permanent
 corruption. Control-only access reduction remains available.

@@ -18,13 +18,14 @@ metadata, while `content` holds original bytes. Both still use GraphValueCodec;
 this experiment does not remove JSON/Base64 overhead on full reads. The existing
 A5 insertion plan includes both values in native assignment and durable intent.
 A local replacement updates existing values atomically under revision checks;
-CloudKit import is not atomic across independently mirrored values. Complete
+The local transaction does not guarantee atomic cloud import of both values. Complete
 reads reject mixed metadata/body checksums. Listing certifies neither body
 availability nor checksum; no progress/download-state API is introduced.
 
 The listing adapter inventories/checks identities and membership as before, then
 reads only the metadata key through the scoped facade. It checks the encoded-key
-list and does not decode unrelated user values. Legacy envelopes fall back to
+list and does not explicitly decode unrelated user values. Native faulting may still load
+data; this is not a body-size-independent memory or I/O guarantee. Legacy envelopes fall back to
 complete verified decoding. Results keep stable ID ordering and owner filtering.
 Queries deliberately still snapshot every scoped record, including file bodies,
 and charge their actual encoded bytes before decoding. Default-budget refusal
@@ -60,3 +61,6 @@ split metadata/body mismatch, malformed/future metadata, mixed representation,
 unknown-property preservation and a poisoned body that listing must not decode
 while complete reads and sharing integrity still fail. Run the full suite and
 required manifest/diff checks. Publish results before choosing the next change.
+
+See the [retained result](results/c03a-attachment-metadata-costs-2026-10-27.md)
+for both runs, remaining query costs and outstanding device gates.

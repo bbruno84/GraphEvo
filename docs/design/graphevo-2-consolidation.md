@@ -81,3 +81,14 @@ policy. Demonstrate representative end-to-end v1 local/cloud migration
 feasibility, including the coordinated cutover and returning old devices.
 Only then review beta entry. Complete migration tooling, real app adoption and
 release acceptance during beta; mandatory data migration cannot become optional.
+
+## First attachment metadata experiment
+
+[C03a](graphevo-2-attachment-metadata-experiment.md) separates metadata/body on
+new files and preserves existing envelopes. The [local result](results/c03a-attachment-metadata-costs-2026-10-27.md)
+retains 564 measurements and 473 passing tests. Four 10-MiB file listing improves
+from about 219 ms to 29–30 ms; sampled process peak falls from 134 to 71 MiB.
+Native faulting/memory remain variable, complete reads and query costs are
+largely unchanged, and default query allowance still refuses four large files.
+The candidate remains isolated: device assignment/import/replacement/conflict
+acceptance, coordinated conversion and query body avoidance are still open.

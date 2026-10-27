@@ -54,6 +54,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   cost baseline and proposed selective-access, file and observation improvements.
 - [GraphEvo 2 metadata experiment](design/graphevo-2-metadata-experiment.md):
   C02a baseline/A/B comparisons and scope-confined metadata batching candidate.
+- [GraphEvo 2 attachment metadata experiment](design/graphevo-2-attachment-metadata-experiment.md):
+  C03a split metadata, legacy fallback and local cost/correctness evaluation.
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
   retaining the original goals and architectural questions. The specification
   supersedes it for current decisions; neither describes the v1 public API.
