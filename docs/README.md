@@ -56,6 +56,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   C02a baseline/A/B comparisons and scope-confined metadata batching candidate.
 - [GraphEvo 2 attachment metadata experiment](design/graphevo-2-attachment-metadata-experiment.md):
   C03a split metadata, legacy fallback and local cost/correctness evaluation.
+- [GraphEvo 2 native identity experiment](design/graphevo-2-native-identity-experiment.md):
+  C02b isolated native model, explicit copy conversion and selective point lookup.
 - [GraphEvo 2 experiment matrix](design/graphevo-2-experiment-matrix.md):
   binary/query variants, regression and owner/participant native lifecycle, with
   [measured outcomes](design/results/cost-matrix-2026-10-27.md).
@@ -69,3 +71,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   evidence, remaining tests and their scope.
 - [GraphEvoDemo initial assessment](design/graphevo-demo-initial-assessment.md):
   source state, existing coverage, build evidence, and laboratory preparation.
+
+- [C02b native identity results](design/results/c02b-native-identities-2026-10-27.md):
+  selective reads/patches, retained endpoint regressions, bounded topology and
+  metadata batching, explicit integrity costs and remaining migration/cloud gates.

@@ -249,3 +249,25 @@ Sources: A6 backup contract, specification S11, V05/V08.
 - [ ] **R** Review release notes, incompatible-beta migration paths and downgrade
   boundaries; verify mandatory migration and all selected acceptance gates before
   the release PRs/tags described in the delivery plan.
+
+
+## C02b native identity prototype gates
+
+- [ ] Integrate a selected native identity model only after reviewing the
+  [prototype](graphevo-2-native-identity-experiment.md): default schema/openers
+  remain unchanged during the experiment.
+- [ ] Define production point-read absence/global-validation semantics, including
+  missing columns, raw/column disagreement, duplicates, import progress and old
+  writers. An activated local fixture is not a cloud completeness certificate.
+- [ ] Validate paired-store/cloud conversion, actual native sharing and recovery,
+  source/auxiliary/ledger protection and mandatory v1 mapping before adoption.
+- [ ] Check high-degree Relationship/Action reference costs and indexing/storage
+  trade-offs; Entity-only latency is insufficient for graph-wide acceptance.
+
+- [x] Measure the local C02b native-column candidates, including 500-reference
+  actions and a second independent campaign. The [retained result](results/c02b-native-identities-2026-10-27.md)
+  includes both regressing intermediate resolvers; integrated C02 gates above
+  remain open.
+- [ ] Carry the changed-owner facade fallback and staged/raw-mismatched endpoint
+  regressions into integrated metadata/import tests on supported SDKs. A batched
+  property fetch must never hide newly inserted metadata from the local view.

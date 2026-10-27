@@ -44,7 +44,7 @@ jobs:
         run: swift package dump-package
 
       - name: Resolve dependencies
-        run: xcodebuild -resolvePackageDependencies -scheme GraphEvo
+        run: xcodebuild -resolvePackageDependencies -scheme GraphEvo-Package
 
       - name: Prepare iOS 18.5 simulator
         run: |
@@ -68,7 +68,7 @@ jobs:
       - name: Build and run tests on iOS Simulator
         run: >-
           xcodebuild test
-          -scheme GraphEvo
+          -scheme GraphEvo-Package
           -destination 'platform=iOS Simulator,id=${{ env.GRAPHEVO_SIMULATOR_ID }}'
           CODE_SIGNING_ALLOWED=NO
 
@@ -93,12 +93,12 @@ jobs:
         run: swift package dump-package
 
       - name: Resolve dependencies
-        run: xcodebuild -resolvePackageDependencies -scheme GraphEvo
+        run: xcodebuild -resolvePackageDependencies -scheme GraphEvo-Package
 
       - name: Build and run tests on macOS
         run: >-
           xcodebuild test
-          -scheme GraphEvo
+          -scheme GraphEvo-Package
           -destination 'platform=macOS'
           CODE_SIGNING_ALLOWED=NO
 
@@ -107,6 +107,11 @@ jobs:
       - name: Run Swift 6 model consumer
         run: swift run --package-path IntegrationTests/PackageConsumer ModelConsumer
 
+      - name: Validate native identity laboratory (functional smoke only)
+        run: |
+          swift build -c release --product IdentityLookupProbe
+          IDENTITY_PROBE_BIN="$(swift build -c release --show-bin-path)"
+          python3 Experiments/IdentityLookup/run.py --executable "$IDENTITY_PROBE_BIN/IdentityLookupProbe" --output "$RUNNER_TEMP/graphevo-identity-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --cases smoke --repetitions 1
       - name: Validate consolidation harness (functional smoke only)
         run: |
           swift build -c release --package-path Experiments/ConsolidationCosts
