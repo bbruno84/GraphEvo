@@ -252,6 +252,7 @@ package enum GraphTypedStoreAdapter {
         private(set) var nativeCandidateCount = 0
         var root: Entity?
         var membership: Action?
+        private var metadata: GraphRuntimeMetadata?
 
         init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false, maximumCandidates: Int? = nil) throws {
             graph = facade(context)
@@ -261,10 +262,11 @@ package enum GraphTypedStoreAdapter {
             try GraphValueDecodingDiagnostics.checking {
                 let all = try maximumCandidates.map { try boundedNodes(graph, limit: $0) } ?? allNodes(graph)
                 nativeCandidateCount = all.count
+                metadata = try GraphRuntimeMetadata(nodes: all, keys: [graphKey, idKey, formatsKey, layoutKey, stageKey], context: context)
                 let roots = all.filter { $0.runtimeTypeIfPresent == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
                 guard roots.count == 1, let selected = roots[0] as? Entity,
-                      selected[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
-                      selected[dynamicMember: layoutKey] as? String == (database ? databaseVersion : layoutVersion) else { throw GraphStoreError.corruptIdentity }
+                      metadataValue(selected, graphKey) as? String == graphID.rawValue.uuidString,
+                      metadataValue(selected, layoutKey) as? String == (database ? databaseVersion : layoutVersion) else { throw GraphStoreError.corruptIdentity }
                 root = selected
                 if database {
                     let candidates = all.filter { $0.type == membersType && $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString }
@@ -272,10 +274,10 @@ package enum GraphTypedStoreAdapter {
                     membership = action
                 }
                 for node in all where node.runtimeTypeIfPresent != rootType && (!database || node.runtimeTypeIfPresent != membersType) {
-                    if database, node[dynamicMember: graphKey] as? String != graphID.rawValue.uuidString { continue }
-                    if database, let staged = node[dynamicMember: stageKey] {
+                    if database, metadataValue(node, graphKey) as? String != graphID.rawValue.uuidString { continue }
+                    if database, let staged = metadataValue(node, stageKey) {
                         guard node.runtimeTypeIfPresent != nil, let text = staged as? String, UUID(uuidString: text) != nil,
-                              let nodeID = node[dynamicMember: idKey] as? String, UUID(uuidString: nodeID) != nil else {
+                              let nodeID = metadataValue(node, idKey) as? String, UUID(uuidString: nodeID) != nil else {
                             throw GraphStoreError.corruptIdentity
                         }
                         _ = try encodedKeys(node)
@@ -292,8 +294,8 @@ package enum GraphTypedStoreAdapter {
                         continue
                     }
                     guard let type = node.runtimeTypeIfPresent, !type.hasPrefix(prefix),
-                          node[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
-                          let text = node[dynamicMember: idKey] as? String, let uuid = UUID(uuidString: text) else {
+                          metadataValue(node, graphKey) as? String == graphID.rawValue.uuidString,
+                          let text = metadataValue(node, idKey) as? String, let uuid = UUID(uuidString: text) else {
                         throw GraphStoreError.corruptIdentity
                     }
                     let id = GraphNodeID(graphID: graphID, rawValue: uuid)
@@ -318,6 +320,10 @@ package enum GraphTypedStoreAdapter {
                     } else if edge.subject == nil && edge.object == nil { throw GraphStoreError.corruptIdentity }
                 }
             }
+        }
+
+        private func metadataValue(_ node: Node, _ key: String) -> Any? {
+            metadata?.value(for: node, key: key)
         }
 
         var isShared: Bool { StoreNativeContext.isShared(root?.runtimeObjectID.persistentStore, in: context) }
@@ -354,8 +360,8 @@ package enum GraphTypedStoreAdapter {
         }
 
         func referenceID(_ entity: Entity) throws -> GraphNodeID {
-            guard entity[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
-                  let value = entity[dynamicMember: idKey] as? String, let uuid = UUID(uuidString: value) else {
+            guard metadataValue(entity, graphKey) as? String == graphID.rawValue.uuidString,
+                  let value = metadataValue(entity, idKey) as? String, let uuid = UUID(uuidString: value) else {
                 throw GraphStoreError.unresolvedReference
             }
             let id = GraphNodeID(graphID: graphID, rawValue: uuid)
@@ -380,7 +386,7 @@ package enum GraphTypedStoreAdapter {
         }
 
         func encodedKeys(_ node: Node) throws -> Set<String> {
-            guard let raw = node[dynamicMember: formatsKey], let keys = raw as? [String], Set(keys).count == keys.count,
+            guard let raw = metadataValue(node, formatsKey), let keys = raw as? [String], Set(keys).count == keys.count,
                   keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.corruptIdentity }
             return Set(keys)
         }
