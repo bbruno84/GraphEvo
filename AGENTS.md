@@ -459,12 +459,15 @@ seam is test infrastructure and must remain absent in Release.
 
 Read the [A6 contract](docs/design/graphevo-2-attachments.md) before changing
 attachment persistence. The alpha uses reserved logical type
-`GraphEvo.Attachment.v1` and one versioned content value over the unchanged
-native model. Validate the complete envelope, identity, same-graph exclusive
+`GraphEvo.Attachment.v1` over the unchanged native model. C03a experiments with
+separate `attachmentMetadata` and `content` values; retain dual reads and preserve
+legacy envelopes on replacement, with no implicit conversion/downgrade claim.
+Metadata-only listing does not certify content availability/integrity; full reads
+and native sharing checks must still validate both values. Validate identity, same-graph exclusive
 owner, byte count and digest; no owner transfer or attachment-owned attachment.
 Prepare security-scoped coordinated I/O outside write scopes. Participant
 imports use A5 assignment/journal recovery; replacement edits the existing
-property under permission/revision checks. Do not replay partial native import.
+values under permission/revision checks. Do not replay partial native import.
 Owner deletion must include files on implicitly deleted edges, with dependency
 and permission checks before edits. Preserve rollback and surviving actions.
 Use whole-directory backups from a quiescent closed source for external content;

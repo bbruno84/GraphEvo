@@ -121,6 +121,10 @@ The existing physical assignment interruption is evidence for one window only.
   identity and ownership model as its starting point. Measure envelope decoding,
   full-content listing, copies, peak memory, latency and storage with representative
   content/sizes/graph counts; select representation and supported size envelope.
+- [ ] **B** Complete C03a split-file acceptance: native participant insertion and
+  two-value replacement/recovery, partial import/conflicting values, mixed old/new
+  stores and coordinated legacy conversion. Metadata listing is not a body
+  availability certificate. See the [experiment](graphevo-2-attachment-metadata-experiment.md).
 - [ ] **B** Decide whether query/list costs require metadata separation or schema
   changes. Document actual availability and unsupported streaming/progress/
   eviction/selective-download behavior rather than promising these capabilities.

@@ -165,7 +165,7 @@ import GraphEvoModel
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let file = try #require(session.nodes[metadata.id])
                 // Inject a partial-import reference through its scoped facade; no mutation is committed.
-                file[dynamicMember: "content"] = try GraphValueCodec.encode(try #require(orphan.properties["content"]))
+                for (key, value) in orphan.properties { file[dynamicMember: key] = try GraphValueCodec.encode(value) }
                 #expect(throws: GraphAttachmentError.self) { try GraphTypedStoreAdapter.mirroringRoot(context, id: graph.id) }
                 #expect(throws: GraphAttachmentError.self) { try GraphTypedStoreAdapter.nativeMembers(context, id: graph.id) }
                 #expect(try GraphTypedStoreAdapter.controlRoot(context, id: graph.id).runtimeTypeIfPresent == GraphTypedStoreAdapter.rootType)
@@ -187,5 +187,75 @@ import GraphEvoModel
         await #expect(throws: GraphAttachmentError.self) { try await GraphStoreBackup.copyClosedDirectory(from: live, to: root) }
         let destination = root.appendingPathComponent("Existing"); try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         await #expect(throws: GraphAttachmentError.self) { try await GraphStoreBackup.copyClosedDirectory(from: live, to: destination) }
+    }
+}
+
+extension GraphAttachmentTests {
+    @Test func mixedLegacyAndSplitFilesReopenReplaceAndCascadeWithoutImplicitConversion() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Graph.sqlite")
+        let graph = try await GraphStore.open(at: url)
+        let owner = try await owner(graph)
+        let old = try GraphAttachmentPayload(id: graph.makeNodeID(), ownerID: owner, fileName: "old.bin", contentType: "public.data", data: Data([1, 2]))
+        let oldRecord = try old.graphRecord(legacy: true)
+        try await graph.transaction { _ = try $0.insert(oldRecord) }
+        let input = try source(root, bytes: Data([3, 4]))
+        let fresh = try await graph.importAttachment(from: input, ownedBy: owner)
+        #expect(Set(try await graph.attachments(ownedBy: owner).map(\.id)) == [old.id, fresh.id])
+        #expect(try await graph.attachment(old.id)?.data == Data([1, 2]))
+        let extra = try GraphRecordPatch(id: old.id, properties: ["applicationField": .set(.string("preserved"))], addingTags: ["tag"])
+        _ = try await graph.transaction { try $0.patch(extra) }
+        let replaced = try await graph.replaceAttachment(old.id, from: input)
+        #expect(replaced.id == old.id && replaced.ownerID == owner)
+        try await graph.close()
+        let reopened = try await GraphStore.open(at: url)
+        try await reopened.read { scope in
+            let legacy = try #require(try scope.record(for: old.id))
+            #expect(legacy.properties[GraphAttachmentPayload.metadataKey] == nil)
+            #expect(legacy.properties["applicationField"] == .string("preserved") && legacy.tags.contains("tag"))
+            #expect(try scope.attachment(old.id)?.data == Data([3, 4]))
+            #expect(try scope.record(for: fresh.id)?.properties[GraphAttachmentPayload.metadataKey] != nil)
+            #expect(try scope.attachments(ownedBy: owner).count == 2)
+        }
+        try await reopened.delete(owner)
+        #expect(try await reopened.attachment(old.id) == nil)
+        #expect(try await reopened.attachment(fresh.id) == nil)
+        try await reopened.close()
+    }
+
+    @Test func metadataProjectionSkipsInvalidBodyWhileContentAndSharingIntegrityStillFail() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let database = try await GraphDatabase.inMemory(), graph = try await database.createGraph()
+        let owner = try await owner(graph)
+        let metadata = try await graph.importAttachment(from: source(root, bytes: Data([1, 2])), ownedBy: owner)
+        try await database.nativeOperation { native in
+            try await native.performBackgroundTask { context in
+                defer { context.rollback(); context.reset() }
+                let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
+                let file = try #require(session.nodes[metadata.id])
+                // A malformed codec body must not be decoded by a metadata-only list.
+                file[dynamicMember: GraphAttachmentPayload.contentKey] = Data([0])
+                let project = try #require(GraphTypedStoreAdapter.database.graph.attachmentMetadata)
+                #expect(try project(context, graph.id) == [metadata])
+                #expect(throws: (any Error).self) { try session.record(metadata.id) }
+                #expect(throws: (any Error).self) { try GraphTypedStoreAdapter.mirroringRoot(context, id: graph.id) }
+            }
+        }
+        #expect(try await graph.attachment(metadata.id)?.data == Data([1, 2]))
+        try await graph.close(); try await database.close()
+    }
+}
+
+extension GraphAttachmentTests {
+    @Test func durableSharedInsertionIntentRetainsBothAttachmentValues() throws {
+        let graph = GraphID()
+        let payload = try GraphAttachmentPayload(id: GraphNodeID(graphID: graph), ownerID: GraphNodeID(graphID: graph), fileName: "file.bin", contentType: "public.data", data: Data([0, 255]))
+        let record = try payload.graphRecord()
+        let plan = try GraphSharedInsertionPlan(graphID: graph, records: [record])
+        let decoded = try JSONDecoder().decode(GraphSharedInsertionPlan.self, from: JSONEncoder().encode(plan))
+        let recovered = try #require(try decoded.records().first)
+        #expect(recovered == record)
+        #expect(recovered.properties.count == 2)
+        #expect(try GraphAttachmentPayload(graphRecord: recovered).content == payload.content)
     }
 }

@@ -40,6 +40,7 @@ package struct GraphStoreAdapter: Sendable {
     package let insert: @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void
     package let patch: @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord
     package let delete: @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void
+    package let attachmentMetadata: (@Sendable (NSManagedObjectContext, GraphID) throws -> [GraphAttachmentMetadata])?
     package let query: (@Sendable (NSManagedObjectContext, GraphID, GraphQueryRequest) throws -> GraphQueryOutput)?
 
     package init(
@@ -49,10 +50,11 @@ package struct GraphStoreAdapter: Sendable {
         insert: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void,
         patch: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord,
         delete: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void,
+        attachmentMetadata: (@Sendable (NSManagedObjectContext, GraphID) throws -> [GraphAttachmentMetadata])? = nil,
         query: (@Sendable (NSManagedObjectContext, GraphID, GraphQueryRequest) throws -> GraphQueryOutput)? = nil
     ) {
         self.initialize = initialize; self.fetch = fetch; self.fetchAll = fetchAll
-        self.insert = insert; self.patch = patch; self.delete = delete; self.query = query
+        self.insert = insert; self.patch = patch; self.delete = delete; self.query = query; self.attachmentMetadata = attachmentMetadata
     }
 }
 

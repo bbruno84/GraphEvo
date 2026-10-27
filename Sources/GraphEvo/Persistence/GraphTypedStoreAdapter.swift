@@ -43,6 +43,19 @@ package enum GraphTypedStoreAdapter {
             insert: { context, graphID, record in try Session(context, graphID, database: database).insert(record) },
             patch: { context, graphID, patch in try Session(context, graphID, database: database).patch(patch) },
             delete: { context, graphID, id in try Session(context, graphID, database: database).delete(id) },
+            attachmentMetadata: { context, graphID in
+                let session = try Session(context, graphID, database: database)
+                return try session.nodes.compactMap { id, node -> GraphAttachmentMetadata? in
+                    guard node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType else { return nil }
+                    guard session.kind(node) == .entity else { throw GraphAttachmentError.notAnAttachment }
+                    // A metadata projection must not decode the body or unrelated application values.
+                    let formats = try session.encodedKeys(node)
+                    let key = formats.contains(GraphAttachmentPayload.metadataKey) ? GraphAttachmentPayload.metadataKey : GraphAttachmentPayload.contentKey
+                    guard formats.contains(key), let bytes = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
+                    let record = try GraphRecord(id: id, type: node.type, properties: [key: GraphValueCodec.decode(bytes)])
+                    return try GraphAttachmentPayload.metadata(from: record)
+                }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
+            },
             query: { context, graphID, request in
                 let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
                 try checkCancellation()

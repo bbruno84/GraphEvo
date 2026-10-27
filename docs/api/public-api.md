@@ -1134,7 +1134,10 @@ enum GraphStoreBackup {
 `byteCount: Int`, `sha256: String` and `revision: UUID`.
 `GraphAttachmentContent: Sendable, Equatable` exposes `metadata` and `data: Data`.
 Codable metadata is transport data, not authority or proof that bytes are locally
-available. Reads verify complete content, version, identities, owner and checksum.
+available. Complete reads verify content, version, identities, owner and checksum.
+On the C03a experimental branch, `attachments(ownedBy:)` validates descriptive
+metadata without loading split content; listing does not certify body availability
+or integrity. Existing A6 single-envelope files retain full validation on listing.
 Nil denotes an absent local node; incomplete/invalid content or an unavailable
 owner throws. This does not establish permanent cloud absence or corruption.
 
@@ -1144,7 +1147,7 @@ owner and creation date and rejects a locally changed revision. Owner deletion
 cleans owned files, including those on implicitly deleted relationship edges;
 transaction rollback preserves the previous content. Raw patches cannot transfer
 ownership or replace valid content with malformed metadata. `GraphEvo.Attachment.v1`
-and its `content` representation are reserved for this alpha feature. Current
+and its `content` / experimental `attachmentMetadata` properties are reserved for this alpha feature. Current
 native model hashes remain unchanged; v1 binary fields are not automatically
 converted into attachments.
 

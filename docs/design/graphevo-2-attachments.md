@@ -17,22 +17,30 @@ identifier. Existing v1 binary properties are not automatically reinterpreted
 as owned attachments. Older alpha readers do not implement this ownership/cleanup
 contract; downgrading an A6 attachment-bearing store to those readers is unsupported.
 
-The candidate reuses an Entity with logical type `GraphEvo.Attachment.v1` and
-one `content` property. A versioned binary property-list envelope holds metadata
-and bytes together; the existing versioned value codec then stores it through
-Core Data's transformable property, which already permits external binary
-storage. The native model/hashes are unchanged. The logical type/content format
-is reserved for this feature. This is a deliberate alpha representation to
-exercise files on the current schema, not a final schema commitment or a claim
-that the OS chose physical external storage.
+The integrated A6 baseline reuses an Entity with logical type
+`GraphEvo.Attachment.v1` and one `content` property containing a versioned binary
+property-list envelope with metadata and bytes. The C03a experiment keeps that
+logical type, identity, owner and native model, but writes a version-2 metadata
+envelope in `attachmentMetadata` and the original bytes in `content`. Both
+properties still use the existing versioned GraphValue codec and Core Data
+transformable storage. Native external binary placement is an OS decision.
 
-One native property value binds metadata and bytes; reads still verify its
-version, graph/node identities, owner, size and checksum. Full sharing integrity checks validate file content as well;
-control-only access reduction remains available without decoding that content.
-An unavailable owner,
-missing value or mismatched content fails visibly. Such a failure during cloud
-import does not establish permanent corruption. Native snapshots are separate
-from application-model decoding and from cloud import completeness.
+The experimental reader supports both representations. Existing A6 values are
+not rewritten on open, listing or replacement: a replacement of an old envelope
+retains its format, avoiding new native detail rows on a participant store.
+There is no automatic conversion or alpha downgrade support. A coordinated
+conversion, including previously assigned shares, is still a separate gate.
+Older A6 readers cannot read new split values.
+
+Complete reads and sharing integrity checks validate version, graph/node
+identities, owner, size and checksum. Split metadata listing validates descriptive
+metadata without reading/decoding/hashing the content value; it does not certify
+body availability or integrity. Legacy listing still validates the complete
+old envelope. Missing or mismatched content fails on full reads and integrity
+checks, including during a partial import, without establishing permanent
+corruption. Control-only access reduction remains available.
+
+See the [C03a procedure and decision](graphevo-2-attachment-metadata-experiment.md).
 
 ## Lifecycle
 
@@ -68,10 +76,10 @@ native delete advice before editing, and preserves the existing behavior of
 surviving actions/endpoints. Transaction failure rolls back all these removals.
 
 Read results are detached `GraphAttachmentContent` values with complete bytes.
-`attachments(ownedBy:)` lists detached metadata in stable node-ID order. Both
-listing and reading currently decode/check complete content; metadata listing is
-not yet a cheap projection. Synchronous read scopes expose the same read/list
-operations. File I/O is not allowed inside a mutation scope.
+`attachments(ownedBy:)` lists detached metadata in stable node-ID order.
+Complete reading verifies the content. Listing is a metadata-only projection for
+split files, with full-envelope fallback for legacy files. Synchronous read scopes expose the
+same read/list operations. File I/O is not allowed inside a mutation scope.
 
 Export snapshots and verifies content first, then coordinates a write at a new
 caller-selected file URL. It prepares a temporary sibling before publishing;
@@ -92,7 +100,7 @@ remains release work. Native errors may already have persisted objects:
 inspect `pendingSharedOperations()`, recover the recorded operation and obtain
 its attachment metadata by the returned IDs; do not resubmit the import.
 
-Replacement changes the existing content property and therefore uses the
+Replacement changes existing content/metadata properties and therefore uses the
 ordinary permission-checked transaction rather than creating new shared rows.
 Deletion uses the same ownership and native permission checks. Account/cache
 policy and remote conflicting replacements remain release gates. No direct
