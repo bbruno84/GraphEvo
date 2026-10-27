@@ -40,6 +40,8 @@ internal let GraphEvoRemoteChangeAlreadyMergedKey = "GraphEvo.remoteChangeAlread
 /// GraphEvo never migrates or moves an incompatible existing store.
 public enum GraphStoreOpeningError: LocalizedError {
     case incompatibleStore(URL)
+    case runtimeOwnershipConflict(URL)
+    case requiresV2Runtime(URL)
     case unreadableStore(URL, underlying: Error)
     case failedToLoadStore(URL, underlying: Error)
     case cloudKitEnvironmentUnavailable
@@ -49,6 +51,10 @@ public enum GraphStoreOpeningError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
+        case .runtimeOwnershipConflict:
+            return "The store is owned by another persistence runtime."
+        case .requiresV2Runtime:
+            return "The store contains GraphEvo 2 identities and requires the typed store API."
         case .incompatibleStore(let url):
             return "The store at \(url.path) is incompatible with the GraphEvo model. Migrate it in the application before opening GraphEvo."
         case .unreadableStore(let url, let error):

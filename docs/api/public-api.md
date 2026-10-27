@@ -834,3 +834,134 @@ change the original transaction result. No retries or alternative conflict
 checks are introduced. Consumers with exhaustive `GraphEvent` switches must
 handle the new diagnostic case. A consumer may correlate terminal application
 state, outcome, and history in any arrival order using the UUID.
+
+
+## GraphEvo 2 alpha model contracts
+
+The following additive types are available through `import GraphEvo`. They are
+implemented in the Swift 6 GraphEvoModel target and do not open a store. The typed GraphStore opening gateway is described below; legacy Graph remains
+available for v1 stores. See the
+[A3 guide](../design/graphevo-2-application-models.md) for scope and limitations.
+
+- `GraphID(rawValue: UUID = UUID())`: Sendable, Hashable, Codable graph identity;
+  read-only `rawValue`.
+- `GraphNodeID(graphID: GraphID, rawValue: UUID = UUID())`: Sendable, Hashable,
+  Codable node identity; read-only `graphID` and `rawValue`.
+- `GraphNodeKind`: `.entity`, `.relationship`, `.action`.
+- `GraphEndpoints`: `.entity`, `.relationship(subject: GraphNodeID?, object:
+  GraphNodeID?)`, `.action(subjects: Set<GraphNodeID>, objects: Set<GraphNodeID>)`;
+  read-only `kind`.
+- `GraphValue`: `.null`, `.boolean(Bool)`, `.integer(Int64)`,
+  `.unsignedInteger(UInt64)`, `.floatingPoint(Double)`, `.decimal(Decimal)`,
+  `.string(String)`, `.data(Data)`, `.date(Date)`, `.url(URL)`, `.uuid(UUID)`,
+  `.array([GraphValue])`, `.object([String: GraphValue])`,
+  `.encoded(GraphEncodedValue)`; Sendable and Equatable.
+- `GraphEncodedValue(codec: String, version: UInt, data: Data) throws`: read-only
+  codec/version/data; unknown codecs retain bytes without implicit execution.
+- `GraphPropertyValue: Sendable`: `var graphValue: GraphValue { get }` and
+  `init(graphValue: GraphValue) throws`. Conformances: GraphValue,
+  GraphEncodedValue, String, Bool, Int, Int64, UInt64, Double, Decimal, Data,
+  Date, URL, UUID, and conditional Optional, Array and string-keyed Dictionary.
+- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:) throws`:
+  read-only fields; endpoints defaults to `.entity`, properties/tags/groups to
+  empty and creation date to nil. Type/property keys must be nonempty and
+  references must have the same graph ID.
+- `GraphRecord.value<Value: GraphPropertyValue>(for:as:) throws -> Value`:
+  defaults `as` to Value.self; missing keys and failed typed decoding differ.
+- `GraphModel: Sendable`: read-only `id: GraphNodeID`; static `graphType: String`
+  and `graphKind: GraphNodeKind`; `init(graphRecord: GraphRecord) throws` and
+  `graphRecord() throws -> GraphRecord`.
+- `GraphRecord.init<Model: GraphModel>(_ model: Model) throws` and
+  `decoded<Model: GraphModel>(as: Model.Type = Model.self) throws -> Model`:
+  checked mapping validates type, kind and identity.
+- `GraphPropertyChange`: `.set(GraphValue)` and `.remove`; setting null is
+  distinct from removing a property in the detached contract.
+- `GraphRecordPatch(id:properties:addingTags:removingTags:addingGroups:
+  removingGroups:endpoints:) throws`: defaults all changes to empty/unchanged;
+  read-only matching fields. `applying(to: GraphRecord) throws -> GraphRecord`
+  preserves unknown fields and metadata, rejecting identity/kind conflicts.
+- `GraphModelError`: `invalidRecord(String)`, `invalidValue`,
+  `missingProperty(String)`, `propertyDecodingFailed(String, underlying: Error)`,
+  `unexpectedType`, `unexpectedKind`, `identityMismatch`, `crossGraphReference`,
+  `conflictingPatch`, `unsupportedLegacyValue(String)`; LocalizedError.
+
+These detached values do not establish persistent membership, resolve endpoint
+existence, run codecs or commit edits. Public v2 scopes, durable ID persistence,
+legacy translation and null/codec storage remain incomplete. Never apply a stale
+encoded model as a whole-record replacement that drops unknown properties.
+
+
+## GraphEvo 2 typed local persistence
+
+All types below are available through `import GraphEvo` and compile in Swift 6.
+See [the typed store guide](../design/graphevo-2-typed-store.md) for identity,
+layout, complexity, adoption and migration limits.
+
+`GraphStore` is a Sendable actor with:
+
+```swift
+static func open(at url: URL) async throws -> GraphStore
+static func inMemory() async throws -> GraphStore
+static func adoptLocalV1Store(at url: URL, backupRoot: URL) async throws
+    -> (store: GraphStore, report: GraphV1AdoptionReport)
+nonisolated let id: GraphID
+nonisolated func makeNodeID() -> GraphNodeID
+func close() async throws
+func read<Value: Sendable>(
+    _ body: @escaping @Sendable (GraphReadScope) throws -> Value
+) async throws -> Value
+func transaction<Value: Sendable>(
+    _ body: @escaping @Sendable (GraphMutation) throws -> Value
+) async throws -> Value
+func fetch<Model: GraphModel>(
+    _ id: GraphNodeID, as type: Model.Type = Model.self
+) async throws -> Model?
+func fetchAll<Model: GraphModel>(_ type: Model.Type) async throws -> [Model]
+@discardableResult func insert<Model: GraphModel>(_ model: Model) async throws -> GraphNodeID
+func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) async throws -> Model
+func delete(_ id: GraphNodeID) async throws
+```
+
+`GraphReadScope` is a context-confined class without Sendable conformance. Its
+initializer and native context are not public. It has `graphID: GraphID`,
+`record(for: GraphNodeID) throws -> GraphRecord?`, synchronous `fetch(_:as:)`
+and `fetchAll(_:)` counterparts of the actor methods. It expires after the body.
+
+`GraphMutation` is a final subclass with synchronous throwing methods:
+
+```swift
+@discardableResult func insert<Model: GraphModel>(_ model: Model) throws -> GraphNodeID
+@discardableResult func insert(_ record: GraphRecord) throws -> GraphNodeID
+func patch(_ patch: GraphRecordPatch) throws -> GraphRecord
+func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) throws -> Model
+func delete(_ id: GraphNodeID) throws
+```
+
+Bodies do not suspend. Insert entities before referencing them. A failed body
+rolls back; a failed typed patch validates before editing even if its error is
+caught in the body. Partial updates preserve unknown properties. Entity deletion
+removes incident relationships and action membership while retaining other
+entities and valid empty actions. New IDs and required property-format metadata are persisted in reserved detail
+properties; missing format metadata is reported as corrupt identity metadata rather
+than exposing envelope bytes as application Data. Untouched adopted v1 nodes have
+an explicit empty format list; they are not derived from local URI paths. `fetchAll` has a stable UUID
+ordering but currently builds a linear index; the A7 query engine is pending.
+
+`GraphV1AdoptionReport` has read-only Sendable `graphID: GraphID`,
+`nodeIDs: [String: GraphNodeID]` and `backupURL: URL?`. The map keys are original
+v1 facade IDs. Repeated adoption returns retained identities and nil backupURL.
+Adoption requires a quiescent current-schema local source with all legacy/native
+writers closed; it backs up SQLite and present sidecars before identity edits.
+It does not perform cloud cutover, convert every legacy codec or migrate an
+incompatible native model.
+
+`GraphStoreError: Error, LocalizedError` distinguishes `closed`, `ownershipConflict`, `expiredScope`,
+`foreignGraph`, `duplicateIdentity`, `corruptIdentity`, `missingNode`,
+`unresolvedReference`, `legacyStoreRequiresAdoption`, `unsupportedLayout`,
+`reservedName`, and `persistence(underlying: Error)`. Model errors and caller body
+errors retain their own types. Cancellation retains the A2 pre/post-save contract.
+
+The legacy `GraphStoreOpeningError` also adds `runtimeOwnershipConflict(URL)`
+and `requiresV2Runtime(URL)`: legacy readiness fails when a typed owner is active
+or an adopted typed-layout store requires the new API. Retained native contexts
+retain legacy ownership; dropping a facade alone is not proof of store closure.

@@ -9,5 +9,18 @@ The fixture uses a local package dependency to the repository root so it can run
 Run it from the repository root with:
 
 ```bash
-swift run --package-path IntegrationTests/PackageConsumer
+swift run --package-path IntegrationTests/PackageConsumer PackageConsumer
 ```
+
+The second executable is a non-UI Swift 6 model consumer. It imports only the
+public GraphEvo product, maps an ordinary Sendable application model, transfers
+its values across tasks and the main actor, and performs typed SQLite CRUD,
+including a partial edit retaining an unknown encoded field, awaited close/reopen
+with stable identities, and deletion through the public v2 gateway.
+
+```bash
+swift run --package-path IntegrationTests/PackageConsumer ModelConsumer
+```
+
+The fixture manifest requires Swift tools 6.0. The legacy executable retains
+Swift 5 language mode; ModelConsumer uses Swift 6 language mode.

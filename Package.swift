@@ -15,12 +15,31 @@ let package = Package(
     targets: [
         .target(
             name: "GraphEvo",
-            dependencies: ["GraphEvoRuntime"],
+            dependencies: ["GraphEvoRuntime", "GraphEvoModel", "GraphEvoStore"],
             path: "Sources/GraphEvo",
             swiftSettings: [
                 .define("GRAPHEVO_IOS16"),
                 .swiftLanguageMode(.v5)
             ]
+        ),
+        .target(
+            name: "GraphEvoStore",
+            dependencies: ["GraphEvoModel", "GraphEvoRuntime"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "GraphEvoStoreTests",
+            dependencies: ["GraphEvo", "GraphEvoStore", "GraphEvoRuntime"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
+            name: "GraphEvoModel",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "GraphEvoModelTests",
+            dependencies: ["GraphEvoModel", "GraphEvo", "GraphEvoRuntime"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
             name: "GraphEvoRuntime",

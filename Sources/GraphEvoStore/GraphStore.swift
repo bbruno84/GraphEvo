@@ -1,0 +1,154 @@
+import CoreData
+import Foundation
+import GraphEvoModel
+import GraphEvoRuntime
+
+public enum GraphStoreError: Error {
+    case closed
+    case ownershipConflict
+    case expiredScope
+    case foreignGraph
+    case duplicateIdentity
+    case corruptIdentity
+    case missingNode
+    case unresolvedReference
+    case legacyStoreRequiresAdoption
+    case unsupportedLayout
+    case reservedName
+    case persistence(underlying: any Error)
+}
+
+/// A local adoption report. Old IDs are lookup keys, never the new identity representation.
+public struct GraphV1AdoptionReport: Sendable {
+    public let graphID: GraphID
+    public let nodeIDs: [String: GraphNodeID]
+    public let backupURL: URL?
+    package init(graphID: GraphID, nodeIDs: [String: GraphNodeID], backupURL: URL?) {
+        self.graphID = graphID; self.nodeIDs = nodeIDs; self.backupURL = backupURL
+    }
+}
+
+/// Privileged callbacks implemented by the current Graph facade adapter.
+package struct GraphStoreAdapter: Sendable {
+    package let initialize: @Sendable (NSManagedObjectContext, URL?) throws -> GraphV1AdoptionReport
+    package let fetch: @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> GraphRecord?
+    package let fetchAll: @Sendable (NSManagedObjectContext, GraphID, String, GraphNodeKind) throws -> [GraphRecord]
+    package let insert: @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void
+    package let patch: @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord
+    package let delete: @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void
+
+    package init(
+        initialize: @escaping @Sendable (NSManagedObjectContext, URL?) throws -> GraphV1AdoptionReport,
+        fetch: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> GraphRecord?,
+        fetchAll: @escaping @Sendable (NSManagedObjectContext, GraphID, String, GraphNodeKind) throws -> [GraphRecord],
+        insert: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void,
+        patch: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord,
+        delete: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void
+    ) {
+        self.initialize = initialize; self.fetch = fetch; self.fetchAll = fetchAll
+        self.insert = insert; self.patch = patch; self.delete = delete
+    }
+}
+
+/// Independently closeable local graph handle. Public operations never expose native contexts.
+public actor GraphStore {
+    public nonisolated let id: GraphID
+    private let handle: StoreHandle
+    private let adapter: GraphStoreAdapter
+
+    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) {
+        self.id = id; self.handle = handle; self.adapter = adapter
+    }
+
+    package static func open(configuration: StoreConfiguration, schema: StoreSchema, adapter: GraphStoreAdapter,
+                             adoptionBackupRoot: URL? = nil) async throws -> (GraphStore, GraphV1AdoptionReport) {
+        do {
+            let handle = try await StoreRegistry.shared.open(configuration, schema: schema)
+            do {
+                let report = try await handle.transaction { try adapter.initialize($0, adoptionBackupRoot) }
+                return (GraphStore(id: report.graphID, handle: handle, adapter: adapter), report)
+            } catch {
+                try await handle.close()
+                throw error
+            }
+        } catch { throw translate(error) }
+    }
+
+    public nonisolated func makeNodeID() -> GraphNodeID { GraphNodeID(graphID: id) }
+
+    public func close() async throws {
+        do { try await handle.close() } catch { throw Self.translate(error) }
+    }
+
+    public func read<Value: Sendable>(
+        _ body: @escaping @Sendable (GraphReadScope) throws -> Value
+    ) async throws -> Value {
+        let adapter = adapter, id = id
+        do {
+            return try await handle.read { context in
+                let scope = GraphReadScope(context: context, graphID: id, adapter: adapter)
+                defer { scope.invalidate() }
+                return try body(scope)
+            }
+        } catch { throw Self.translate(error) }
+    }
+
+    public func transaction<Value: Sendable>(
+        _ body: @escaping @Sendable (GraphMutation) throws -> Value
+    ) async throws -> Value {
+        let adapter = adapter, id = id
+        do {
+            return try await handle.transaction { context in
+                let scope = GraphMutation(context: context, graphID: id, adapter: adapter)
+                defer { scope.invalidate() }
+                return try body(scope)
+            }
+        } catch { throw Self.translate(error) }
+    }
+
+    public func fetch<Model: GraphModel>(_ id: GraphNodeID, as type: Model.Type = Model.self) async throws -> Model? {
+        try await read { try $0.fetch(id, as: type) }
+    }
+
+    public func fetchAll<Model: GraphModel>(_ type: Model.Type) async throws -> [Model] {
+        try await read { try $0.fetchAll(type) }
+    }
+
+    @discardableResult public func insert<Model: GraphModel>(_ model: Model) async throws -> GraphNodeID {
+        try await transaction { try $0.insert(model) }
+    }
+
+    public func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) async throws -> Model {
+        try await transaction { try $0.patch(patch, as: type) }
+    }
+
+    public func delete(_ id: GraphNodeID) async throws { try await transaction { try $0.delete(id) } }
+
+    private static func translate(_ error: any Error) -> any Error {
+        guard let runtime = error as? StoreRuntimeError else { return error }
+        switch runtime {
+        case .closedHandle: return GraphStoreError.closed
+        case .configurationConflict: return GraphStoreError.ownershipConflict
+        default: return GraphStoreError.persistence(underlying: error)
+        }
+    }
+}
+
+extension GraphStoreError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .ownershipConflict: return "The store has an incompatible persistence owner."
+        case .closed: return "The graph store handle is closed."
+        case .expiredScope: return "The graph operation scope has expired."
+        case .foreignGraph: return "The node belongs to another graph."
+        case .duplicateIdentity: return "The graph contains a duplicate logical node identity."
+        case .corruptIdentity: return "The graph's persisted identity metadata is invalid."
+        case .missingNode: return "The requested graph node does not exist."
+        case .unresolvedReference: return "A graph endpoint does not resolve to an entity in this graph."
+        case .legacyStoreRequiresAdoption: return "The local v1 store requires explicit adoption with a backup."
+        case .unsupportedLayout: return "The graph store layout version is unsupported."
+        case .reservedName: return "The graph operation uses a reserved type or property name."
+        case .persistence: return "The graph persistence operation failed."
+        }
+    }
+}

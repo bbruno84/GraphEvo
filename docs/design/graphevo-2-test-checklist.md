@@ -91,7 +91,7 @@ it must not be mislabeled a same-account owner-only reader.
 
 The [A1 runtime increment](graphevo-2-store-runtime.md) now adds library-level
 local ownership evidence alongside the standalone probes. It is package-internal
-and does not yet replace the legacy public Graph facade or implement writes.
+and does not yet replace the legacy public Graph facade. The [A2 contract](graphevo-2-async-transactions.md) adds local writes and cancellation evidence; those 46 runtime tests pass on macOS and iOS Simulator.
 
 | ID | Check | Status / evidence |
 |---|---|---|
@@ -100,12 +100,21 @@ and does not yet replace the legacy public Graph facade or implement writes.
 | V03.3 | Two handles to one canonical store share an explicit ownership policy; independent stores remain independent | Partial: [A1](graphevo-2-store-runtime.md) verifies concurrent lease coalescing, independent memory IDs, schema/access conflict rejection, symlink/case/missing-path rules and independent close. Public graph integration, legacy/v2 exclusion and multi-store/cloud sets remain pending |
 | V03.4 | Transaction commit, thrown error/rollback and pending-edit ownership | Partial: deliberate rollback and clean next save observed; application-model/scoped contract pending |
 | V03.5 | Cancellation before work, during work and around commit; distinguish cancellation from rollback | Partial: [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) shows native work does not inherit caller cancellation; explicit pre-commit signal rolls back, while post-commit cancellation does not. Queued-before-execution window pending |
-| V03.6 | Close/reopen/invalidation while tasks are pending; main-thread responsiveness | Partial: [A1](graphevo-2-store-runtime.md) drains admitted native reads, orders reopen after final detach, releases deallocated handles and retains failed-shutdown ownership. Earlier [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) covers a probe save; A1 does not implement commits. Broader stress/responsiveness pending |
+| V03.6 | Close/reopen/invalidation while tasks are pending; main-thread responsiveness | Partial: [A1](graphevo-2-store-runtime.md) drains admitted native reads, orders reopen after final detach, releases deallocated handles and retains failed-shutdown ownership. Earlier [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) covers a probe save; [A2](graphevo-2-async-transactions.md) additionally drains active and queued admitted writes during a cancelled close. Broader stress/responsiveness pending |
 | V03.7 | Native sharing invocation timing versus callback completion; evaluate off-main context ownership | Partial: [T6](results/v01-t6-ipad-diagnosis-2026-10-24.md) proves synchronous work despite callbacks; off-main design not run |
 | V03.8 | Concurrent remote import and local edits with explicit merge policy | Partial: [V09](results/v09-shared-graph-files-2026-10-26.md) coordinated disjoint edits at a common future start on two accounts; both independently recovered the combined graph. Remote import/save overlap and same-object conflict policy remain unverified |
 | V03.9 | App/extension access to one App Group store across processes | Partial local control: [two macOS processes](results/v03-cancellation-process-2026-10-26.md) exposed duplicate insertion and Core Data merge error 133020 without distributed ownership. Physical iOS App Group/extension test remains unrun |
 
 ## V04 — typed application models
+
+The [first A3 library increment](graphevo-2-application-models.md) now supplies
+16 model/adapter regressions and a standalone public Swift 6 value consumer.
+These pass on the current Mac and iOS Simulator. Evidence includes detached
+Entity/Relationship/Action mapping, typed errors, graph-aware references,
+partial patches preserving unknown bytes/metadata, main-actor transfer and
+candidate SQLite patch/reopen. The null bridge limitation is retained explicitly.
+This extends the earlier accessory probes below; typed public database CRUD,
+durable identity translation and full value migration remain incomplete.
 
 | ID | Check | Status / evidence |
 |---|---|---|
@@ -113,6 +122,13 @@ and does not yet replace the legacy public Graph facade or implement writes.
 | V04.2 | Identity, optional/scalar/property round trips and unsupported/decoding errors | Accessory partial: identity/string/optional/integer and decoder errors observed locally; broader type matrix paused |
 | V04.3 | Relationships/actions, edits/deletion and scope lifetime | Accessory partial: one parent/inverse deletion and cross-graph application guard observed; relationship/action facades not tested |
 | V04.4 | Value snapshots versus live/scoped models; actor transfer and justified Sendable contracts | Accessory partial: immutable Sendable values compiled; live/scoped model comparison not run |
+
+The [A3 typed store continuation](graphevo-2-typed-store.md) additionally exercises
+persistent local graph/node IDs, public typed CRUD and scopes, full new-value
+envelopes, current-schema local adoption/backups, cyclic references, endpoint
+patches, deletion preserving empty actions, ownership exclusion and UI-state
+transfer. This extends V04 locally; cloud identity/membership, full legacy source
+conversion and the deployment-floor runtime matrix remain separate pending work.
 
 ## V05 — attachments
 
