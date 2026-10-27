@@ -117,6 +117,13 @@ The existing physical assignment interruption is evidence for one window only.
 
 ## PA05 — native files: agreed cost review and acceptance
 
+The [executed matrix](results/cost-matrix-2026-10-27.md) adds local binary/query
+comparisons and serial cross-account native file lifecycle evidence. Keep the
+remaining gates below: disk growth for four 1-MiB files, metadata-list/full-read
+memory, real media, offline/conflicts/account recovery, conversion and migration
+are not resolved by that result.
+
+
 - [ ] **B** Perform M12's representation/cost review while retaining the accepted
   identity and ownership model as its starting point. Measure envelope decoding,
   full-content listing, copies, peak memory, latency and storage with representative

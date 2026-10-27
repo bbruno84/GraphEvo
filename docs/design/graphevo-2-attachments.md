@@ -134,3 +134,22 @@ callers must adopt a whole-content source backup before transforming stores
 that contain external content. Coordinated v1 cloud cutover remains separate
 mandatory work; this increment neither silently migrates data nor freezes the
 schema.
+
+
+## Subsequent cost matrix candidate
+
+The [executed matrix](results/cost-matrix-2026-10-27.md) adds a distinct binary
+magic/version/declared-length envelope for top-level GraphValue.data (M02),
+retaining JSON decoding. Metadata and body use that codec without Base64;
+nested/opaque value semantics remain unchanged. Existing attachment envelopes
+and old native JSON values stay readable. Replacing a legacy attachment keeps
+its logical single-envelope shape but can write the new outer codec. All
+clients must support the new codec before writing it; older alpha readers and
+downgrades are unsupported. This does not complete v1 migration or silently
+convert a store on open. Native model hashes and ownership are unchanged.
+
+M03b's natively filtered query dependencies remove unrelated body transformation
+while complete reads and sharing integrity remain strict. The separate metadata
+list adapter still has native faulting costs. Serial cross-account lifecycle
+passes on the binary format; storage is not uniformly smaller, and conflict,
+offline/account recovery, real media/size envelope and conversion remain gates.

@@ -887,7 +887,11 @@ available for v1 stores. See the
 
 These detached values alone do not establish persistent membership, resolve
 endpoint existence or commit edits. The typed persistence scopes below supply
-identity, reference checks and value envelopes. Complete legacy translation and
+identity, reference checks and value envelopes. On the matrix experiment branch,
+top-level Data uses a length-checked versioned binary envelope with legacy JSON
+reads; nested and opaque values keep their existing representation. Older alpha
+readers cannot consume the new format; no automatic conversion/downgrade is implied.
+Complete legacy translation and
 cloud cutover remain unfinished. Never apply a stale encoded model as a
 whole-record replacement that drops unknown properties.
 

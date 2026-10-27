@@ -92,3 +92,16 @@ Native faulting/memory remain variable, complete reads and query costs are
 largely unchanged, and default query allowance still refuses four large files.
 The candidate remains isolated: device assignment/import/replacement/conflict
 acceptance, coordinated conversion and query body avoidance are still open.
+
+
+## Executed cost / correctness matrix
+
+The [matrix](graphevo-2-experiment-matrix.md) and
+[retained comparison](results/cost-matrix-2026-10-27.md) cover binary storage,
+descriptor property dependencies and native row filtering (M03b), plus physical
+owner/participant file lifecycle. M02 + M03b is proposed for review: unrelated
+large-file queries succeed at unchanged budgets with substantially lower memory,
+and full reads are faster. Four-small-file disk usage increases; list/read memory,
+indexed identities, real storage envelopes and migration remain open. Observation
+benefits from cheaper queries without introducing C04 shared work. This evidence
+does not authorize an automatic integration, beta entry or schema freeze.

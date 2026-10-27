@@ -59,7 +59,8 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         GraphValueTransformer.register()
-        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: Model.makeModel())
+        let container = NSPersistentContainer(name: "MetadataResources", managedObjectModel: Model.makeModel())
+        let coordinator = container.persistentStoreCoordinator
         let first = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: root.appendingPathComponent("First.sqlite"))
         let second = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: root.appendingPathComponent("Second.sqlite"))
         let ids = [GraphID(), GraphID()]

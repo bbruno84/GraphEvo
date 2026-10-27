@@ -1,6 +1,6 @@
 # GraphEvo 2 — cost and correctness experiment matrix
 
-Status: active, 2026-10-27. Parent checkpoint: C03a `ea29ec9`, preferred B remains
+Status: local/native experiments executed, 2026-10-27; final CI tracked below. Parent checkpoint: C03a `ea29ec9`, preferred B remains
 `e2e53ab`. Work is isolated on `codex/v2-cost-experiment-matrix`; no integration,
 merge, release-tag movement or final representation decision is authorized by
 this matrix. Preserve intermediate commits/binaries so variants remain comparable.
@@ -44,3 +44,17 @@ Record outcomes and a proposed direction in a linked result before merging or
 starting another redesign. C02 native indexed identities, C04 shared observer
 work, representative production media/conflicts, coordinated alpha conversion
 and mandatory v1 migration remain separate gates unless explicitly tested here.
+
+
+## Outcome checkpoint
+
+The [retained result](results/cost-matrix-2026-10-27.md) records 946 new local
+measurements, 477 local tests, 18 sanitizer tests, all 14 physical lifecycle
+stages and two final read-only query stages. Preferred direction for review:
+M02 binary payloads plus M03b native-filtered property dependencies. Four-large-file
+scalar queries succeed at the original allowance in 28–29 ms / about 17 MiB.
+Full reads improve, no-file queries retain their cost, and four-small-file disk
+usage increases. Native listing memory, real content/storage envelope, selective
+identity indexing, conflict/offline/account cases and mandatory migration remain
+open. No integration/merge or schema freeze is implied. Compatibility-only fixture corrections have been revalidated locally (477 tests
+and 18 sanitizer tests). Final PR CI remains a separate M08 acceptance check.
