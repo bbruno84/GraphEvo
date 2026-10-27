@@ -24,6 +24,7 @@
  */
 
 import CoreData
+import GraphEvoRuntime
 
 public enum SearchCondition: Int {
   case or
@@ -57,6 +58,20 @@ public class Search<T: Node> {
     return self
   }
   
+  /// Trusted v2 inventory boundary. Native fetchLimit applies before facade construction; no property fallback.
+  package func runtimeLimitedNodes(_ limit: Int) throws -> [T] {
+    guard let context = graph.managedObjectContext,
+          let identifier = NodeClass(nodeType: T.self)?.identifier, limit > 0 else { throw GraphQueryError.unsupportedStorage }
+    let request = NSFetchRequest<ManagedNode>(entityName: identifier)
+    request.fetchLimit = limit
+    request.fetchBatchSize = min(limit, 256)
+    let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
+    try checkCancellation()
+    let nodes = try context.fetch(request)
+    try checkCancellation()
+    return nodes.map { T(managedNode: $0) }
+  }
+
   /**
    Apply provided predicate to Search.
    - Parameter _ predicate: A Predicate.

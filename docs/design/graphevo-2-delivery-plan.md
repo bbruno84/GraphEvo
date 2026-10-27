@@ -108,6 +108,15 @@ Shared imports reuse A5 assignment. The attachment representation and memory
 limit remain alpha decisions; complete v1/cloud migration and broader backup/
 conflict/performance coverage remain release work.
 
+The [A7 candidate](graphevo-2-queries.md) adds typed query descriptors,
+AND/OR composition, scalar filters, directed relations, cycle-safe bounded BFS,
+keyset pages, count/projection and selected aggregates. The current schema uses
+an explicit bounded inventory/memory strategy; native indexes or cheap scalar
+COUNT/projection are not claimed. A7 temporarily stacks on the open A6 PR #75;
+retarget its PR to v2 integration after A6 review/merge. The maintainer deferred
+attachment representation costs to end-of-alpha consolidation. A8 observation
+and mandatory migration remain separate work.
+
 ## Migration throughout alpha
 
 Migration is a parallel workstream rather than a task first discovered after

@@ -1,4 +1,5 @@
 import CoreData
+import Foundation
 import GraphEvoModel
 
 /// Synchronous context-confined scope. Not Sendable and invalid after its body returns.
@@ -11,9 +12,12 @@ public class GraphReadScope {
         self.context = context; self.graphID = graphID; self.adapter = adapter
     }
 
+    package let queryScopeID = UUID()
+    package var queryView: GraphQueryLocalView { GraphQueryLocalView(graphID: graphID, scopeID: queryScopeID, includesPendingChanges: self is GraphMutation) }
+
     package func invalidate() { context = nil }
 
-    fileprivate func withContext<Value>(_ body: (NSManagedObjectContext, GraphStoreAdapter) throws -> Value) throws -> Value {
+    package func withContext<Value>(_ body: (NSManagedObjectContext, GraphStoreAdapter) throws -> Value) throws -> Value {
         guard let context else { throw GraphStoreError.expiredScope }
         return try body(context, adapter)
     }

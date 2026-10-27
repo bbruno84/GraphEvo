@@ -391,6 +391,14 @@ Intervening edits can change later results; it is not a frozen multi-page
 snapshot. Snapshot pagination is a separate capability if adopted. Query
 results identify the promised local view rather than implying cloud completeness.
 
+The [A7 candidate](graphevo-2-queries.md) implements this contract with an
+explicit bounded native inventory and memory evaluator over the current encoded
+layout. Its capability matrix fixes missing/null behavior, exact numeric cases,
+related/BFS limits, cursor binding and local-view identity. This is not native
+scalar predicate/count/projection pushdown or a performance certification.
+Attachment ownership remains unchanged; its representation costs are assessed
+at the agreed end-of-alpha consolidation.
+
 ## 10. Observation and the future of Watch
 
 ### Agreed requirement and working contracts

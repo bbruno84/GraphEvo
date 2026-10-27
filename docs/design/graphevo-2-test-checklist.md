@@ -199,3 +199,15 @@ replacement/export/deletion, owner cascade and retained B. It includes sampled
 process memory windows. V09 remains separate surrogate evidence. Document-provider,
 offline/account-cache, remote conflicts, partial-intent reconciliation and
 mirrored-group restore remain open; no streaming or progress capability is inferred.
+
+
+### A7 library integration
+
+The [A7 candidate](graphevo-2-queries.md) adds explicit bounded typed query
+execution, related predicates/BFS, keyset pages, projection/count and selected
+aggregates. [Local and retained iPad evidence](results/a7-retained-graph-queries-2026-10-27.md)
+uses the actual candidate model; V06's surrogate primitives retain their separate
+scope. Budget exhaustion produces errors rather than partial results; current
+execution is not SQL pushdown or performance certification. A8 dependency
+invalidation/observed-state/processing work remains open. Attachment representation
+costs are deferred to the maintainer's agreed end-of-alpha review.

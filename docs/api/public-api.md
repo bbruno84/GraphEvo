@@ -1174,3 +1174,138 @@ and operation ledgers, without discovering internal paths. It does not itself
 certify quiescence, remote delivery or cloud rollback. The narrower
 `MigrationBackupManager.backupStore` is insufficient for a whole-content backup
 when native external content exists. See the [A6 contract](../design/graphevo-2-attachments.md).
+
+## V2 alpha bounded queries and traversal (A7)
+
+`GraphQuery<Model: GraphModel>: Sendable` selects the persistent type/kind and
+requires a `GraphQueryBudget`. It provides value builders `where(_:)`,
+`sorted(by: [GraphQuerySort])`, `limit(_ count: Int)`, `after(_ cursor:
+GraphQueryCursor)` and `explain() throws -> GraphQueryPlan`.
+
+```swift
+extension GraphStore {
+    func query<Model: GraphModel>(_ query: GraphQuery<Model>) async throws -> GraphQueryResult<Model>
+    func count<Model: GraphModel>(_ query: GraphQuery<Model>) async throws -> GraphQueryCount
+    func project<Model: GraphModel>(_ query: GraphQuery<Model>, properties: Set<String>) async throws -> GraphQueryProjectionResult
+    func aggregate<Model: GraphModel>(_ query: GraphQuery<Model>, _ aggregate: GraphQueryAggregate) async throws -> GraphQueryAggregateResult
+    func traverse(_ traversal: GraphTraversal) async throws -> GraphTraversalResult
+}
+```
+
+The same operations exist synchronously on GraphReadScope/GraphMutation. Scopes
+remain non-Sendable and invalid outside their body. Count and aggregation cover
+the full filtered set within the allowance, ignore order/limit and reject cursors.
+Projection/fetch honor order/limit/cursor. Count/projection/aggregation do not
+invoke application decoders; typed fetch decodes only returned rows and never
+silently drops failures.
+
+`GraphQueryBudget: Sendable, Equatable` has read-only `maximumCandidates`,
+`maximumPropertyBytes`, `maximumSteps: Int`. Its throwing initializer requires
+positive candidates below Int.max, nonnegative property allowance and positive
+steps. Defaults are 32 MiB of charged property payload and 100,000 logical steps;
+there is no default candidate allowance. Budgets are work limits, not result
+counts, native I/O limits or hard memory/deadline guarantees. Candidate inventory
+includes native node rows across the resource group; only selected-graph
+application records are evaluated. Every query currently uses explicit bounded
+inventory plus memory evaluation. No SQL/native-count optimization or silent
+fallback is claimed. Opening/catalog costs are outside a query allowance.
+
+`GraphQueryPredicate: Sendable, Equatable` is indirect and supports:
+
+- `all`, `none`, `id(GraphNodeID)`, `type(String)`, `tag(String)`, `group(String)`,
+  `exists(String)`;
+- `property(String, GraphQueryComparison, GraphValue)`;
+- `subject(GraphNodeID)`, `object(GraphNodeID)` for relationship/action endpoints;
+- `and([GraphQueryPredicate])`, `or([GraphQueryPredicate])`, `not(GraphQueryPredicate)`
+  and operators `&&`, `||`, `!`;
+- `related(GraphQueryRelation, matching: GraphQueryPredicate)` for Entity neighbors.
+
+Successive where calls combine with **AND**, unlike retained v1 Search OR.
+Property names and strings are literal/case-sensitive; no v1 LIKE wildcard or
+case-folding behavior is inherited. Missing comparisons are false; explicit null
+participates in equality/inequality and does not match ordered/string operations.
+Empty AND/OR are true/false. Reserved metadata keys are rejected. Expressions
+allow at most 256 AST nodes/depth 32 and four nested related hops.
+
+`GraphQueryComparison: Sendable, Equatable` has `equal`, `notEqual`, `lessThan`,
+`lessThanOrEqual`, `greaterThan`, `greaterThanOrEqual`, `beginsWith`, `contains`.
+Equality supports null/scalars; ordering requires homogeneous Bool, integer,
+finite Double/Decimal, String or finite Date. UUID/URL support equality only;
+URL equality follows Foundation. Numeric cases are not implicitly coerced.
+Data/array/object/encoded comparisons and ordering are unsupported; presence and
+projection retain opaque values. Unsupported operands/shapes fail before inventory.
+
+`GraphQuerySortKey: Sendable, Equatable` has `identity`, `createdDate`,
+`property(String)`. `GraphQuerySort: Sendable, Equatable` exposes `key`,
+`direction: GraphQuerySortDirection` (`ascending`, `descending`) and
+`missing: GraphQueryMissingValues` (`first`, `last`). Both enums are Sendable,
+Equatable. Init defaults to ascending/missing last. At most eight sort keys;
+UUID ascending is the final tie-breaker. Missing/null share a first/last bucket
+independent of direction. Heterogeneous or unsupported ordered values fail before
+page slicing.
+
+`GraphQueryAggregate: Sendable` has `sum(String)`, `minimum(String)`,
+`maximum(String)`. Sum supports homogeneous Int64/UInt64/finite Double and rejects
+overflow/non-finite results; Decimal sum is unsupported. Min/max support ordered
+scalars. Missing/null values do not contribute; no contributors produces nil.
+Floating sum uses deterministic UUID input order, not exact arithmetic.
+
+`GraphQueryRelation: Sendable, Equatable` has `outgoing(String?)`,
+`incoming(String?)`, `actionObjects(String?)`, `actionSubjects(String?)`.
+The optional string filters exact relationship/action type. Neighbors are Entity
+endpoints in the same graph; hidden membership/root links are excluded. Related
+predicates are existential, deduplicating neighbors per hop. Optional absent
+endpoints/empty actions do not invent neighbors. Attachment ownership is not an
+implicit edge.
+
+`GraphTraversal: Sendable` initializes with `from origins: [GraphNodeID]`,
+`via relation: GraphQueryRelation`, `maximumDepth: Int`, `budget: GraphQueryBudget`
+and throws on empty origins/invalid depth or oversized input. Depth is 0...32.
+Breadth-first traversal excludes origins, suppresses all revisits/cycles and
+orders visits by depth then UUID. `GraphTraversalVisit: Sendable, Equatable`
+contains `id: GraphNodeID`, `depth: Int`. There is no unbounded traversal or
+claim that a depth-limited result exhausted the graph.
+
+`GraphQueryResult<Model>: Sendable` exposes `items: [Model]`,
+`nextCursor: GraphQueryCursor?`, `view: GraphQueryLocalView`,
+`diagnostics: GraphQueryDiagnostics`. `GraphQueryProjectionResult: Sendable`
+has `rows: [GraphQueryProjection]` and the same cursor/view/diagnostics.
+Projection rows expose `id` and `values: [String: GraphValue]`; absent requested
+keys are omitted, explicit null retained; at most 128 keys. `GraphQueryCount`
+contains `value: Int`, view and diagnostics. `GraphQueryAggregateResult` contains
+`value: GraphValue?`, `contributingCount: Int`, view and diagnostics.
+`GraphTraversalResult` contains `visits: [GraphTraversalVisit]`, view and
+diagnostics. These result structs are Sendable and read-only.
+
+`GraphQueryCursor: Sendable` is opaque and not Codable. It binds logical graph,
+persistent model type/kind, predicate structure and sort order. Positive page
+limit is required when using it. Page size and allowance changes are allowed;
+fetch/projection may share a cursor. Current-state keyset pagination compares
+the retained tuple/UUID without offsets or looking up the anchor. Anchor deletion
+is supported; intervening sort-key edits may repeat/omit rows and inserts before
+the tuple are absent from later pages. It is not a frozen/durable paging session.
+
+`GraphQueryLocalView: Sendable, Equatable` exposes `graphID`, `scopeID: UUID`,
+`includesPendingChanges: Bool`. The flag marks mutation-scope execution, not a
+claim that pending edits exist. Scope identity is neither a native generation
+nor cloud-completeness marker. Separate pages execute in new local views.
+`GraphQueryDiagnostics: Sendable` exposes `nativeCandidates`, `scopedNodes`,
+`propertyBytesCharged`, `evaluationSteps: Int`. Byte charging is a documented
+payload/structural tariff, not resident memory. Steps are logical engine work.
+`GraphQueryPlan: Sendable` contains `strategy: Strategy`, `budget`;
+`Strategy: Sendable, Equatable` currently has only `boundedInventoryAndMemory`.
+Explain validates shape; graph-specific references/cursors are checked at execution.
+
+`GraphQueryError: Error, Equatable, LocalizedError` distinguishes `invalidBudget`,
+`invalidLimit`, `invalidPropertyName`, `invalidModelType`, `invalidTraversal`,
+`invalidOrigin`, `unsupportedValue`, `unsupportedComparison`, `incomparableValues`,
+`foreignGraph`, `invalidCursor`, `expressionTooComplex`, `arithmeticOverflow`,
+`unsupportedStorage`, `budgetExceeded(GraphQueryBudgetDimension)`.
+`GraphQueryBudgetDimension: Sendable, Equatable` has `candidates`, `propertyBytes`,
+`steps`. Store/model/native errors retain their existing type. No partial result
+is returned after budget exhaustion or cancellation. Checks run around inventory,
+between snapshots and periodically in evaluation; native fetch/codec calls settle
+before the next cancellation check.
+
+See the [A7 contract](../design/graphevo-2-queries.md) for the capability matrix,
+limits, moving-current-state semantics and retained test scope.

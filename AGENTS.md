@@ -470,3 +470,21 @@ and permission checks before edits. Preserve rollback and surviving actions.
 Use whole-directory backups from a quiescent closed source for external content;
 SQLite/WAL/SHM/ledger copying alone cannot certify a complete attachment backup.
 No internal external-storage paths or fake progress/streaming states are public.
+
+## V2 bounded queries
+
+Read the [A7 contract](docs/design/graphevo-2-queries.md) before changing query
+execution. Descriptors require explicit candidate allowance; current encoded
+properties use bounded native inventory plus memory evaluation, never a silent
+fallback. Candidate allowance includes all local native node rows in the resource
+group; only scoped application records enter evaluation. Charge payload before
+typed envelope decoding and reject limits without partial output. This is not
+a total memory/time or SQL-I/O bound. Preserve AND composition, literal strings,
+missing/null distinction, exact numeric cases and UUID ordering tie-breaks.
+Cursors bind graph/descriptor, are current-state values and never certify a
+frozen snapshot or cloud completion. Traversal excludes hidden links and origins,
+deduplicates cycles, and has explicit depth/work bounds. Pass runtime cancellation
+checks through trusted scope metadata; no context or managed object escapes.
+A8 must add explicit dependency invalidation; these APIs do not imply observation
+or durable processing. Attachment representation costs are deferred to the agreed
+end-of-alpha review; do not silently redesign file ownership during query work.

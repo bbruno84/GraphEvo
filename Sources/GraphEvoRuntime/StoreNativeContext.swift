@@ -5,6 +5,11 @@ import Foundation
 package enum StoreNativeContext {
     package static let privateURLKey = "GraphEvo.v2.privateStoreURL"
     package static let sharedURLKey = "GraphEvo.v2.sharedStoreURL"
+    package typealias CancellationCheck = @Sendable () throws -> Void
+    package static let cancellationKey = "GraphEvo.v2.cancellationCheck"
+    package static func cancellationCheck(in context: NSManagedObjectContext) -> CancellationCheck {
+        (context.userInfo[cancellationKey] as? CancellationCheck) ?? {}
+    }
     package static let containerKey = "GraphEvo.v2.container"
 
     package static func privateStore(in context: NSManagedObjectContext) -> NSPersistentStore? {
