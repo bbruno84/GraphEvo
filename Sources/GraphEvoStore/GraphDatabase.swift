@@ -74,6 +74,17 @@ public actor GraphDatabase {
         catch { throw GraphStore.translate(error) }
     }
 
+    /// Read-only diagnostics remain available while a native writer awaits its framework callback.
+    package func contextRead<Value: Sendable>(
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
+    ) async throws -> Value {
+        do { return try await handle.read(body) } catch { throw GraphStore.translate(error) }
+    }
+
+    package func nativeSetup() async throws -> StoreCloudSetup {
+        do { return try await handle.cloudSetup() } catch { throw GraphStore.translate(error) }
+    }
+
     public func close() async throws {
         do { try await handle.close() } catch { throw GraphStore.translate(error) }
     }

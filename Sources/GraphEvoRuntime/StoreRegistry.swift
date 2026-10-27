@@ -34,6 +34,11 @@ package actor StoreHandle {
         return try await registry.retain(key, generation: generation, token: token)
     }
 
+    package func cloudSetup() async throws -> StoreCloudSetup {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.cloudSetup(key, generation: generation, token: token)
+    }
+
     package func snapshot() async throws -> StoreRuntimeSnapshot {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         return try await registry.snapshot(key, generation: generation, token: token)
@@ -81,7 +86,7 @@ package actor StoreRegistry {
         let resolved: ResolvedStore
         let schema: StoreSchema
         let opening: Task<StoreResources, any Error>
-        var fileIdentity: FileIdentity?
+        var fileIdentities: [StoreKey: FileIdentity] = [:]
         var tokens: Set<UUID> = []
         var shutdown: Task<Void, any Error>?
     }
@@ -102,26 +107,28 @@ package actor StoreRegistry {
                 try Task.checkCancellation()
                 continue
             }
-            let identity = try resolved.fileIdentity()
+            let identities = try resolved.resourceIdentities()
+            let requestedKeys = Set(try resolved.resources.map(\.key))
             for (key, entry) in entries where key != resolved.key {
-                let ownedIdentity = entry.fileIdentity ?? (try? entry.resolved.fileIdentity())
-                if let identity, identity == ownedIdentity, let url = resolved.url {
+                let ownedKeys = Set(try entry.resolved.resources.map(\.key))
+                guard requestedKeys.isDisjoint(with: ownedKeys) else {
+                    throw StoreRuntimeError.configurationConflict(resolved.url)
+                }
+                let observed = (try? entry.resolved.resourceIdentities()) ?? [:]
+                let ownedIdentities = entry.fileIdentities.merging(observed) { recorded, _ in recorded }
+                if !Set(identities.values).isDisjoint(with: Set(ownedIdentities.values)), let url = resolved.url {
                     throw StoreRuntimeError.unsupportedFileAlias(url)
                 }
             }
             if let entry = entries[resolved.key] {
-                guard entry.resolved.configuration.access == resolved.configuration.access,
-                      entry.resolved.configuration.cloudKitContainerIdentifier == resolved.configuration.cloudKitContainerIdentifier,
-                      entry.schema.isCompatible(with: schema) else {
+                guard try entry.resolved.isCompatible(with: resolved), entry.schema.isCompatible(with: schema) else {
                     throw StoreRuntimeError.configurationConflict(resolved.url)
                 }
-                if let previous = entry.fileIdentity, previous != identity, let url = resolved.url {
-                    throw StoreRuntimeError.storeReplaced(url)
-                }
+                try validateIdentities(entry.fileIdentities, current: identities, resolved: resolved)
             } else {
                 let hooks = hooks, owner = owner
                 let opening = Task.detached { try await StoreResources.open(resolved, schema: schema, hooks: hooks, owner: owner) }
-                entries[resolved.key] = Entry(resolved: resolved, schema: schema, opening: opening, fileIdentity: identity)
+                entries[resolved.key] = Entry(resolved: resolved, schema: schema, opening: opening, fileIdentities: identities)
             }
             let token = UUID()
             entries[resolved.key]!.tokens.insert(token)
@@ -130,18 +137,21 @@ package actor StoreRegistry {
             do {
                 _ = try await entry.opening.value
             } catch {
-                if entries[resolved.key]?.generation == entry.generation { entries.removeValue(forKey: resolved.key) }
-                throw error
+                if entries[resolved.key]?.generation == entry.generation {
+                    if let quarantine = error as? StoreOpenQuarantine {
+                        entries[resolved.key]?.tokens.removeAll()
+                        entries[resolved.key]?.shutdown = Task { throw quarantine.failure }
+                    } else { entries.removeValue(forKey: resolved.key) }
+                }
+                throw (error as? StoreOpenQuarantine)?.failure ?? error
             }
             do {
-                let current = try resolved.fileIdentity()
+                let current = try resolved.resourceIdentities()
                 guard let registered = entries[resolved.key], registered.generation == entry.generation,
                       registered.tokens.contains(token) else { throw StoreRuntimeError.closedHandle }
-                if let previous = registered.fileIdentity, previous != current, let url = resolved.url {
-                    throw StoreRuntimeError.storeReplaced(url)
-                }
+                try validateIdentities(registered.fileIdentities, current: current, resolved: resolved)
                 if entries[resolved.key]?.generation == entry.generation {
-                    entries[resolved.key]?.fileIdentity = current
+                    entries[resolved.key]?.fileIdentities = current
                 }
                 try Task.checkCancellation()
             } catch {
@@ -166,6 +176,11 @@ package actor StoreRegistry {
         let next = UUID()
         entries[key]?.tokens.insert(next)
         return StoreHandle(registry: self, key: key, generation: generation, token: next)
+    }
+
+    fileprivate func cloudSetup(_ key: StoreKey, generation: UUID, token: UUID) async throws -> StoreCloudSetup {
+        let entry = try entry(for: key, generation: generation, token: token)
+        return await (try await entry.opening.value).cloudSetup()
     }
 
     fileprivate func snapshot(_ key: StoreKey, generation: UUID, token: UUID) async throws -> StoreRuntimeSnapshot {
@@ -198,10 +213,17 @@ package actor StoreRegistry {
     private func entry(for key: StoreKey, generation: UUID, token: UUID) throws -> Entry {
         guard let entry = entries[key], entry.generation == generation,
               entry.shutdown == nil, entry.tokens.contains(token) else { throw StoreRuntimeError.closedHandle }
-        if let previous = entry.fileIdentity, previous != (try entry.resolved.fileIdentity()), let url = entry.resolved.url {
-            throw StoreRuntimeError.storeReplaced(url)
-        }
+        try validateIdentities(entry.fileIdentities, current: entry.resolved.resourceIdentities(), resolved: entry.resolved)
         return entry
+    }
+
+    private func validateIdentities(_ previous: [StoreKey: FileIdentity], current: [StoreKey: FileIdentity],
+                                    resolved: ResolvedStore) throws {
+        for resource in try resolved.resources {
+            if let identity = previous[resource.key], identity != current[resource.key], let url = resource.url {
+                throw StoreRuntimeError.storeReplaced(url)
+            }
+        }
     }
 
     fileprivate func release(_ key: StoreKey, generation: UUID, token: UUID) async throws {

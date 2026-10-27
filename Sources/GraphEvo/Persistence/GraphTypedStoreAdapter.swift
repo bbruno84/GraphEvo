@@ -1,6 +1,8 @@
 import CoreData
 import GraphEvoModel
 import GraphEvoStore
+import GraphEvoRuntime
+import CloudKit
 
 /// Local alpha layout using the unchanged candidate schema and reserved detail properties.
 package enum GraphTypedStoreAdapter {
@@ -14,6 +16,7 @@ package enum GraphTypedStoreAdapter {
     static let formatsKey = prefix + "encodedKeys"
     static let layoutKey = prefix + "layout"
     static let layoutVersion = "a3.1"
+    static let stageKey = prefix + "stagedInsertion"
 
     package static let current = makeAdapter(database: false)
     package static let database = GraphDatabaseAdapter(
@@ -47,7 +50,7 @@ package enum GraphTypedStoreAdapter {
         try GraphValueDecodingDiagnostics.checking {
             let all = try allNodes(facade(context))
             if all.isEmpty { return [] }
-            let roots = all.filter { $0.type == rootType }
+            let roots = all.filter { $0.runtimeTypeIfPresent == rootType }
             guard !roots.isEmpty else { throw GraphStoreError.legacyStoreRequiresAdoption }
             var ids = Set<GraphID>()
             for root in roots {
@@ -58,6 +61,21 @@ package enum GraphTypedStoreAdapter {
                 guard ids.insert(GraphID(rawValue: uuid)).inserted else { throw GraphStoreError.duplicateIdentity }
             }
             return ids.sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
+        }
+    }
+
+    /// Access reduction and status lookup must remain possible when application payloads are invalid.
+    static func controlRoot(_ context: NSManagedObjectContext, id: GraphID) throws -> Entity {
+        try GraphValueDecodingDiagnostics.checking {
+            let graph = facade(context)
+            let roots = Search<Entity>(graph: graph).where(.type(rootType)).sync().filter {
+                $0[dynamicMember: graphKey] as? String == id.rawValue.uuidString
+            }
+            if let error = graph.snapshotReadError { throw error }
+            guard !roots.isEmpty else { throw GraphStoreError.missingGraph }
+            guard roots.count == 1, let root = roots.first,
+                  root[dynamicMember: layoutKey] as? String == databaseVersion else { throw GraphStoreError.corruptIdentity }
+            return root
         }
     }
 
@@ -85,13 +103,17 @@ package enum GraphTypedStoreAdapter {
         let membership = Action(membersType, graph: graph)
         membership[dynamicMember: graphKey] = id.rawValue.uuidString
         membership.add(subjects: root)
+        if let store = StoreNativeContext.privateStore(in: context) {
+            try root.runtimeAssignOwnedObjects(to: store, in: context)
+            try membership.runtimeAssignOwnedObjects(to: store, in: context)
+        }
     }
 
     private static func upgrade(_ context: NSManagedObjectContext, backupRoot: URL) throws -> [GraphID] {
         let graph = facade(context), all = try allNodes(graph)
-        if all.filter({ $0.type == rootType }).allSatisfy({ $0[dynamicMember: layoutKey] as? String == databaseVersion }),
+        if all.filter({ $0.runtimeTypeIfPresent == rootType }).allSatisfy({ $0[dynamicMember: layoutKey] as? String == databaseVersion }),
            !all.isEmpty { return try catalog(context) }
-        guard let root = all.first(where: { $0.type == rootType }) as? Entity,
+        guard let root = all.first(where: { $0.runtimeTypeIfPresent == rootType }) as? Entity,
               let text = root[dynamicMember: graphKey] as? String, let uuid = UUID(uuidString: text),
               let url = context.persistentStoreCoordinator?.persistentStores.first?.url else {
             throw GraphStoreError.legacyStoreRequiresAdoption
@@ -112,13 +134,13 @@ package enum GraphTypedStoreAdapter {
         return [id]
     }
 
-    private static func facade(_ context: NSManagedObjectContext) -> Graph {
+    static func facade(_ context: NSManagedObjectContext) -> Graph {
         let graph = Graph(transactionContext: context, configuration: GraphStoreConfiguration())
         graph.isReadSnapshot = true
         return graph
     }
 
-    private static func allNodes(_ graph: Graph) throws -> [Node] {
+    static func allNodes(_ graph: Graph) throws -> [Node] {
         let all = Predicate([NSPredicate(value: true)])
         let nodes: [Node] = Search<Entity>(graph: graph).where(all).sync()
             + Search<Relationship>(graph: graph).where(all).sync()
@@ -131,7 +153,7 @@ package enum GraphTypedStoreAdapter {
         try GraphValueDecodingDiagnostics.checking {
             let graph = facade(context)
             let nodes = try allNodes(graph)
-            let roots = nodes.filter { $0.type == rootType }
+            let roots = nodes.filter { $0.runtimeTypeIfPresent == rootType }
             if !roots.isEmpty {
                 guard roots.count == 1, roots[0] is Entity,
                       roots[0][dynamicMember: layoutKey] as? String == layoutVersion,
@@ -182,13 +204,14 @@ package enum GraphTypedStoreAdapter {
         }
     }
 
-    private static func stamp(_ node: Node, id: GraphNodeID) {
+    static func stamp(_ node: Node, id: GraphNodeID) {
         node[dynamicMember: idKey] = id.rawValue.uuidString
         node[dynamicMember: graphKey] = id.graphID.rawValue.uuidString
     }
 
-    private final class Session {
+    final class Session {
         let graph: Graph
+        let context: NSManagedObjectContext
         let graphID: GraphID
         var nodes: [GraphNodeID: Node] = [:]
         let database: Bool
@@ -197,11 +220,12 @@ package enum GraphTypedStoreAdapter {
 
         init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false) throws {
             graph = facade(context)
+            self.context = context
             self.graphID = graphID
             self.database = database
             try GraphValueDecodingDiagnostics.checking {
                 let all = try allNodes(graph)
-                let roots = all.filter { $0.type == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
+                let roots = all.filter { $0.runtimeTypeIfPresent == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
                 guard roots.count == 1, let selected = roots[0] as? Entity,
                       selected[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
                       selected[dynamicMember: layoutKey] as? String == (database ? databaseVersion : layoutVersion) else { throw GraphStoreError.corruptIdentity }
@@ -211,9 +235,27 @@ package enum GraphTypedStoreAdapter {
                     guard candidates.count == 1, let action = candidates[0] as? Action else { throw GraphStoreError.corruptIdentity }
                     membership = action
                 }
-                for node in all where node.type != rootType && (!database || node.type != membersType) {
+                for node in all where node.runtimeTypeIfPresent != rootType && (!database || node.runtimeTypeIfPresent != membersType) {
                     if database, node[dynamicMember: graphKey] as? String != graphID.rawValue.uuidString { continue }
-                    guard !node.type.hasPrefix(prefix),
+                    if database, let staged = node[dynamicMember: stageKey] {
+                        guard node.runtimeTypeIfPresent != nil, let text = staged as? String, UUID(uuidString: text) != nil,
+                              let nodeID = node[dynamicMember: idKey] as? String, UUID(uuidString: nodeID) != nil else {
+                            throw GraphStoreError.corruptIdentity
+                        }
+                        _ = try encodedKeys(node)
+                        if let entity = node as? Entity,
+                           membership?.objects.contains(where: { $0.sharesBackingObject(with: entity) }) == true {
+                            throw GraphStoreError.corruptIdentity
+                        }
+                        if let action = node as? Action, !action.subjects.isEmpty || !action.objects.isEmpty {
+                            throw GraphStoreError.corruptIdentity
+                        }
+                        if let edge = node as? Relationship, edge.subject != nil || edge.object != nil {
+                            throw GraphStoreError.corruptIdentity
+                        }
+                        continue
+                    }
+                    guard let type = node.runtimeTypeIfPresent, !type.hasPrefix(prefix),
                           node[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
                           let text = node[dynamicMember: idKey] as? String, let uuid = UUID(uuidString: text) else {
                         throw GraphStoreError.corruptIdentity
@@ -239,6 +281,29 @@ package enum GraphTypedStoreAdapter {
                         guard edge.object == nil else { throw GraphStoreError.corruptIdentity }
                     } else if edge.subject == nil && edge.object == nil { throw GraphStoreError.corruptIdentity }
                 }
+            }
+        }
+
+        var isShared: Bool { StoreNativeContext.isShared(root?.runtimeObjectID.persistentStore, in: context) }
+
+        func requireWriteAccess(completing operationID: UUID? = nil) throws {
+            if isShared {
+                guard let container = context.userInfo[StoreNativeContext.containerKey] as? NSPersistentCloudKitContainer,
+                      let root, container.canUpdateRecord(forManagedObjectWith: root.runtimeObjectID),
+                      let share = try container.fetchShares(matching: [root.runtimeObjectID])[root.runtimeObjectID],
+                      share.currentUserParticipant?.role == .privateUser,
+                      share.currentUserParticipant?.acceptanceStatus == .accepted,
+                      share.currentUserParticipant?.permission == .readWrite else {
+                    throw GraphStoreError.permissionDenied
+                }
+            }
+            if isShared, let pending = try GraphSharedInsertionJournal.read(graphID: graphID, context: context),
+               pending.operationID != operationID { throw GraphStoreError.pendingNativeOperation }
+        }
+
+        func assign(_ node: Node) throws {
+            if let store = root?.runtimeObjectID.persistentStore ?? StoreNativeContext.privateStore(in: context) {
+                try node.runtimeAssignOwnedObjects(to: store, in: context)
             }
         }
 
@@ -317,6 +382,8 @@ package enum GraphTypedStoreAdapter {
         }
 
         func insert(_ record: GraphRecord) throws {
+            try requireWriteAccess()
+            guard !isShared else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             try validate(record)
             guard nodes[record.id] == nil else { throw GraphStoreError.duplicateIdentity }
             let values = try record.properties.mapValues { try GraphValueCodec.encode($0) }
@@ -335,12 +402,20 @@ package enum GraphTypedStoreAdapter {
             node.add(to: Array(record.groups))
             if let date = record.createdDate { node.setCreatedDate(date) }
             setEndpoints(node, subjects: subjects, objects: objects)
+            try assign(node)
         }
 
-        func patch(_ patch: GraphRecordPatch) throws -> GraphRecord {
+        func patch(_ patch: GraphRecordPatch, completing operationID: UUID? = nil) throws -> GraphRecord {
+            guard patch.properties.keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.reservedName }
+            try requireWriteAccess(completing: operationID)
             guard let node = try node(patch.id) else { throw GraphStoreError.missingNode }
             let current = try snapshot(node, id: patch.id)
             let updated = try patch.applying(to: current)
+            if isShared {
+                let createsDetails = updated.properties.keys.contains { current.properties[$0] == nil } ||
+                    !updated.tags.isSubset(of: current.tags) || !updated.groups.isSubset(of: current.groups)
+                guard !createsDetails else { throw GraphStoreError.sharedInsertionRequiresPreparation }
+            }
             try validate(updated)
             let (subjects, objects) = try resolve(updated.endpoints)
             var values: [String: Data] = [:]
@@ -358,11 +433,15 @@ package enum GraphTypedStoreAdapter {
             node.add(tags: Array(patch.addingTags)); node.remove(tags: Array(patch.removingTags))
             node.add(to: Array(patch.addingGroups)); node.remove(from: Array(patch.removingGroups))
             if patch.endpoints != nil { setEndpoints(node, subjects: subjects, objects: objects) }
+            try assign(node)
             return updated
         }
 
         func delete(_ id: GraphNodeID) throws {
+            try requireWriteAccess()
             guard let node = try node(id) else { throw GraphStoreError.missingNode }
+            if isShared, let container = context.userInfo[StoreNativeContext.containerKey] as? NSPersistentCloudKitContainer,
+               !container.canDeleteRecord(forManagedObjectWith: node.runtimeObjectID) { throw GraphStoreError.permissionDenied }
             if let entity = node as? Entity {
                 // Preserve actions and their other endpoints, including valid empty actions.
                 for action in entity.actions {

@@ -136,13 +136,41 @@ public class Node: NSObject, Codable {
   
   /// Compares facade backing objects on the caller's existing context queue.
   /// Native ownership includes detail rows; callers remain on this facade's context queue.
-  package var runtimeOwnedObjectIDs: [NSManagedObjectID] {
+  package var runtimeOwnedObjectIDs: [NSManagedObjectID] { runtimeOwnedObjects.map(\.objectID) }
+
+  package var runtimeOwnedObjects: [NSManagedObject] {
     var objects: [NSManagedObject] = [node]
     for name in ["propertySet", "tagSet", "groupSet"] {
       if let details = node.value(forKey: name) as? Set<NSManagedObject> { objects.append(contentsOf: details) }
     }
-    return objects.map(\.objectID)
+    return objects
   }
+
+  package func runtimeAssignOwnedObjects(to store: NSPersistentStore, in context: NSManagedObjectContext) throws {
+    for object in runtimeOwnedObjects {
+      guard object.managedObjectContext === context else { throw GraphStoreError.ownershipConflict }
+      if object.objectID.isTemporaryID { context.assign(object, to: store) }
+      else if object.objectID.persistentStore !== store { throw GraphStoreError.ownershipConflict }
+    }
+  }
+
+  /// Moves only newly needed, already assigned detail rows between facades of the same native kind/store.
+  package func runtimeMoveDetails(from source: Node, propertyNames: Set<String>) throws -> Set<String> {
+    guard node.entity.name == source.node.entity.name,
+          node.managedObjectContext === source.node.managedObjectContext,
+          node.objectID.persistentStore === source.node.objectID.persistentStore else { throw GraphStoreError.ownershipConflict }
+    var moved = Set<String>()
+    for property in Array(source.node.propertySet) where propertyNames.contains(property.name) &&
+        !node.propertySet.contains(where: { $0.name == property.name }) {
+      property.node = node
+      moved.insert(property.name)
+    }
+    for tag in Array(source.node.tagSet) where !node.tagSet.contains(where: { $0.name == tag.name }) { tag.node = node }
+    for group in Array(source.node.groupSet) where !node.groupSet.contains(where: { $0.name == group.name }) { group.node = node }
+    return moved
+  }
+
+  package var runtimeTypeIfPresent: String? { node.value(forKey: "type") as? String }
 
   package var runtimeObjectID: NSManagedObjectID { node.objectID }
 

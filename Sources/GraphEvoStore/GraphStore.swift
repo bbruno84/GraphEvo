@@ -12,6 +12,9 @@ public enum GraphStoreError: Error {
     case corruptIdentity
     case missingNode
     case missingGraph
+    case permissionDenied
+    case sharedInsertionRequiresPreparation
+    case pendingNativeOperation
     case unresolvedReference
     case legacyStoreRequiresAdoption
     case unsupportedLayout
@@ -77,6 +80,14 @@ public actor GraphStore {
                 throw error
             }
         } catch { throw translate(error) }
+    }
+
+    /// Trusted platform adapter operations retain this logical handle's native owner.
+    package func nativeOperation<Value: Sendable>(
+        _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
+    ) async throws -> Value {
+        do { return try await handle.nativeOperation(body) }
+        catch { throw Self.translate(error) }
     }
 
     public nonisolated func makeNodeID() -> GraphNodeID { GraphNodeID(graphID: id) }
@@ -148,6 +159,9 @@ extension GraphStoreError: LocalizedError {
         case .foreignGraph: return "The node belongs to another graph."
         case .duplicateIdentity: return "The graph contains a duplicate logical node identity."
         case .corruptIdentity: return "The graph's persisted identity metadata is invalid."
+        case .permissionDenied: return "The current sharing metadata does not permit this write."
+        case .sharedInsertionRequiresPreparation: return "New shared objects require an awaited native assignment operation."
+        case .pendingNativeOperation: return "A previous native graph operation is still pending."
         case .missingGraph: return "The requested logical graph is not present in the local catalog."
         case .missingNode: return "The requested graph node does not exist."
         case .unresolvedReference: return "A graph endpoint does not resolve to an entity in this graph."

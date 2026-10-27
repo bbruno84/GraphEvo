@@ -292,9 +292,10 @@ Separate zones do not promise one local SQLite per graph, selective download,
 independent encryption or unlimited zone count. The [A4 implementation](graphevo-2-graph-separation.md)
 now tests the actual v1-derived candidate model, including owned detail rows,
 cycles, disconnected entities and empty endpoints. It uses the owner-private
-resource for personal graphs; introduce the shared-store resource pair with A5
-participant routing and resource ownership checks. This sequencing does not
-change the final private/shared topology or its required validation.
+resource for personal graphs. The [A5 candidate](graphevo-2-user-sharing.md) adds
+the shared-store resource pair, participant routing, explicit native assignment
+of new detail rows and local durable intent recovery. The schema remains an
+alpha candidate; cloud migration and account-change policy remain release gates.
 
 ### Working contracts
 

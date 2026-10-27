@@ -93,6 +93,14 @@ personal graph boundaries require only the private resource. This does not defer
 user sharing or weaken its exit. Keep the [hardware evidence](results/a4-native-membership-2026-10-27.md)
 separate from local regression tests and from native partial-operation recovery.
 
+The [A5 implementation candidate](graphevo-2-user-sharing.md) adds paired native
+ownership, invitations/acceptance, explicit participant structural operations,
+permissions and leave/revocation. Local operation journals diagnose/recover
+partial assignment without replaying native sharing. Native model hashes remain
+unchanged. Hardware evidence and remaining release gates are recorded in the
+A5 guide; this does not complete coordinated v1 cloud cutover or account-change
+policy, and does not freeze the schema.
+
 ## Migration throughout alpha
 
 Migration is a parallel workstream rather than a task first discovered after

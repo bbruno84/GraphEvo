@@ -161,4 +161,18 @@ private struct CatalogItem: GraphModel {
         #expect(!FileManager.default.fileExists(atPath: missing.path))
     }
 
+    @Test func removingReservedMetadataInsideACaughtPatchCannotDamageIdentity() async throws {
+        let graph = try await GraphStore.inMemory()
+        let item = CatalogItem(id: graph.makeNodeID(), label: "retained")
+        try await graph.insert(item)
+        try await graph.transaction { scope throws -> Void in
+            for name in ["__graphevo_v2.graphID", "__graphevo_v2.nodeID", "__graphevo_v2.encodedKeys"] {
+                let patch = try GraphRecordPatch(id: item.id, properties: [name: .remove])
+                #expect(throws: GraphStoreError.self) { try scope.patch(patch) }
+            }
+        }
+        #expect(try await graph.fetch(item.id, as: CatalogItem.self)?.label == "retained")
+        try await graph.close()
+    }
+
 }

@@ -1,6 +1,7 @@
 import CoreData
 import CloudKit
 import Foundation
+import os
 
 /// Test seams for native lifecycle boundaries, never exposed by the Graph API.
 struct StoreLifecycleHooks: Sendable {
@@ -10,23 +11,26 @@ struct StoreLifecycleHooks: Sendable {
     var didQueueWriter: (@Sendable () async -> Void)?
     var didBeginClose: (@Sendable () async -> Void)?
     var beforeDetach: (@Sendable () async throws -> Void)?
+    var didLoadStore: (@Sendable (URL?) throws -> Void)?
 }
 
 /// One container with operation-scoped private contexts. Admission covers actor reentrancy.
 actor StoreResources {
     let id = UUID()
-    private let gateway: StoreGatewayLease
+    private let gateways: [StoreGatewayLease]
     private let container: NSPersistentContainer
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
+    private var eventObserver: NSObjectProtocol?
+    private let setupTracker = StoreCloudSetupTracker()
     private var writerBusy = false
     private var writers: [(UUID, CheckedContinuation<Void, any Error>)] = []
     private var closing = false
     private var admitted = 0
     private var drain: CheckedContinuation<Void, Never>?
 
-    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateway: StoreGatewayLease) {
-        self.gateway = gateway
+    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease]) {
+        self.gateways = gateways
         self.container = container
         self.resolved = resolved
         self.hooks = hooks
@@ -38,30 +42,63 @@ actor StoreResources {
         hooks: StoreLifecycleHooks,
         owner: UUID
     ) async throws -> StoreResources {
-        let gateway = try StoreGatewayLease.acquire(resolved.configuration, owner: owner)
+        let members = try resolved.resources
+        let gateways = try members.map { try StoreGatewayLease.acquire($0.configuration, owner: owner) }
         try await hooks.beforeLoad?()
         let model = schema.makeModel()
         guard !schema.identifier.isEmpty, !schema.entityVersionHashes.isEmpty,
               model.entityVersionHashesByName == schema.entityVersionHashes else {
             throw StoreRuntimeError.invalidModel(schema.identifier)
         }
+        let descriptions = try members.enumerated().map { index, member in
+            let description = try storeDescription(member, model: model)
+            if let identifier = resolved.configuration.cloudKitContainerIdentifier {
+                guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      resolved.url != nil, resolved.configuration.access == .readWrite else {
+                    throw StoreRuntimeError.invalidConfiguration("Mirroring requires writable SQLite resources and a container identifier.")
+                }
+                let options = NSPersistentCloudKitContainerOptions(containerIdentifier: identifier)
+                options.databaseScope = index == 0 ? .private : .shared
+                description.cloudKitContainerOptions = options
+                description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            }
+            return description
+        }
+        let container: NSPersistentContainer
+        if resolved.configuration.cloudKitContainerIdentifier != nil {
+            container = NSPersistentCloudKitContainer(name: schema.identifier, managedObjectModel: model)
+        } else { container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model) }
+        container.persistentStoreDescriptions = descriptions
+        let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways)
+        do { try await resources.load() }
+        catch {
+            let failure = StoreRuntimeError.loadFailed(resolved.url, underlying: error)
+            do { try await resources.detach() }
+            catch {
+                throw StoreOpenQuarantine(resources: resources,
+                    failure: StoreRuntimeError.shutdownFailed(resolved.url, underlying: error))
+            }
+            throw failure
+        }
+        return resources
+    }
+
+    private static func storeDescription(_ resolved: ResolvedStore, model: NSManagedObjectModel) throws -> NSPersistentStoreDescription {
         let description: NSPersistentStoreDescription
         switch resolved.configuration.location {
         case .sqlite(let url):
             if FileManager.default.fileExists(atPath: url.path) {
                 let metadata: [String: Any]
-                do {
-                    metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
-                } catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
+                do { metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url) }
+                catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
                 guard model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else {
                     throw StoreRuntimeError.incompatibleStore(url)
                 }
             } else if resolved.configuration.access == .readOnly {
                 throw StoreRuntimeError.invalidConfiguration("A read-only SQLite store must already exist.")
             }
-            do {
-                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            } catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
+            do { try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true) }
+            catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
             description = NSPersistentStoreDescription(url: url)
             description.type = NSSQLiteStoreType
             description.isReadOnly = resolved.configuration.access == .readOnly
@@ -73,31 +110,37 @@ actor StoreResources {
         description.shouldAddStoreAsynchronously = true
         description.shouldMigrateStoreAutomatically = false
         description.shouldInferMappingModelAutomatically = false
-        let container: NSPersistentContainer
-        if let identifier = resolved.configuration.cloudKitContainerIdentifier {
-            guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  resolved.url != nil, resolved.configuration.access == .readWrite else {
-                throw StoreRuntimeError.invalidConfiguration("Mirroring requires a writable SQLite store and a container identifier.")
+        return description
+    }
+
+    private func load() async throws {
+        if let cloud = container as? NSPersistentCloudKitContainer {
+            let tracker = setupTracker
+            eventObserver = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification,
+                object: cloud, queue: nil) { note in
+                guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey] as? NSPersistentCloudKitContainer.Event,
+                      event.type == .setup, event.endDate != nil else { return }
+                let identifier = event.storeIdentifier, success = event.succeeded
+                let failure = event.error.map { (($0 as NSError).domain, ($0 as NSError).code) }
+                tracker.record(identifier, success: success, failure: failure)
             }
-            let cloud = NSPersistentCloudKitContainer(name: schema.identifier, managedObjectModel: model)
-            let options = NSPersistentCloudKitContainerOptions(containerIdentifier: identifier)
-            options.databaseScope = .private
-            description.cloudKitContainerOptions = options
-            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-            container = cloud
-        } else {
-            container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model)
         }
-        container.persistentStoreDescriptions = [description]
-        do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                container.loadPersistentStores { _, error in
-                    if let error { continuation.resume(throwing: error) }
-                    else { continuation.resume() }
+        let progress = StoreLoadProgress(count: container.persistentStoreDescriptions.count)
+        let hook = hooks.didLoadStore
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            container.loadPersistentStores { description, error in
+                var failure: (any Error)? = error
+                if failure == nil {
+                    do { try hook?(description.url) } catch { failure = error }
                 }
+                if let result = progress.finish(failure) { continuation.resume(with: result) }
             }
-        } catch { throw StoreRuntimeError.loadFailed(resolved.url, underlying: error) }
-        return StoreResources(container: container, resolved: resolved, hooks: hooks, gateway: gateway)
+        }
+    }
+
+    func cloudSetup() -> StoreCloudSetup {
+        setupTracker.snapshot(configured: resolved.configuration.cloudKitContainerIdentifier != nil,
+            identifiers: container.persistentStoreCoordinator.persistentStores.map(\.identifier))
     }
 
     /// Trusted adapter boundary: bodies return values and must never save or escape contexts.
@@ -108,10 +151,11 @@ actor StoreResources {
         defer { finish() }
         let cancellation = OperationCancellation()
         let sqlite = resolved.url != nil
+        let configuration = resolved.configuration, container = container
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await container.performBackgroundTask { @Sendable context in
-                Self.prepare(context)
+                Self.prepare(context, configuration: configuration, container: container)
                 defer { context.rollback(); context.reset() }
                 try cancellation.check()
                 if sqlite { try context.setQueryGenerationFrom(.current) }
@@ -135,9 +179,9 @@ actor StoreResources {
         return try await withTaskCancellationHandler {
             try await acquireWriter(request, cancellation: cancellation)
             defer { releaseWriter() }
-            let hooks = hooks
+            let hooks = hooks, configuration = resolved.configuration, container = container
             return try await container.performBackgroundTask { @Sendable context in
-                Self.prepare(context)
+                Self.prepare(context, configuration: configuration, container: container)
                 defer { context.rollback(); context.reset() }
                 try cancellation.check()
                 let value = try body(context)
@@ -173,7 +217,10 @@ actor StoreResources {
         }
     }
 
-    private static func prepare(_ context: NSManagedObjectContext) {
+    private static func prepare(_ context: NSManagedObjectContext, configuration: StoreConfiguration, container: NSPersistentContainer) {
+        if case .sqlite(let url) = configuration.location { context.userInfo[StoreNativeContext.privateURLKey] = url }
+        context.userInfo[StoreNativeContext.sharedURLKey] = configuration.sharedStoreURL
+        context.userInfo[StoreNativeContext.containerKey] = container
         context.name = "GraphEvo.v2.runtime"
         context.undoManager = nil
         context.mergePolicy = NSMergePolicy(merge: .errorMergePolicyType)
@@ -217,12 +264,40 @@ actor StoreResources {
         if admitted > 0 {
             await withCheckedContinuation { drain = $0 }
         }
-        do {
-            try await hooks.beforeDetach?()
-            for store in container.persistentStoreCoordinator.persistentStores {
-                try container.persistentStoreCoordinator.remove(store)
-            }
-            gateway.release()
-        } catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
+        do { try await detach() }
+        catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
+    }
+
+    private func detach() async throws {
+        try await hooks.beforeDetach?()
+        for store in container.persistentStoreCoordinator.persistentStores {
+            try container.persistentStoreCoordinator.remove(store)
+        }
+        if let eventObserver { NotificationCenter.default.removeObserver(eventObserver) }
+        eventObserver = nil
+        for gateway in gateways { gateway.release() }
+    }
+}
+
+/// Retains a failed native owner if partial loading could not be safely detached.
+struct StoreOpenQuarantine: Error {
+    let resources: StoreResources
+    let failure: any Error
+}
+
+private final class StoreLoadProgress: Sendable {
+    private struct State: Sendable {
+        var remaining: Int
+        var error: (any Error)?
+    }
+    private let state: OSAllocatedUnfairLock<State>
+    init(count: Int) { state = OSAllocatedUnfairLock(initialState: State(remaining: count)) }
+    func finish(_ error: (any Error)?) -> Result<Void, any Error>? {
+        state.withLock { state in
+            if state.error == nil { state.error = error }
+            state.remaining -= 1
+            guard state.remaining == 0 else { return nil }
+            return state.error.map { .failure($0) } ?? .success(())
+        }
     }
 }
