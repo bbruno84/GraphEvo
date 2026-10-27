@@ -2,6 +2,8 @@ import Foundation
 
 /// Versioned alpha property storage; independent of Codable conformance on public values.
 package enum GraphValueCodec {
+    // Distinct from legacy JSON. A declared length rejects truncated/extended binary payloads.
+    private static let binaryMagic = Data([0x47, 0x45, 0x56, 0x4f, 0, 0x44, 0x41, 0x54, 0x41])
     private struct Envelope: Codable { let version: Int; let value: PayloadV1 }
     private indirect enum PayloadV1: Codable {
         case null, boolean(Bool), integer(Int64), unsignedInteger(UInt64), floatingPoint(Double)
@@ -49,12 +51,29 @@ package enum GraphValueCodec {
     }
 
     package static func encode(_ value: GraphValue) throws -> Data {
+        if case .data(let bytes) = value {
+            var result = binaryMagic
+            result.append(1)
+            let count = UInt64(bytes.count)
+            for shift in stride(from: 56, through: 0, by: -8) { result.append(UInt8(truncatingIfNeeded: count >> shift)) }
+            result.append(bytes)
+            return result
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(Envelope(version: 1, value: PayloadV1(value)))
     }
 
     package static func decode(_ data: Data) throws -> GraphValue {
+        if data.starts(with: binaryMagic) {
+            let header = binaryMagic.count + 9
+            guard data.count >= header, data[data.startIndex + binaryMagic.count] == 1 else {
+                throw GraphModelError.invalidRecord("Unsupported or incomplete binary property envelope.")
+            }
+            let length = data.dropFirst(binaryMagic.count + 1).prefix(8).reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+            guard length == UInt64(data.count - header) else { throw GraphModelError.invalidRecord("Invalid binary property length.") }
+            return .data(Data(data.dropFirst(header)))
+        }
         let envelope = try JSONDecoder().decode(Envelope.self, from: data)
         guard envelope.version == 1 else { throw GraphModelError.invalidRecord("Unsupported property envelope version.") }
         return try envelope.value.value()
