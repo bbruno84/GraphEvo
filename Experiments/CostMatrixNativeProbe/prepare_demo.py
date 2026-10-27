@@ -59,8 +59,8 @@ text = text.replace(needle, '''    private struct MatrixOwner: GraphModel {
     private struct Fixture: Codable {''', 1)
 needle = '                case "invite":'
 assert text.count(needle) == 1
-text = text.replace(needle, r'''                case "matrix-query-owner", "matrix-query-peer":
-                    let owner = stage == "matrix-query-owner"
+text = text.replace(needle, r'''                case "matrix-query-owner", "matrix-query-peer", "matrix-query-owner-fixed", "matrix-query-peer-fixed":
+                    let owner = stage.hasPrefix("matrix-query-owner")
                     guard (try await db.graphIDs()).contains(fixture.b) == owner else { throw Failure.fixture }
                     let budget = try GraphQueryBudget(maximumCandidates: 10_000, maximumPropertyBytes: 32 * 1024)
                     let a = try await db.openGraph(fixture.a)

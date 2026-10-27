@@ -155,3 +155,10 @@ snapshots. Transformer-error capture surrounds lookup and execution so requested
 malformed legacy values cannot become silently absent. This reduces native body
 faults as well as value-codec work; it is still not a hard memory/I/O bound or
 native indexed identity/query engine.
+
+
+The older-runtime CI probe also requires graph-ID-only routing before any
+per-graph metadata batch. Fetching foreign format/staging rows and merely
+accessing their values lazily is insufficient: native transformation can be
+eager. The corrected reader fetches per-graph metadata only for routed owners,
+retaining the full native candidate inventory and all selected-graph checks.

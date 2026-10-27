@@ -566,3 +566,8 @@ capture active across property fetch/value access and evaluation; a requested
 legacy decoder failure must not silently become an absent value. The unique
 native-transformer probe must distinguish skipped-body reads from requested
 failures. No row index may survive its query/scope.
+
+For database Sessions, route native owners by graphID before fetching any
+per-graph ID/format/staging metadata. Do not rely on deferred native transformer
+execution: older Core Data can transform fetched values eagerly. Preserve the
+full native candidate count while excluding foreign per-graph payload rows.

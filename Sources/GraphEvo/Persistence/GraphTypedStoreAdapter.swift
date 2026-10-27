@@ -280,18 +280,25 @@ package enum GraphTypedStoreAdapter {
             try GraphValueDecodingDiagnostics.checking {
                 let all = try maximumCandidates.map { try boundedNodes(graph, limit: $0) } ?? allNodes(graph)
                 nativeCandidateCount = all.count
-                metadata = try GraphRuntimeMetadata(nodes: all, keys: [graphKey, idKey, formatsKey, layoutKey, stageKey], context: context)
-                let roots = all.filter { $0.runtimeTypeIfPresent == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
+                // Route by graph ID before fetching per-graph metadata. Older Core Data versions
+                // can eagerly transform fetched values even when application access is deferred.
+                let scoped: [Node]
+                if database {
+                    let routing = try GraphRuntimeMetadata(nodes: all, keys: [graphKey], context: context, minimumPersistedOwners: 0)
+                    scoped = all.filter { routing.value(for: $0, key: graphKey) as? String == graphID.rawValue.uuidString }
+                } else { scoped = all }
+                metadata = try GraphRuntimeMetadata(nodes: scoped, keys: [graphKey, idKey, formatsKey, layoutKey, stageKey], context: context)
+                let roots = scoped.filter { $0.runtimeTypeIfPresent == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
                 guard roots.count == 1, let selected = roots[0] as? Entity,
                       metadataValue(selected, graphKey) as? String == graphID.rawValue.uuidString,
                       metadataValue(selected, layoutKey) as? String == (database ? databaseVersion : layoutVersion) else { throw GraphStoreError.corruptIdentity }
                 root = selected
                 if database {
-                    let candidates = all.filter { $0.type == membersType && $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString }
+                    let candidates = scoped.filter { $0.type == membersType && $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString }
                     guard candidates.count == 1, let action = candidates[0] as? Action else { throw GraphStoreError.corruptIdentity }
                     membership = action
                 }
-                for node in all where node.runtimeTypeIfPresent != rootType && (!database || node.runtimeTypeIfPresent != membersType) {
+                for node in scoped where node.runtimeTypeIfPresent != rootType && (!database || node.runtimeTypeIfPresent != membersType) {
                     if database, metadataValue(node, graphKey) as? String != graphID.rawValue.uuidString { continue }
                     if database, let staged = metadataValue(node, stageKey) {
                         guard node.runtimeTypeIfPresent != nil, let text = staged as? String, UUID(uuidString: text) != nil,
