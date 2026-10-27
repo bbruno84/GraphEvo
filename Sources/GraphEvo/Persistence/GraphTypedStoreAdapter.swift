@@ -284,7 +284,7 @@ package enum GraphTypedStoreAdapter {
                 // can eagerly transform fetched values even when application access is deferred.
                 let scoped: [Node]
                 if database {
-                    let routing = try GraphRuntimeMetadata(nodes: all, keys: [graphKey], context: context, minimumPersistedOwners: 0)
+                    let routing = try GraphRuntimeMetadata(nodes: all, keys: [graphKey], context: context)
                     scoped = all.filter { routing.value(for: $0, key: graphKey) as? String == graphID.rawValue.uuidString }
                 } else { scoped = all }
                 metadata = try GraphRuntimeMetadata(nodes: scoped, keys: [graphKey, idKey, formatsKey, layoutKey, stageKey], context: context)
