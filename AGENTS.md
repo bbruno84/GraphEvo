@@ -415,3 +415,19 @@ GraphRecordMapper restrictions above still apply to that older adapter.
 Current-schema local adoption requires stopped external/v1 writers and a backup
 before identity edits. It does not establish a cloud cutover. See
 [typed local operations](docs/design/graphevo-2-typed-store.md).
+
+## V2 A4 graph catalog and native boundaries
+
+`GraphDatabase` opens a4.1 multi-graph resources and returns independent
+`GraphStore` leases. Preserve hidden root/membership links and their exclusion
+from application snapshots. The native model is unchanged. A3-to-A4 local
+upgrade is explicit and backed up; never silently upgrade a3.1 or cloud data.
+`openMirrored` currently owns a private store. The private/shared resource pair
+and participant assignment belong to A5. Native share callbacks hold runtime
+admission and the writer gate through completion. A durable share request with
+missing native metadata is pending: never create another share as a fallback.
+Native opening, catalog presence, share persistence, local record mappings and
+independent replica integrity are separate facts. Inspect every owned detail
+row when validating boundaries. See `docs/design/graphevo-2-graph-separation.md`
+and `Experiments/A4NativeProbe/README.md`. Do not replay reserved probe stages
+or commit generated stores, case envelopes, device logs or local signing files.

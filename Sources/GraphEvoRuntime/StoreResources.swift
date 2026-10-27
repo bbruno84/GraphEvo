@@ -1,4 +1,5 @@
 import CoreData
+import CloudKit
 import Foundation
 
 /// Test seams for native lifecycle boundaries, never exposed by the Graph API.
@@ -72,7 +73,21 @@ actor StoreResources {
         description.shouldAddStoreAsynchronously = true
         description.shouldMigrateStoreAutomatically = false
         description.shouldInferMappingModelAutomatically = false
-        let container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model)
+        let container: NSPersistentContainer
+        if let identifier = resolved.configuration.cloudKitContainerIdentifier {
+            guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  resolved.url != nil, resolved.configuration.access == .readWrite else {
+                throw StoreRuntimeError.invalidConfiguration("Mirroring requires a writable SQLite store and a container identifier.")
+            }
+            let cloud = NSPersistentCloudKitContainer(name: schema.identifier, managedObjectModel: model)
+            let options = NSPersistentCloudKitContainerOptions(containerIdentifier: identifier)
+            options.databaseScope = .private
+            description.cloudKitContainerOptions = options
+            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            container = cloud
+        } else {
+            container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model)
+        }
         container.persistentStoreDescriptions = [description]
         do {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
@@ -132,6 +147,26 @@ actor StoreResources {
                 hooks.afterCommit?()
                 return value
             }
+        } onCancel: {
+            cancellation.cancel()
+            Task { await self.cancelWriter(request) }
+        }
+    }
+
+    /// Privileged framework work; the completion must settle before this owner can detach.
+    func nativeOperation<Value: Sendable>(
+        _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
+    ) async throws -> Value {
+        guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
+        try admit()
+        defer { finish() }
+        let request = UUID(), cancellation = OperationCancellation()
+        return try await withTaskCancellationHandler {
+            try await acquireWriter(request, cancellation: cancellation)
+            defer { releaseWriter() }
+            try cancellation.check()
+            // Native APIs own their cancellation semantics once started. Await their real outcome.
+            return try await body(container)
         } onCancel: {
             cancellation.cancel()
             Task { await self.cancelWriter(request) }

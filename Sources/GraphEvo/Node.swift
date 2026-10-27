@@ -134,6 +134,20 @@ public class Node: NSObject, Codable {
     return node
   }
   
+  /// Compares facade backing objects on the caller's existing context queue.
+  /// Native ownership includes detail rows; callers remain on this facade's context queue.
+  package var runtimeOwnedObjectIDs: [NSManagedObjectID] {
+    var objects: [NSManagedObject] = [node]
+    for name in ["propertySet", "tagSet", "groupSet"] {
+      if let details = node.value(forKey: name) as? Set<NSManagedObject> { objects.append(contentsOf: details) }
+    }
+    return objects.map(\.objectID)
+  }
+
+  package var runtimeObjectID: NSManagedObjectID { node.objectID }
+
+  package func sharesBackingObject(with other: Node) -> Bool { node === other.node }
+
   /// A reference to the type.
   public var type: String {
     return node.performAndWait { $0.type }

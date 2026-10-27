@@ -289,8 +289,12 @@ The working cloud topology is a runtime with private and shared stores, with
 one owner-only share boundary per personal graph, later inviting users to that
 same graph. V01/V02/V09 support this candidate under tested conditions.
 Separate zones do not promise one local SQLite per graph, selective download,
-independent encryption or unlimited zone count. The final topology still needs
-the actual v1-derived candidate model, including detail rows and cycles.
+independent encryption or unlimited zone count. The [A4 implementation](graphevo-2-graph-separation.md)
+now tests the actual v1-derived candidate model, including owned detail rows,
+cycles, disconnected entities and empty endpoints. It uses the owner-private
+resource for personal graphs; introduce the shared-store resource pair with A5
+participant routing and resource ownership checks. This sequencing does not
+change the final private/shared topology or its required validation.
 
 ### Working contracts
 
