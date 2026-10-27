@@ -63,3 +63,20 @@ The revised checkpoint batches up to 128 distinct endpoint UUIDs, checking all
 three node kinds per batch. It retains raw/native identity, membership, backing
 object and duplicate checks. A 130-endpoint regression crosses the boundary and
 rejects pending cross-kind duplicates and missing endpoint columns.
+
+## Intermediate batching result and corrected local-view check
+
+The UUID-batching-only campaign at `4d162f4` completed another 528 rows:
+wide-action read was 51.27 ms full, 280.34 ms columns and 277.02 ms indexed.
+Batching requests alone was insufficient; this variant is not selected.
+
+The next candidate prefetches native topology (not property bodies) and batches
+only graph/node/staging metadata for referenced owners. Changed owners use the
+facade's pending local view. A regression initially exposed a newly inserted
+staging property that the batched-property path missed; the fallback and tests
+now retain that pending guard. The failing run is retained externally as
+`/tmp/graphevo-c02b-topology-regression.log`.
+
+A one-repetition wide-action screen at `c5e0ce7` passed (20 rows), with indexed
+read at 33.74 ms. This screen only authorizes the complete repeated campaign;
+it is not the final performance conclusion.

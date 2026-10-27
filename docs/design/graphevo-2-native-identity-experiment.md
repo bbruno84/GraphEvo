@@ -62,3 +62,10 @@ backing-object equality, raw/native identity and membership checks. A regression
 crosses that batch boundary and rejects pending missing/cross-kind duplicate
 identities. Retain both measurement campaigns; do not accept fast Entity reads
 as evidence for high-degree graph operations.
+
+The UUID-batching-only checkpoint still regressed on the wide action. The next
+candidate also prefetches native topology and batches only graph/node/staging
+property rows for referenced owners. Do not prefetch property sets or endpoint
+payload bodies. Changed owners retain facade reads for pending inverse/property
+edits; no metadata cache survives the operation. Missing/duplicate/raw-mismatched
+and staged endpoint regressions must continue passing.
