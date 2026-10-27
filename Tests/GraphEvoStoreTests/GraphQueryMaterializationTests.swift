@@ -119,12 +119,11 @@ extension GraphQueryMaterializationTests {
         for entity in model.entities {
             entity.attributesByName["object"]?.valueTransformerName = name.rawValue
         }
-        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+        let container = NSPersistentContainer(name: "QueryBodyProbe", managedObjectModel: model)
+        let coordinator = container.persistentStoreCoordinator
         let store = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: root.appendingPathComponent("Graph.sqlite"))
-        let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
-        context.persistentStoreCoordinator = coordinator
         let graph = GraphID(), owner = GraphNodeID(graphID: graph), other = GraphNodeID(graphID: graph)
-        try await context.perform { @Sendable in
+        try await container.performBackgroundTask { @Sendable context in
             let facade = GraphTypedStoreAdapter.facade(context)
             let root = Entity(GraphTypedStoreAdapter.rootType, graph: facade)
             root[dynamicMember: GraphTypedStoreAdapter.graphKey] = graph.rawValue.uuidString

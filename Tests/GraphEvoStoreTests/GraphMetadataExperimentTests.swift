@@ -62,10 +62,8 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
         let coordinator = NSPersistentStoreCoordinator(managedObjectModel: Model.makeModel())
         let first = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: root.appendingPathComponent("First.sqlite"))
         let second = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: root.appendingPathComponent("Second.sqlite"))
-        let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
-        context.persistentStoreCoordinator = coordinator
         let ids = [GraphID(), GraphID()]
-        try await context.perform { @Sendable in
+        try await container.performBackgroundTask { @Sendable context in
             let facade = GraphTypedStoreAdapter.facade(context)
             for (store, id) in zip(context.persistentStoreCoordinator!.persistentStores, ids) {
                 let root = Entity(GraphTypedStoreAdapter.rootType, graph: facade)
@@ -126,12 +124,11 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
         for entity in model.entities {
             if let object = entity.attributesByName["object"] { object.valueTransformerName = name.rawValue }
         }
-        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+        let container = NSPersistentContainer(name: "MetadataProbe", managedObjectModel: model)
+        let coordinator = container.persistentStoreCoordinator
         let store = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: root.appendingPathComponent("Graph.sqlite"))
-        let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
-        context.persistentStoreCoordinator = coordinator
         let ids = [GraphID(), GraphID()]
-        try await context.perform { @Sendable in
+        try await container.performBackgroundTask { @Sendable context in
             let facade = GraphTypedStoreAdapter.facade(context)
             for (index, id) in ids.enumerated() {
                 let root = Entity(GraphTypedStoreAdapter.rootType, graph: facade)
