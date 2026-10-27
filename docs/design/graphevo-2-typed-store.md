@@ -96,7 +96,7 @@ use it. Collisions in v1 adoption fail before editing.
 | One Entity with type `__graphevo_v2.graph` | Graph UUID under graphID; layout `a3.1` under layout |
 | Every application Entity/Relationship/Action | Graph UUID under graphID and node UUID under nodeID |
 | Adopted source nodes | Original v1 facade ID under legacyID |
-| Nodes with typed property writes | An encodedKeys string array explicitly identifying versioned property envelopes |
+| Every application node | A required encodedKeys string array identifying versioned property envelopes; empty for untouched adopted v1 values |
 
 These names have the namespace prefix in storage. IDs are stored as canonical
 UUID strings. Lookups never regenerate a missing ID, derive it from a Core Data
@@ -104,7 +104,8 @@ URI, or obtain permanent IDs as a side effect. Adoption reads old facade IDs
 only as translation keys; those IDs do not become new identities.
 
 The root is hidden from public records. Opening validates layout and all node
-identities, including duplicates and graph ownership. Unknown/corrupt versions
+identities, including duplicates and graph ownership, plus the required property
+format metadata. Unknown/corrupt versions
 fail instead of creating another root or reassigning IDs. Metadata checks are
 local integrity checks, not a distributed uniqueness constraint or import barrier.
 
@@ -219,3 +220,27 @@ and reject unknown envelope versions; all 18 model tests passed after adding
 these fixtures. CI initialization also selects the configured Xcode globally,
 runs first-launch setup and boots the dedicated simulator before testing; bounded
 retries cover only CoreSimulator service startup, never failing test bodies.
+
+
+## Pre-merge review correction
+
+Review on 2026-10-27 reproduced a silent representation error: removing a node's
+encodedKeys metadata caused an encoded Data property to be returned as the raw
+envelope bytes. The previous default of an empty key set conflated missing
+bookkeeping with untouched legacy values. The regression failed before the fix,
+including accepting a reopen of that incomplete store.
+
+Every application node now requires an encodedKeys array. Local v1 adoption
+writes an empty array in the same transaction as the identity mapping; insert
+and patch retain their explicit arrays. Session validation rejects missing or
+invalid arrays on open and on operations instead of returning successful
+misinterpreted data. This finalizes the unreleased a3.1 contract before its first
+integration; it does not add automatic conversion of earlier disposable branch
+fixtures or change the native Core Data schema. Arbitrary payload corruption and
+remote import completeness remain distinct verification concerns.
+
+After the correction, all 402 local tests passed (322 legacy, 46 runtime,
+18 model and 16 store/adoption). The 16 store/adoption tests also passed under
+Thread Sanitizer without reported races, and the external typed consumer,
+manifest and diff checks passed. The new regression's pre-fix failure remains
+distinct from these post-fix results; platform CI verifies the reviewed head.

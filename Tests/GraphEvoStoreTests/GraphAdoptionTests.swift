@@ -167,4 +167,23 @@ private func adoptionDirectory() throws -> URL {
         try await handle.close()
         try await store.close()
     }
+
+    @Test func missingFormatMetadataCannotExposeEnvelopeBytesAsApplicationData() async throws {
+        let directory = try adoptionDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Main.sqlite")
+        let store = try await GraphStore.open(at: url)
+        let record = try GraphRecord(id: store.makeNodeID(), type: "binary", properties: ["blob": .data(Data([0, 255]))])
+        try await store.transaction { try $0.insert(record) }
+        let handle = try await StoreRegistry.shared.open(.init(location: .sqlite(url)), schema: GraphRuntimeSchema.current)
+        try await handle.transaction { context in
+            let graph = Graph(transactionContext: context, configuration: GraphStoreConfiguration())
+            let node = try #require(Search<Entity>(graph: graph).where(.type("binary")).sync().first)
+            node[dynamicMember: "__graphevo_v2.encodedKeys"] = nil
+        }
+        await #expect(throws: GraphStoreError.self) { try await store.read { try $0.record(for: record.id) } }
+        try await handle.close()
+        try await store.close()
+        await #expect(throws: GraphStoreError.self) { try await GraphStore.open(at: url) }
+    }
 }

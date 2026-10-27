@@ -89,6 +89,7 @@ package enum GraphTypedStoreAdapter {
             for (node, nodeID, oldID) in identities {
                 stamp(node, id: nodeID)
                 node[dynamicMember: legacyKey] = oldID
+                node[dynamicMember: formatsKey] = [String]()
             }
             let root = Entity(rootType, graph: graph)
             root[dynamicMember: graphKey] = id.rawValue.uuidString
@@ -123,6 +124,7 @@ package enum GraphTypedStoreAdapter {
                         throw GraphStoreError.corruptIdentity
                     }
                     let id = GraphNodeID(graphID: graphID, rawValue: uuid)
+                    _ = try encodedKeys(node)
                     guard nodes.updateValue(node, forKey: id) == nil else { throw GraphStoreError.duplicateIdentity }
                 }
             }
@@ -164,8 +166,7 @@ package enum GraphTypedStoreAdapter {
         }
 
         func encodedKeys(_ node: Node) throws -> Set<String> {
-            guard let raw = node[dynamicMember: formatsKey] else { return [] }
-            guard let keys = raw as? [String], Set(keys).count == keys.count,
+            guard let raw = node[dynamicMember: formatsKey], let keys = raw as? [String], Set(keys).count == keys.count,
                   keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.corruptIdentity }
             return Set(keys)
         }
