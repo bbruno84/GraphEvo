@@ -48,6 +48,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   lifecycle, bounded I/O, shared assignment, integrity and whole-content backups.
 - [GraphEvo 2 A7 bounded queries](design/graphevo-2-queries.md): typed predicates,
   current-state pagination, bounded relations/traversal, projections and aggregates.
+- [GraphEvo 2 A8 observation](design/graphevo-2-observation.md): bounded async
+  current state, live rescan hints and demand-aware Combine adapters.
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
   retaining the original goals and architectural questions. The specification
   supersedes it for current decisions; neither describes the v1 public API.

@@ -1,7 +1,7 @@
 # GraphEvo 2 — end-of-alpha and release checklist
 
 Status: open consolidation register, 2026-10-27. This collects follow-ups from
-A1–A7 and the specification so they survive individual PRs. It complements the
+A1–A8 and the specification so they survive individual PRs. It complements the
 [delivery plan](graphevo-2-delivery-plan.md), [decision register](graphevo-2-decisions.md)
 and [experimental evidence register](graphevo-2-test-checklist.md).
 
@@ -19,8 +19,8 @@ leave enumerated R validation work. An optional capability may be explicitly
 excluded with its user impact and recovery route documented; an unchecked box
 is not an agreed deferral. Mandatory data migration cannot be excluded.
 
-A8 observation still belongs to alpha. Its implementation and the migration
-feasibility review are prerequisites to consolidation, not work postponed by
+A8 observation belongs to alpha. Its candidate implementation, supported-scope
+review and the migration feasibility review precede consolidation; they are not postponed by
 calling this a post-alpha checklist. No release branch or tag follows from
 creating this document.
 
@@ -153,7 +153,9 @@ Sources: [A7 contract](graphevo-2-queries.md),
 - [ ] **B** Demonstrate dependency invalidation for related-node/action filters,
   ordering, membership and attachments; close the retained V07 relationship gap.
 - [ ] **B** Specify buffering/coalescing, slow consumers, cancellation, resource
-  release, resubscription and error/incomplete-import delivery.
+  release, resubscription and error/incomplete-import delivery. Assess conservative
+  whole-resource query refresh with many observers, Combine demand and any
+  downstream scheduler queues against the supported production cost envelope.
 - [ ] **R** Validate real remote edits/deletions, access/account changes, relaunch,
   pending work and close. If durable replay is selected, validate cursor retention,
   acknowledgements, duplicate delivery and history-gap recovery.
@@ -161,7 +163,11 @@ Sources: [A7 contract](graphevo-2-queries.md),
   application. No event, mapping or save callback establishes cloud completion
   or exactly-once processing.
 
-Sources: specification S10, V07, D06/O04; A8 evidence must be added here.
+Sources: [A8 candidate](graphevo-2-observation.md),
+[physical/local results](results/a8-live-observation-2026-10-27.md), specification S10, V07,
+D06/O04. The alpha implements async state and Combine over conservative
+resource invalidation, with live rescan hints for processing. This does not
+close O04 or mark the wider beta/stable items above complete.
 
 ## PA08 — mandatory v1 local and cloud migration
 

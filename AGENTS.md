@@ -496,3 +496,18 @@ updated when a v2 increment introduces or resolves a deferred check. Link
 closure evidence and retain its actual scope. B items gate beta entry; R items
 gate stable 2.0. A8 implementation and migration feasibility still belong before
 beta; mandatory v1 data migration cannot be deferred beyond stable release.
+
+## V2 observation and Combine
+
+Read the [A8 contract](docs/design/graphevo-2-observation.md) before changing
+observation. Native invalidations are bounded rescan hints, scoped to a runtime
+resource group, not per-node events or proof of import completion. Subscribe
+before the initial read; preserve conservative related/action/file invalidation,
+visible recoverable failure states and per-handle lifecycle. Query observation
+rejects continuation cursors. Native account changes remain sticky for that
+runtime and terminate observed queries; do not infer full account/cache safety.
+Never deliver downstream under persistence/state locks. Combine is a cold adapter
+with positive demand, one pending newest value and serialized callbacks; it does
+not provide durable replay or control native writers. Keep O04 open until stable
+processing scope is selected. Retain physical remote evidence separately from
+injected signals and keep alpha/beta gates in the post-alpha checklist updated.

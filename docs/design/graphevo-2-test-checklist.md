@@ -214,3 +214,25 @@ scope. Budget exhaustion produces errors rather than partial results; current
 execution is not SQL pushdown or performance certification. A8 dependency
 invalidation/observed-state/processing work remains open. Attachment representation
 costs are deferred to the maintainer's agreed end-of-alpha review.
+
+## A8 implementation evidence
+
+The [A8 contract](graphevo-2-observation.md) adds actual library tests for related
+and action-dependent invalidation, direct ordering, cross-handle updates,
+recoverable errors, slow readers/resubscription, lifecycle, Combine demand and
+cancellation. Runtime tests cover bounded hints, registration cleanup and sticky
+injected account-change hints. Injected remote notifications are local plumbing
+evidence, not actual CloudKit delivery. V07's broader replay/background/account
+matrix and production costs remain tracked in the post-alpha checklist.
+
+[A8 physical results](results/a8-live-observation-2026-10-27.md) retain an actual
+cross-account iPad-to-XR child-property/deletion run. Both async and Combine
+related-query observers transitioned empty → pinned parent → empty without
+polling/resubscription; B's exact attachment control stayed unchanged. This
+closes the related dependency gap for that candidate/scenario, not the entire
+V07 replay/background/account matrix. Full local tests: 462; targeted TSan: 12.
+
+A8 review adds regressions for an account hint masked by a delayed ordinary
+publication and synchronous subscriber-deinit cancellation. See the result's
+review follow-up; these local concurrency checks do not extend hardware
+account-switch/replay coverage.
