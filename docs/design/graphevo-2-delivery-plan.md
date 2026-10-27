@@ -101,6 +101,13 @@ unchanged. Hardware evidence and remaining release gates are recorded in the
 A5 guide; this does not complete coordinated v1 cloud cutover or account-change
 policy, and does not freeze the schema.
 
+The [A6 candidate](graphevo-2-attachments.md) adds an owned attachment lifecycle
+over the current schema, bounded source import, complete verified reads,
+replacement/export/delete, owner cleanup and closed whole-directory copies.
+Shared imports reuse A5 assignment. The attachment representation and memory
+limit remain alpha decisions; complete v1/cloud migration and broader backup/
+conflict/performance coverage remain release work.
+
 ## Migration throughout alpha
 
 Migration is a parallel workstream rather than a task first discovered after

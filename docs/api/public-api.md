@@ -1102,3 +1102,75 @@ entries recursively. Obtain a quiescent source and back up both resources of a
 pair with their ledgers. Close is not a cloud synchronization barrier.
 See the [A5 contract](../design/graphevo-2-user-sharing.md) for recovery limits,
 permissions, physical evidence and remaining beta gates.
+
+## V2 alpha native attachments (A6)
+
+```swift
+extension GraphStore {
+    nonisolated static var maximumAttachmentByteCount: Int { get } // 10 MiB
+    func importAttachment(from source: URL, ownedBy ownerID: GraphNodeID,
+                          fileName: String? = nil,
+                          contentType: String = "public.data") async throws -> GraphAttachmentMetadata
+    func attachment(_ id: GraphNodeID) async throws -> GraphAttachmentContent?
+    func attachments(ownedBy ownerID: GraphNodeID) async throws -> [GraphAttachmentMetadata]
+    func replaceAttachment(_ id: GraphNodeID, from source: URL,
+                           fileName: String? = nil,
+                           contentType: String? = nil) async throws -> GraphAttachmentMetadata
+    func deleteAttachment(_ id: GraphNodeID) async throws
+    @discardableResult func exportAttachment(_ id: GraphNodeID,
+                                            to destination: URL) async throws -> GraphAttachmentMetadata
+}
+extension GraphReadScope {
+    func attachment(_ id: GraphNodeID) throws -> GraphAttachmentContent?
+    func attachments(ownedBy ownerID: GraphNodeID) throws -> [GraphAttachmentMetadata]
+}
+enum GraphStoreBackup {
+    static func copyClosedDirectory(from source: URL, to destination: URL) async throws
+}
+```
+
+`GraphAttachmentMetadata: Sendable, Equatable, Codable` exposes read-only
+`id: GraphNodeID`, `ownerID: GraphNodeID`, `fileName: String`, `contentType: String`,
+`byteCount: Int`, `sha256: String` and `revision: UUID`.
+`GraphAttachmentContent: Sendable, Equatable` exposes `metadata` and `data: Data`.
+Codable metadata is transport data, not authority or proof that bytes are locally
+available. Reads verify complete content, version, identities, owner and checksum.
+Nil denotes an absent local node; incomplete/invalid content or an unavailable
+owner throws. This does not establish permanent cloud absence or corruption.
+
+An attachment has exactly one application-node owner, of any public node kind,
+in its own graph. Attachments cannot own attachments. Replacement preserves ID,
+owner and creation date and rejects a locally changed revision. Owner deletion
+cleans owned files, including those on implicitly deleted relationship edges;
+transaction rollback preserves the previous content. Raw patches cannot transfer
+ownership or replace valid content with malformed metadata. `GraphEvo.Attachment.v1`
+and its `content` representation are reserved for this alpha feature. Current
+native model hashes remain unchanged; v1 binary fields are not automatically
+converted into attachments.
+
+Import coordinates/security-scopes source access outside the write scope and
+copies bounded bytes rather than retaining a source URL. Export snapshots then
+writes a new caller-owned destination, refusing existing files and cleaning
+intermediate artifacts on failure. Caller-controlled destination ownership is
+required. Cancellation before local commit/publication preserves prior state;
+started native shared assignment can retain partial intent, requiring A5 recovery
+rather than an import replay. A locally committed result is distinct from export
+or independent replica recovery.
+
+The alpha buffers complete content and accepts empty files through 10 MiB.
+Listing metadata currently also decodes/checks content. Streaming, per-file
+progress, eviction, selective download, a persistent offline-retention guarantee
+and distributed replacement conflict resolution are unsupported.
+
+`GraphAttachmentError: Error, LocalizedError` distinguishes `invalidMetadata`,
+`invalidFileURL`, `limitExceeded(maxBytes: Int)`, `incompleteOrInvalidContent`,
+`unsupportedVersion`, `notAnAttachment`, `missingOwner`, `conflict` and
+`destinationExists`. Store/permission/native I/O errors retain their normal type.
+
+The directory-backup helper requires all source owners closed, external writers
+stopped and a new non-overlapping caller-controlled destination. It copies the
+complete application-owned directory opaquely, including native external content
+and operation ledgers, without discovering internal paths. It does not itself
+certify quiescence, remote delivery or cloud rollback. The narrower
+`MigrationBackupManager.backupStore` is insufficient for a whole-content backup
+when native external content exists. See the [A6 contract](../design/graphevo-2-attachments.md).

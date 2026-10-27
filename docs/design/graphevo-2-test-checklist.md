@@ -186,3 +186,16 @@ reserved metadata removal and owned-detail transfer. These are separate from
 accounts. A load, native acceptance, local save or completed setup alone is not
 cross-device evidence. Broader crash/conflict, account-cache and migration gates
 remain open; no native internal metadata-table mutation is part of this path.
+
+
+### A6 library integration
+
+The [A6 candidate](graphevo-2-attachments.md) adds owned attachment lifecycle on
+the unchanged native model. Local tests include empty/10-MiB source-copy/reopen,
+whole-directory backups, cancellation, rollback, integrity and owner cleanup.
+The [actual-model iPad/XR result](results/a6-native-attachments-2026-10-27.md)
+observes exact cross-account 512-byte/10-MiB recovery, participant shared import,
+replacement/export/deletion, owner cascade and retained B. It includes sampled
+process memory windows. V09 remains separate surrogate evidence. Document-provider,
+offline/account-cache, remote conflicts, partial-intent reconciliation and
+mirrored-group restore remain open; no streaming or progress capability is inferred.

@@ -82,7 +82,7 @@ package enum GraphTypedStoreAdapter {
     /// Validates the selected local graph before requesting its native share boundary.
     package static func mirroringRoot(_ context: NSManagedObjectContext, id: GraphID) throws -> Entity {
         let session = try Session(context, id, database: true)
-        for (nodeID, node) in session.nodes { _ = try session.snapshot(node, id: nodeID) }
+        for (nodeID, node) in session.nodes { try session.validate(session.snapshot(node, id: nodeID)) }
         guard let root = session.root else { throw GraphStoreError.corruptIdentity }
         return root
     }
@@ -90,7 +90,7 @@ package enum GraphTypedStoreAdapter {
     package static func nativeMembers(_ context: NSManagedObjectContext, id: GraphID) throws -> [NSManagedObjectID] {
         let session = try Session(context, id, database: true)
         guard let root = session.root, let membership = session.membership else { throw GraphStoreError.corruptIdentity }
-        for (nodeID, node) in session.nodes { _ = try session.snapshot(node, id: nodeID) }
+        for (nodeID, node) in session.nodes { try session.validate(session.snapshot(node, id: nodeID)) }
         return ([root, membership] + Array(session.nodes.values)).flatMap(\.runtimeOwnedObjectIDs)
     }
 
@@ -353,6 +353,16 @@ package enum GraphTypedStoreAdapter {
             guard !record.type.hasPrefix(prefix), !record.properties.keys.contains(where: { $0.hasPrefix(prefix) }) else {
                 throw GraphStoreError.reservedName
             }
+            if record.type == GraphAttachmentPayload.graphType {
+                let payload = try GraphAttachmentPayload(graphRecord: record)
+                guard let owner = nodes[payload.ownerID], owner.runtimeTypeIfPresent != GraphAttachmentPayload.graphType else {
+                    throw GraphAttachmentError.missingOwner
+                }
+                if let existing = nodes[record.id] {
+                    let previous = try GraphAttachmentPayload(graphRecord: snapshot(existing, id: record.id))
+                    guard previous.ownerID == payload.ownerID else { throw GraphAttachmentError.invalidMetadata }
+                }
+            }
         }
 
         func resolve(_ endpoints: GraphEndpoints) throws -> ([Entity], [Entity]) {
@@ -439,18 +449,45 @@ package enum GraphTypedStoreAdapter {
 
         func delete(_ id: GraphNodeID) throws {
             try requireWriteAccess()
-            guard let node = try node(id) else { throw GraphStoreError.missingNode }
-            if isShared, let container = context.userInfo[StoreNativeContext.containerKey] as? NSPersistentCloudKitContainer,
-               !container.canDeleteRecord(forManagedObjectWith: node.runtimeObjectID) { throw GraphStoreError.permissionDenied }
-            if let entity = node as? Entity {
-                // Preserve actions and their other endpoints, including valid empty actions.
-                for action in entity.actions {
-                    action.remove(subjects: [entity])
-                    action.remove(objects: [entity])
-                }
-                for relationship in entity.relationships { relationship.delete() }
+            guard nodes[id] != nil else { throw GraphStoreError.missingNode }
+            var filesByOwner: [GraphNodeID: [GraphNodeID]] = [:]
+            for (candidateID, candidate) in nodes where candidate.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
+                let payload = try GraphAttachmentPayload(graphRecord: snapshot(candidate, id: candidateID))
+                filesByOwner[payload.ownerID, default: []].append(candidateID)
             }
-            node.delete()
+            var pending = [id], selected = Set<GraphNodeID>()
+            while let next = pending.popLast() {
+                guard selected.insert(next).inserted, let node = nodes[next] else { continue }
+                pending += filesByOwner[next] ?? []
+                if let entity = node as? Entity {
+                    for relationship in entity.relationships {
+                        guard let edgeID = nodes.first(where: { $0.value.sharesBackingObject(with: relationship) })?.key else {
+                            throw GraphStoreError.unresolvedReference
+                        }
+                        pending.append(edgeID)
+                    }
+                }
+            }
+            // All dependency and permission checks precede edits, including implicitly deleted edges.
+            if isShared, let container = context.userInfo[StoreNativeContext.containerKey] as? NSPersistentCloudKitContainer {
+                for next in selected {
+                    guard let node = nodes[next], container.canDeleteRecord(forManagedObjectWith: node.runtimeObjectID) else {
+                        throw GraphStoreError.permissionDenied
+                    }
+                }
+            }
+            let ordered = selected.sorted { (nodes[$0] is Entity ? 1 : 0) < (nodes[$1] is Entity ? 1 : 0) }
+            for next in ordered {
+                guard let node = nodes[next] else { continue }
+                if let entity = node as? Entity {
+                    // Preserve actions and their other endpoints, including valid empty actions.
+                    for action in entity.actions {
+                        action.remove(subjects: [entity]); action.remove(objects: [entity])
+                    }
+                }
+                node.delete()
+                nodes.removeValue(forKey: next)
+            }
         }
     }
 }
