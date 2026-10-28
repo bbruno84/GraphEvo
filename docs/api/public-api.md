@@ -314,6 +314,21 @@ Use `.where(.type("*"))` to fetch all types in the selected node family.
 `batchSize` sets Core Data's fetch batch size, not a result limit; `batchOffset`
 sets the fetch offset. Searches do not impose sorting or stable pagination.
 
+Graph also offers exact, graph-scoped lookups for application identifiers:
+
+```swift
+public func entities(type: String, matchingIDs ids: [String]) -> [Entity]
+public func entities(type: String, property name: String, exactly value: String) -> [Entity]
+public func relationships(type: String, subjectIDs: [String]? = nil,
+                          objectIDs: [String]? = nil) -> [Relationship]
+```
+
+They return all matching rows, including duplicates, without applying
+`batchOffset`. Native fetches narrow by exact type and, for property lookup,
+property name. Transformable values and legacy physical IDs are checked in
+memory. `Node.id` omits store identity, so an equal ID from another store is
+indistinguishable. See [Search and predicates](../guides/search-and-predicates.md#exact-lookups-for-application-identifiers).
+
 ## 6. Watchers
 
 `Watch<T>` observes changes to typed nodes:
