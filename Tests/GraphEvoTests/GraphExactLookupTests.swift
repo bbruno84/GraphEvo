@@ -1,7 +1,29 @@
+import CoreData
 import XCTest
 @testable import GraphEvo
 
 final class GraphExactLookupTests: XCTestCase {
+    private final class CountingCoordinator: NSPersistentStoreCoordinator, @unchecked Sendable {
+        var entityFetchRows: [Int] = []
+        var relationshipFetchRows: [Int] = []
+        var relationshipPredicates: [String] = []
+
+        override func execute(_ request: NSPersistentStoreRequest,
+                              with context: NSManagedObjectContext) throws -> Any {
+            let result = try super.execute(request, with: context)
+            if let fetch = request as? NSFetchRequest<NSFetchRequestResult>,
+               let rows = result as? [Any] {
+                if fetch.entity?.name == ModelIdentifier.entityName {
+                    entityFetchRows.append(rows.count)
+                } else if fetch.entity?.name == ModelIdentifier.relationshipName {
+                    relationshipFetchRows.append(rows.count)
+                    relationshipPredicates.append(fetch.predicate?.predicateFormat ?? "")
+                }
+            }
+            return result
+        }
+    }
+
     private func makeGraph() -> Graph {
         Graph(storeURL: FileManager.default.temporaryDirectory
             .appendingPathComponent("ExactLookup-\(UUID()).sqlite"), migrationEnabled: false)
@@ -45,6 +67,7 @@ final class GraphExactLookupTests: XCTestCase {
 
         XCTAssertEqual(Set(graph.entities(type: "Bolletta", matchingIDs: [bill.id, unrelated.id, "bad"]).map(\.id)), Set([bill.id, unrelated.id]))
         XCTAssertTrue(graph.entities(type: "Categoria", matchingIDs: [bill.id]).isEmpty)
+        XCTAssertTrue(graph.entities(type: "Bolletta", matchingIDs: [bill.id.replacingOccurrences(of: "Bolletta", with: "Invented")]).isEmpty)
         XCTAssertTrue(graph.entities(type: "Bolletta", matchingIDs: []).isEmpty)
         XCTAssertEqual(graph.relationships(type: "classified", subjectIDs: [bill.id]).map(\.id), [edge.id])
         XCTAssertEqual(Set(graph.relationships(type: "classified", objectIDs: [category.id]).map(\.id)), Set([edge.id, another.id]))
@@ -68,10 +91,31 @@ final class GraphExactLookupTests: XCTestCase {
         let graph = makeGraph()
         let draft = Entity("Bolletta", graph: graph)
         draft[dynamicMember: "codice_bolletta"] = "draft*"
+        let category = Entity("Categoria", graph: graph)
+        let draftEdge = draft.is(relationship: "classified").of(category)
         let draftID = draft.id
         XCTAssertEqual(graph.entities(type: "Bolletta", matchingIDs: [draftID]).map(\.id), [draftID])
         XCTAssertEqual(graph.entities(type: "Bolletta", property: "codice_bolletta", exactly: "draft*").map(\.id), [draftID])
+        XCTAssertEqual(graph.relationships(type: "classified", subjectIDs: [draftID],
+                                           objectIDs: [category.id]).map(\.id), [draftEdge.id])
         XCTAssertTrue(try graph.readSnapshot { $0.entities(type: "Bolletta", matchingIDs: [draftID]).isEmpty })
+    }
+
+    func testInMemoryPermanentIDsResolveWithoutSaving() {
+        var configuration = GraphStoreConfiguration()
+        configuration.name = "ExactMemory-\(UUID())"
+        configuration.backend = .inMemory
+        let graph = Graph(configuration: configuration, migrationEnabled: false)
+        let entity = Entity("Bolletta", graph: graph)
+        let id = entity.id
+        XCTAssertEqual(graph.entities(type: "Bolletta", matchingIDs: [id]).map(\.id), [id])
+    }
+
+    func testTypeEndingInPhysicalIDPatternIsUnambiguous() {
+        let graph = makeGraph()
+        let entity = Entity("Bollettap12", graph: graph)
+        graph.sync()
+        XCTAssertEqual(graph.entities(type: "Bollettap12", matchingIDs: [entity.id]).map(\.id), [entity.id])
     }
 
     func testUnknownIDFromAnotherStoreDoesNotResolve() {
@@ -85,5 +129,38 @@ final class GraphExactLookupTests: XCTestCase {
             .sync().map(\.id).first { $0 != own.id }
         XCTAssertNotNil(foreignID)
         XCTAssertTrue(local.entities(type: "Bolletta", matchingIDs: [foreignID!]).isEmpty)
+    }
+
+    func testPhysicalAndEndpointLookupsDoNotFetchWholeTypes() throws {
+        GraphValueTransformer.register()
+        let coordinator = CountingCoordinator(managedObjectModel: Model.create())
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ExactCount-\(UUID()).sqlite")
+        let store = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: url)
+        let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        context.persistentStoreCoordinator = coordinator
+        let graph = Graph(transactionContext: context, configuration: GraphStoreConfiguration())
+        defer { context.reset(); try? coordinator.remove(store) }
+
+        let category = Entity("Categoria", graph: graph)
+        var selected: Entity!
+        for index in 0..<30 {
+            let bill = Entity("Bolletta", graph: graph)
+            _ = bill.is(relationship: "classified").of(category)
+            if index == 17 { selected = bill }
+        }
+        try context.save()
+        let id = selected.id
+        context.reset()
+        coordinator.entityFetchRows = []
+        coordinator.relationshipFetchRows = []
+        coordinator.relationshipPredicates = []
+
+        XCTAssertEqual(graph.entities(type: "Bolletta", matchingIDs: [id]).map(\.id), [id])
+        XCTAssertLessThanOrEqual(context.registeredObjects.count, 1)
+        XCTAssertTrue(coordinator.entityFetchRows.allSatisfy { $0 <= 1 })
+        let edges = graph.relationships(type: "classified", subjectIDs: [id])
+        XCTAssertEqual(edges.count, 1)
+        XCTAssertEqual(coordinator.relationshipFetchRows.last, 1)
+        XCTAssertTrue(coordinator.relationshipPredicates.last?.contains("subject IN") == true)
     }
 }

@@ -325,9 +325,11 @@ public func relationships(type: String, subjectIDs: [String]? = nil,
 
 They return all matching rows, including duplicates, without applying
 `batchOffset`. Native fetches narrow by exact type and, for property lookup,
-property name. Transformable values and legacy physical IDs are checked in
-memory. `Node.id` omits store identity, so an equal ID from another store is
-indistinguishable. See [Search and predicates](../guides/search-and-predicates.md#exact-lookups-for-application-identifiers).
+property name. Transformable values are compared in memory. Legacy physical
+IDs resolve through the current store coordinator; relationship endpoint
+filters use native object-ID predicates. `Node.id` omits store identity, so
+an equal ID from another store is indistinguishable. See
+[Search and predicates](../guides/search-and-predicates.md#exact-lookups-for-application-identifiers).
 
 ## 6. Watchers
 

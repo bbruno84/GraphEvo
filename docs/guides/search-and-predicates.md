@@ -50,13 +50,16 @@ let edges = graph.relationships(type: "classified", subjectIDs: billIDs,
 
 The exact type and property name narrow the native fetch. Property values use
 Core Data's transformable storage, so the final value comparison is in Swift;
-this is not a SQL value index. Physical IDs and relationship endpoints are
-also checked after the exact-type fetch. Pass `nil` for an unrestricted edge
-direction or an empty array to match nothing. These lookups ignore `batchOffset`
+this is not a SQL value index. Physical IDs resolve through the current store's
+Core Data coordinator without fetching the whole entity type. Relationship
+endpoint filters become native object-ID predicates. Pass `nil` for an
+unrestricted edge direction or an empty array to match nothing. These lookups
+ignore `batchOffset`
 so that a duplicate is not lost to pagination.
 
 Legacy `Node.id` omits store identity. Use IDs only with the owning Graph; a
-same-valued ID from a different store cannot be distinguished. The current
+same-valued ID from a different store cannot be distinguished. ID resolution
+requires the permanent SQLite-style `p<digits>` URI component. The current
 context's pending inserts are visible, while `readSnapshot` sees committed rows
 and `transaction` sees its scoped context. Return values from those scopes, not
 Node facades.
