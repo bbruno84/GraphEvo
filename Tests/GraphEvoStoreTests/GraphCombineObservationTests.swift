@@ -131,6 +131,30 @@ private final class DeinitCancellingSubscriber: Subscriber {
         b.cancel(); try await graph.close()
     }
 
+    @Test func publicCombineAndAsyncSubscriptionsShareWithoutCouplingDemand() async throws {
+        let graph = try await GraphStore.inMemory(), query = try observationQuery()
+        let observation = try await graph.observe(query)
+        _ = try await waitForObservation(observation) { _ in true }
+        let subscriber = DemandSubscriber<GraphQueryState<ObservedItem>>()
+        graph.publisher(for: query).subscribe(subscriber)
+        #expect(await graph.sharedObservationDiagnostics.subscribers == 1)
+        subscriber.request(.max(1))
+        var iterator = subscriber.values.stream.makeAsyncIterator()
+        #expect(await iterator.next() != nil)
+        #expect(await graph.sharedObservationDiagnostics.activeGroups == 1)
+        #expect(await graph.sharedObservationDiagnostics.subscribers == 2)
+        let id = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: ObservedItem.graphType)) }
+        _ = try await waitForObservation(observation) { $0.items.map(\.id) == [id] }
+        #expect(subscriber.received == 1)
+        observation.cancel()
+        subscriber.request(.unlimited)
+        while let state = await iterator.next() {
+            if case .value(let result) = state, result.items.map(\.id) == [id] { break }
+        }
+        subscriber.cancel(); try await graph.close()
+    }
+
     @Test func invalidDescriptorTerminatesPublisherWithFailure() async throws {
         let graph = try await GraphStore.inMemory()
         let subscriber = DemandSubscriber<GraphQueryState<ObservedItem>>()

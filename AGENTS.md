@@ -609,3 +609,16 @@ destruction occur outside locks. Account changes supersede in-flight reads.
 Injected sources/checkpoints are deterministic local tests, not CloudKit proof.
 Keep baseline/sample counts, startup overhead and mixed-query outcomes even if
 they regress. Default schemas, observer APIs and query budgets are not changed.
+
+
+## C04 public observation consolidation
+
+The first adoption branch routes public observe/publisher through one lazy
+GraphStore-owned coordinator; the [adoption contract](docs/design/graphevo-2-observation.md#c04-consolidation-adoption)
+settles shared view identity and join/refresh semantics. Keep idle graph/source
+references weak to avoid a handle cycle. Exact query/model/limit/budgets share
+native detached records; model decoding and delivery remain subscriber-owned.
+The package-only independent A8 path is retained solely as a cost control, and
+shared measurements must exercise public observe. Do not claim public startup,
+heavy-decoder or physical native acceptance from C04a local timing alone. Schema,
+migration and integration-line promotion remain separate reviewed work.

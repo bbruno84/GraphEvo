@@ -11,7 +11,7 @@ extension GraphReadScope {
         let output = try executeQuery(traversal.request)
         return GraphTraversalResult(visits: output.visits, view: queryView, diagnostics: output.diagnostics)
     }
-    /// Detached immutable records for the opt-in shared observation laboratory.
+    /// Detached immutable records for shared observation reads.
     package func observationOutput<Model: GraphModel>(_ query: GraphQuery<Model>) throws -> (GraphQueryOutput, GraphQueryLocalView) {
         (try executeQuery(query.request), queryView)
     }

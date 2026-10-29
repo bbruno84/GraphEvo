@@ -275,10 +275,13 @@ Sources: A6 backup contract, specification S11, V05/V08.
 
 ## C04a shared observation adoption gates
 
-- [ ] Review the [C04a experiment](graphevo-2-shared-observation-experiment.md),
+- [x] Review the [C04a experiment](graphevo-2-shared-observation-experiment.md),
   including single-observer/mixed-query overhead, update CPU and process memory.
-- [ ] Settle shared execution view/cursor semantics, per-consumer model decoding
-  and failure/demand/cancellation behavior before changing public observe/publisher.
+  PR #83 reviewed and merged into the experiment parent at `9232993`; exact-head
+  macOS/iOS CI run `40575201851` passed. This is not integration-line promotion.
+- [x] Settle shared execution view/cursor semantics, per-consumer model decoding
+  and failure/demand/cancellation behavior: see the [adoption contract](graphevo-2-observation.md#c04-consolidation-adoption).
+  The first consolidation PR wires the public path; native acceptance below stays open.
 - [ ] Validate supported native notification/account/import/handle lifecycles and
   representative physical-device workloads. Injected feeds are not CloudKit proof.
 - [ ] Retain broad relationship/action/file invalidation until narrower dependency
@@ -288,5 +291,5 @@ Sources: A6 backup contract, specification S11, V05/V08.
 - [x] Retain C04a local matrix and independent confirmation: [results](results/c04a-shared-observation-2026-10-27.md).
   Exact-query gains do not settle single/mixed workload overhead or public adoption.
 - [ ] Assess startup fan-out/model-decoder churn and heavy/slow application models
-  before public integration. New subscribers deliberately request fresh reads and
+  before consolidation promotion. New subscribers deliberately request fresh reads and
   can refresh existing equal-query subscribers; shared view semantics remain explicit.

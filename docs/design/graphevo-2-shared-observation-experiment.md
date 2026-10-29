@@ -4,6 +4,12 @@ Status: local matrix and confirmation measured; opt-in laboratory after #82 (`ed
 publisher, change signals, schema, budgets and native invalidation remain unchanged.
 Use the default current model, not C02b's native identity model, to isolate costs.
 
+This document describes the retained experiment checkpoint. PR #83 was reviewed
+and merged into its experiment parent on 2026-10-29 (`9232993`); exact-head CI run
+`40575201851` passed. The subsequent public-path implementation is specified in
+the [C04 adoption contract](graphevo-2-observation.md#c04-consolidation-adoption).
+It does not retroactively change the measured checkpoint or close native gates.
+
 ## Candidate and contract
 
 One explicit GraphSharedObservationLab belongs to one GraphStore handle. Share

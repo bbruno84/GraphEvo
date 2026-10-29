@@ -51,3 +51,12 @@ The first small screening run used only unchanged mixed-query results and a new
 scopeID, which did not independently prove post-write freshness. Its binary/logs
 remain as a functional preflight; those mixed timings are not acceptance evidence.
 The timed matrix requires the changed sentinel in every result.
+
+
+After C04a selection, `shared` runs public `GraphStore.observe`, using the handle's
+own coordinator and its payload-free counters. `independent` runs the retained
+package-only A8 implementation. This preserves the original control after public
+adoption; it does not compare the selected path against itself. The historical
+C04a checkpoint and its hashes remain unchanged. Record new source/binary hashes
+for any consolidation comparison. The explicit laboratory is still used for
+source/checkpoint injection in deterministic tests.

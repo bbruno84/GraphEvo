@@ -1368,8 +1368,14 @@ extension GraphStore {
 }
 ```
 
-Each observation initially reads current local state and serially rereads after
-resource-group invalidation, including related-node/action/file dependencies.
+Each observation initially reads current local state. Exact query definitions,
+concrete model types, row limits and all budget dimensions share a serial native
+read worker within the same GraphStore handle. Each subscriber independently
+decodes application models and receives newest states; another handle never
+joins that group. Resource invalidation retains related-node/action/file dependencies.
+A shared execution has one real scopeID and diagnostics for all recipients.
+New subscriptions request a fresh read, never a cached result or a read begun
+before registration; joining or refreshing a group can refresh its other members.
 Output is newest-one, may coalesce intermediate states/errors, and may repeat
 an unchanged result after unrelated changes. Cursor-based descriptors are
 rejected; sort/limit describe the current first page. Recoverable errors produce
@@ -1392,5 +1398,8 @@ neither ordered transaction identities nor durable history cursors. Rescan on
 startup/reconnect and reconcile the application's prior inventory. No per-node
 deletions, durable replay, acknowledgements, exactly-once effects or cloud-import
 completion are supplied. O04 remains a consolidation choice, not a completed
-replay feature. Each observer reruns its own bounded A7 query; total observation
-memory/time/scan costs still require end-of-alpha assessment.
+replay feature. Different query shapes still execute independently. Sequential
+subscription startup and heavy/slow application decoders remain consolidation
+work; sharing is not a total memory/time bound. See the
+[consolidation adoption](../design/graphevo-2-observation.md#c04-consolidation-adoption)
+for the accepted scope and remaining native-device acceptance.
