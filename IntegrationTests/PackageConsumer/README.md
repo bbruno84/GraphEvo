@@ -30,3 +30,9 @@ ModelConsumer also exercises the explicit fresh local native-identity schema
 through the public product: SQLite creation, a typed model, storage integrity,
 query/Combine and reopen. This does not enable native-column mirrored selection
 or assert cross-device synchronization.
+
+Both explicit mirrored schema overloads are compiled and exercised against
+non-file URLs for current/native selection. These fail configuration validation
+before native/cloud loading and require no iCloud credentials. Successful native
+private/private-shared opening belongs to the separate public device consumer;
+invalid-URL refusal must not be presented as CloudKit synchronization evidence.

@@ -7,6 +7,37 @@ import Testing
 /// Offline adapter checks: the native container has two local descriptions and no cloud options.
 /// These assertions do not establish native setup, assignment or remote import.
 @Suite(.timeLimit(.minutes(2))) struct GraphNativePairedLaboratoryTests {
+    @Test func privateOnlyOptInRequiresExactSingleResourceAndLocalAdapterStillRejectsIt() async throws {
+        GraphValueTransformer.register()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("NativePrivate-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("private.sqlite")
+        let container = NSPersistentCloudKitContainer(name: "OfflineNativePrivate", managedObjectModel: GraphNativeIdentityColumns.makeModel(indexed: true))
+        let store = try container.persistentStoreCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: url)
+        defer { try? container.persistentStoreCoordinator.remove(store) }
+        try await container.performBackgroundTask { context in
+            defer { context.rollback(); context.reset() }
+            context.userInfo[StoreNativeContext.containerKey] = container
+            context.userInfo[StoreNativeContext.privateURLKey] = url
+            let adapter = GraphNativeIdentityDatabaseAdapter.makeDatabase(allowsMirroring: true)
+            let id = GraphID(), nodeID = GraphNodeID(graphID: id)
+            try adapter.create(context, id)
+            try adapter.graph.insert(context, id, GraphRecord(id: nodeID, type: "private.item"))
+            try context.save()
+            #expect(try adapter.graph.fetch(context, id, nodeID)?.id == nodeID)
+            #expect(try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: id, allowsMirroring: true) == 1)
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityDatabaseAdapter.database.catalog(context) }
+            context.userInfo[StoreNativeContext.sharedURLKey] = url
+            #expect(throws: GraphStoreError.self) { try adapter.catalog(context) }
+            context.userInfo[StoreNativeContext.sharedURLKey] = "invalid"
+            #expect(throws: GraphStoreError.self) { try adapter.catalog(context) }
+            context.userInfo.removeObject(forKey: StoreNativeContext.sharedURLKey)
+            context.userInfo[StoreNativeContext.privateURLKey] = folder.appendingPathComponent("other.sqlite")
+            #expect(throws: GraphStoreError.self) { try adapter.catalog(context) }
+        }
+    }
+
     @Test(arguments: [false, true])
     func optInPairRoutesEqualNodeUUIDsAndPreservesLocalOnlyRejection(sharedLoadsFirst: Bool) async throws {
         GraphValueTransformer.register()
@@ -25,7 +56,7 @@ import Testing
         let first = GraphNodeID(graphID: a, rawValue: uuid), second = GraphNodeID(graphID: b, rawValue: uuid)
         try await container.performBackgroundTask { context in
             defer { context.rollback(); context.reset() }
-            let adapter = GraphNativeIdentityDatabaseAdapter.makeDatabase(allowsMirroredPair: true)
+            let adapter = GraphNativeIdentityDatabaseAdapter.makeDatabase(allowsMirroring: true)
             context.userInfo[StoreNativeContext.containerKey] = container
             context.userInfo[StoreNativeContext.privateURLKey] = privateURL
             context.userInfo[StoreNativeContext.sharedURLKey] = sharedURL
@@ -47,7 +78,7 @@ import Testing
             #expect(Set(try adapter.catalog(context)) == [a, b])
             #expect(try adapter.graph.fetch(context, a, first)?.properties["value"] == .string("private"))
             #expect(try adapter.graph.fetch(context, b, second)?.properties["value"] == .string("shared"))
-            #expect(try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: b, allowsMirroredPair: true) == 1)
+            #expect(try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: b, allowsMirroring: true) == 1)
             #expect(try GraphTypedStoreAdapter.nativeMembers(context, id: b).allSatisfy { $0.persistentStore?.url == sharedURL })
             #expect(throws: GraphStoreError.self) { try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: b) }
             do { _ = try adapter.graph.fetch(context, a, second); Issue.record("Foreign graph lookup was admitted.") }
@@ -62,7 +93,7 @@ import Testing
             node.node.setValue(nil, forKey: GraphNativeIdentityColumns.nodeAttribute)
             #expect(throws: GraphStoreError.self) { try adapter.graph.fetch(context, b, second) }
             #expect(throws: GraphStoreError.self) {
-                try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: b, allowsMirroredPair: true)
+                try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: b, allowsMirroring: true)
             }
             context.rollback()
             #expect(try adapter.graph.fetch(context, b, second)?.properties["value"] == .string("shared"))

@@ -187,3 +187,11 @@ revoke/reinvite/leave and interruption recovery. Its first recovery save returne
 a Core Data merge conflict; retained intent was later explicitly recovered without
 replaying assignment. Both outcomes remain evidence. This does not change public
 mirrored defaults or close the broader conflict/account/scale/migration gates.
+
+Public mirrored schema adoption is recorded separately in the
+[public consumer result](results/native-public-mirrored-schema-2026-10-29.md).
+The first invitation was not usable on XR (unknownItem); read-only server lookup
+returned an owner-only share. One explicit same-recipient persistence returned
+the identical capability and enabled acceptance/import. This finding keeps
+invitation readiness/error/continuation guidance open before beta; no automatic
+reinvite, new zone or structural assignment replay was added.

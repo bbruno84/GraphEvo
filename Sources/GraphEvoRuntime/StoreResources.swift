@@ -49,11 +49,12 @@ actor StoreResources {
         try await hooks.beforeLoad?()
         let model = schema.makeModel()
         guard !schema.identifier.isEmpty, !schema.entityVersionHashes.isEmpty,
-              model.entityVersionHashesByName == schema.entityVersionHashes else {
+              model.entityVersionHashesByName == schema.entityVersionHashes,
+              schema.requiredModelVersionIdentifier.map({ model.versionIdentifiers == [AnyHashable($0)] }) ?? true else {
             throw StoreRuntimeError.invalidModel(schema.identifier)
         }
         let descriptions = try members.enumerated().map { index, member in
-            let description = try storeDescription(member, model: model)
+            let description = try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier)
             if let identifier = resolved.configuration.cloudKitContainerIdentifier {
                 guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       resolved.url != nil, resolved.configuration.access == .readWrite else {
@@ -85,7 +86,8 @@ actor StoreResources {
         return resources
     }
 
-    private static func storeDescription(_ resolved: ResolvedStore, model: NSManagedObjectModel) throws -> NSPersistentStoreDescription {
+    private static func storeDescription(_ resolved: ResolvedStore, model: NSManagedObjectModel,
+                                         requiredModelVersionIdentifier: String?) throws -> NSPersistentStoreDescription {
         let description: NSPersistentStoreDescription
         switch resolved.configuration.location {
         case .sqlite(let url):
@@ -93,7 +95,8 @@ actor StoreResources {
                 let metadata: [String: Any]
                 do { metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url) }
                 catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
-                guard model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else {
+                guard model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata),
+                      requiredModelVersionIdentifier.map({ metadata[NSStoreModelVersionIdentifiersKey] as? [String] == [$0] }) ?? true else {
                     throw StoreRuntimeError.incompatibleStore(url)
                 }
             } else if resolved.configuration.access == .readOnly {

@@ -1,0 +1,33 @@
+--- a/Sources/GraphEvo/GraphSharing.swift
++++ b/Sources/GraphEvo/GraphSharing.swift
+@@ -142,20 +142,30 @@
+                   recipient.recordName != (try await GraphSharingNative.cloudService(container).userRecordID().recordName) else {
+                 throw GraphSharingError.invalidParticipant
+             }
++            NSLog("InviteTrace fetched participants=%d matching=%d", share.participants.count, share.participants.contains { $0.userIdentity.userRecordID?.recordName == recipient.recordName } ? 1 : 0)
++            let originalTag = share.recordChangeTag
+             let lookup = CKUserIdentity.LookupInfo(userRecordID: CKRecord.ID(recordName: recipient.recordName))
+             let participants = try await container.fetchParticipants(matching: [lookup], into: store)
+             guard participants.count == 1, let participant = participants.first,
+                   participant.userIdentity.userRecordID?.recordName == recipient.recordName else {
+                 throw GraphSharingError.invalidParticipant
+             }
++            NSLog("InviteTrace resolved participants=%d matching=%d", share.participants.count, share.participants.contains { $0.userIdentity.userRecordID?.recordName == recipient.recordName } ? 1 : 0)
+             participant.permission = permission == .readWrite ? .readWrite : .readOnly
+             participant.role = .privateUser
+             // A retry updates the same recipient; it does not add a different participant.
+             if let existing = share.participants.first(where: { $0.userIdentity.userRecordID?.recordName == recipient.recordName }) {
+                 existing.permission = participant.permission
+             } else { share.addParticipant(participant) }
++            NSLog("InviteTrace afterAdd participants=%d matching=%d", share.participants.count, share.participants.contains { $0.userIdentity.userRecordID?.recordName == recipient.recordName } ? 1 : 0)
+             share.publicPermission = .none
++            NSLog("InviteTrace prePersist participants=%d matching=%d", share.participants.count, share.participants.contains { $0.userIdentity.userRecordID?.recordName == recipient.recordName } ? 1 : 0)
+             let saved = try await container.persistUpdatedShare(share, in: store)
++            NSLog("InviteTrace persisted participants=%d matching=%d tagChanged=%d", saved.participants.count, saved.participants.contains { $0.userIdentity.userRecordID?.recordName == recipient.recordName } ? 1 : 0, saved.recordChangeTag != originalTag ? 1 : 0)
++            let readback = try GraphSharingNative.share(rootID, container: container)
++            NSLog("InviteTrace readback participants=%d matching=%d sameTag=%d", readback.participants.count, readback.participants.contains { $0.userIdentity.userRecordID?.recordName == recipient.recordName } ? 1 : 0, saved.recordChangeTag == readback.recordChangeTag ? 1 : 0)
++            let server = try await GraphSharingNative.cloudService(container).privateCloudDatabase.record(for: saved.recordID) as? CKShare
++            NSLog("InviteTrace server participants=%d matching=%d sameTag=%d", server?.participants.count ?? -1, server?.participants.contains { $0.userIdentity.userRecordID?.recordName == recipient.recordName } == true ? 1 : 0, saved.recordChangeTag == server?.recordChangeTag ? 1 : 0)
+             guard let url = saved.url else { throw GraphMirroringError.missingNativeResponse }
+             return try GraphInvitation(graphID: id, url: url, recipient: recipient)
+         }

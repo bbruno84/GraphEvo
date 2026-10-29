@@ -63,7 +63,7 @@ extension GraphDatabase {
 /// Alpha native-model selection. Incompatible layouts require fresh stores, not automatic conversion.
 public enum GraphDatabaseSchema: Sendable {
     case current
-    /// Fresh local indexed identity model. Mirrored opens do not select this model yet.
+    /// Indexed native identity alpha model. Select explicitly for local or mirrored stores.
     case nativeIdentity
 }
 
@@ -87,9 +87,9 @@ extension GraphDatabase {
         }
     }
 
-    /// Checks this local graph's storage-level identities, structure and payloads; returns application row count.
+    /// Checks the graph's current local storage identities, structure and payloads; returns application row count.
     /// Does not invoke application model decoders or certify CloudKit/import completion.
     public func validateIntegrity(of graphID: GraphID) async throws -> Int {
-        try await contextRead { try GraphNativeIdentityDatabaseAdapter.validate($0, graphID: graphID) }
+        try await contextRead { try GraphNativeIdentityDatabaseAdapter.validate($0, graphID: graphID, allowsMirroring: true) }
     }
 }

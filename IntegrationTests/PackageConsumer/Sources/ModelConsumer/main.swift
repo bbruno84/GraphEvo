@@ -97,7 +97,26 @@ private struct Profile: GraphModel {
         let nativeReader = try await nativeReopen.openGraph(nativeGraph.id)
         guard try await nativeReader.fetch(nativeProfile.id, as: Profile.self)?.displayName == "Grace" else { throw GraphStoreError.missingNode }
         try await nativeReader.close(); try await nativeReopen.close()
+        try await checkMirroredOverloadValidation()
         print("GraphEvo Swift 6 typed store, graph catalog and native schema consumer passed")
+    }
+}
+
+/// Compile and exercise both public schema overloads without native cloud loading or credentials.
+private func checkMirroredOverloadValidation() async throws {
+    let invalid = URL(string: "https://example.invalid/not-a-local-store.sqlite")!
+    for schema in [GraphDatabaseSchema.current, .nativeIdentity] {
+        do {
+            let database = try await GraphDatabase.openMirrored(at: invalid, containerIdentifier: "iCloud.example.invalid", schema: schema)
+            try await database.close()
+            throw GraphModelError.invalidValue
+        } catch GraphStoreError.persistence(underlying: _) {}
+        do {
+            let database = try await GraphDatabase.openMirrored(privateStoreAt: invalid, sharedStoreAt: invalid,
+                                                               containerIdentifier: "iCloud.example.invalid", schema: schema)
+            try await database.close()
+            throw GraphModelError.invalidValue
+        } catch GraphStoreError.persistence(underlying: _) {}
     }
 }
 

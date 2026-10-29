@@ -96,6 +96,11 @@ Sources: [A1](graphevo-2-store-runtime.md),
 - [ ] **B** Settle native sharing presentation/adapters and invitation transport,
   recipient/container binding, errors and host responsibilities. Protect
   invitation/account capabilities and keep diagnostics payload-free.
+- [ ] **B** Settle invitation readiness and resumable error behavior after native
+  persistence, including unknownItem metadata lookup and a server share response
+  lacking the intended recipient. Retain the first failures and explicit
+  same-capability continuation in the [public adoption result](results/native-public-mirrored-schema-2026-10-29.md);
+  never recreate zones or replay structural assignment as an availability fix.
 - [ ] **R** Repeat supported mutations, fresh recovery and relaunch/offline/
   background scenarios on same-account and different-account replicas using
   the selected model; verify the control graph remains unchanged.
@@ -431,3 +436,36 @@ supported recovery/error guidance, retain both outcomes and add deterministic
 conflict/interruption coverage before claiming a general guarantee. Neither
 automatic retry nor a change of merge policy was introduced. PA03 account/scale/
 concurrency and mandatory v1 migration gates remain open.
+
+
+### Public mirrored schema adoption
+
+The explicit public native overloads cover private-only and paired resources;
+no-schema/current defaults remain unchanged. The native factory requires standard
+Core Data model version GraphEvo.nativeIdentity.alpha.2 before existing-file load,
+so an old same-hash prototype cannot start export before catalog refusal. The
+[adoption result](results/native-public-mirrored-schema-2026-10-29.md) separates
+513 local tests, 14 sanitizer tests, Swift 6 Release consumption, successful
+private-only device consumption, and paired invitation failures/continuation.
+Do not replace the retained controlled #90 laboratory result with a claim that
+every public paired attempt was clean. PA03 invitation readiness remains open;
+app/widget support from merged #91 still gates beta.
+
+
+The public paired consumer subsequently completed exact initial/replacement
+10-MiB export, participant import/deletion, owner cascade to A=0 and preserved B.
+It required one explicit same-recipient persistence with byte-identical invitation
+after unknownItem, plus distinct read-only host continuations/controlled debugger
+launches after reportless starts. The adoption result retains those failures;
+PA03 invitation readiness is not closed by eventual success. Public native
+private/paired selection is implemented; review/CI of its increment remains
+separate from integration/tag/beta promotion.
+
+### Public adoption causal gate (2026-10-29)
+
+The maintainer requested causes before app/widget work. [Causal triage](results/native-public-causal-triage-2026-10-29.md)
+reproduced a launcher false positive and added UUID/PID/scene receipts. The
+historical black screen did not recur in bounded normal-launch checks, and two
+traced first invitations succeeded with matching local/native/server recipients.
+Neither historical cause is established. Keep PA03 invitation readiness open and
+PR #92 draft; successful continuations/repetitions are not incident closure.

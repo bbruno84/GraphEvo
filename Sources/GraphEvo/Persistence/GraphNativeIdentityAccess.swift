@@ -4,18 +4,18 @@ import GraphEvoModel
 import GraphEvoRuntime
 
 /// Context-confined native identity access with an explicit persisted protocol marker.
-/// The same resolver serves historical lab fixtures and fresh local alpha stores.
+/// The resolver serves historical local fixtures and explicitly admitted fresh native topologies.
 struct GraphNativeIdentityAccess: Sendable {
     private let activationKey: String
     private let activationVersion: String
-    private let allowsMirroredPair: Bool
+    private let allowsMirroring: Bool
     private let graphAttribute = GraphNativeIdentityColumns.graphAttribute
     private let nodeAttribute = GraphNativeIdentityColumns.nodeAttribute
     private let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
 
-    init(activationKey: String, activationVersion: String, allowsMirroredPair: Bool = false) {
+    init(activationKey: String, activationVersion: String, allowsMirroring: Bool = false) {
         self.activationKey = activationKey; self.activationVersion = activationVersion
-        self.allowsMirroredPair = allowsMirroredPair
+        self.allowsMirroring = allowsMirroring
     }
 
     /// Activate only newly allocated empty graph controls, never an existing populated layout.
@@ -46,13 +46,15 @@ struct GraphNativeIdentityAccess: Sendable {
             throw GraphStoreError.unsupportedLayout
         }
         if context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer {
-            guard allowsMirroredPair,
+            guard allowsMirroring,
                   let privateURL = context.userInfo[StoreNativeContext.privateURLKey] as? URL,
-                  let sharedURL = context.userInfo[StoreNativeContext.sharedURLKey] as? URL,
-                  privateURL != sharedURL,
-                  let stores = context.persistentStoreCoordinator?.persistentStores, stores.count == 2,
-                  stores.contains(where: { $0.url == privateURL }), stores.contains(where: { $0.url == sharedURL }) else {
-                throw GraphStoreError.unsupportedLayout
+                  let stores = context.persistentStoreCoordinator?.persistentStores,
+                  stores.contains(where: { $0.url == privateURL }) else { throw GraphStoreError.unsupportedLayout }
+            if let sharedValue = context.userInfo[StoreNativeContext.sharedURLKey] {
+                guard let sharedURL = sharedValue as? URL, sharedURL != privateURL, stores.count == 2,
+                      stores.contains(where: { $0.url == sharedURL }) else { throw GraphStoreError.unsupportedLayout }
+            } else {
+                guard stores.count == 1 else { throw GraphStoreError.unsupportedLayout }
             }
         }
     }

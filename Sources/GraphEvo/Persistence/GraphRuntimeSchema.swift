@@ -12,11 +12,14 @@ package enum GraphRuntimeSchema {
     }
 
     package static let nativeIdentity = StoreSchema(
-        identifier: "GraphEvo.nativeIdentity.alpha.1",
-        entityVersionHashes: GraphNativeIdentityColumns.makeModel(indexed: true).entityVersionHashesByName
+        identifier: "GraphEvo.nativeIdentity.alpha.2",
+        entityVersionHashes: GraphNativeIdentityColumns.makeModel(indexed: true).entityVersionHashesByName,
+        requiredModelVersionIdentifier: "GraphEvo.nativeIdentity.alpha.2"
     ) {
         GraphValueTransformer.register()
-        return GraphNativeIdentityColumns.makeModel(indexed: true)
+        let model = GraphNativeIdentityColumns.makeModel(indexed: true)
+        model.versionIdentifiers = ["GraphEvo.nativeIdentity.alpha.2"]
+        return model
     }
 
 }

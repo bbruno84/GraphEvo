@@ -1,9 +1,10 @@
 # GraphEvo 2 — native identity integration
 
-Status: fresh local native identity layout available as an explicit alpha schema
-selection. Default/current and mirrored opens retain the prior model. The shared
-resolver preserves audited absence and common writers; controlled native paired
-sharing/file acceptance passed, while public mirrored adoption remains separate. C02b's original weaker miss is retained only as historical evidence.
+Status: explicit native schema selection supports local, private-only mirrored and
+private/shared mirrored public opens. No-schema/current defaults retain the prior
+model. Controlled native sharing/file acceptance is retained separately from the
+public-consumer adoption checks below. Historical weaker prototype misses and
+unversioned local alpha files are not silently adopted.
 Read the [prototype](graphevo-2-native-identity-experiment.md),
 [query contract](graphevo-2-queries.md) and [post-alpha checklist](graphevo-2-post-alpha-checklist.md).
 
@@ -13,8 +14,8 @@ Logical GraphID/GraphNodeID remain persistent UUID values. Native graph/node
 String columns are queryable routing projections, cross-checked against archived
 logical identity metadata. Never derive identity from Core Data URIs or native
 CloudKit mappings. A configured compound index supplies no global uniqueness or
-cross-replica completion guarantee. Optional native fields are selected only by the explicit local native schema;
-default and mirrored opens remain on the previous model.
+cross-replica completion guarantee. Optional native fields are selected explicitly for local or mirrored resources;
+no-schema/current opens retain the previous model.
 
 | Operation | Evidence and outcome |
 |---|---|
@@ -253,3 +254,45 @@ This closes controlled native paired/file feasibility for the selected model.
 Public mirrored schema selection remains a separate reviewed adoption; defaults,
 quotas, account/cache policy, broad conflict/crash guarantees and v1 migration
 are not settled by this run.
+
+
+## Public mirrored schema adoption
+
+Both public mirrored opening shapes now accept `schema: GraphDatabaseSchema`.
+Explicit `.nativeIdentity` selects the common native adapter with mirroring
+admission. A mirrored context must contain either exactly the runtime's private
+resource, or exactly its distinct private/shared pair. Local adapters and the
+historical prototype retain local-only admission. The old laboratory wrapper
+now delegates to these public APIs rather than maintaining another opener.
+Public validateIntegrity(of:) checks the current local view on either topology;
+it remains full storage validation, not application decoding or cloud completion.
+
+The public factory records Core Data model version identifier
+`GraphEvo.nativeIdentity.alpha.2`; native entity hashes and the root's alpha.1
+logical protocol are unchanged. StoreSchema optionally requires that identifier
+in existing store metadata, checking every resource before creating/loading a
+mirrored container. The requirement also participates in runtime lease
+compatibility. Standard native model creation persists the identifier; no manual
+metadata stamping, secondary coordinator, backfill or migration is used.
+
+This extra check is necessary because historical prototype/current native alpha
+files can have matching entity hashes but another logical protocol. Refusing them
+only after mirrored loading could start native export before catalog refusal.
+Unversioned files now fail pre-load incompatibility and retain their original
+reader/data under M13's fresh-store policy. A new local path still says nothing
+about remote compatibility: old cloud data needs an explicit supported v1 cutover
+or controlled test setup, never silent identity repair.
+
+The external Swift 6 Release consumer exercises both public overload signatures
+and early URL validation without cloud credentials. The separate
+[public device host](../../Experiments/PublicMirroredProbe/README.md) contains no
+package/testable API use: private-only typed query/observation/reopen and paired
+file assignment/replacement/deletion use the published product. Physical results
+are recorded separately from compilation and offline topology tests.
+
+The [public adoption result](results/native-public-mirrored-schema-2026-10-29.md)
+records successful private-only opening/typed query/observation/reopen and
+complete cross-account public file lifecycle with the versioned factory. Initial
+invitation visibility and reportless host launches are retained, together with
+explicit same-capability/read-only continuations. Eventual success does not close
+PA03 readiness semantics or the wider beta gates.

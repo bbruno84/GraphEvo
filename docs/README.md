@@ -111,3 +111,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [Fresh native identity paired acceptance laboratory](../Experiments/NativeIdentityPairedProbe/README.md) — internal host, offline checks and pending physical matrix.
 
 - [Native identity paired device acceptance](design/results/native-identity-paired-devices-2026-10-29.md) — controlled iPad/XR sharing, explicit conflict recovery and native attachment lifecycle.
+
+- [Public native mirrored schema adoption](design/results/native-public-mirrored-schema-2026-10-29.md) — explicit schema overloads, pre-load version guard and separate public consumer evidence.
+
+- [Public adoption causal triage](design/results/native-public-causal-triage-2026-10-29.md):
+  reproduced launch acknowledgement defect, traced invitations and unresolved historical causes.
