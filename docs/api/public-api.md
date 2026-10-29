@@ -1416,7 +1416,7 @@ not certified. Query signatures, cursor semantics and the reported bounded
 inventory strategy are unchanged. See the
 [query contract](../design/graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
 
-## Explicit local native-identity schema (alpha)
+## Explicit native-identity schema (alpha)
 
 ```swift
 public enum GraphDatabaseSchema: Sendable {
@@ -1427,19 +1427,37 @@ public enum GraphDatabaseSchema: Sendable {
 extension GraphDatabase {
     public static func open(at url: URL, schema: GraphDatabaseSchema) async throws -> GraphDatabase
     public static func inMemory(schema: GraphDatabaseSchema) async throws -> GraphDatabase
+    public static func openMirrored(at url: URL, containerIdentifier: String,
+                                    schema: GraphDatabaseSchema) async throws -> GraphDatabase
+    public static func openMirrored(privateStoreAt privateURL: URL, sharedStoreAt sharedURL: URL,
+                                    containerIdentifier: String, schema: GraphDatabaseSchema) async throws -> GraphDatabase
     public func validateIntegrity(of graphID: GraphID) async throws -> Int
 }
 ```
 
-`nativeIdentity` creates a new local store or reopens its compatible fresh-alpha
-layout. It uses optional native graph/node String projections and a configured
+`nativeIdentity` selects the explicit native layout for local, private-only mirrored
+or private/shared mirrored resources. It uses optional native graph/node String projections and a configured
 compound fetch index; no uniqueness constraint or specific SQL-plan guarantee is
 implied. It does not convert an existing current/prototype store or erase an
 incompatible path. Graph creation activates only newly allocated empty controls.
 Incompatible alpha layouts start from empty stores under M13.
 
-Existing no-schema overloads and `current` retain the previous model. Mirrored
-opening still selects that model; the new choice is local-only at this increment.
+Existing no-schema overloads and `current` retain the previous model, including
+mirrored opens. Native mirroring requires an explicit `schema: .nativeIdentity`.
+The current native alpha uses model version identifier
+`GraphEvo.nativeIdentity.alpha.2`. The runtime validates this public Core Data
+metadata before loading any existing resource, as well as native entity hashes.
+Unversioned alpha/prototype files are refused even when their hashes match;
+there is no automatic stamp, conversion or wipe. New local and mirrored native
+files use the same versioned factory. Root protocol `nativeIdentityLayout =
+alpha.1` and native entity shape are unchanged; the new local version gate prevents
+old same-shape prototype data from starting export before catalog validation.
+
+Mirrored opening reserves the whole topology before loading: exactly one private
+resource or an explicit private/shared pair, using the same schema for both.
+There is no fallback on explicit mirrored failure. Fresh local paths do not
+establish empty/compatible cloud state; the caller must choose a controlled
+compatible cloud environment or a separately supported migration/cutover.
 Single-graph v1 adoption APIs retain their existing separate scope.
 
 Native point hits validate targets/references; misses audit the same-view native
@@ -1450,10 +1468,11 @@ does not select an indexed SQL query strategy. Scoped snapshots validate native
 projections of consulted nodes, and descriptor/codec errors remain visible.
 
 `validateIntegrity(of:)` supports both public database schemas and returns the
-selected graph's application-row count, including attachments and excluding hidden
+selected graph's current local application-row count, including attachments and excluding hidden
 controls. It explicitly scans identities, structure and stored payloads/file
 integrity. It does not invoke application model initializers, follow query byte
 budgets or certify domain validity, another replica or CloudKit import completion.
+It supports local and mirrored native owners through the same topology-checked resolver.
 The operation can load complete large file bodies; metadata-only listing has a
 different scope. A graph absent from the current catalog reports `missingGraph`.
 

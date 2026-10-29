@@ -3,17 +3,17 @@ import Foundation
 import GraphEvoModel
 import GraphEvoStore
 
-/// Fresh local alpha protocol. Historical prototype markers are deliberately not accepted.
+/// Fresh native alpha protocol with explicit local/mirrored admission. Historical prototype markers are deliberately not accepted.
 enum GraphNativeIdentityDatabaseAdapter {
-    private static func access(allowsMirroredPair: Bool = false) -> GraphNativeIdentityAccess {
+    private static func access(allowsMirroring: Bool = false) -> GraphNativeIdentityAccess {
         GraphNativeIdentityAccess(activationKey: GraphTypedStoreAdapter.prefix + "nativeIdentityLayout",
-                                  activationVersion: "alpha.1", allowsMirroredPair: allowsMirroredPair)
+                                  activationVersion: "alpha.1", allowsMirroring: allowsMirroring)
     }
 
     static var database: GraphDatabaseAdapter { makeDatabase() }
 
-    static func makeDatabase(allowsMirroredPair: Bool = false) -> GraphDatabaseAdapter {
-        let access = access(allowsMirroredPair: allowsMirroredPair)
+    static func makeDatabase(allowsMirroring: Bool = false) -> GraphDatabaseAdapter {
+        let access = access(allowsMirroring: allowsMirroring)
         let base = GraphTypedStoreAdapter.database
         let graph = GraphStoreAdapter(initialize: { _, _ in throw GraphStoreError.unsupportedLayout },
             fetch: { context, graphID, id in
@@ -46,8 +46,8 @@ enum GraphNativeIdentityDatabaseAdapter {
         }, upgrade: { _, _ in throw GraphStoreError.unsupportedLayout })
     }
 
-    static func validate(_ context: NSManagedObjectContext, graphID: GraphID, allowsMirroredPair: Bool = false) throws -> Int {
-        let access = access(allowsMirroredPair: allowsMirroredPair)
+    static func validate(_ context: NSManagedObjectContext, graphID: GraphID, allowsMirroring: Bool = false) throws -> Int {
+        let access = access(allowsMirroring: allowsMirroring)
         if try GraphNativeIdentityColumns.validateModel(in: context) {
             guard try access.catalog(context).contains(graphID) else { throw GraphStoreError.missingGraph }
             return try access.validateAll(context, graphID: graphID)

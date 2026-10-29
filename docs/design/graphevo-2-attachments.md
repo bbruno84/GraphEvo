@@ -166,3 +166,10 @@ cascade. This is an internal schema laboratory, not a public mirrored-model
 switch, arbitrary file-size/performance guarantee, backup certification or proof
 of immediate server asset garbage collection. Accepted attachment identity and
 ownership were unchanged; broader release and v1 migration gates remain open.
+
+The [public API adoption result](results/native-public-mirrored-schema-2026-10-29.md)
+repeats the exact native file lifecycle through published schema opening and
+integrity methods, including shared insertion/replacement/export, remote
+deletion and owner cascade. It retains invitation and host-startup failures
+and their explicit continuations; it introduces no larger size/performance
+or server asset-reclamation guarantee.

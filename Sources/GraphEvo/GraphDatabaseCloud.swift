@@ -22,16 +22,43 @@ extension GraphDatabase {
     /// Opens an owner-private mirrored resource. The catalog may grow as native imports arrive.
     /// There is no local fallback: failure to configure this explicit cloud resource is an error.
     public static func openMirrored(at url: URL, containerIdentifier: String) async throws -> GraphDatabase {
-        try await open(configuration: .init(location: .sqlite(url), cloudKitContainerIdentifier: containerIdentifier),
-                       schema: GraphRuntimeSchema.current, adapter: GraphTypedStoreAdapter.database)
+        try await openMirrored(at: url, containerIdentifier: containerIdentifier, schema: .current)
+    }
+
+    /// Selects an alpha schema explicitly. Existing incompatible local/cloud data is not converted or erased.
+    public static func openMirrored(at url: URL, containerIdentifier: String,
+                                    schema: GraphDatabaseSchema) async throws -> GraphDatabase {
+        let configuration = StoreConfiguration(location: .sqlite(url), cloudKitContainerIdentifier: containerIdentifier)
+        switch schema {
+        case .current:
+            return try await open(configuration: configuration, schema: GraphRuntimeSchema.current,
+                                  adapter: GraphTypedStoreAdapter.database)
+        case .nativeIdentity:
+            return try await open(configuration: configuration, schema: GraphRuntimeSchema.nativeIdentity,
+                                  adapter: GraphNativeIdentityDatabaseAdapter.makeDatabase(allowsMirroring: true))
+        }
     }
 
     /// Opens one native owner with explicitly reserved private and shared SQLite resources.
     public static func openMirrored(privateStoreAt privateURL: URL, sharedStoreAt sharedURL: URL,
                                     containerIdentifier: String) async throws -> GraphDatabase {
-        try await open(configuration: .init(location: .sqlite(privateURL), cloudKitContainerIdentifier: containerIdentifier,
-                                            sharedStoreURL: sharedURL),
-                       schema: GraphRuntimeSchema.current, adapter: GraphTypedStoreAdapter.database)
+        try await openMirrored(privateStoreAt: privateURL, sharedStoreAt: sharedURL,
+                               containerIdentifier: containerIdentifier, schema: .current)
+    }
+
+    /// Selects the same explicit schema for both resources under one native owner.
+    public static func openMirrored(privateStoreAt privateURL: URL, sharedStoreAt sharedURL: URL,
+                                    containerIdentifier: String, schema: GraphDatabaseSchema) async throws -> GraphDatabase {
+        let configuration = StoreConfiguration(location: .sqlite(privateURL), cloudKitContainerIdentifier: containerIdentifier,
+                                               sharedStoreURL: sharedURL)
+        switch schema {
+        case .current:
+            return try await open(configuration: configuration, schema: GraphRuntimeSchema.current,
+                                  adapter: GraphTypedStoreAdapter.database)
+        case .nativeIdentity:
+            return try await open(configuration: configuration, schema: GraphRuntimeSchema.nativeIdentity,
+                                  adapter: GraphNativeIdentityDatabaseAdapter.makeDatabase(allowsMirroring: true))
+        }
     }
 
     /// Prepares an owner-only zone using the public persistent-container sharing API.

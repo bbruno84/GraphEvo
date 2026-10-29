@@ -676,7 +676,8 @@ See the delivery plan and native identity integration contract.
 ## Explicit fresh native local schema
 
 GraphDatabaseSchema.nativeIdentity selects the public fresh local alpha layout;
-no-schema/current and mirrored opens keep the previous model at this increment.
+no-schema/current opens keep the previous model; explicit mirrored selection
+uses the public native overloads described below.
 Use the shared GraphNativeIdentityAccess resolver, with distinct public/prototype
 activation markers. Public graph activation requires new empty controls; never
 call historical backfill/copy helpers from ordinary native opens. Snapshots check
@@ -690,9 +691,10 @@ v1 migration remain separate. See the fresh local native schema contract.
 ## Fresh native paired laboratory
 
 GraphNativeIdentityPairedLaboratory is internal physical-test infrastructure.
-Only its adapter explicitly allows native-column mirrored contexts, with two
-actual stores matching runtime private/shared URLs. Local/prototype resolvers
-remain local-only; public mirrored opens retain their current schema. Use the
+Its compatibility wrapper now delegates to public schema overloads. Mirrored
+admission permits exactly one private resource or a private/shared pair matching
+runtime URLs. Local/prototype adapters remain local-only; no-schema mirrored
+opens retain the current model. Use the
 [one-use host](Experiments/NativeIdentityPairedProbe/README.md) with new controlled
 fixtures and protected run-bound transports. Offline container tests have no
 cloud options and prove no assignment/import. Do not replay mutations, reset
@@ -709,3 +711,19 @@ explicit recovery of its original ledger without reassignment. The host's
 recover-after-conflict ticket is explicit journal recovery, not permission to
 replay patchShared or arbitrary transaction bodies. Public mirrored adoption,
 broader crash/conflict/account/scale coverage and v1 migration remain separate.
+
+
+## Public native mirrored schema
+
+Both openMirrored overload shapes accept explicit GraphDatabaseSchema selection.
+The native factory requires standard model version identifier
+GraphEvo.nativeIdentity.alpha.2 in every existing resource before native loading;
+matching entity hashes alone must not activate unversioned prototype data.
+New local/mirrored native files get the identifier from their fresh model factory.
+Do not manually stamp old files, use another native coordinator, convert or erase
+as an opening side effect. No-schema/current opens retain their prior model.
+The root alpha.1 protocol and native columns are unchanged; this is a local
+pre-load version gate, not remote compatibility or import completion proof.
+validateIntegrity(of:) supports both legitimate mirrored topologies but remains
+a current-local full payload check. Use the public consumer host to distinguish
+published API evidence from historical @testable laboratory coverage.

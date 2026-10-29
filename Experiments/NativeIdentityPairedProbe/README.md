@@ -87,3 +87,12 @@ launch failures. Never replay a mutation whose invocation is uncertain.
 The A5 and A6 successes cover one fixture/size and two OS versions. They do not
 close account switching, simultaneous structural writer, arbitrary crash, quota,
 server-enforcement, wider payload/performance or mandatory v1 migration gates.
+
+## Public API adoption host
+
+`--public-api` selects published schema opening and integrity methods rather
+than the historical compatibility wrapper. For a public-only A6/private consumer
+and separate read-only failure diagnosis, use
+[PublicMirroredProbe](../PublicMirroredProbe/README.md). Current native files
+require model version GraphEvo.nativeIdentity.alpha.2; original unversioned
+laboratory files are retained as history and are not silently adopted.
