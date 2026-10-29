@@ -490,3 +490,15 @@ one store. Native account/revocation policy remains open in PA03.
 Evidence: [520 tests, 7 selected sanitizer tests, external Swift 6 Release
 process/bundle consumers and generic iOS build](results/extension-readonly-access-2026-10-29.md).
 This closes the first protective increment only; the iOS gate above stays open.
+
+
+### Actual app/widget App Group baseline (2026-10-29)
+
+[Physical WidgetKit evidence](results/widget-app-group-2026-10-29.md) now covers
+signed App Groups with app-owned private/shared mirroring and local read-only
+widgets on iPadOS 27.0 and iOS 27.2. Native mirroring/mutation refusals, independent
+PIDs, 0→1→2, iPad owner close/reopen and visible small/medium rendering are retained.
+This closes the **first physical read-only baseline experiment**, not PA02/O03
+as a whole. Preserve the iOS 18 actual-widget gap and the remaining suspension,
+protected-data, concurrent migration/reset, account/cache/revocation, performance
+and interactive-write decisions. No beta/tag promotion follows from this result.

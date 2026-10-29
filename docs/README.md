@@ -122,3 +122,6 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 - [Extension access safeguard result](design/results/extension-readonly-access-2026-10-29.md):
   520 tests, selected sanitizer and independent-process public reader evidence.
+
+- [Actual WidgetKit / App Group result](design/results/widget-app-group-2026-10-29.md):
+  signed app-owned cloud synchronization with read-only widgets; physical iPad/iPhone evidence.
