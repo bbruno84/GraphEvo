@@ -5,6 +5,8 @@ import GraphEvoRuntime
 
 public enum GraphStoreError: Error {
     case closed
+    case readOnly
+    case synchronizationUnavailableInExtension
     case ownershipConflict
     case expiredScope
     case foreignGraph
@@ -12,6 +14,7 @@ public enum GraphStoreError: Error {
     case corruptIdentity
     case missingNode
     case missingGraph
+    case missingStore
     case permissionDenied
     case sharedInsertionRequiresPreparation
     case pendingNativeOperation
@@ -173,6 +176,9 @@ public actor GraphStore {
     package static func translate(_ error: any Error) -> any Error {
         guard let runtime = error as? StoreRuntimeError else { return error }
         switch runtime {
+        case .missingStore: return GraphStoreError.missingStore
+        case .readOnlyStore: return GraphStoreError.readOnly
+        case .synchronizationUnavailableInExtension: return GraphStoreError.synchronizationUnavailableInExtension
         case .closedHandle: return GraphStoreError.closed
         case .configurationConflict: return GraphStoreError.ownershipConflict
         default: return GraphStoreError.persistence(underlying: error)
@@ -183,6 +189,9 @@ public actor GraphStore {
 extension GraphStoreError: LocalizedError {
     public var errorDescription: String? {
         switch self {
+        case .missingStore: return "The local store is unavailable until the containing app initializes it."
+        case .readOnly: return "The graph store is open for local reading only."
+        case .synchronizationUnavailableInExtension: return "Cloud synchronization must be owned by the containing app; use local read-only access in the extension."
         case .ownershipConflict: return "The store has an incompatible persistence owner."
         case .closed: return "The graph store handle is closed."
         case .expiredScope: return "The graph operation scope has expired."

@@ -1,7 +1,8 @@
 # Public native adoption — causal triage, 2026-10-29
 
-Status: open. The maintainer requested causes before continuing to app/widget
-work. PR #92 is draft. The previous positive functional result is retained,
+Status: investigation open; see the later maintainer disposition below. The
+maintainer initially requested causes before continuing to app/widget work,
+and PR #92 was held as draft. The previous positive functional result is retained,
 but neither the historical black screen nor the lost invitation recipient is
 closed by later successful runs. No Graph library fix or automatic retry was
 selected from an unproven hypothesis.
@@ -125,3 +126,14 @@ are missing from the original failures and the failures did not recur here.
 More successful repetitions alone cannot supply the missing cause. Keep PA03
 open and do not promote #92 or proceed to app/widget under a claim that these
 causes have been established.
+
+
+## Later maintainer disposition
+
+The maintainer explicitly authorized waiting for recurrence of the non-reproduced
+incidents, fixing the launcher and proceeding. This supersedes the temporary
+hold on further work; it does not close either historical cause. The launcher
+fix was included in #92, reviewed at d2e095cc71e58308b27b113526ea90137a6c0513 with
+both jobs of CI 40937899273 successful, and merged into the consolidation parent
+at 7a21bf6ae82022d1f362c6ae39f6dfa9a1ea8175. Retain failure telemetry on recurrence;
+no speculative CloudKit workaround or automatic invitation retry was selected.

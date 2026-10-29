@@ -734,5 +734,21 @@ not proof that new CLI arguments reached the app. A receipt is not a native
 stage/export certificate; never replay reserved writes to recover missing host
 acknowledgements. Invitation trace instrumentation belongs only in the external
 copy made by `Experiments/PublicMirroredProbe/prepare_invite_triage.py`, never
-the shipping library. Keep the historical launch/invitation causal gate open
-until failure-specific evidence establishes their causes.
+the shipping library. The maintainer authorized continuing after the launcher
+fix while waiting for the historical anomalies to recur; retain them as open
+incidents without claiming established causes.
+
+
+## V2 containing app and extension access
+
+Read `docs/design/graphevo-2-app-extension-access.md`. The containing app owns
+CloudKit synchronization. The v2 runtime rejects mirrored configuration from
+an extension bundle before native model/loading and gateway claims. `openReadOnly` uses
+ordinary native read-only containers for existing single/paired files; missing
+resources, mutations and extension mirroring have public typed errors. Never
+create a store in a widget as a fallback, start a second cloud synchronizer,
+relax same-process ownership, or retain a lifetime file lock across suspension.
+The role check is not a universal process lock or third-party-writer detector.
+Local extension writes and iOS App Group/suspension/account policy remain gates;
+macOS independent-process observation evidence is not physical-widget coverage.
+Keep the library independent of WidgetKit and refresh queries after resume.

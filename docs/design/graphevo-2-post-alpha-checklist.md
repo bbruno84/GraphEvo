@@ -469,3 +469,24 @@ historical black screen did not recur in bounded normal-launch checks, and two
 traced first invitations succeeded with matching local/native/server recipients.
 Neither historical cause is established. Keep PA03 invitation readiness open and
 PR #92 draft; successful continuations/repetitions are not incident closure.
+
+
+### Containing-app/extension first safeguard
+
+The maintainer authorized continuing after fixing the launcher while retaining
+non-reproduced historical incidents until recurrence. Their cause is not claimed
+resolved. #92 passed exact-head macOS/iOS CI and was reviewed/merged into the
+consolidation parent at 7a21bf6ae82022d1f362c6ae39f6dfa9a1ea8175.
+
+The [extension access contract](graphevo-2-app-extension-access.md) adds v2
+extension mirroring refusal and explicit single/paired local read-only openers.
+Unit checks and an independent-process macOS public consumer cover local refresh,
+observation and mutation refusal. **PA02/O03 remain open** for an actual iOS
+App Group/widget, containing-app cloud owner, suspension/protected data and the
+selected interactive-write scope. An extension-role preflight is not a universal
+cross-process ownership lock or a claim that two application processes may mirror
+one store. Native account/revocation policy remains open in PA03.
+
+Evidence: [520 tests, 7 selected sanitizer tests, external Swift 6 Release
+process/bundle consumers and generic iOS build](results/extension-readonly-access-2026-10-29.md).
+This closes the first protective increment only; the iOS gate above stays open.

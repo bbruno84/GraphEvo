@@ -107,6 +107,9 @@ jobs:
       - name: Run Swift 6 model consumer
         run: swift run --package-path IntegrationTests/PackageConsumer ModelConsumer
 
+      - name: Validate independent-process local read-only access
+        run: swift run --package-path IntegrationTests/PackageConsumer ProcessConsumer
+
       - name: Validate shared observation laboratory (functional smoke only)
         run: |
           swift build -c release --product ObservationCostProbe
