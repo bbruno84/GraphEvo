@@ -252,11 +252,16 @@ package enum GraphNativeIdentityPrototype {
         return result
     }
 
-    /// Target/reference validation only; unrelated corruption requires validateAll, unlike the public adapter.
+    /// Hits validate targets/references. Misses additionally audit the complete local identity inventory.
+    /// Application body integrity remains an explicit validateAll responsibility.
     package static func record(_ context: NSManagedObjectContext, id: GraphNodeID) throws -> GraphRecord? {
         try GraphValueDecodingDiagnostics.checking {
             let (root, membership) = try anchors(context, graphID: id.graphID)
-            guard let node = try checkedNode(context, id: id, root: root, membership: membership) else { return nil }
+            guard let node = try checkedNode(context, id: id, root: root, membership: membership) else {
+                // An index miss is not absence: a missing/misrouted column can hide a logical row.
+                _ = try validateIdentityInventory(context, graphID: id.graphID)
+                return nil
+            }
             let endpoints = try references(context, node: node, id: id, root: root, membership: membership)
             let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: root) { entity in
                 guard let graph = entity.node.value(forKey: graphAttribute) as? String,
@@ -281,18 +286,53 @@ package enum GraphNativeIdentityPrototype {
         }
     }
 
-    /// Full graph checks are explicit and separately timed. Not a cloud import/completion certificate.
+    /// Metadata-only local audit. No application body is decoded or native identity repaired.
+    /// Missing reads must audit the same context/view before returning nil.
+    package static func validateIdentityInventory(_ context: NSManagedObjectContext, graphID: GraphID) throws -> Int {
+        try GraphValueDecodingDiagnostics.checking {
+            try identityInventory(context, graphID: graphID).nodes.count
+        }
+    }
+
+    private static func identityInventory(_ context: NSManagedObjectContext, graphID: GraphID) throws -> GraphTypedStoreAdapter.Session {
+        _ = try anchors(context, graphID: graphID)
+        let session = try GraphTypedStoreAdapter.Session(context, graphID, database: true)
+        guard session.stagedNodeIDs.isEmpty else { throw GraphStoreError.pendingNativeOperation }
+        let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
+        // An unrouted row can lack both logical and native graph IDs. It must not disappear
+        // from every per-graph inventory and turn an incomplete import into false absence.
+        for node in try GraphTypedStoreAdapter.allNodes(session.graph) {
+            try checkCancellation()
+            guard let graphText = node.node.value(forKey: graphAttribute) as? String,
+                  UUID(uuidString: graphText) != nil else { throw GraphStoreError.corruptIdentity }
+            if node.type == GraphTypedStoreAdapter.rootType || node.type == GraphTypedStoreAdapter.membersType {
+                guard node.node.value(forKey: nodeAttribute) == nil else { throw GraphStoreError.corruptIdentity }
+            } else {
+                guard let text = node.node.value(forKey: nodeAttribute) as? String,
+                      UUID(uuidString: text) != nil else { throw GraphStoreError.corruptIdentity }
+            }
+        }
+        for (id, node) in session.nodes {
+            try checkCancellation()
+            guard node.node.value(forKey: graphAttribute) as? String == graphID.rawValue.uuidString,
+                  node.node.value(forKey: nodeAttribute) as? String == id.rawValue.uuidString else { throw GraphStoreError.corruptIdentity }
+        }
+        let indexed = try fetch(context, graphID: graphID)
+        try checkCancellation()
+        guard Set(indexed.map(\.runtimeObjectID)) == Set(session.nodes.values.map(\.runtimeObjectID)) else { throw GraphStoreError.corruptIdentity }
+        return session
+    }
+
+    /// Full graph checks add payload/endpoint/file-owner validation to the identity audit.
+    /// Neither operation certifies import completion or another replica's state.
     package static func validateAll(_ context: NSManagedObjectContext, graphID: GraphID) throws -> Int {
         try GraphValueDecodingDiagnostics.checking {
-            _ = try anchors(context, graphID: graphID)
-            let session = try GraphTypedStoreAdapter.Session(context, graphID, database: true)
+            let session = try identityInventory(context, graphID: graphID)
+            let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
             for (id, node) in session.nodes {
-                guard node.node.value(forKey: graphAttribute) as? String == graphID.rawValue.uuidString,
-                      node.node.value(forKey: nodeAttribute) as? String == id.rawValue.uuidString else { throw GraphStoreError.corruptIdentity }
+                try checkCancellation()
                 try session.validate(session.snapshot(node, id: id))
             }
-            let indexed = try fetch(context, graphID: graphID)
-            guard Set(indexed.map(\.runtimeObjectID)) == Set(session.nodes.values.map(\.runtimeObjectID)) else { throw GraphStoreError.corruptIdentity }
             return session.nodes.count
         }
     }

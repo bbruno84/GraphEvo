@@ -271,6 +271,7 @@ package enum GraphTypedStoreAdapter {
         var nodes: [GraphNodeID: Node] = [:]
         let database: Bool
         private(set) var nativeCandidateCount = 0
+        private(set) var stagedNodeIDs = Set<GraphNodeID>()
         var root: Entity?
         var membership: Action?
         private var metadata: GraphRuntimeMetadata?
@@ -305,7 +306,7 @@ package enum GraphTypedStoreAdapter {
                     if database, metadataValue(node, graphKey) as? String != graphID.rawValue.uuidString { continue }
                     if database, let staged = metadataValue(node, stageKey) {
                         guard node.runtimeTypeIfPresent != nil, let text = staged as? String, UUID(uuidString: text) != nil,
-                              let nodeID = metadataValue(node, idKey) as? String, UUID(uuidString: nodeID) != nil else {
+                              let nodeID = metadataValue(node, idKey) as? String, let stagedUUID = UUID(uuidString: nodeID) else {
                             throw GraphStoreError.corruptIdentity
                         }
                         _ = try encodedKeys(node)
@@ -319,6 +320,7 @@ package enum GraphTypedStoreAdapter {
                         if let edge = node as? Relationship, edge.subject != nil || edge.object != nil {
                             throw GraphStoreError.corruptIdentity
                         }
+                        stagedNodeIDs.insert(GraphNodeID(graphID: graphID, rawValue: stagedUUID))
                         continue
                     }
                     guard let type = node.runtimeTypeIfPresent, !type.hasPrefix(prefix),

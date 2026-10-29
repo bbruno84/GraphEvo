@@ -91,3 +91,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [Identity-guarded query materialization result](design/results/identity-guarded-queries-2026-10-29.md):
   same-schema public query body selection, native transformer checks and matched
   baseline/candidate Release rows; complete structural inventory remains.
+
+- [Native identity integration contract](design/graphevo-2-native-identity-integration.md):
+  same-view absence safety, metadata versus full integrity, all-writer invariants
+  and protected-source conversion/native adoption gates.

@@ -191,3 +191,19 @@ subscriptions, startup separately from update and unchanged candidate budgets.
 Keep mixed and single-observer overhead even if it regresses; do not turn reduced
 body materialization into a claim of indexed SQL access or a bounded total heap.
 The selected C02b native schema still requires its distinct integration gates.
+
+
+## Native identity integration started
+
+The [integration contract](graphevo-2-native-identity-integration.md) fixes the
+validation boundary before public schema adoption. The first increment closes
+the laboratory's false-negative lookup: audit same-view identity metadata before
+returning nil, reject missing/misrouted projections and known staged rows, and
+retain full payload integrity as a separate explicit operation. A native
+transformer poison probe verifies that the metadata audit does not read unrelated
+application bodies. Negative reads now intentionally have an inventory cost.
+
+The next increments must maintain projections through all writers and explicit
+protected-source conversion/recovery, then verify native private/shared import
+and conversion before selecting mirrored schemas or indexed query execution.
+Default public openers, the native model and alpha.8 remain unchanged here.
