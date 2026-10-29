@@ -176,3 +176,14 @@ changes/access-cache policy, old-cloud-layout cutover and returning old devices,
 zone quotas, larger performance envelopes and native sharing UI adapters. The
 host controls presentation and invitation transport. Current polling probes do
 not certify live observation or selective graph download.
+
+## Native identity schema follow-on
+
+The internal fresh native-column pair has separate
+[device acceptance](results/native-identity-paired-devices-2026-10-29.md) on owner
+iPadOS 27.0 and different-account XR iOS 18.7.10: exact A-only import, participant
+additions/details and independent owner recovery, read-only/restored permissions,
+revoke/reinvite/leave and interruption recovery. Its first recovery save returned
+a Core Data merge conflict; retained intent was later explicitly recovered without
+replaying assignment. Both outcomes remain evidence. This does not change public
+mirrored defaults or close the broader conflict/account/scale/migration gates.

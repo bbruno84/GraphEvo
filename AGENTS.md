@@ -685,3 +685,27 @@ backfill. Queries retain full bounded inventory and existing property policies.
 validateIntegrity(of:) is explicit full storage/payload validation, not app-domain
 validation or a CloudKit certificate. Fresh paired/native physical acceptance and
 v1 migration remain separate. See the fresh local native schema contract.
+
+
+## Fresh native paired laboratory
+
+GraphNativeIdentityPairedLaboratory is internal physical-test infrastructure.
+Only its adapter explicitly allows native-column mirrored contexts, with two
+actual stores matching runtime private/shared URLs. Local/prototype resolvers
+remain local-only; public mirrored opens retain their current schema. Use the
+[one-use host](Experiments/NativeIdentityPairedProbe/README.md) with new controlled
+fixtures and protected run-bound transports. Offline container tests have no
+cloud options and prove no assignment/import. Do not replay mutations, reset
+clouds implicitly, backfill imported projections or treat a reset confirmation
+as proof that another old writer cannot run later. Controlled native paired and
+attachment acceptance is recorded below; public mirrored adoption is separate.
+
+
+The [controlled device result](docs/design/results/native-identity-paired-devices-2026-10-29.md)
+now records native A5 sharing/recovery/lifecycle and separate A6 file acceptance
+on iPad/XR; it supersedes the initial connectivity block for that bounded scope.
+Retain the first Cocoa merge-conflict recovery failure and later successful
+explicit recovery of its original ledger without reassignment. The host's
+recover-after-conflict ticket is explicit journal recovery, not permission to
+replay patchShared or arbitrary transaction bodies. Public mirrored adoption,
+broader crash/conflict/account/scale coverage and v1 migration remain separate.

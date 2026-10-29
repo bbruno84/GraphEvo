@@ -153,3 +153,16 @@ while complete reads and sharing integrity remain strict. The separate metadata
 list adapter still has native faulting costs. Serial cross-account lifecycle
 passes on the binary format; storage is not uniformly smaller, and conflict,
 offline/account recovery, real media/size envelope and conversion remain gates.
+
+## Native identity schema follow-on
+
+A separate fresh native-column paired fixture passed the
+[physical file lifecycle](results/native-identity-paired-devices-2026-10-29.md#separate-native-attachment-run)
+on owner iPadOS 27.0 and different-account XR iOS 18.7.10. Exact 512-byte/10-MiB
+bodies, participant attachment assignment, stable-ID replacement/export, remote
+deletion and owner/file cascade were recovered by independent peers while B's
+file and boundary remained intact. Full native integrity reached A=0 after
+cascade. This is an internal schema laboratory, not a public mirrored-model
+switch, arbitrary file-size/performance guarantee, backup certification or proof
+of immediate server asset garbage collection. Accepted attachment identity and
+ownership were unchanged; broader release and v1 migration gates remain open.
