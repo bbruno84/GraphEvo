@@ -198,3 +198,9 @@ queries retain independent native scans. Heavy/slow decoder workloads and real
 native import/account/access-change checks remain required before promoting the
 consolidated branch; local injected source tests do not close those gates. This
 increment is an alpha implementation PR, not beta entry or a schema freeze.
+
+
+The [public-path verification](results/c04-public-observation-2026-10-29.md)
+records 497 local tests, 28 selected sanitizer tests and 36 fresh Release rows.
+It retains the one-sample mixed regression and independent five-repetition check;
+these are wiring/regression evidence, not a new supported performance envelope.
