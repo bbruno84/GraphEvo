@@ -1477,3 +1477,33 @@ The operation can load complete large file bodies; metadata-only listing has a
 different scope. A graph absent from the current catalog reports `missingGraph`.
 
 See the [fresh native store contract](../design/graphevo-2-native-identity-integration.md#fresh-local-native-schema-api).
+
+
+## V2 containing-app synchronization and extension readers
+
+The v2 runtime rejects mirrored openings from app extensions with
+`GraphStoreError.synchronizationUnavailableInExtension` before native loading.
+The selected alpha policy gives the containing app CloudKit synchronization;
+it also refuses isolated extension mirroring. This is a conservative library
+policy, not an Apple-wide prohibition on CloudKit in extensions. A local reader
+can use:
+
+```swift
+public static func openReadOnly(at url: URL,
+    schema: GraphDatabaseSchema = .current) async throws -> GraphDatabase
+public static func openReadOnly(privateStoreAt privateURL: URL,
+    sharedStoreAt sharedURL: URL,
+    schema: GraphDatabaseSchema = .current) async throws -> GraphDatabase
+```
+
+These methods open existing compatible SQLite resources through an ordinary
+read-only Core Data container, preserving pair routing and explicit schema
+selection. They never create missing stores/graphs or start CloudKit. Missing
+resources produce `GraphStoreError.missingStore`; graph mutations produce
+`GraphStoreError.readOnly`. Cloud operations are unsupported: their public
+setup preflight may instead report a local database. Incompatible resources are not converted.
+The existing same-process ownership/access compatibility remains enforced.
+Query observations retain their conservative invalidation contract; callers
+should query freshly after extension resume. This is not a global cross-process
+lock, account/permission certificate, or completed iOS App Group/widget support.
+See [the extension access contract](../design/graphevo-2-app-extension-access.md).

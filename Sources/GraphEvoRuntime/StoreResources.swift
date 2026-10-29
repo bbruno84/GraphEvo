@@ -5,6 +5,7 @@ import os
 
 /// Test seams for native lifecycle boundaries, never exposed by the Graph API.
 struct StoreLifecycleHooks: Sendable {
+    var processRole: StoreProcessRole?
     var beforeLoad: (@Sendable () async throws -> Void)?
     var didReserveHandle: (@Sendable () async -> Void)?
     var afterCommit: (@Sendable () -> Void)?
@@ -44,6 +45,7 @@ actor StoreResources {
         hooks: StoreLifecycleHooks,
         owner: UUID
     ) async throws -> StoreResources {
+        try (hooks.processRole ?? StoreProcessRole.current).validate(resolved.configuration)
         let members = try resolved.resources
         let gateways = try members.map { try StoreGatewayLease.acquire($0.configuration, owner: owner) }
         try await hooks.beforeLoad?()
@@ -100,7 +102,7 @@ actor StoreResources {
                     throw StoreRuntimeError.incompatibleStore(url)
                 }
             } else if resolved.configuration.access == .readOnly {
-                throw StoreRuntimeError.invalidConfiguration("A read-only SQLite store must already exist.")
+                throw StoreRuntimeError.missingStore(url)
             }
             do { try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true) }
             catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }

@@ -93,3 +93,30 @@ extension GraphDatabase {
         try await contextRead { try GraphNativeIdentityDatabaseAdapter.validate($0, graphID: graphID, allowsMirroring: true) }
     }
 }
+
+
+extension GraphDatabase {
+    /// Reads an existing local store without starting CloudKit or creating a graph/store.
+    /// The containing app owns synchronization. This does not certify account access or import completion.
+    public static func openReadOnly(at url: URL, schema: GraphDatabaseSchema = .current) async throws -> GraphDatabase {
+        try await openReadOnly(configuration: .init(location: .sqlite(url), access: .readOnly), schema: schema)
+    }
+
+    /// Reads both existing resources locally; private/shared routing is retained without a cloud container.
+    public static func openReadOnly(privateStoreAt privateURL: URL, sharedStoreAt sharedURL: URL,
+                                    schema: GraphDatabaseSchema = .current) async throws -> GraphDatabase {
+        try await openReadOnly(configuration: .init(location: .sqlite(privateURL), access: .readOnly,
+                                                    sharedStoreURL: sharedURL), schema: schema)
+    }
+
+    private static func openReadOnly(configuration: StoreConfiguration, schema: GraphDatabaseSchema) async throws -> GraphDatabase {
+        switch schema {
+        case .current:
+            return try await open(configuration: configuration, schema: GraphRuntimeSchema.current,
+                                  adapter: GraphTypedStoreAdapter.database)
+        case .nativeIdentity:
+            return try await open(configuration: configuration, schema: GraphRuntimeSchema.nativeIdentity,
+                                  adapter: GraphNativeIdentityDatabaseAdapter.database)
+        }
+    }
+}

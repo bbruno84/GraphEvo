@@ -34,6 +34,11 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
+            name: "ProcessConsumer",
+            dependencies: [.product(name: "GraphEvo", package: repositoryName)],
+            swiftSettings: modelConsumerSettings
+        ),
+        .executableTarget(
             name: "ModelConsumer",
             dependencies: [.product(name: "GraphEvo", package: repositoryName)],
             swiftSettings: modelConsumerSettings

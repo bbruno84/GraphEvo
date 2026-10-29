@@ -116,3 +116,9 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 - [Public adoption causal triage](design/results/native-public-causal-triage-2026-10-29.md):
   reproduced launch acknowledgement defect, traced invitations and unresolved historical causes.
+
+- [Containing app and extension access](design/graphevo-2-app-extension-access.md):
+  app-owned synchronization, extension refusal and local read-only opening; iOS gate remains open.
+
+- [Extension access safeguard result](design/results/extension-readonly-access-2026-10-29.md):
+  520 tests, selected sanitizer and independent-process public reader evidence.

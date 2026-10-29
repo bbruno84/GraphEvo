@@ -91,3 +91,11 @@ alternatives, affected contracts, evidence and remaining limitations. Keep
 experimental success separate from a supported release guarantee. A schema
 change records its v1 migration effect even if alpha files remain disposable.
 Do not mark D01–D14 universally closed because one native probe succeeded.
+
+
+2026-10-29 O03 first increment: containing app owns CloudKit synchronization;
+v2 mirrored openings are rejected from an app-extension bundle. Explicit local
+read-only readers are implemented as a candidate path, with separate-process
+macOS evidence. This does not settle iOS sandbox/suspension or interactive writes;
+see [extension access](graphevo-2-app-extension-access.md). The maintainer rejects
+forcing concurrent native cloud synchronizers or unsafe lifetime locks.
