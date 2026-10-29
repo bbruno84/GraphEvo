@@ -61,7 +61,7 @@ sharing writes have not been revalidated. C02/C03/C04 gates remain open.
 - Verify all node kinds, endpoint/owner deletion, tags/groups, unknown values,
   null/absent data and identity/reference preservation. C01's Entity-only scalar
   fixtures do not establish the full model contract.
-- Include local alpha conversion and mandatory v1 mapping/codec feasibility.
+- Use fresh stores for incompatible alpha layouts; retain mandatory v1 mapping/codec feasibility.
   Public attachment metadata and original bytes must remain recoverable; ordinary
   v1 binary values are not implicitly reclassified as owned files.
 - Revalidate actual same-account and cross-account mirroring with the selected
@@ -221,5 +221,17 @@ The next increment wires native projection maintenance into common row/control
 creation, ordinary writes and shared staging/finalization preflight. The
 [writer contract](graphevo-2-native-identity-integration.md#common-writer-projection-maintenance)
 keeps default models/openers unchanged and distinguishes local common-writer
-coverage from native-column physical sharing acceptance. Protected-source
-conversion/recovery is the next remaining layout-adoption component.
+coverage from native-column physical sharing acceptance. The next layout-adoption
+component is fresh-store opening/validation under M13, followed by fresh native
+private/shared acceptance. Alpha conversion tooling is not required.
+
+
+## Fresh alpha stores — maintainer decision (2026-10-29)
+
+M13 supersedes earlier alpha-conversion steps in this plan: start the new native
+layout from empty stores. Do not implement alpha-to-alpha conversion/backfill or
+interruption recovery as a public-adoption gate. Retain old probe evidence as
+history. Next: create/validate fresh local stores, then controlled fresh mirrored
+private/shared fixtures, while maintaining writer, query and observation guards.
+Mandatory v1 local/cloud migration remains separate. No automatic erasure of
+incompatible existing files or CloudKit data is introduced.

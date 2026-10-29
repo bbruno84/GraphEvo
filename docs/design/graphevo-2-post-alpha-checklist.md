@@ -322,9 +322,9 @@ does not close the review/native-SDK or indexed identity/query gates above.
   become successful absence. Preserve separate metadata/full-payload validation.
 - [ ] Carry complete native projection maintenance through every integrated
   writer, attachment and assignment/recovery path before any public selection.
-- [ ] Implement protected-source conversion/activation/interruption handling;
-  verify supported native private/shared conversion rather than inferring it from
-  the existing local mapping prototype. Mandatory v1 migration remains open.
+- [ ] Validate fresh native local/private/shared store initialization and import;
+  alpha conversion/activation/interruption tooling is removed by M13. Mandatory
+  protected-source v1 migration remains a separate open gate.
 - [ ] Retain changed negative-lookup/audit costs and high-degree action coverage.
   Default native schema and query row-coverage gates remain open.
 
@@ -343,8 +343,8 @@ does not close public schema, paired-store conversion or v1 migration gates.
   independent graphs, reopen and malformed/partial model rejection.
 - [ ] Validate native-column staged assignment/finalization/import and recovery
   on the private/shared resource pair. Local hooks/tests do not certify it.
-- [ ] Implement explicit protected-source conversion/activation/interruption
-  tooling before public model selection; v1 migration remains mandatory.
+- [ ] Validate public model selection using fresh stores under M13; no prior
+  alpha conversion is required. V1 migration remains mandatory.
 
 #84/#85/#86 review and exact-head macOS/iOS checks passed and their consolidation
 merges are `e2f6323` / `33225aa` / `0b933dd`. Native/schema/beta gates stay open.
@@ -353,3 +353,13 @@ Local writer evidence: 507 full tests and 31 selected sanitizer tests pass,
 including common local file lifecycle, projection corruption refusal and guarded
 point/mutation behavior during injected incomplete import. Physical native-column
 assignment/import and protected conversion gates above remain open.
+
+
+## Alpha compatibility scope — resolved by M13
+
+The maintainer selected empty stores for incompatible alpha layouts on 2026-10-29.
+Earlier checklist references to alpha conversion, paired alpha-store conversion
+or protected alpha-conversion recovery are superseded: they are not adoption
+or beta gates. Historical migration experiments remain evidence only. Fresh
+local/mirrored initialization and native behavior still require acceptance.
+Mandatory v1 migration and beta compatibility/backup requirements remain.

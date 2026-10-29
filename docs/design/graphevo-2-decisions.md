@@ -21,6 +21,9 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 | M10 | Keep v1 on `develop`, integrate v2 on `codex/graphevo-2` from the planning branch, and use focused `codex/v2-<topic>` PRs into v2 | Alpha tags come from v2 integration; `release/2.0` starts there at beta, with fixes returning to v2. Stable 2.0 is promoted to `master` and `develop` through reviewed PRs |
 | M11 | V2 minimum OS versions may be raised as technically appropriate without inheriting v1 deployment constraints | Choose floors from API/architecture needs and validate their runtime matrix; A1's current iOS 16/macOS 12 declarations are provisional |
 | M12 | Keep A6's attachment identity/ownership approach and assess representation costs at alpha completion | The maintainer accepted the model; defer file-cost redesign while completing queries/observation, then consolidate schema/API before beta |
+| M13 | Incompatible alpha layouts start from empty stores; no alpha-to-alpha conversion, downgrade or interrupted alpha-conversion recovery | Remove alpha conversion tooling from adoption gates; reject existing incompatible paths without automatic erasure. Mandatory v1 migration and beta compatibility remain separate |
+
+M13 records the 2026-10-29 fresh-store decision.
 
 M01–M04 and M09–M11 reflect the discussion following the 2026-10-26 laboratory results.
 M05–M08 carry forward the initial agreed requirements. M12 records the
@@ -70,7 +73,7 @@ envelope decision remains open after this first local screen.
 | O03 | Does 2.0 include concurrent app/extension writes to an App Group store? | A process-local owner is insufficient; same-file conflicts were observed in the macOS control | No cross-process safety claim; assess iOS support/cost during alpha |
 | O04 | Does processing require durable replay in the first 2.0? | Determines history retention, consumer cursors, acknowledgements and gap recovery | A8 supplies live invalidation plus explicit rescan as its alpha candidate; select stable scope during consolidation and do not conflate it with durable processing |
 | O05 | How are empty actions, detached optional edges and incomplete imported structures exposed? | The v1 migration must preserve valid optional forms without legitimizing damaged graphs | Inventory v1 fixtures and define domain invariants during A3/A4 |
-| O06 | Which alpha stores need migration to later prereleases? | Early adopters need an explicit data-retention promise before using alphas for real data | Synthetic/disposable until a release explicitly states a supported path |
+| O06 | Resolved by M13: no migration between incompatible alpha stores | Alphas start from empty stores; do not use them with a data-retention promise | Remove alpha conversion tooling from adoption gates; preserve v1 migration and beta rules |
 
 The only initial maintainer question was the mixed-version policy, resolved
 as M09. Other choices remain visible without blocking independent specification
