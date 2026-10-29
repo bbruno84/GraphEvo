@@ -33,6 +33,21 @@ private struct QueryAction: GraphModel {
         let ids: [GraphNodeID]
         func close() async throws { try await graph.close(); try await other.close(); try await db.close() }
     }
+    @Test func finiteIdentityQueriesKeepRelationshipAndActionEndpointsComplete() async throws {
+        let fixture = try await fixture(), graph = fixture.graph, ids = fixture.ids
+        let secondAction = graph.makeNodeID()
+        try await graph.transaction { scope in
+            _ = try scope.patch(GraphRecordPatch(id: ids[4], properties: ["unused": .set(.data(Data(repeating: 1, count: 1024 * 1024)))]))
+            try scope.insert(GraphRecord(id: secondAction, type: QueryAction.graphType, endpoints: .action(subjects: [ids[0]], objects: [ids[2]]), properties: ["unused": .data(Data(repeating: 1, count: 1024 * 1024))]))
+        }
+        let allowance = try budget(bytes: 16 * 1024)
+        let edge = try await graph.query(GraphQuery<QueryEdge>(budget: allowance).where(.id(ids[3])))
+        #expect(edge.items.first?.record.endpoints == .relationship(subject: ids[0], object: ids[1]))
+        let action = try await graph.query(GraphQuery<QueryAction>(budget: allowance).where(.id(ids[5])))
+        #expect(action.items.first?.record.endpoints == .action(subjects: [ids[0], ids[1]], objects: [ids[2]]))
+        try await fixture.close()
+    }
+
     private func budget(_ candidates: Int = 128, bytes: Int = 1024 * 1024, steps: Int = 100_000) throws -> GraphQueryBudget {
         try GraphQueryBudget(maximumCandidates: candidates, maximumPropertyBytes: bytes, maximumSteps: steps)
     }

@@ -293,3 +293,19 @@ Sources: A6 backup contract, specification S11, V05/V08.
 - [ ] Assess startup fan-out/model-decoder churn and heavy/slow application models
   before consolidation promotion. New subscribers deliberately request fresh reads and
   can refresh existing equal-query subscribers; shared view semantics remain explicit.
+
+
+## Identity-guarded materialization follow-up
+
+- [ ] Review the public-path identity-guarded implementation and retained matched
+  Release comparison. It retains complete bounded structural inventory; it does
+  not close native indexed query adoption.
+- [ ] Verify the native same-model transformer exclusion/requested-failure probe
+  on supported macOS/iOS SDKs, including eager transformation behavior.
+- [ ] Keep body-validation scope explicit for IDs rejected before property access;
+  complete selected records, candidates, related dependencies, ordered Boolean
+  errors, pending edits and moving-page semantics must remain covered.
+- [ ] Reassess startup and different-query costs after this increment. Native
+  columns, import/old-writer absence semantics and v1 data migration remain open.
+
+Source: [query materialization contract](graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).

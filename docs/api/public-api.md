@@ -1403,3 +1403,15 @@ subscription startup and heavy/slow application decoders remain consolidation
 work; sharing is not a total memory/time bound. See the
 [consolidation adoption](../design/graphevo-2-observation.md#c04-consolidation-adoption)
 for the accepted scope and remaining native-device acceptance.
+
+
+### Identity-guarded query materialization (v2 consolidation)
+
+Leading finite ID guards can avoid loading property bodies on excluded nodes of
+the same model type. Selected complete models retain every field; candidate,
+identity/membership/endpoint/format inventory stays complete and bounded. A
+property condition before the ID guard, an unbounded Boolean alternative, related
+predicates or traversal keeps conservative materialization. Skipped bodies are
+not certified. Query signatures, cursor semantics and the reported bounded
+inventory strategy are unchanged. See the
+[query contract](../design/graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).

@@ -162,3 +162,43 @@ per-graph metadata batch. Fetching foreign format/staging rows and merely
 accessing their values lazily is insufficient: native transformation can be
 eager. The corrected reader fetches per-graph metadata only for routed owners,
 retaining the full native candidate inventory and all selected-graph checks.
+
+
+## C02 consolidation: identity-guarded materialization
+
+The first selective-materialization increment retains the current native schema
+and the complete bounded node/identity/membership/endpoint/format-list inventory.
+It avoids fetching property rows or decoding property bodies for same-model nodes
+that a leading finite identity guard rejects. Candidate/scoped-node diagnostics,
+structural validation, cancellation and evaluation steps retain their scope;
+`explain()` still reports `boundedInventoryAndMemory`. This is not indexed native
+row selection or a native COUNT/projection implementation.
+
+An ID predicate, `none`, or an OR whose every branch has a finite identity guard
+can establish a bound. An AND may reach such a guard only through earlier
+property-free conditions, including the query builder's initial `all`. Boolean
+order is preserved: `id(a) && property(...)` can skip other IDs, while
+`property(...) && id(a)` stays conservative so an earlier comparison/decoder
+error cannot disappear. An unbounded OR or NOT does not itself establish a finite
+bound. Related predicates anywhere in the descriptor and traversal disable this
+optimization: excluded top-level IDs can still supply related property values.
+
+All potentially eligible IDs retain the previous field policy: complete records
+load every application property, and count/projection/aggregate operations load
+all descriptor-referenced keys. Limits and cursors do not prune that set before
+validation; matching models remain complete. Nonselected same-model property
+bodies are neither charged nor certified, just as unrelated-type bodies are not
+certified by M03b. Structural/type/tag/group charges and the full resource-group
+candidate allowance remain. A query for a missing ID still validates inventory;
+this does not adopt C02b's unresolved missing-column absence semantics.
+
+Native property-row batches exclude owners with an empty selected-key set before
+fetching transformable values. Keep decoder-error capture around inventory,
+property fetching/access and evaluation: older Core Data may transform fetched
+values eagerly. Regression probes must demonstrate zero transformation of an
+excluded same-model poison body and failure when that body is requested.
+
+Native logical identity columns remain a separate integration candidate. Before
+selecting them publicly, settle missing columns, old writers, imported partial
+rows, private/shared conversion and mandatory v1 migration. This increment does
+not change store opening, migrations, share assignment or attachment ownership.
