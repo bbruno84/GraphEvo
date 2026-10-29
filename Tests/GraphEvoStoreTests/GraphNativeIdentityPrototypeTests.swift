@@ -251,7 +251,8 @@ private final class NativeAuditBodyProbe: NSSecureUnarchiveFromDataTransformer, 
             try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.b); try context.save()
             let facade = GraphTypedStoreAdapter.facade(context), id = GraphNodeID(graphID: fixture.a)
             let staged = Entity("partial", graph: facade)
-            GraphTypedStoreAdapter.stamp(staged, id: id)
+            staged[dynamicMember: GraphTypedStoreAdapter.idKey] = id.rawValue.uuidString
+            staged[dynamicMember: GraphTypedStoreAdapter.graphKey] = id.graphID.rawValue.uuidString
             staged[dynamicMember: GraphTypedStoreAdapter.stageKey] = UUID().uuidString
             staged[dynamicMember: GraphTypedStoreAdapter.formatsKey] = [String]()
             let session = try GraphTypedStoreAdapter.Session(context, fixture.a, database: true)
@@ -353,5 +354,126 @@ extension GraphNativeIdentityPrototypeTests {
         await #expect(throws: (any Error).self) { try await GraphDatabase.open(at: root.appendingPathComponent("Graph.sqlite")) }
         try await sibling.close()
         await #expect(throws: GraphStoreError.self) { try await GraphDatabase.open(at: root.appendingPathComponent("Graph.sqlite")) }
+    }
+}
+
+extension GraphNativeIdentityPrototypeTests {
+    @Test func commonWriterMaintainsEveryKindFilesRollbackCascadeAndReopen() async throws {
+        struct Abort: Error {}
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Writer.sqlite")
+        let database = try await GraphNativeIdentityPrototype.openLab(at: url, indexed: true, fullAdapter: true)
+        let graph = try await database.createGraph(), other = try await database.createGraph()
+        let a = graph.makeNodeID(), b = graph.makeNodeID(), edge = graph.makeNodeID(), action = graph.makeNodeID()
+        try await graph.transaction { scope in
+            try scope.insert(GraphRecord(id: a, type: "item", properties: ["value": .null]))
+            try scope.insert(GraphRecord(id: b, type: "item"))
+            try scope.insert(GraphRecord(id: edge, type: "edge", endpoints: .relationship(subject: a, object: b)))
+            try scope.insert(GraphRecord(id: action, type: "action", endpoints: .action(subjects: [a], objects: [b])))
+            #expect(try scope.record(for: edge)?.endpoints == .relationship(subject: a, object: b))
+        }
+        let input = root.appendingPathComponent("input.bin"); try Data([1,2,3]).write(to: input)
+        let file = try await graph.importAttachment(from: input, ownedBy: edge)
+        try Data([4,5,6,7]).write(to: input)
+        let replaced = try await graph.replaceAttachment(file.id, from: input)
+        #expect(replaced.id == file.id && replaced.ownerID == edge)
+        #expect(try await graph.attachment(file.id)?.data == Data([4,5,6,7]))
+        _ = try await graph.transaction { try $0.patch(GraphRecordPatch(id: a, properties: ["value": .set(.integer(9))])) }
+        try await database.contextRead { context throws -> Void in
+            #expect(try GraphNativeIdentityPrototype.validateAll(context, graphID: graph.id) == 5)
+            #expect(try GraphNativeIdentityPrototype.validateIdentityInventory(context, graphID: other.id) == 0)
+        }
+        let aborted = graph.makeNodeID()
+        await #expect(throws: Abort.self) {
+            try await graph.transaction { scope throws -> Void in
+                try scope.insert(GraphRecord(id: aborted, type: "abort"))
+                #expect(try scope.record(for: aborted)?.id == aborted)
+                throw Abort()
+            }
+        }
+        #expect(try await graph.read { try $0.record(for: aborted) } == nil)
+        try await graph.delete(a)
+        #expect(try await graph.attachment(file.id) == nil)
+        #expect(try await graph.read { try $0.record(for: edge) } == nil)
+        #expect(try await graph.read { try $0.record(for: action)?.endpoints } == .action(subjects: [], objects: [b]))
+        try await graph.close(); try await other.close(); try await database.close()
+        let reopened = try await GraphNativeIdentityPrototype.openLab(at: url, indexed: true, fullAdapter: true)
+        let reader = try await reopened.openGraph(graph.id)
+        #expect(try await reader.read { try $0.record(for: b)?.id } == b)
+        try await reopened.contextRead { context throws -> Void in
+            #expect(try GraphNativeIdentityPrototype.validateAll(context, graphID: graph.id) == 2)
+            #expect(try GraphNativeIdentityPrototype.record(context, id: file.id) == nil)
+        }
+        try await reader.close(); try await reopened.close()
+    }
+
+    @Test func commonWriterRejectsDamagedExistingProjectionWithoutRepairingOrEditingPayload() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let database = try await GraphNativeIdentityPrototype.openLab(at: root.appendingPathComponent("Writer.sqlite"), indexed: true, fullAdapter: true)
+        let graph = try await database.createGraph(), id = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: "item", properties: ["name": .string("keep")])) }
+        try await database.nativeOperation { native in
+            try await native.performBackgroundTask { context in
+                defer { context.rollback(); context.reset() }
+                let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
+                let node = try #require(session.nodes[id])
+                node.node.setValue(nil, forKey: GraphNativeIdentityPrototype.nodeAttribute)
+                #expect(throws: GraphStoreError.self) { try GraphNativeIdentityColumns.stamp(node, graphID: graph.id, nodeID: id.rawValue) }
+                #expect(throws: GraphStoreError.self) { try session.patch(GraphRecordPatch(id: id, properties: ["name": .set(.string("bad"))])) }
+                #expect(throws: GraphStoreError.self) { try session.delete(id) }
+                #expect(node.node.value(forKey: GraphNativeIdentityPrototype.nodeAttribute) == nil)
+                #expect(try session.snapshot(node, id: id).properties["name"] == .string("keep"))
+            }
+        }
+        #expect(try await graph.read { try $0.record(for: id)?.properties["name"] } == .string("keep"))
+        let stagedID = graph.makeNodeID()
+        try await database.nativeOperation { native in
+            try await native.performBackgroundTask { context in
+                defer { context.reset() }
+                // Simulate a framework import with logical staging metadata but incomplete native columns.
+                let staged = Entity("writer.partialImport", graph: GraphTypedStoreAdapter.facade(context))
+                staged[dynamicMember: GraphTypedStoreAdapter.graphKey] = graph.id.rawValue.uuidString
+                staged[dynamicMember: GraphTypedStoreAdapter.idKey] = stagedID.rawValue.uuidString
+                staged[dynamicMember: GraphTypedStoreAdapter.stageKey] = UUID().uuidString
+                staged[dynamicMember: GraphTypedStoreAdapter.formatsKey] = [String]()
+                try context.save()
+            }
+        }
+        await #expect(throws: GraphStoreError.self) { try await graph.read { try $0.record(for: stagedID) } }
+        await #expect(throws: GraphStoreError.self) {
+            try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: id, properties: ["name": .set(.string("bad"))])) }
+        }
+        try await database.nativeOperation { native in
+            try await native.performBackgroundTask { context in
+                defer { context.reset() }
+                let graph = GraphTypedStoreAdapter.facade(context)
+                for node in Search<Entity>(graph: graph).where(.type("writer.partialImport")).sync() { node.delete() }
+                try context.save()
+            }
+        }
+        #expect(try await graph.read { try $0.record(for: stagedID) } == nil)
+        #expect(try await graph.read { try $0.record(for: id)?.properties["name"] } == .string("keep"))
+        try await graph.close(); try await database.close()
+    }
+
+    @Test @MainActor func partialProjectionModelIsRejectedBeforeControlCreationOrLogicalStamping() async throws {
+        let model = Model.makeModel()
+        let attribute = NSAttributeDescription()
+        attribute.name = GraphNativeIdentityPrototype.graphAttribute
+        attribute.attributeType = .stringAttributeType; attribute.isOptional = true
+        model.entitiesByName[ModelIdentifier.entityName]!.properties.append(attribute)
+        let container = NSPersistentContainer(name: "IncompleteProjection", managedObjectModel: model)
+        _ = try container.persistentStoreCoordinator.addPersistentStore(ofType: NSInMemoryStoreType, configurationName: nil, at: nil)
+        let graph = GraphID(), id = GraphNodeID(graphID: graph)
+        try await container.performBackgroundTask { @Sendable context in
+            defer { context.rollback(); context.reset() }
+            #expect(throws: GraphStoreError.self) { try GraphTypedStoreAdapter.database.create(context, graph) }
+            #expect(!context.hasChanges)
+            let node = Entity("item", graph: GraphTypedStoreAdapter.facade(context))
+            #expect(throws: GraphStoreError.self) { try GraphTypedStoreAdapter.stamp(node, id: id) }
+            #expect(node[dynamicMember: GraphTypedStoreAdapter.idKey] == nil)
+            #expect(node[dynamicMember: GraphTypedStoreAdapter.graphKey] == nil)
+        }
+        try close(container)
     }
 }

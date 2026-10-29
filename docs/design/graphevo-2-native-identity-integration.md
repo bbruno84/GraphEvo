@@ -124,3 +124,61 @@ The [first retained result](results/native-identity-readiness-2026-10-29.md)
 records 504 tests, 16 sanitizer tests and 120 focused Release rows. Safe native
 absence on 500 nodes costs about 52 ms; positive indexed hits remain 2.6–3.5 ms.
 These are local validation scopes, not interchangeable production guarantees.
+
+
+## Common writer projection maintenance
+
+After the reviewed #84/#85/#86 merges into `codex/v2-cost-experiment-matrix`
+(`e2f6323`, `33225aa`, `0b933dd`), the common typed writer maintains projections
+when the explicitly selected model contains both optional String columns on all
+three node kinds. A schema with partial/mixed column definitions is rejected.
+Default Model.makeModel still has neither column, so public opening and persisted
+model hashes remain unchanged.
+
+New application rows receive their existing logical UUIDs in native columns in
+GraphTypedStoreAdapter.stamp, before membership links or assignment. New roots
+and membership controls receive the graph UUID and a nil node UUID. The prototype
+no longer rescans after each insert to stamp columns as a special workaround.
+Application fields remain ordinary detail properties; native identity columns do
+not appear in detached records.
+
+A persisted row's projection is validated rather than filled or repaired.
+Common writer admission validates graph controls and current graph projections,
+rejecting incomplete staged state unless completing the explicit native operation.
+Normal record lookup validates its target. Patch/replacement preserves IDs;
+delete/cascade removes the same rows and preserves surviving action identities.
+Explicit conversion/backfill remains the only path that may populate existing
+missing projections after validating a protected source.
+
+Shared staging preflights the model before journal reservation, and uses the same
+new-row stamp. Finalization revalidates root/membership/staged and already-committed
+rows before linking or clearing intent. Native assignment remains exclusively
+owned by NSPersistentCloudKitContainer; no retry/replay or synthetic share claim
+is added. Default-schema behavior remains unchanged. These hooks do not establish
+native-column private/shared import or real-device assignment acceptance.
+
+The package-only laboratory adds `fullAdapter: true` to exercise common public
+GraphDatabase/GraphStore operations on the candidate model, independently of the
+old targeted mutation prototype. Point reads retain the same guarded native
+hit/miss path in both modes; the option changes mutation adapters, not absence
+safety. Local acceptance covers all node kinds, pending
+reads/rollback, file import/replacement, implicit edge/file cascade, surviving
+actions, independent graphs, integrity checks and reopen. It also verifies that a
+bad persisted projection cannot be repaired by stamping/patch/deletion, and a
+partial model fails before control creation or raw logical identity edits.
+
+Protected-source conversion/activation/interruption tooling and native paired
+store acceptance are still required before exposing this model publicly. No
+conversion, default schema selection, beta entry or integration/tag promotion is
+implied by projection maintenance.
+
+
+Local writer acceptance passes 507 full tests (322 legacy, 101 store, 61 runtime,
+23 model) and 31 selected sanitizer tests. The full-writer point path also rejects
+an injected incomplete imported row, refuses a normal patch while it is staged,
+and resumes valid absence only after fixture cleanup. This is deterministic local
+coverage, not native CloudKit import/assignment acceptance.
+
+The [writer acceptance record](results/native-identity-writers-2026-10-29.md)
+separates 507 local tests, 31 targeted sanitizer tests and the Release functional
+probe from physical native-column sharing/conversion acceptance.

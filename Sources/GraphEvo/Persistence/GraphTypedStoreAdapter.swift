@@ -139,12 +139,15 @@ package enum GraphTypedStoreAdapter {
 
     private static func createGraph(_ context: NSManagedObjectContext, id: GraphID) throws {
         guard !(try catalog(context)).contains(id) else { throw GraphStoreError.duplicateIdentity }
+        try GraphNativeIdentityColumns.validateModel(in: context)
         let graph = facade(context)
         let root = Entity(rootType, graph: graph)
         root[dynamicMember: graphKey] = id.rawValue.uuidString
         root[dynamicMember: layoutKey] = databaseVersion
+        try GraphNativeIdentityColumns.stamp(root, graphID: id, nodeID: nil)
         let membership = Action(membersType, graph: graph)
         membership[dynamicMember: graphKey] = id.rawValue.uuidString
+        try GraphNativeIdentityColumns.stamp(membership, graphID: id, nodeID: nil)
         membership.add(subjects: root)
         if let store = StoreNativeContext.privateStore(in: context) {
             try root.runtimeAssignOwnedObjects(to: store, in: context)
@@ -165,6 +168,8 @@ package enum GraphTypedStoreAdapter {
         _ = try MigrationBackupManager.backupStore(at: url, migrationID: "GraphEvo2-A3-to-A4", rootOverride: backupRoot)
         let membership = Action(membersType, graph: graph)
         membership[dynamicMember: graphKey] = text
+        try GraphNativeIdentityColumns.stamp(membership, graphID: id, nodeID: nil)
+        try GraphNativeIdentityColumns.stamp(root, graphID: id, nodeID: nil)
         membership.add(subjects: root)
         for node in session.nodes.values {
             if let entity = node as? Entity { membership.add(objects: entity) }
@@ -248,18 +253,20 @@ package enum GraphTypedStoreAdapter {
                     migrationID: "GraphEvo2-LocalIdentity-A3", conflictPolicy: .duplicate, rootOverride: backupRoot).folderURL
             }
             for (node, nodeID, oldID) in identities {
-                stamp(node, id: nodeID)
+                try stamp(node, id: nodeID)
                 node[dynamicMember: legacyKey] = oldID
                 node[dynamicMember: formatsKey] = [String]()
             }
             let root = Entity(rootType, graph: graph)
             root[dynamicMember: graphKey] = id.rawValue.uuidString
             root[dynamicMember: layoutKey] = layoutVersion
+            try GraphNativeIdentityColumns.stamp(root, graphID: id, nodeID: nil)
             return GraphV1AdoptionReport(graphID: id, nodeIDs: mapping, backupURL: backupURL)
         }
     }
 
-    static func stamp(_ node: Node, id: GraphNodeID) {
+    static func stamp(_ node: Node, id: GraphNodeID) throws {
+        try GraphNativeIdentityColumns.stamp(node, graphID: id.graphID, nodeID: id.rawValue)
         node[dynamicMember: idKey] = id.rawValue.uuidString
         node[dynamicMember: graphKey] = id.graphID.rawValue.uuidString
     }
@@ -371,6 +378,13 @@ package enum GraphTypedStoreAdapter {
             }
             if isShared, let pending = try GraphSharedInsertionJournal.read(graphID: graphID, context: context),
                pending.operationID != operationID { throw GraphStoreError.pendingNativeOperation }
+            if try GraphNativeIdentityColumns.validateModel(in: context) {
+                guard stagedNodeIDs.isEmpty || operationID != nil else { throw GraphStoreError.pendingNativeOperation }
+                guard let root else { throw GraphStoreError.corruptIdentity }
+                try GraphNativeIdentityColumns.validate(root, graphID: graphID, nodeID: nil)
+                if let membership { try GraphNativeIdentityColumns.validate(membership, graphID: graphID, nodeID: nil) }
+                for (id, node) in nodes { try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: id.rawValue) }
+            }
         }
 
         func assign(_ node: Node) throws {
@@ -386,6 +400,7 @@ package enum GraphTypedStoreAdapter {
 
         func node(_ id: GraphNodeID) throws -> Node? {
             guard id.graphID == graphID else { throw GraphStoreError.foreignGraph }
+            if let node = nodes[id] { try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: id.rawValue) }
             return nodes[id]
         }
 
@@ -485,7 +500,7 @@ package enum GraphTypedStoreAdapter {
             case .relationship: node = Relationship(record.type, graph: graph)
             case .action: node = Action(record.type, graph: graph)
             }
-            stamp(node, id: record.id)
+            try stamp(node, id: record.id)
             if database, let entity = node as? Entity { membership?.add(objects: entity) }
             node[dynamicMember: formatsKey] = values.keys.sorted()
             for (key, value) in values { node[dynamicMember: key] = value }
@@ -530,7 +545,7 @@ package enum GraphTypedStoreAdapter {
 
         func delete(_ id: GraphNodeID) throws {
             try requireWriteAccess()
-            guard nodes[id] != nil else { throw GraphStoreError.missingNode }
+            guard try node(id) != nil else { throw GraphStoreError.missingNode }
             var filesByOwner: [GraphNodeID: [GraphNodeID]] = [:]
             for (candidateID, candidate) in nodes where candidate.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
                 let payload = try GraphAttachmentPayload(graphRecord: snapshot(candidate, id: candidateID))

@@ -204,11 +204,11 @@ extension GraphQueryMaterializationTests {
             root[dynamicMember: GraphTypedStoreAdapter.graphKey] = graph.rawValue.uuidString
             root[dynamicMember: GraphTypedStoreAdapter.layoutKey] = GraphTypedStoreAdapter.databaseVersion
             let item = Entity(Item.graphType, graph: facade)
-            GraphTypedStoreAdapter.stamp(item, id: owner)
+            try GraphTypedStoreAdapter.stamp(item, id: owner)
             item[dynamicMember: "rank"] = try GraphValueCodec.encode(.integer(1))
             item[dynamicMember: GraphTypedStoreAdapter.formatsKey] = ["rank"]
             let body = Entity("matrix.other", graph: facade)
-            GraphTypedStoreAdapter.stamp(body, id: other)
+            try GraphTypedStoreAdapter.stamp(body, id: other)
             body[dynamicMember: GraphTypedStoreAdapter.formatsKey] = [String]()
             body[dynamicMember: "body"] = "matrix-body-poison"
             let members = Action(GraphTypedStoreAdapter.membersType, graph: facade)
@@ -229,7 +229,7 @@ extension GraphQueryMaterializationTests {
             context.reset()
             let session = try GraphTypedStoreAdapter.Session(context, graph, database: true)
             let poisoned = Entity(Item.graphType, graph: session.graph), poisonedID = GraphNodeID(graphID: graph)
-            GraphTypedStoreAdapter.stamp(poisoned, id: poisonedID)
+            try GraphTypedStoreAdapter.stamp(poisoned, id: poisonedID)
             poisoned[dynamicMember: GraphTypedStoreAdapter.formatsKey] = [String]()
             poisoned[dynamicMember: "body"] = "matrix-body-poison"
             session.membership?.add(objects: poisoned)

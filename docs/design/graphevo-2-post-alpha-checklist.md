@@ -332,3 +332,24 @@ First native readiness evidence: [504 tests, 16 selected sanitizer tests and 120
 focused Release rows](results/native-identity-readiness-2026-10-29.md), retaining
 stronger negative-lookup costs and unrouted/staged/native-body regressions. This
 does not close public schema, paired-store conversion or v1 migration gates.
+
+
+## Common native projection writer follow-up
+
+- [ ] Review common projection maintenance for optional-column models. New rows
+  and controls must be stamped in the common writer, with no prototype-only
+  post-insertion rescan or repair of persisted missing projections.
+- [ ] Keep local full-adapter coverage for all kinds, files, rollback, cascade,
+  independent graphs, reopen and malformed/partial model rejection.
+- [ ] Validate native-column staged assignment/finalization/import and recovery
+  on the private/shared resource pair. Local hooks/tests do not certify it.
+- [ ] Implement explicit protected-source conversion/activation/interruption
+  tooling before public model selection; v1 migration remains mandatory.
+
+#84/#85/#86 review and exact-head macOS/iOS checks passed and their consolidation
+merges are `e2f6323` / `33225aa` / `0b933dd`. Native/schema/beta gates stay open.
+
+Local writer evidence: 507 full tests and 31 selected sanitizer tests pass,
+including common local file lifecycle, projection corruption refusal and guarded
+point/mutation behavior during injected incomplete import. Physical native-column
+assignment/import and protected conversion gates above remain open.
