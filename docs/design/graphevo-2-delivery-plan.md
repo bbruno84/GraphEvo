@@ -218,3 +218,11 @@ library acceptance matrix pass, with documented recovery/downgrade boundaries.
 Review any optional v1 API adapter separately; it cannot block or weaken the
 core design. Documentation and examples move to the actual v2 contracts while
 v1 guidance remains accessible.
+
+## Migration manager renewal
+
+The [M1–M5 plan](graphevo-2-migration-manager.md) renews the manager alongside
+mandatory v1 conversion. Evaluate a compatibility adapter on MyHomeBills
+RecoveryV2 instead of assuming either full source compatibility or no adapter.
+The first package-only journal increment is not a public executor or a migration
+readiness certificate. Local/cloud conversion feasibility remains a beta gate.

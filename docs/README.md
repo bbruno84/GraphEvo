@@ -122,3 +122,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 - [Extension access safeguard result](design/results/extension-readonly-access-2026-10-29.md):
   520 tests, selected sanitizer and independent-process public reader evidence.
+
+- [V2 migration manager renewal](design/graphevo-2-migration-manager.md): awaited
+  manager plan, concrete RecoveryV2 compatibility evaluation, checkpoint foundation
+  and remaining admission/local/cloud conversion increments.

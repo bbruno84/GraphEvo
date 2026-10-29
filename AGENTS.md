@@ -752,3 +752,17 @@ The role check is not a universal process lock or third-party-writer detector.
 Local extension writes and iOS App Group/suspension/account policy remain gates;
 macOS independent-process observation evidence is not physical-widget coverage.
 Keep the library independent of WidgetKit and refresh queries after resume.
+
+
+## V2 migration manager foundation
+
+Read `docs/design/graphevo-2-migration-manager.md` before extending the manager.
+The package-only journal records intents and confirmations; it neither executes
+bodies nor excludes Graph/widget/remote writers. Do not wire it to production
+conversion before admission, protected backups and destination marker adapters.
+Pending intents require reconciliation; missing markers alone do not authorize
+replay. Keep data+marker in the same future destination transaction and separate
+phase success, validation, activation and remote completion. Evaluate the v1
+compatibility layer against RecoveryV2; do not copy application-specific repair,
+deduplication, reset or cache policies into the library. Preserve v1 behavior and
+keep PA08 open until representative local/cloud feasibility is established.

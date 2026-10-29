@@ -211,6 +211,15 @@ close O04 or mark the wider beta/stable items above complete.
 
 ## PA08 — mandatory v1 local and cloud migration
 
+Manager renewal is tracked in the [M1–M5 contract](graphevo-2-migration-manager.md).
+M1 provides package-only checkpoint bookkeeping; it does not close migration
+feasibility, resource admission or compatibility gates. The compatibility layer
+must be evaluated on the concrete MyHomeBills RecoveryV2 consumer, preserving
+phase separation and commit-before-checkpoint recovery.
+
+- [ ] **B** Settle the awaited manager/admission contract, legacy completion import
+  and tested v1 adapter subset; document Graph-dependent migrations that need porting.
+
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,
   topology, optional forms, values, binary content and old-to-new identity mapping.
