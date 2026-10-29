@@ -69,51 +69,33 @@ proof of row coverage and dependency correctness; candidate allowance must
 still account for its documented resource group. Do not advertise indexed SQL
 queries merely because point operations can use native identity columns.
 
-## Explicit conversion with protected source
+## Fresh-store alpha policy
 
-Public migration tooling is a later increment. Its implementation must provide:
+Maintainer decision, 2026-10-29: start each incompatible alpha layout from an
+empty store. Alpha-to-alpha conversion, downgrade compatibility, identity
+backfill tooling and interrupted alpha-conversion recovery are not delivery
+gates. The next increment creates and validates the selected native layout on
+fresh local resources, then fresh controlled private/shared fixtures.
 
-1. A quiescent closed source with coordinated stopped v1/external writers, runtime
-   ownership exclusion and a whole-directory backup including external content,
-   auxiliaries and operation ledgers. Do not modify the original source or use an
-   ordinary open to trigger incompatible model migration.
-2. An owned new destination and explicit conversion state: prepared, native model
-   conversion, identity backfill, validation, activation, ready. Persist enough
-   source/destination/model identity to diagnose interruption without guessing
-   that a partially produced destination is usable. Protect identity transports.
-3. UUIDs from the archived logical IDs, exact node kinds/references, tags/groups,
-   dates, null/opaque values, attachment metadata/ownership/content and native
-   bookkeeping preserved or explicitly rejected. Activation occurs only after
-   complete validation of the intended resource set.
-4. Failure leaves source/backup intact and an unpublished destination available
-   for diagnosis. Retrying/resuming must prove the exact phase is safe; do not
-   replay a failed native mutation or silently adopt partial backfill. Recovery
-   must not move the public source path before conversion is accepted.
+This does not authorize ordinary opens to erase an existing incompatible path
+or cloud database. They retain explicit incompatibility errors. Fresh local
+files alone do not certify empty remote data; mirrored acceptance uses controlled
+fresh test state. The existing copy/backfill prototype remains historical
+laboratory infrastructure, not a required alpha migration product.
 
-For already-v2 sources, preserve archived logical UUIDs exactly. A v1 source may
-not have them: allocate and durably record its logical-ID mapping once before
-native projection/backfill. Legacy identifiers may be mapping lookup keys, never
-a URI-derived UUID representation; restart must reuse the same recorded mapping.
-Preserve all application values and references through that mapping.
-
-The existing local prototype already exercises explicit copy-to-new-destination
-mapping and rollback/backfill, but is not complete migration tooling. Conversion
-of CloudKit private/shared pairs must first be verified using supported native
-framework behavior. Do not assume that copying or independently migrating a
-mirrored SQLite file preserves its share identity/export history. That procedure
-remains a feasibility gate, not a settled promise in this document. Mandatory
-v1 local/cloud migration, returning old clients and coordinated cloud cutover
-remain binding. Demonstrate representative local/cloud migration feasibility
-before beta; complete and validate mandatory migration tooling before stable 2.0.
+Mandatory v1-to-v2 migration remains separate: preserve data, logical mappings,
+references and file bytes with protected sources/backups and coordinated stopped
+v1 writers. Demonstrate representative local/cloud feasibility before beta and
+complete migration tooling before stable 2.0. Beta data compatibility follows
+the delivery plan; this decision concerns disposable alpha stores.
 
 ## Increment order
 
 1. Close false absence and split metadata audit from full integrity; add staged,
    missing/misrouted and malformed-body regressions, retain changed costs.
-2. Wire all writers and local explicit conversion/activation/recovery into a
-   reviewed integrated layout. Revalidate normal leases, attachments and high-
-   degree actions, then expose the supported local opening/validation contract.
-3. Verify native private/shared schema/import/conversion, assignment, cross-user
+2. Wire all writers into the fresh-store layout. Revalidate normal leases,
+   attachments, high-degree actions and opening/validation on empty local stores.
+3. Verify fresh native private/shared schema/import, assignment, cross-user
    mutation and recovery before selecting the layout for mirrored opens.
 4. Add selective query execution only where row coverage and related dependency
    bounds are established. Re-measure public startup/mixed descriptors and
@@ -167,10 +149,10 @@ actions, independent graphs, integrity checks and reopen. It also verifies that 
 bad persisted projection cannot be repaired by stamping/patch/deletion, and a
 partial model fails before control creation or raw logical identity edits.
 
-Protected-source conversion/activation/interruption tooling and native paired
-store acceptance are still required before exposing this model publicly. No
-conversion, default schema selection, beta entry or integration/tag promotion is
-implied by projection maintenance.
+Fresh-store opening/validation and native paired-store acceptance remain before
+public model selection. Prior alpha conversion tooling is not required under
+the maintainer's fresh-store policy. Projection maintenance alone does not
+select the default schema, enter beta or promote an integration/tag.
 
 
 Local writer acceptance passes 507 full tests (322 legacy, 101 store, 61 runtime,

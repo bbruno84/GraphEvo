@@ -155,10 +155,14 @@ A8:
 - A8: review end-to-end migration feasibility and interruption/recovery protocol.
   Final implementation and broad real-store validation continue during beta.
 
-Alpha release notes explicitly state whether a prior alpha store is reusable,
-migratable or disposable. Experimental alpha files do not silently replace v1
-production data. Full automatic migration from every alpha is not an agreed
-requirement; settle the supported alpha-to-beta path before external adoption.
+Maintainer decision (2026-10-29): incompatible alpha layouts start from empty
+stores. Prior alpha data is disposable; alpha-to-alpha conversion, downgrade
+compatibility and interrupted alpha-conversion recovery are not requirements.
+Release notes state this fresh-store policy. Existing incompatible paths are
+still rejected without automatic erasure; fresh-store creation is an explicit
+caller/test setup action. Experimental alpha files do not replace v1 production
+data. Mandatory v1 migration and adopted beta-data compatibility remain distinct
+requirements. Start beta from the agreed defined schema under its migration rules.
 
 ## Beta entry gate
 

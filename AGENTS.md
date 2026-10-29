@@ -660,3 +660,14 @@ and shared finalization preserve native projection checks and pending intent.
 The package-only `openLab(fullAdapter: true)` tests ordinary local APIs without
 the old prototype's mutation workaround. It is not a public schema opener or
 physical native-column sharing proof. See the [writer contract](docs/design/graphevo-2-native-identity-integration.md#common-writer-projection-maintenance).
+
+
+## Fresh alpha stores (M13)
+
+Incompatible alpha layouts start from empty stores. Do not build alpha-to-alpha
+conversion, downgrade or interrupted alpha-conversion recovery as an adoption
+gate. This supersedes earlier alpha-conversion follow-ups above. Next native
+layout work targets fresh local and controlled mirrored store initialization.
+Do not automatically erase incompatible existing files or cloud data. Mandatory
+v1-to-v2 migration and beta data compatibility remain distinct requirements.
+See the delivery plan and native identity integration contract.
