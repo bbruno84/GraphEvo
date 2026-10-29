@@ -63,14 +63,17 @@ package enum GraphTypedStoreAdapter {
                     try GraphQueryValidation.request(request, graphID: graphID)
                     let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
                     let propertyPlan = GraphQueryPropertyPlan(request)
-                    let partial = session.nodes.values.filter { propertyPlan.properties(type: $0.type, kind: session.kind($0)) != nil }
+                    let partial = session.nodes.compactMap { id, node -> Node? in
+                        guard let keys = propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), !keys.isEmpty else { return nil }
+                        return node
+                    }
                     let propertyRows = try GraphRuntimeMetadata(nodes: partial, keys: propertyPlan.referencedKeys, context: context, minimumPersistedOwners: 0)
                     var remaining = request.budget.maximumPropertyBytes
                     var records: [GraphRecord] = []
                     for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
                         try checkCancellation()
                         guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
-                        records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node)), propertyRows: propertyRows) { raw in
+                        records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), propertyRows: propertyRows) { raw in
                             try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
                             for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
                             for (key, value) in raw.properties where !key.hasPrefix(prefix) {

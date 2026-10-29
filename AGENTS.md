@@ -622,3 +622,16 @@ The package-only independent A8 path is retained solely as a cost control, and
 shared measurements must exercise public observe. Do not claim public startup,
 heavy-decoder or physical native acceptance from C04a local timing alone. Schema,
 migration and integration-line promotion remain separate reviewed work.
+
+
+## Identity-guarded query materialization
+
+Leading finite ID guards may skip same-model property rows/bodies, while complete
+bounded native identity/membership/endpoint/format inventory remains. Preserve
+Boolean order: do not use a later ID to hide an earlier property error. Related
+predicates and traversal disable this optimization. Keep complete fields for all
+potentially eligible model records and unchanged candidate/step/structural charges.
+Empty-key owners must be excluded before native property fetching; retain the
+same-model native transformer poison probe. See the [query contract](docs/design/graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
+No schema/native identity activation, SQL predicate capability, total-memory bound
+or certification of skipped bodies is implied.

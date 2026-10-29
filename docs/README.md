@@ -87,3 +87,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [C04 public observation adoption checks](design/results/c04-public-observation-2026-10-29.md):
   per-handle public async/Combine wiring, lifecycle checks and retained targeted
   Release comparison; physical adoption and startup/query costs remain open.
+
+- [Identity-guarded query materialization result](design/results/identity-guarded-queries-2026-10-29.md):
+  same-schema public query body selection, native transformer checks and matched
+  baseline/candidate Release rows; complete structural inventory remains.

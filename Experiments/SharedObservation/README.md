@@ -60,3 +60,12 @@ adoption; it does not compare the selected path against itself. The historical
 C04a checkpoint and its hashes remain unchanged. Record new source/binary hashes
 for any consolidation comparison. The explicit laboratory is still used for
 source/checkpoint injection in deterministic tests.
+
+
+For a matched implementation comparison, pass `--baseline-executable` with a
+retained pre-change binary in addition to `--executable` for the candidate. The
+baseline creates one closed seed per case, then every implementation/variant
+receives a fresh complete copy of that same directory. Metrics add an
+`implementation` field, and environment metadata records both binary hashes.
+Default single-binary CI behavior is unchanged. Retain failed stages and do not
+run any local build/test while the comparison is timing.

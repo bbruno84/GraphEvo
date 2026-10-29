@@ -174,3 +174,20 @@ as a package-only control and runs the selected mode through public `observe`.
 Startup and mixed-query latency remain visible follow-ups, not hidden by caching
 old results or broadening query allowances. A draft PR can make this behavior
 reviewable while physical/native and heavy-decoder adoption gates remain open.
+
+
+## First selective-materialization increment
+
+Before adopting native identity columns, optimize ID-guarded queries on the
+current layout. Keep complete structural inventory but avoid same-model property
+rows/bodies that a leading finite ID guard rejects. Related/traversal queries and
+property-before-ID Boolean evaluation remain conservative. This improves a
+well-defined public query path without changing schema, absence, sharing or
+migration contracts. See the [query contract](graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
+
+Compare the public observer path against the retained pre-change Release binary
+on copies of one closed seed. Include equal/mixed descriptors, one/eight/32
+subscriptions, startup separately from update and unchanged candidate budgets.
+Keep mixed and single-observer overhead even if it regresses; do not turn reduced
+body materialization into a claim of indexed SQL access or a bounded total heap.
+The selected C02b native schema still requires its distinct integration gates.

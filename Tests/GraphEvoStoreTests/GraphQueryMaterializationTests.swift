@@ -23,6 +23,81 @@ import GraphEvoModel
     }
     private func budget() throws -> GraphQueryBudget { try GraphQueryBudget(maximumCandidates: 100, maximumPropertyBytes: 16 * 1024) }
 
+    @Test func identityGuardsSkipExcludedSameTypeBodiesWithoutChangingInventoryOrReturnedFields() async throws {
+        let database = try await GraphDatabase.inMemory(), graph = try await database.createGraph(), other = try await database.createGraph()
+        let a = graph.makeNodeID(), b = graph.makeNodeID(), large = graph.makeNodeID()
+        try await graph.transaction { scope in
+            try scope.insert(GraphRecord(id: a, type: Item.graphType, properties: ["rank": .integer(2), "extra": .string("complete"), "optional": .null]))
+            try scope.insert(GraphRecord(id: b, type: Item.graphType, properties: ["rank": .integer(1)]))
+            try scope.insert(GraphRecord(id: large, type: Item.graphType, properties: ["body": .data(Data(repeating: 7, count: 1024 * 1024))]))
+        }
+        let query = GraphQuery<Item>(budget: try budget()).where(.id(a) || .id(b)).sorted(by: [GraphQuerySort(.property("rank"))]).limit(1)
+        let page = try await graph.query(query)
+        #expect(page.items.map(\.id) == [b])
+        #expect(page.diagnostics.nativeCandidates == 7)
+        #expect(page.diagnostics.scopedNodes == 3)
+        let cursor = try #require(page.nextCursor)
+        let next = try await graph.query(query.after(cursor))
+        #expect(next.items.first?.record.properties == ["rank": .integer(2), "extra": .string("complete"), "optional": .null])
+        #expect(try await graph.count(query).value == 2)
+        #expect(try await graph.project(query, properties: ["optional", "extra"]).rows.first?.id == b)
+        #expect(try await graph.aggregate(query, .sum("rank")).value == .integer(3))
+        let missing = GraphQuery<Item>(budget: try budget()).where(.id(graph.makeNodeID()))
+        #expect(try await graph.query(missing).items.isEmpty)
+        await #expect(throws: GraphQueryError.self) { try await graph.query(GraphQuery<Item>(budget: budget())) }
+        await #expect(throws: GraphQueryError.self) { try await graph.query(GraphQuery<Item>(budget: budget()).where(.id(large))) }
+        let tooSmall = GraphQuery<Item>(budget: try GraphQueryBudget(maximumCandidates: 6)).where(.id(a))
+        await #expect(throws: GraphQueryError.self) { try await graph.query(tooSmall) }
+        try await graph.close(); try await other.close(); try await database.close()
+    }
+
+    @Test func propertyBeforeIdentityAndRelatedDependenciesRemainConservative() async throws {
+        let graph = try await GraphStore.inMemory(), a = graph.makeNodeID(), b = graph.makeNodeID(), edge = graph.makeNodeID()
+        try await graph.transaction { scope in
+            try scope.insert(GraphRecord(id: a, type: Item.graphType, properties: ["rank": .integer(1)]))
+            try scope.insert(GraphRecord(id: b, type: Item.graphType, properties: ["rank": .string("incomparable"), "body": .data(Data(repeating: 1, count: 1024 * 1024))]))
+            try scope.insert(GraphRecord(id: edge, type: "matrix.edge", endpoints: .relationship(subject: a, object: b)))
+        }
+        let base = GraphQuery<Item>(budget: try budget())
+        #expect(try await graph.count(base.where(.id(a)).where(.property("rank", .greaterThan, .integer(0)))).value == 1)
+        await #expect(throws: GraphQueryError.self) { try await graph.count(base.where(.property("rank", .greaterThan, .integer(0))).where(.id(a))) }
+        await #expect(throws: GraphQueryError.self) { try await graph.query(base.where(.id(a) || .tag("unbounded"))) }
+        await #expect(throws: GraphQueryError.self) { try await graph.query(base.where(!(.id(b)))) }
+        let related = base.where(.id(a)).where(.related(.outgoing("matrix.edge"), matching: .exists("body")))
+        await #expect(throws: GraphQueryError.self) { try await graph.count(related) }
+        let finite = base.where((.id(a) && .property("rank", .equal, .integer(1))) || (.id(graph.makeNodeID()) && .exists("body")))
+        #expect(try await graph.count(finite).value == 1)
+        try await graph.close()
+    }
+
+    @Test func identityMaterializationSeesPendingEditsAndStillRejectsExcludedRoutingCorruption() async throws {
+        let database = try await GraphDatabase.inMemory(), graph = try await database.createGraph()
+        let a = graph.makeNodeID(), excluded = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: excluded, type: Item.graphType, properties: ["body": .data(Data(repeating: 2, count: 1024 * 1024))])) }
+        let query = GraphQuery<Item>(budget: try budget()).where(.id(a))
+        try await graph.transaction { scope in
+            try scope.insert(GraphRecord(id: a, type: Item.graphType, properties: ["rank": .integer(1)]))
+            _ = try scope.patch(GraphRecordPatch(id: a, properties: ["rank": .set(.integer(4))]))
+            #expect(try scope.query(query).items.first?.record.properties["rank"] == .integer(4))
+            #expect(try scope.query(query).view.includesPendingChanges)
+            try scope.delete(a)
+            #expect(try scope.query(query).items.isEmpty)
+        }
+        try await database.nativeOperation { native in
+            try await native.performBackgroundTask { context in
+                defer { context.rollback(); context.reset() }
+                let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
+                let node = try #require(session.nodes[excluded]), execute = try #require(GraphTypedStoreAdapter.database.graph.query)
+                node[dynamicMember: GraphTypedStoreAdapter.formatsKey] = ["body", "body"]
+                #expect(throws: GraphStoreError.self) { try execute(context, graph.id, query.request) }
+                node[dynamicMember: GraphTypedStoreAdapter.formatsKey] = ["body"]
+                node[dynamicMember: GraphTypedStoreAdapter.idKey] = "invalid"
+                #expect(throws: GraphStoreError.self) { try execute(context, graph.id, query.request) }
+            }
+        }
+        try await graph.close(); try await database.close()
+    }
+
     @Test func completeModelsAndExplicitDependenciesStayChargedButUnrelatedBodiesDoNot() async throws {
         let database = try await GraphDatabase.inMemory(), graph = try await database.createGraph()
         let owner = graph.makeNodeID(), target = graph.makeNodeID(), edge = graph.makeNodeID()
@@ -150,6 +225,22 @@ extension GraphQueryMaterializationTests {
             #expect(transformer.count > 0)
             context.reset()
             #expect(throws: (any Error).self) { try GraphTypedStoreAdapter.Session(context, graph, database: true).record(other) }
+            #expect(transformer.count > 0)
+            context.reset()
+            let session = try GraphTypedStoreAdapter.Session(context, graph, database: true)
+            let poisoned = Entity(Item.graphType, graph: session.graph), poisonedID = GraphNodeID(graphID: graph)
+            GraphTypedStoreAdapter.stamp(poisoned, id: poisonedID)
+            poisoned[dynamicMember: GraphTypedStoreAdapter.formatsKey] = [String]()
+            poisoned[dynamicMember: "body"] = "matrix-body-poison"
+            session.membership?.add(objects: poisoned)
+            try context.save(); context.reset(); transformer.reset()
+            let selected = GraphQuery<Item>(budget: try GraphQueryBudget(maximumCandidates: 100)).where(.id(owner))
+            #expect(try execute(context, graph, selected.request).records.map(\.id) == [owner])
+            var projection = selected.request; projection.operation = .projection(["rank"])
+            #expect(try execute(context, graph, projection).records.first?.properties["rank"] == .integer(1))
+            #expect(transformer.count == 0)
+            let requestedBody = GraphQuery<Item>(budget: try GraphQueryBudget(maximumCandidates: 100)).where(.id(poisonedID))
+            #expect(throws: (any Error).self) { try execute(context, graph, requestedBody.request) }
             #expect(transformer.count > 0)
             context.reset()
         }
