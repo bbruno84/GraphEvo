@@ -752,3 +752,21 @@ The role check is not a universal process lock or third-party-writer detector.
 Local extension writes and iOS App Group/suspension/account policy remain gates;
 macOS independent-process observation evidence is not physical-widget coverage.
 Keep the library independent of WidgetKit and refresh queries after resume.
+
+
+## Actual WidgetKit laboratory
+
+`Experiments/WidgetAccessProbe` prepares a disposable configured demo with a real
+embedded WidgetKit extension and App Group, using only public Graph APIs.
+Keep account-specific project/signing changes and original demo edits out of
+tracked source. The app owns the native mirrored pair; the widget opens existing
+resources read-only and closes every lease per invocation. Its manifest has IDs
+and mode, never the counter value used as query evidence. Preview data is not a
+provider read. Retain exact run/value, PID, public refusal and separate liveness/
+render evidence; never replay reserved writes to refresh a widget. Keep reports
+under App Group Library/Application Support so native device transport can read
+them. Simulator tests require ad-hoc signing for real group mapping. The actual
+hardware baseline is scoped in `docs/design/results/widget-app-group-2026-10-29.md`;
+iOS 18 real-widget, lifecycle/account/protected-data and interactive writes remain
+open. Do not infer cloud export/recovery from a local widget or publish personal
+Home Screen images or generated stores/logs.
