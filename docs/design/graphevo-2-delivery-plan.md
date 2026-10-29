@@ -188,6 +188,19 @@ Enter beta only when:
 6. Supported OS/toolchain, process topology, query capabilities, attachment
    envelope and recovery limitations are published.
 
+## App/widget requirement before beta
+
+Maintainer requirement, 2026-10-29: concurrent app/widget access to the same
+App Group graph must be designed, implemented and validated before beta.
+Settle O03 with explicit read/write roles, synchronization ownership, native
+change visibility, lifecycle and migration/first-launch behavior. A process-local
+runtime registry does not coordinate independent app/extension owners. The
+read-only local-widget approach is a candidate, not yet a final scope decision.
+Interactive writes require an explicit supported contract and conflict/recovery
+checks. Retain iOS multiprocess evidence separately from same-process runtime
+and different-device CloudKit tests. Track acceptance under PA02 in the
+[post-alpha checklist](graphevo-2-post-alpha-checklist.md).
+
 ## Beta and final release
 
 During beta, complete migration tooling and validate copies of representative
