@@ -727,3 +727,12 @@ pre-load version gate, not remote compatibility or import completion proof.
 validateIntegrity(of:) supports both legitimate mirrored topologies but remains
 a current-local full payload check. Use the public consumer host to distinguish
 published API evidence from historical @testable laboratory coverage.
+
+Public mirrored host launches use a fresh `--launch-ticket` receipt bound to
+CoreDevice PID and scene activation. Launch success or a termination signal is
+not proof that new CLI arguments reached the app. A receipt is not a native
+stage/export certificate; never replay reserved writes to recover missing host
+acknowledgements. Invitation trace instrumentation belongs only in the external
+copy made by `Experiments/PublicMirroredProbe/prepare_invite_triage.py`, never
+the shipping library. Keep the historical launch/invitation causal gate open
+until failure-specific evidence establishes their causes.

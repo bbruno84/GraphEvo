@@ -116,3 +116,11 @@ No integration/tag promotion, beta declaration, supported multiprocess claim or
 v1 conversion is included. App/widget access remains required before beta. Keep
 invitation readiness/error/retry semantics, broad conflict/crash/account/scale
 coverage and mandatory v1 local/cloud migration open in the post-alpha register.
+
+## Maintainer-requested causal follow-up
+
+The [causal triage](native-public-causal-triage-2026-10-29.md) reproduces a host
+launch acknowledgement defect and records two instrumented first-invitation
+successes. It does not establish the exact cause of the historical black screen
+or missing recipient. PR #92 remains draft pending that investigation; later
+success must not close the retained incidents.

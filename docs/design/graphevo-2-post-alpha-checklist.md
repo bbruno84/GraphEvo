@@ -460,3 +460,12 @@ launches after reportless starts. The adoption result retains those failures;
 PA03 invitation readiness is not closed by eventual success. Public native
 private/paired selection is implemented; review/CI of its increment remains
 separate from integration/tag/beta promotion.
+
+### Public adoption causal gate (2026-10-29)
+
+The maintainer requested causes before app/widget work. [Causal triage](results/native-public-causal-triage-2026-10-29.md)
+reproduced a launcher false positive and added UUID/PID/scene receipts. The
+historical black screen did not recur in bounded normal-launch checks, and two
+traced first invitations succeeded with matching local/native/server recipients.
+Neither historical cause is established. Keep PA03 invitation readiness open and
+PR #92 draft; successful continuations/repetitions are not incident closure.

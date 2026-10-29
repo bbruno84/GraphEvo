@@ -13,5 +13,5 @@ args = parser.parse_args()
 script = Path(__file__).resolve()
 subprocess.run([sys.executable, str(script.parent.parent / "NativeIdentityPairedProbe/prepare_demo.py"),
                 str(args.demo), str(args.destination), "--attachments", "--public-api"], check=True)
-for name in ["PublicMirroredProbe.swift", "PublicMirroredDiagnostics.swift", "AppDelegate.swift", "SceneDelegate.swift"]:
+for name in ["PublicMirroredProbe.swift", "PublicMirroredDiagnostics.swift", "AppDelegate.swift", "SceneDelegate.swift", "ProbeLaunchReceipt.swift"]:
     shutil.copyfile(script.with_name(name), args.destination / ("GraphEvoDemo/" + name))
