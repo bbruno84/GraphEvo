@@ -112,6 +112,25 @@ private final class DeinitCancellingSubscriber: Subscriber {
         try await graph.close()
     }
 
+    @Test func laboratorySharesWorkWhileCombineRetainsIndependentDemandAndCancellation() async throws {
+        let graph = try await GraphStore.inMemory(), lab = GraphSharedObservationLab(graph: graph)
+        let descriptor = try observationQuery(), publisher = lab.publisher(for: descriptor)
+        let a = DemandSubscriber<GraphQueryState<ObservedItem>>(), b = DemandSubscriber<GraphQueryState<ObservedItem>>()
+        publisher.subscribe(a); publisher.subscribe(b)
+        #expect(await lab.diagnostics.subscribers == 0)
+        a.request(.max(1)); b.request(.max(1))
+        var first = a.values.stream.makeAsyncIterator(), second = b.values.stream.makeAsyncIterator()
+        #expect(await first.next() != nil); #expect(await second.next() != nil)
+        #expect(await lab.diagnostics.activeGroups == 1)
+        a.cancel()
+        let id = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: ObservedItem.graphType)) }
+        #expect(b.received == 1)
+        b.request(.unlimited)
+        while let state = await second.next() { if case .value(let result) = state, result.items.map(\.id) == [id] { break } }
+        b.cancel(); try await graph.close()
+    }
+
     @Test func invalidDescriptorTerminatesPublisherWithFailure() async throws {
         let graph = try await GraphStore.inMemory()
         let subscriber = DemandSubscriber<GraphQueryState<ObservedItem>>()

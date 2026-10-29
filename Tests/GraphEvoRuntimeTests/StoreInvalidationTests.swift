@@ -51,6 +51,18 @@ import Testing
         raw.continuation.finish()
     }
 
+    @Test func explicitFeedCancellationReleasesAnUnconsumedSubscriptionOnly() async throws {
+        let hub = StoreInvalidationHub(), first = hub.subscribe(owner: UUID()), second = hub.subscribe(owner: UUID())
+        first.cancel(); first.cancel()
+        #expect(hub.subscriberCount == 1)
+        hub.publish(.accountChange)
+        #expect(second.stream.accountHasChanged)
+        var iterator = second.stream.makeAsyncIterator()
+        #expect(await iterator.next()?.reason == .accountChange)
+        second.cancel()
+        #expect(hub.subscriberCount == 0)
+    }
+
     @Test func consumerCancellationRemovesItsRegistration() async throws {
         let hub = StoreInvalidationHub(), ready = AsyncStream<Void>.makeStream()
         let feed = hub.subscribe(owner: UUID())

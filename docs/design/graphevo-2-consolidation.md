@@ -120,3 +120,23 @@ remain unchanged. Missing-column absence, import/old-writer semantics,
 private/shared conversion, native sharing and mandatory v1 migration remain
 C02 gates; this local result does not freeze the schema. C04 observer work is the
 next independent cost investigation after review of this candidate.
+
+
+## Shared observation experiment measured
+
+[C04a](graphevo-2-shared-observation-experiment.md) tests one explicit laboratory
+per handle. Exact query/model/budget shapes share immutable native query records;
+application models are decoded independently per subscriber. Broad invalidation,
+per-consumer newest buffers, cancellation and Combine demand remain. There is no
+result replay, cross-handle grouping or default public observer change. The matrix
+separates startup from update wall/CPU costs, includes single and mixed observers,
+and measures sampled whole-process RSS on the default model independently of
+C02b. Native source cleanup and late-join/account races precede timing acceptance.
+
+
+The [C04a result](results/c04a-shared-observation-2026-10-27.md) retains 420 timed
+matrix/confirmation rows. At 500 nodes/eight equal observers an update wave falls
+from 786 to 183 ms; 32 equal observers fall from 3251 to 181 ms. Initial reads
+remain proportional to new subscriptions; mixed descriptors remain separate.
+Use exact-query native-work sharing as the next candidate for review; no default
+public activation, narrower invalidation or replay cache is introduced.

@@ -14,6 +14,12 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
+            name: "ObservationCostProbe",
+            dependencies: ["GraphEvo"],
+            path: "Experiments/SharedObservation/Sources",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .executableTarget(
             name: "IdentityLookupProbe",
             dependencies: ["GraphEvo"],
             path: "Experiments/IdentityLookup/Sources",
