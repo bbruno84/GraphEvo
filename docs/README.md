@@ -83,3 +83,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [C04a shared observation results](design/results/c04a-shared-observation-2026-10-27.md):
   repeated startup/update wall/CPU/RSS comparisons, execution attempts versus
   delivered views, retained preflight correction and remaining adoption gates.
+
+- [C04 public observation adoption checks](design/results/c04-public-observation-2026-10-29.md):
+  per-handle public async/Combine wiring, lifecycle checks and retained targeted
+  Release comparison; physical adoption and startup/query costs remain open.

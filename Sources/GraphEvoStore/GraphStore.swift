@@ -63,6 +63,7 @@ public actor GraphStore {
     public nonisolated let id: GraphID
     private let handle: StoreHandle
     private let adapter: GraphStoreAdapter
+    private var observationCoordinator: GraphObservationCoordinator?
 
     private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) {
         self.id = id; self.handle = handle; self.adapter = adapter
@@ -99,7 +100,22 @@ public actor GraphStore {
         catch { throw Self.translate(error) }
     }
 
-    /// Admission only; used by the explicit observation laboratory without opening another feed.
+    // Created on this actor before suspension; concurrent first subscribers share one coordinator.
+    func queryObservationCoordinator() -> GraphObservationCoordinator {
+        if let observationCoordinator { return observationCoordinator }
+        let coordinator = GraphObservationCoordinator(graph: self)
+        observationCoordinator = coordinator
+        return coordinator
+    }
+
+    package var sharedObservationDiagnostics: GraphSharedObservationSnapshot {
+        get async {
+            guard let observationCoordinator else { return GraphSharedObservationSnapshot() }
+            return await observationCoordinator.diagnostics
+        }
+    }
+
+    /// Admission only, without opening another feed.
     package func observationAdmission() async throws {
         do { _ = try await handle.snapshot() } catch { throw Self.translate(error) }
     }

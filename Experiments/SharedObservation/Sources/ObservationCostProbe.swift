@@ -84,7 +84,7 @@ private func next(_ stream: GraphObservation<GraphQueryState<Item>>, id: GraphNo
         let sampler = Task.detached { while !Task.isCancelled { samples.sample(); try? await Task.sleep(for: .milliseconds(2)) } }
         let open = DispatchTime.now().uptimeNanoseconds
         let database = try await GraphDatabase.open(at: url), graph = try await database.openGraph(fixture.graph)
-        let openMS = ms(open), lab = args[3] == "shared" ? GraphSharedObservationLab(graph: graph) : nil
+        let openMS = ms(open), shared = args[3] == "shared"
         let begin = DispatchTime.now().uptimeNanoseconds, initialCPU = cpu()
         var streams: [(GraphObservation<GraphQueryState<Item>>, GraphNodeID, UUID)] = []
         for index in 0..<count {
@@ -92,13 +92,13 @@ private func next(_ stream: GraphObservation<GraphQueryState<Item>>, id: GraphNo
             let predicate: GraphQueryPredicate = args[5] == "mixed" ? (.id(id) || .id(fixture.ids[0])) : .id(id)
             let query = GraphQuery<Item>(budget: try GraphQueryBudget(maximumCandidates: fixture.ids.count * 2 + 100)).where(predicate && .tag("active"))
             let observation: GraphObservation<GraphQueryState<Item>>
-            if let lab { observation = try await lab.observe(query) }
-            else { observation = try await graph.observe(query) }
+            if shared { observation = try await graph.observe(query) }
+            else { observation = try await graph.observeIndependently(query) }
             let value = try await next(observation, id: id, changedID: fixture.ids[0])
             streams.append((observation,id,value.view.scopeID))
         }
         let startupMS = ms(begin), startupCPU = cpu() - initialCPU
-        let before = await lab?.diagnostics.executions
+        let before = shared ? await graph.sharedObservationDiagnostics.executions : nil
         let revision = UUID().uuidString, wave = DispatchTime.now().uptimeNanoseconds, waveCPU = cpu()
         try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: fixture.ids[0], properties: ["revision": .set(.string(revision))])) }
         let writeMS = ms(wave), tail = DispatchTime.now().uptimeNanoseconds
@@ -109,9 +109,9 @@ private func next(_ stream: GraphObservation<GraphQueryState<Item>>, id: GraphNo
             var ids = Set<UUID>(); for try await scope in group { ids.insert(scope) }; return ids
         }
         let waveMS = ms(wave), tailMS = ms(tail), updateCPU = cpu() - waveCPU
-        let after = await lab?.diagnostics.executions
+        let after = shared ? await graph.sharedObservationDiagnostics.executions : nil
         for (stream,_,_) in streams { stream.cancel() }
-        if let lab { guard await lab.diagnostics.subscribers == 0, await lab.diagnostics.activeGroups == 0 else { throw Failure.mismatch } }
+        if shared { guard await graph.sharedObservationDiagnostics.subscribers == 0, await graph.sharedObservationDiagnostics.activeGroups == 0 else { throw Failure.mismatch } }
         try await graph.close(); try await database.close()
         sampler.cancel(); await sampler.value; samples.sample()
         let (peak, sampleCount) = samples.result

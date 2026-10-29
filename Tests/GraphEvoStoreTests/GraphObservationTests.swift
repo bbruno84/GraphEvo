@@ -27,7 +27,56 @@ func waitForObservation(_ observation: GraphObservation<GraphQueryState<Observed
     throw ObservationTestFailure()
 }
 
+private actor WeakObservedStore {
+    weak var value: GraphStore?
+    init(_ graph: GraphStore) { value = graph }
+}
+
 @Suite(.timeLimit(.minutes(1))) struct GraphObservationTests {
+    @Test func concurrentPublicSubscriptionsShareOnlyWithinTheirOwnHandle() async throws {
+        let database = try await GraphDatabase.inMemory(), graph = try await database.createGraph()
+        let sibling = try await database.openGraph(graph.id), query = try observationQuery()
+        let observations = try await withThrowingTaskGroup(of: GraphObservation<GraphQueryState<ObservedItem>>.self) { tasks in
+            for _ in 0..<8 { tasks.addTask { try await graph.observe(query) } }
+            var result: [GraphObservation<GraphQueryState<ObservedItem>>] = []
+            for try await observation in tasks { result.append(observation) }
+            return result
+        }
+        for observation in observations { _ = try await waitForObservation(observation) { _ in true } }
+        #expect(await graph.sharedObservationDiagnostics.activeGroups == 1)
+        #expect(await graph.sharedObservationDiagnostics.subscribers == 8)
+        let other = try await sibling.observe(query)
+        _ = try await waitForObservation(other) { _ in true }
+        #expect(await sibling.sharedObservationDiagnostics.activeGroups == 1)
+        #expect(await sibling.sharedObservationDiagnostics.subscribers == 1)
+        let limited = try await graph.observe(query.limit(1))
+        _ = try await waitForObservation(limited) { _ in true }
+        #expect(await graph.sharedObservationDiagnostics.activeGroups == 2)
+        for observation in observations { observation.cancel() }
+        #expect(await graph.sharedObservationDiagnostics.subscribers == 1)
+        try await graph.close()
+        var closed = limited.makeAsyncIterator(); while await closed.next() != nil {}
+        other.refresh(); _ = try await waitForObservation(other) { _ in true }
+        limited.cancel(); other.cancel()
+        try await sibling.close(); try await database.close()
+    }
+
+    @Test func idleCoordinatorDoesNotRetainClosedGraphHandle() async throws {
+        func exercise() async throws -> WeakObservedStore {
+            let graph = try await GraphStore.inMemory(), weak = WeakObservedStore(graph)
+            let observation = try await graph.observe(observationQuery())
+            _ = try await waitForObservation(observation) { _ in true }
+            observation.cancel()
+            try await graph.close()
+            return weak
+        }
+        let weak = try await exercise()
+        // Retirement and worker teardown are asynchronous; allow them to settle without retaining the handle.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while await weak.value != nil, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(await weak.value == nil)
+    }
+
     @Test func relatedMembershipValueAndDeletionRefreshFromOtherHandles() async throws {
         let database = try await GraphDatabase.inMemory(), graph = try await database.createGraph()
         let writer = try await database.openGraph(graph.id)

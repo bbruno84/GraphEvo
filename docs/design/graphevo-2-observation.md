@@ -38,14 +38,14 @@ for await state in observation {
 ```
 
 The subscription is installed before the first query. A save racing the initial
-read queues another refresh. Each refresh uses a fresh A7 read scope and retains
+read queues another refresh. Each native refresh uses a fresh A7 read scope and retains
 its local-view identity, budgets, typed decoding and moving-page semantics.
 An observation represents the current first page; a descriptor with an `after`
 cursor is rejected before subscription. Sort/limit remain supported. Count and
 other specialized outputs currently use one-shot operations or a changes-driven
 rescan rather than separate specialized observation APIs.
 
-Both invalidation and output have newest-one buffering. A worker executes reads
+Both invalidation and output have newest-one buffering. A worker per exact query/model/budget group executes reads
 serially; no task is allocated per notification. A slow reader can skip initial,
 intermediate and failed states superseded by a newer state. It receives no
 per-commit delivery guarantee, frozen multi-page view or permanent error history.
@@ -121,7 +121,8 @@ let cancellable = graph.publisher(for: query)
     .sink(receiveCompletion: handleCompletion, receiveValue: handleState)
 ```
 
-Every subscriber owns an independent observation/worker. Creation waits until
+Every subscriber owns an independent observation and model-decoding/delivery worker;
+exact shapes on one handle share native reads. Creation waits until
 first positive demand. After startup, demand controls downstream delivery, not
 Core Data saves, CloudKit import or when the observation refreshes. A single
 pending output mailbox keeps the newest value when demand is exhausted or a
@@ -160,3 +161,46 @@ file-heavy graphs, native remote/background/account/access-change coverage and
 O04's durable-processing choice. Migrated fixtures, full account/cache policy,
 app integration and mandatory v1 local/cloud migration still gate beta/stable
 under the delivery plan. A8 implementation is not permission to declare beta.
+
+
+## C04 consolidation adoption
+
+The first consolidation increment routes public `observe` and `publisher(for:)`
+through the C04a coordinator, owned lazily by one GraphStore actor. The actor
+creates it before suspension so concurrent first subscriptions cannot create
+independent coordinators. Its idle graph reference and native-source factory are
+weak: an empty coordinator cannot retain its owning handle in a cycle. Active
+observations retain the existing handle as before; final cancellation/drop retires
+the group, native source and workers. The explicit laboratory remains available
+for deterministic checkpoints, independently of the public handle coordinator.
+
+Group only an exact validated query definition, concrete Swift model, row limit
+and every candidate/payload/traversal budget dimension. Cursor observations remain
+rejected. One detached native output/local view is shared, including its actual
+scopeID and diagnostics. Each consumer constructs its own application models on
+its own worker, with bounded newest input/output buffering and independent
+application-decoder failure, cancellation and Combine demand. An application
+must not treat scopeID as a unique subscription ID or model-instance identity.
+
+There is no result replay. A join queues a new read; it cannot receive one begun
+before it registered. Its fresh read may also update existing group members.
+Likewise, refreshing one member can refresh the entire group. Native query errors
+are shared read failures and retry on future hints; decoder errors stay local.
+Broad relationship/action/attachment/account invalidation remains in place.
+`changes`/`changePublisher`, O04 processing and default native schemas are unchanged.
+The package-only independent A8 path remains a benchmark control; public APIs
+never select it. The shared benchmark now exercises the actual public path.
+
+The [C04a measurements](results/c04a-shared-observation-2026-10-27.md) select this
+architecture but do not constitute a product latency/RAM guarantee. Startup
+still requests fresh reads and can refresh older subscribers, and different
+queries retain independent native scans. Heavy/slow decoder workloads and real
+native import/account/access-change checks remain required before promoting the
+consolidated branch; local injected source tests do not close those gates. This
+increment is an alpha implementation PR, not beta entry or a schema freeze.
+
+
+The [public-path verification](results/c04-public-observation-2026-10-29.md)
+records 497 local tests, 28 selected sanitizer tests and 36 fresh Release rows.
+It retains the one-sample mixed regression and independent five-repetition check;
+these are wiring/regression evidence, not a new supported performance envelope.

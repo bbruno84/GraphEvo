@@ -140,3 +140,37 @@ from 786 to 183 ms; 32 equal observers fall from 3251 to 181 ms. Initial reads
 remain proportional to new subscriptions; mixed descriptors remain separate.
 Use exact-query native-work sharing as the next candidate for review; no default
 public activation, narrower invalidation or replay cache is introduced.
+
+
+## Selected direction and implementation order
+
+The maintainer accepted the measured direction on 2026-10-29. Stop expanding the
+alternative matrix without a concrete implementation/regression question. Keep
+experiment checkpoints and measured limitations; acceptance of the direction is
+not proof of native/schema/migration readiness.
+
+1. Review C04a and adopt its exact-query native-read coordinator through public
+   async/Combine observation in a focused PR. Settle shared local-view identity,
+   join/refresh behavior and idle handle ownership explicitly. Keep broad native
+   invalidation, independent decoders, per-consumer demand/cancellation and no
+   replay cache. PR #83 is merged into the experiment parent; public adoption is
+   the next implementation, not a change to the alpha.8 integration tag.
+2. Carry selected C02a metadata lookup, M02 binary content and M03b dependency-row
+   filtering forward through review of their stacked PRs. Preserve the four-small-
+   file disk regression and complete integrity/whole-content backup requirements.
+3. Turn C02b native logical identity/membership columns into an integrated design:
+   settle missing-column/old-writer/import semantics, private/shared placement,
+   point validation and explicit full integrity. Add selective query access where
+   a descriptor permits it, and measure startup/different-query behavior through
+   public APIs. The package-only alternative opener is not a public schema choice.
+4. Validate the combined implementation on representative local and native
+   owner/participant workloads, including files, account/access transitions and
+   mandatory coordinated v1 migration feasibility. Reconcile API/schema and
+   beta gates only after that evidence.
+
+The first public-observation increment leaves native schema, opening and file
+ownership unchanged. Its comparison retains the historical independent worker
+as a package-only control and runs the selected mode through public `observe`.
+Startup and mixed-query latency remain visible follow-ups, not hidden by caching
+old results or broadening query allowances. A draft PR can make this behavior
+reviewable while physical/native and heavy-decoder adoption gates remain open.
