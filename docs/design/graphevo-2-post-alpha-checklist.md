@@ -313,3 +313,22 @@ Source: [query materialization contract](graphevo-2-queries.md#c02-consolidation
 Local implementation evidence: [501 tests, 44 targeted sanitizer tests and 72
 matched Release rows](results/identity-guarded-queries-2026-10-29.md). This evidence
 does not close the review/native-SDK or indexed identity/query gates above.
+
+
+## Native identity integration readiness
+
+- [ ] Review the [integration contract](graphevo-2-native-identity-integration.md)
+  and stronger same-view negative lookup: absent columns and staged rows must not
+  become successful absence. Preserve separate metadata/full-payload validation.
+- [ ] Carry complete native projection maintenance through every integrated
+  writer, attachment and assignment/recovery path before any public selection.
+- [ ] Implement protected-source conversion/activation/interruption handling;
+  verify supported native private/shared conversion rather than inferring it from
+  the existing local mapping prototype. Mandatory v1 migration remains open.
+- [ ] Retain changed negative-lookup/audit costs and high-degree action coverage.
+  Default native schema and query row-coverage gates remain open.
+
+First native readiness evidence: [504 tests, 16 selected sanitizer tests and 120
+focused Release rows](results/native-identity-readiness-2026-10-29.md), retaining
+stronger negative-lookup costs and unrouted/staged/native-body regressions. This
+does not close public schema, paired-store conversion or v1 migration gates.

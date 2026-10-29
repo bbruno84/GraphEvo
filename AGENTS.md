@@ -635,3 +635,15 @@ Empty-key owners must be excluded before native property fetching; retain the
 same-model native transformer poison probe. See the [query contract](docs/design/graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
 No schema/native identity activation, SQL predicate capability, total-memory bound
 or certification of skipped bodies is implied.
+
+
+## Native identity integration readiness
+
+Read the [integration contract](docs/design/graphevo-2-native-identity-integration.md).
+The package-only native lookup now audits complete same-view identity metadata
+before returning nil. Missing/misrouted projections are errors; valid staged
+rows block the audit with pendingNativeOperation. Do not decode unrelated bodies,
+repair identities or cache an audit across scopes. Found targets remain targeted;
+full integrity is explicit and separate. Retain the extra negative-lookup cost.
+All-writer projection maintenance, protected-source conversion/recovery and native
+private/shared adoption remain gates; default schemas/openers are unchanged.

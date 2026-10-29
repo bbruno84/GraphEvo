@@ -2,7 +2,25 @@ import CoreData
 import CryptoKit
 import Foundation
 import Testing
+import os
 @testable import GraphEvo
+
+/// Distinguishes actual native transformation from merely skipping typed envelope decoding.
+private final class NativeAuditBodyProbe: NSSecureUnarchiveFromDataTransformer, @unchecked Sendable {
+    private let reads = OSAllocatedUnfairLock(initialState: 0)
+    var count: Int { reads.withLock { $0 } }
+    func reset() { reads.withLock { $0 = 0 } }
+    override func transformedValue(_ value: Any?) -> Any? {
+        let result = GraphValueTransformer().transformedValue(value)
+        if result as? String == "native-audit-body-poison" {
+            reads.withLock { $0 += 1 }
+            GraphValueDecodingDiagnostics.record(NSError(domain: "NativeIdentityAudit.Body", code: 1))
+            return nil
+        }
+        return result
+    }
+    override func reverseTransformedValue(_ value: Any?) -> Any? { GraphValueTransformer().reverseTransformedValue(value) }
+}
 
 @Suite(.timeLimit(.minutes(2))) struct GraphNativeIdentityPrototypeTests {
     private struct Fixture: Sendable { let a: GraphID; let b: GraphID; let records: [GraphRecord]; let source: URL }
@@ -70,6 +88,9 @@ import Testing
             defer { context.rollback(); context.reset() }
             #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: fixture.records[0].id) }
             try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
+            // A targeted hit is valid, but the unconverted second graph prevents resource-wide absence readiness.
+            #expect(try GraphNativeIdentityPrototype.record(context, id: fixture.records[0].id) == fixture.records[0])
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: GraphNodeID(graphID: fixture.a)) }
             context.rollback()
             #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: fixture.records[0].id) }
             try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
@@ -96,7 +117,8 @@ import Testing
         let container = try open(destination, indexed: true)
         try await container.performBackgroundTask { @Sendable context in
             defer { context.rollback(); context.reset() }
-            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a); try context.save()
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.b); try context.save()
             let original = fixture.records[0]
             let patch = try GraphRecordPatch(id: original.id, properties: ["name": .set(.string("updated")), "added": .set(.null)])
             #expect(try GraphNativeIdentityPrototype.patch(context, patch) == patch.applying(to: original))
@@ -130,7 +152,8 @@ import Testing
         let destination = try await convert(root, fixture: fixture, indexed: true), container = try open(destination, indexed: true)
         try await container.performBackgroundTask { @Sendable context in
             defer { context.rollback(); context.reset() }
-            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a); try context.save(); context.reset()
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.b); try context.save(); context.reset()
             #expect(try GraphNativeIdentityPrototype.record(context, id: actionID) == expected)
             let session = try GraphTypedStoreAdapter.Session(context, fixture.a, database: true)
             let endpoint = try #require(session.nodes[ids[129]])
@@ -149,6 +172,109 @@ import Testing
             #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: actionID) }
             context.rollback()
             #expect(try GraphNativeIdentityPrototype.record(context, id: actionID) == expected)
+            #expect(!context.hasChanges)
+        }
+        try close(container)
+    }
+
+    @Test @MainActor func identityAuditDoesNotTransformNativeApplicationBodiesAndRequestedReadsStillFail() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        GraphValueTransformer.register()
+        let transformer = NativeAuditBodyProbe(), name = NSValueTransformerName("NativeAudit-\(UUID())")
+        ValueTransformer.setValueTransformer(transformer, forName: name)
+        defer { ValueTransformer.setValueTransformer(nil, forName: name) }
+        let model = GraphNativeIdentityPrototype.makeModel(indexed: true)
+        for entity in model.entities { entity.attributesByName["object"]?.valueTransformerName = name.rawValue }
+        let container = NSPersistentContainer(name: "NativeAudit", managedObjectModel: model)
+        _ = try container.persistentStoreCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: root.appendingPathComponent("Probe.sqlite"))
+        let graph = GraphID(), id = GraphNodeID(graphID: graph), missing = GraphNodeID(graphID: graph)
+        try await container.performBackgroundTask { @Sendable context in
+            defer { context.rollback(); context.reset() }
+            try GraphTypedStoreAdapter.database.create(context, graph)
+            try GraphNativeIdentityPrototype.backfill(context, graphID: graph)
+            try GraphNativeIdentityPrototype.insert(context, GraphRecord(id: id, type: "poison", properties: ["body": .string("valid")]))
+            let session = try GraphTypedStoreAdapter.Session(context, graph, database: true)
+            let node = try #require(session.nodes[id])
+            node[dynamicMember: "body"] = "native-audit-body-poison"
+            try context.save(); context.reset(); transformer.reset()
+            #expect(try GraphNativeIdentityPrototype.validateIdentityInventory(context, graphID: graph) == 1)
+            #expect(try GraphNativeIdentityPrototype.record(context, id: missing) == nil)
+            #expect(transformer.count == 0)
+            #expect(throws: (any Error).self) { try GraphNativeIdentityPrototype.record(context, id: id) }
+            #expect(transformer.count > 0)
+        }
+        try close(container)
+    }
+
+    @Test @MainActor func missingReadsAuditColumnsWithoutDecodingUnrelatedApplicationBodies() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try await seed(root), destination = try await convert(root, fixture: fixture, indexed: true)
+        let container = try open(destination, indexed: true)
+        try await container.performBackgroundTask { @Sendable context in
+            defer { context.rollback(); context.reset() }
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.b); try context.save(); context.reset()
+            let owner = fixture.records[0].id, missing = GraphNodeID(graphID: fixture.a)
+            let session = try GraphTypedStoreAdapter.Session(context, fixture.a, database: true)
+            let node = try #require(session.nodes[owner])
+            node[dynamicMember: "name"] = Data([0])
+            #expect(try GraphNativeIdentityPrototype.validateIdentityInventory(context, graphID: fixture.a) == 5)
+            #expect(try GraphNativeIdentityPrototype.record(context, id: missing) == nil)
+            #expect(throws: (any Error).self) { try GraphNativeIdentityPrototype.record(context, id: owner) }
+            #expect(throws: (any Error).self) { try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.a) }
+            context.rollback()
+            for key in [GraphNativeIdentityPrototype.graphAttribute, GraphNativeIdentityPrototype.nodeAttribute] {
+                node.node.setValue(nil, forKey: key)
+                #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: owner) }
+                #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: missing) }
+                context.rollback()
+            }
+            try node.setPrototypeIdentity(GraphNodeID(graphID: fixture.b))
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: owner) }
+            context.rollback()
+            node.node.setValue(GraphNodeID(graphID: fixture.a).rawValue.uuidString, forKey: GraphNativeIdentityPrototype.nodeAttribute)
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: owner) }
+            context.rollback()
+            #expect(try GraphNativeIdentityPrototype.record(context, id: missing) == nil)
+            #expect(!context.hasChanges)
+        }
+        try close(container)
+    }
+
+    @Test @MainActor func unassignedStagedRowsPreventAbsenceWithoutAutomaticRepairOrActivation() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try await seed(root), destination = try await convert(root, fixture: fixture, indexed: true)
+        let container = try open(destination, indexed: true)
+        try await container.performBackgroundTask { @Sendable context in
+            defer { context.rollback(); context.reset() }
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
+            try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.b); try context.save()
+            let facade = GraphTypedStoreAdapter.facade(context), id = GraphNodeID(graphID: fixture.a)
+            let staged = Entity("partial", graph: facade)
+            GraphTypedStoreAdapter.stamp(staged, id: id)
+            staged[dynamicMember: GraphTypedStoreAdapter.stageKey] = UUID().uuidString
+            staged[dynamicMember: GraphTypedStoreAdapter.formatsKey] = [String]()
+            let session = try GraphTypedStoreAdapter.Session(context, fixture.a, database: true)
+            #expect(session.stagedNodeIDs == [id])
+            do {
+                _ = try GraphNativeIdentityPrototype.record(context, id: id)
+                Issue.record("A staged logical row must not be reported as absent.")
+            } catch GraphStoreError.pendingNativeOperation {}
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.validateIdentityInventory(context, graphID: fixture.a) }
+            #expect(staged.node.value(forKey: GraphNativeIdentityPrototype.nodeAttribute) == nil)
+            #expect(context.hasChanges)
+            context.rollback()
+            #expect(try GraphNativeIdentityPrototype.record(context, id: id) == nil)
+            #expect(!context.hasChanges)
+            let unrouted = Entity("unrouted", graph: facade)
+            unrouted[dynamicMember: GraphTypedStoreAdapter.idKey] = id.rawValue.uuidString
+            unrouted[dynamicMember: GraphTypedStoreAdapter.formatsKey] = [String]()
+            // Both routing projections are absent, so a per-graph-only audit would miss this row.
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: id) }
+            #expect(unrouted[dynamicMember: GraphTypedStoreAdapter.graphKey] == nil)
+            #expect(unrouted.node.value(forKey: GraphNativeIdentityPrototype.graphAttribute) == nil)
+            context.rollback()
+            #expect(try GraphNativeIdentityPrototype.record(context, id: id) == nil)
             #expect(!context.hasChanges)
         }
         try close(container)
@@ -176,7 +302,7 @@ import Testing
             #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: owner) }
             context.rollback()
             try node.setPrototypeIdentity(nil)
-            #expect(try GraphNativeIdentityPrototype.record(context, id: owner) == nil)
+            #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.record(context, id: owner) }
             #expect(throws: GraphStoreError.self) { try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.a) }
             context.rollback()
             node[dynamicMember: GraphTypedStoreAdapter.idKey] = UUID().uuidString

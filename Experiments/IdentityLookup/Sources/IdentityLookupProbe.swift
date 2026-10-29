@@ -52,7 +52,7 @@ private func elapsed(_ start: UInt64) -> Double { Double(DispatchTime.now().upti
         let args = CommandLine.arguments
         guard args.count >= 4 else { throw Failure.arguments }
         let operation = args[1], root = URL(fileURLWithPath: args[2]), variant = args[3]
-        guard ["seed", "convert", "read", "read-edge", "read-action", "missing", "patch", "validate"].contains(operation),
+        guard ["seed", "convert", "read", "read-edge", "read-action", "missing", "patch", "validate", "audit"].contains(operation),
               ["plain", "files", "fanout", "full", "columns", "indexed"].contains(variant) else { throw Failure.arguments }
         let started = DispatchTime.now().uptimeNanoseconds
         var ms: Double = 0, returned = 0, sourceUnchanged = true
@@ -147,6 +147,7 @@ private func elapsed(_ start: UInt64) -> Double { Double(DispatchTime.now().upti
                 case "missing": guard try await graph.read({ try $0.record(for: GraphNodeID(graphID: graph.id)) }) == nil else { throw Failure.mismatch }
                 case "patch": _ = try await graph.transaction { try $0.patch(GraphRecordPatch(id: fixture.firstIDs[0], properties: ["revision": .set(.string(UUID().uuidString))])) }; returned = 1
                 case "validate": returned = try await database.contextRead { try GraphNativeIdentityPrototype.validateAll($0, graphID: fixture.graphIDs[0]) }
+                case "audit": returned = try await database.contextRead { try GraphNativeIdentityPrototype.validateIdentityInventory($0, graphID: fixture.graphIDs[0]) }
                 default: throw Failure.arguments
                 }
                 ms = elapsed(begin); try await graph.close(); try await database.close()

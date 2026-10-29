@@ -50,8 +50,8 @@ The first harness also times relationships, actions and a 500-endpoint action,
 so a fast Entity-only result cannot hide reference-validation fan-out. Native
 columns with/without a configured index are separate migrated stores. Point
 operations use normal GraphStore runtime scopes through the package-only lab
-opener; complete graph validation is measured separately. A missing/corrupt
-column can look absent to point lookup and is caught by full validation: this is
+opener; complete graph validation is measured separately. At the retained checkpoint, a missing/corrupt
+column could look absent to point lookup and was caught by full validation: this is
 an explicit integration gate, not an accepted production absence contract.
 
 Reference validation must use bounded identity batches across all native node
@@ -78,3 +78,16 @@ candidate. The baseline inventories/validates unrelated routing/format metadata;
 explicit `validateAll` additionally snapshots and validates every payload. Do not
 present those validation scopes as equivalent. All integrated cloud/import/v1
 migration gates remain open.
+
+
+## Integration follow-up: negative lookup safety
+
+The [integration contract](graphevo-2-native-identity-integration.md) tightens the
+package-only negative lookup after the retained C02b checkpoint. A native miss
+now audits the logical/native identity inventory on the same context before
+returning nil; a missing/misrouted projection fails and known staged rows report
+pendingNativeOperation. The metadata audit does not decode unrelated application
+bodies. Found-node scope remains targeted, full integrity remains explicit, and
+neither operation certifies native import completion. The original fast missing
+numbers describe weaker behavior and must not be relabeled as the new contract.
+Default schema/openers and mirrored conversion remain unchanged/gated.

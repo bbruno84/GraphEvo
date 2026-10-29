@@ -40,6 +40,8 @@ for name in names:
         row = json.loads(lines[0])
         if operation == "convert" and row.get("sourceUnchanged") is not True:
             raise RuntimeError("Conversion changed its original source")
+        if operation in {"audit", "validate"} and row.get("returned") != nodes + 2 + int(file):
+            raise RuntimeError("Identity validation did not cover the expected application rows")
         row.update(case=name, repetition=repetition)
         rows.append(row)
         with (output / "metrics.jsonl").open("a") as stream:
@@ -52,9 +54,10 @@ for name in names:
         for variant in ["full", "columns", "indexed"]:
             for repetition in range(1, args.repetitions + 1):
                 invoke(operation, variant, repetition)
-    for variant in ["columns", "indexed"]:
-        for repetition in range(1, args.repetitions + 1):
-            invoke("validate", variant, repetition)
+    for operation in ["audit", "validate"]:
+        for variant in ["columns", "indexed"]:
+            for repetition in range(1, args.repetitions + 1):
+                invoke(operation, variant, repetition)
 summary = ["| Case | Variant | Operation | Samples | Median ms | Min–max ms |", "|---|---|---|---:|---:|---:|"]
 for case, variant, op in dict.fromkeys((x["case"], x["variant"], x["operation"]) for x in rows):
     values = [x["elapsedMS"] for x in rows if (x["case"], x["variant"], x["operation"]) == (case, variant, op)]

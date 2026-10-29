@@ -32,7 +32,8 @@ operations retain full-inventory routing/format validation; prototype calls use 
 They are not equivalent production APIs. Never report the ratio as a ready-to-ship
 GraphStore speedup. The configured index is not proof of a particular SQL plan.
 
-Point lookup does not certify unrelated raw metadata or a missing column. An
+At the retained C02b checkpoint, point lookup did not certify unrelated raw
+metadata or a missing column; see the negative-read tightening below. An
 activated local fixture has passed full validation/backfill; partial cloud import
 and returning old writers are deliberately unsupported here. CloudKit/native
 assignment, pair-store conversion and runtime leases need integrated acceptance.
@@ -46,3 +47,12 @@ selected endpoint metadata, prefetches topology without property bodies, and use
 the facade local view for changed owners. Whole-graph validation additionally
 snapshots all payloads and is stronger than one baseline public record read.
 Use the aggregate `GraphEvo-Package` Xcode scheme to run package tests.
+
+
+The integration follow-up adds `audit` for metadata-only identity inventory checks.
+The runner now reports it separately from `validate` (full application payloads).
+A negative native read invokes the identity audit before returning nil. Missing
+columns or valid staged rows therefore fail rather than hide a logical node;
+valid missing reads now pay an inventory cost. Compare their new timings with the
+retained original C02b scope explicitly. These changes remain package-only and do
+not enable cloud/native schema conversion or default public opens.
