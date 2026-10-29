@@ -207,3 +207,27 @@ Native-column mirrored initialization/assignment/import and physical private/sha
 acceptance remain the next step. Local selection does not make a fresh local path
 proof of an empty cloud container. M13 removes alpha-conversion work; mandatory
 v1 data migration and beta compatibility remain separate release requirements.
+
+
+## Fresh native paired laboratory
+
+A separate internal GraphNativeIdentityPairedLaboratory opener selects the same
+native schema and public alpha marker for a controlled fresh private/shared pair.
+Its adapter explicitly opts the shared resolver into mirrored contexts and
+requires two actual resources matching the runtime's private/shared routing URLs.
+The default local resolver and historical prototype continue rejecting mirrored
+contexts; public mirrored opening signatures/default models remain unchanged.
+No current/historical cloud rows are converted, repaired or deleted.
+
+The [native paired host](../../Experiments/NativeIdentityPairedProbe/README.md)
+reuses A5's one-use stages with protected transports in a distinct fixture
+directory and explicit full native integrity checks on independent recovery.
+Offline two-store routing/identity/permission checks and a generic iOS host build
+are separate from native setup and physical assignment/import acceptance. The
+maintainer confirmed a Development reset on 2026-10-29, but device connectivity
+prevented installation; no cloud stage was launched. Physical paired acceptance,
+including native attachments, remains open before public mirrored selection.
+
+The [readiness result](results/native-identity-paired-lab-2026-10-29.md) records
+512 local tests, 13 sanitizer tests, both offline load orders and the successful
+iOS host build, with the unstarted physical run retained as an open gate.

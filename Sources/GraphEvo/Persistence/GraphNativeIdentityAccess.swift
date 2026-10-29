@@ -8,12 +8,14 @@ import GraphEvoRuntime
 struct GraphNativeIdentityAccess: Sendable {
     private let activationKey: String
     private let activationVersion: String
+    private let allowsMirroredPair: Bool
     private let graphAttribute = GraphNativeIdentityColumns.graphAttribute
     private let nodeAttribute = GraphNativeIdentityColumns.nodeAttribute
     private let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
 
-    init(activationKey: String, activationVersion: String) {
+    init(activationKey: String, activationVersion: String, allowsMirroredPair: Bool = false) {
         self.activationKey = activationKey; self.activationVersion = activationVersion
+        self.allowsMirroredPair = allowsMirroredPair
     }
 
     /// Activate only newly allocated empty graph controls, never an existing populated layout.
@@ -27,6 +29,11 @@ struct GraphNativeIdentityAccess: Sendable {
         try GraphNativeIdentityColumns.validate(root, graphID: graphID, nodeID: nil)
         try GraphNativeIdentityColumns.validate(membership, graphID: graphID, nodeID: nil)
         root[dynamicMember: activationKey] = activationVersion
+        // The marker adds a detail after base control creation has assigned its owned rows.
+        // Keep it in the root's store even when the shared store loaded first.
+        if let store = root.runtimeObjectID.persistentStore {
+            try root.runtimeAssignOwnedObjects(to: store, in: context)
+        }
     }
 
     func checkGraph(_ context: NSManagedObjectContext, graphID: GraphID) throws {
@@ -35,9 +42,18 @@ struct GraphNativeIdentityAccess: Sendable {
 
     private func requireModel(_ context: NSManagedObjectContext) throws {
         guard let model = context.persistentStoreCoordinator?.managedObjectModel,
-              kinds.allSatisfy({ name in [graphAttribute, nodeAttribute].allSatisfy { model.entitiesByName[name]?.attributesByName[$0] != nil } }),
-              !(context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer) else {
+              kinds.allSatisfy({ name in [graphAttribute, nodeAttribute].allSatisfy { model.entitiesByName[name]?.attributesByName[$0] != nil } }) else {
             throw GraphStoreError.unsupportedLayout
+        }
+        if context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer {
+            guard allowsMirroredPair,
+                  let privateURL = context.userInfo[StoreNativeContext.privateURLKey] as? URL,
+                  let sharedURL = context.userInfo[StoreNativeContext.sharedURLKey] as? URL,
+                  privateURL != sharedURL,
+                  let stores = context.persistentStoreCoordinator?.persistentStores, stores.count == 2,
+                  stores.contains(where: { $0.url == privateURL }), stores.contains(where: { $0.url == sharedURL }) else {
+                throw GraphStoreError.unsupportedLayout
+            }
         }
     }
 

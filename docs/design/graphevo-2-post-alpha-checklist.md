@@ -378,3 +378,19 @@ Mandatory v1 migration and beta compatibility/backup requirements remain.
 
 The local API and [validation scopes](graphevo-2-native-identity-integration.md#fresh-local-native-schema-api)
 do not turn bounded queries into indexed SQL or certify cloud completion.
+
+
+### Native paired laboratory readiness (2026-10-29)
+
+The internal native paired opener/host now exercises the selected layout without
+changing public mirrored defaults. Offline adapter checks and generic iOS host
+compilation do not close the native private/shared gate. Development reset was
+confirmed, but physical installation lost connectivity before any cloud stage.
+Retain independent A5/A8 recovery, native-column assignment/recovery, permissions
+and lifecycle, plus a separate attachment byte/ownership/cascade run as open.
+See the [acceptance matrix](../../Experiments/NativeIdentityPairedProbe/README.md).
+V1 migration and beta compatibility remain separate requirements.
+
+[Readiness evidence](results/native-identity-paired-lab-2026-10-29.md): 512 local
+tests and 13 sanitizer tests passed; generic iOS host compiled. Device connectivity
+prevented the physical run; no native acceptance item is closed by these checks.

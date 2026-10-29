@@ -107,3 +107,5 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [Fresh native local store acceptance](design/results/native-fresh-local-stores-2026-10-29.md):
   explicit public native schema, create-only activation, compatible reopen and
   storage integrity; native paired/mirrored acceptance remains separate.
+
+- [Fresh native identity paired acceptance laboratory](../Experiments/NativeIdentityPairedProbe/README.md) — internal host, offline checks and pending physical matrix.
