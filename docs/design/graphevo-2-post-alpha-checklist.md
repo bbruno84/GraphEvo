@@ -61,6 +61,15 @@ Sources: [model contracts](graphevo-2-application-models.md),
 - [ ] **B** Select minimum OS/toolchain and supported process topology (O02/O03).
   Decide app/extension concurrent App Group access explicitly; a process-local
   registry does not establish cross-process safety.
+- [ ] **B** Design, implement and validate concurrent app/widget access to the same
+  App Group graph before beta (maintainer requirement, 2026-10-29). Define the
+  supported read/write roles and which process owns CloudKit synchronization,
+  cross-process change visibility/refresh, writer/intent coordination, and
+  migration/first-launch behavior when the widget starts before the app.
+  A local read-only widget is a candidate baseline, not an agreed restriction;
+  interactive widget writes still require an explicit scope decision. Validate
+  on iOS with independent processes; same-process leases and two-device cloud
+  tests do not establish this contract.
 - [ ] **B** Audit the complete distributed Swift 6 boundary, including legacy
   targets still in Swift 5 mode, Sendable/isolation, context escape, public
   imports and independent UI/non-UI consumers; document retained limitations.
