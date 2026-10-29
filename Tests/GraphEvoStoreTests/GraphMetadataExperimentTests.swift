@@ -71,7 +71,7 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
                 root[dynamicMember: GraphTypedStoreAdapter.graphKey] = id.rawValue.uuidString
                 root[dynamicMember: GraphTypedStoreAdapter.layoutKey] = GraphTypedStoreAdapter.databaseVersion
                 let member = Entity("item", graph: facade)
-                GraphTypedStoreAdapter.stamp(member, id: GraphNodeID(graphID: id))
+                try GraphTypedStoreAdapter.stamp(member, id: GraphNodeID(graphID: id))
                 member[dynamicMember: GraphTypedStoreAdapter.formatsKey] = [String]()
                 let membership = Action(GraphTypedStoreAdapter.membersType, graph: facade)
                 membership[dynamicMember: GraphTypedStoreAdapter.graphKey] = id.rawValue.uuidString
@@ -136,7 +136,7 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
                 root[dynamicMember: GraphTypedStoreAdapter.graphKey] = id.rawValue.uuidString
                 root[dynamicMember: GraphTypedStoreAdapter.layoutKey] = GraphTypedStoreAdapter.databaseVersion
                 let member = Entity("item", graph: facade)
-                GraphTypedStoreAdapter.stamp(member, id: GraphNodeID(graphID: id))
+                try GraphTypedStoreAdapter.stamp(member, id: GraphNodeID(graphID: id))
                 member[dynamicMember: GraphTypedStoreAdapter.formatsKey] = index == 0 ? [String]() as Any : "C02-poison"
                 let membership = Action(GraphTypedStoreAdapter.membersType, graph: facade)
                 membership[dynamicMember: GraphTypedStoreAdapter.graphKey] = id.rawValue.uuidString

@@ -99,3 +99,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [Native identity readiness result](design/results/native-identity-readiness-2026-10-29.md):
   fail-closed negative reads, resource routing, native body exclusion and separate
   metadata/full-integrity costs; public/native schema adoption remains open.
+
+- [Common native identity writer acceptance](design/results/native-identity-writers-2026-10-29.md):
+  common local writes/files/rollback/reopen on the optional-column model, guarded
+  partial imports and remaining native/conversion gates.

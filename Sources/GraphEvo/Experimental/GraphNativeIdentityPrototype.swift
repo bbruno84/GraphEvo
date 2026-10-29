@@ -6,8 +6,8 @@ import GraphEvoStore
 
 /// Local laboratory only. Never selected by the public store schema or opener.
 package enum GraphNativeIdentityPrototype {
-    package static let graphAttribute = "ge2GraphID"
-    package static let nodeAttribute = "ge2NodeID"
+    package static let graphAttribute = GraphNativeIdentityColumns.graphAttribute
+    package static let nodeAttribute = GraphNativeIdentityColumns.nodeAttribute
     private static let activationKey = GraphTypedStoreAdapter.prefix + "nativeIdentityPrototype"
     private static let activationVersion = "local.1"
     private static let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
@@ -31,7 +31,7 @@ package enum GraphNativeIdentityPrototype {
     }
 
     /// Package-only local lab: retain the normal runtime owner, leases, scopes and commit guards.
-    package static func openLab(at url: URL, indexed: Bool) async throws -> GraphDatabase {
+    package static func openLab(at url: URL, indexed: Bool, fullAdapter: Bool = false) async throws -> GraphDatabase {
         GraphValueTransformer.register()
         let base = GraphTypedStoreAdapter.database
         let graph = GraphStoreAdapter(initialize: base.graph.initialize, fetch: { context, graphID, id in
@@ -39,9 +39,11 @@ package enum GraphNativeIdentityPrototype {
             return try record(context, id: id)
         }, fetchAll: base.graph.fetchAll, insert: { context, graphID, value in
             guard value.id.graphID == graphID else { throw GraphStoreError.foreignGraph }
-            try insert(context, value)
+            if fullAdapter { try base.graph.insert(context, graphID, value) }
+            else { try insert(context, value) }
         }, patch: { context, graphID, value in
             guard value.id.graphID == graphID else { throw GraphStoreError.foreignGraph }
+            if fullAdapter { return try base.graph.patch(context, graphID, value) }
             return try patch(context, value)
         }, delete: base.graph.delete, attachmentMetadata: base.graph.attachmentMetadata, query: base.graph.query)
         let adapter = GraphDatabaseAdapter(graph: graph, catalog: { try catalog($0) }, create: { context, id in
@@ -341,9 +343,6 @@ package enum GraphNativeIdentityPrototype {
     package static func insert(_ context: NSManagedObjectContext, _ record: GraphRecord) throws {
         _ = try anchors(context, graphID: record.id.graphID)
         try GraphTypedStoreAdapter.Session(context, record.id.graphID, database: true).insert(record)
-        let refreshed = try GraphTypedStoreAdapter.Session(context, record.id.graphID, database: true)
-        guard let node = refreshed.nodes[record.id] else { throw GraphStoreError.corruptIdentity }
-        try node.setPrototypeIdentity(record.id)
     }
 
     /// Local property/tag/group patch only. Shared writes, attachments and structural edits are not prototyped.

@@ -647,3 +647,16 @@ repair identities or cache an audit across scopes. Found targets remain targeted
 full integrity is explicit and separate. Retain the extra negative-lookup cost.
 All-writer projection maintenance, protected-source conversion/recovery and native
 private/shared adoption remain gates; default schemas/openers are unchanged.
+
+
+## Common native identity writers
+
+GraphNativeIdentityColumns is an optional-model helper: default models have no
+columns and retain existing behavior. New application/control rows use common
+stamping before membership/assignment. Persisted projections are validated,
+never silently filled; explicit conversion owns backfill. Reject partial/mixed
+column definitions before shared intent reservation. Common mutation admission
+and shared finalization preserve native projection checks and pending intent.
+The package-only `openLab(fullAdapter: true)` tests ordinary local APIs without
+the old prototype's mutation workaround. It is not a public schema opener or
+physical native-column sharing proof. See the [writer contract](docs/design/graphevo-2-native-identity-integration.md#common-writer-projection-maintenance).

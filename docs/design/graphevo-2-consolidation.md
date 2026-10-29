@@ -207,3 +207,19 @@ The next increments must maintain projections through all writers and explicit
 protected-source conversion/recovery, then verify native private/shared import
 and conversion before selecting mirrored schemas or indexed query execution.
 Default public openers, the native model and alpha.8 remain unchanged here.
+
+
+## Reviewed consolidation merges and writer increment
+
+#84/#85/#86 were reviewed against their exact heads, with successful macOS/iOS
+CI, and merged through GitHub into the experiment/consolidation parent. Merge
+commits are `e2f6323`, `33225aa` and `0b933dd`; prospective and actual merge trees
+match reviewed content. These merges preserve all measurement checkpoints and do
+not move `codex/graphevo-2` or `2.0.0-alpha.8`.
+
+The next increment wires native projection maintenance into common row/control
+creation, ordinary writes and shared staging/finalization preflight. The
+[writer contract](graphevo-2-native-identity-integration.md#common-writer-projection-maintenance)
+keeps default models/openers unchanged and distinguishes local common-writer
+coverage from native-column physical sharing acceptance. Protected-source
+conversion/recovery is the next remaining layout-adoption component.
