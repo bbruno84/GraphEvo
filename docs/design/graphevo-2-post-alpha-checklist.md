@@ -259,8 +259,9 @@ Sources: A6 backup contract, specification S11, V05/V08.
 - [ ] Define production point-read absence/global-validation semantics, including
   missing columns, raw/column disagreement, duplicates, import progress and old
   writers. An activated local fixture is not a cloud completeness certificate.
-- [ ] Validate paired-store/cloud conversion, actual native sharing and recovery,
-  source/auxiliary/ledger protection and mandatory v1 mapping before adoption.
+- [ ] Complete protected-source/auxiliary/ledger and mandatory v1 mapping
+  acceptance before release adoption. Alpha conversion is removed by M13; fresh
+  native paired sharing/recovery now has bounded device evidence below.
 - [ ] Check high-degree Relationship/Action reference costs and indexing/storage
   trade-offs; Entity-only latency is insufficient for graph-wide acceptance.
 
@@ -322,9 +323,11 @@ does not close the review/native-SDK or indexed identity/query gates above.
   become successful absence. Preserve separate metadata/full-payload validation.
 - [ ] Carry complete native projection maintenance through every integrated
   writer, attachment and assignment/recovery path before any public selection.
-- [ ] Validate fresh native local/private/shared store initialization and import;
-  alpha conversion/activation/interruption tooling is removed by M13. Mandatory
-  protected-source v1 migration remains a separate open gate.
+- [x] Validate controlled fresh native local/private/shared initialization and
+  actual import/assignment/recovery, including separate files. See the local
+  opening result and [device evidence](results/native-identity-paired-devices-2026-10-29.md).
+  Alpha conversion tooling is removed by M13; mandatory protected-source v1
+  migration remains a separate open gate.
 - [ ] Retain changed negative-lookup/audit costs and high-degree action coverage.
   Default native schema and query row-coverage gates remain open.
 
@@ -341,18 +344,22 @@ does not close public schema, paired-store conversion or v1 migration gates.
   post-insertion rescan or repair of persisted missing projections.
 - [ ] Keep local full-adapter coverage for all kinds, files, rollback, cascade,
   independent graphs, reopen and malformed/partial model rejection.
-- [ ] Validate native-column staged assignment/finalization/import and recovery
-  on the private/shared resource pair. Local hooks/tests do not certify it.
-- [ ] Validate public model selection using fresh stores under M13; no prior
-  alpha conversion is required. V1 migration remains mandatory.
+- [x] Validate controlled native-column staged assignment/finalization/import
+  and explicit recovery on the private/shared pair, with independent peers and
+  a separate file run. Preserve the first merge conflict and later recovery.
+  See the [device result](results/native-identity-paired-devices-2026-10-29.md).
+- [x] Validate explicit public local model selection using fresh stores under
+  M13 (reviewed/merged #89). Public mirrored selection is a separate pending
+  increment; no prior alpha conversion is required and v1 migration is mandatory.
 
 #84/#85/#86 review and exact-head macOS/iOS checks passed and their consolidation
 merges are `e2f6323` / `33225aa` / `0b933dd`. Native/schema/beta gates stay open.
 
 Local writer evidence: 507 full tests and 31 selected sanitizer tests pass,
 including common local file lifecycle, projection corruption refusal and guarded
-point/mutation behavior during injected incomplete import. Physical native-column
-assignment/import and protected conversion gates above remain open.
+point/mutation behavior during injected incomplete import. The later physical native-column
+assignment/import result below supersedes that initial laboratory-only scope;
+protected mandatory v1 conversion remains open.
 
 
 ## Alpha compatibility scope — resolved by M13
@@ -367,12 +374,15 @@ Mandatory v1 migration and beta compatibility/backup requirements remain.
 
 ## Fresh native store acceptance
 
-- [ ] Review explicit local native schema selection, create-only activation,
-  incompatible model/prototype refusal and compatible reopen.
+- [x] Review explicit local native schema selection, create-only activation,
+  incompatible model/prototype refusal and compatible reopen. PR #89 reviewed
+  at 0529caa with successful macOS/iOS CI (40856799055, retry after queued job
+  cancellation) and merged through its PR.
 - [ ] Preserve fresh SQLite/memory, independent graph/lease, file, public-product
   consumer and query/observation corruption-recovery regressions.
-- [ ] Validate fresh native private/shared initialization and actual cross-user
-  assignment/import/recovery before selecting this schema in mirrored opens.
+- [x] Validate controlled fresh native private/shared initialization and actual
+  cross-user assignment/import/recovery, including separate attachment bytes/
+  replacement/cascade. See the [device result](results/native-identity-paired-devices-2026-10-29.md); public mirrored adoption remains separate.
 - [ ] Retain v1 migration feasibility and beta data compatibility gates; alpha
   conversion is not required by M13.
 
@@ -394,3 +404,21 @@ V1 migration and beta compatibility remain separate requirements.
 [Readiness evidence](results/native-identity-paired-lab-2026-10-29.md): 512 local
 tests and 13 sanitizer tests passed; generic iOS host compiled. Device connectivity
 prevented the physical run; no native acceptance item is closed by these checks.
+
+
+### Native paired device acceptance (later on 2026-10-29)
+
+The [physical result](results/native-identity-paired-devices-2026-10-29.md) supersedes
+the initial device connectivity block above. Controlled A5 native identities,
+shared insert/details, permissions, explicit interrupted recovery and full
+revoke/reinvite/leave passed on the iPad/XR pair. A separate native A6 run passed
+512-byte/10-MiB exact bytes, participant import/replacement/deletion, owner cascade,
+independent absence and preserved B. Public mirrored defaults remain unchanged.
+
+PA04 remains open for the broad crash/conflict matrix and guidance: the first
+recovery save failed with Cocoa merge error 133020; its original intent survived
+and later explicit recovery succeeded without reassignment. Cover this case in
+supported recovery/error guidance, retain both outcomes and add deterministic
+conflict/interruption coverage before claiming a general guarantee. Neither
+automatic retry nor a change of merge policy was introduced. PA03 account/scale/
+concurrency and mandatory v1 migration gates remain open.

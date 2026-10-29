@@ -2,8 +2,8 @@
 
 Status: fresh local native identity layout available as an explicit alpha schema
 selection. Default/current and mirrored opens retain the prior model. The shared
-resolver preserves audited absence and common writers; native paired acceptance
-remains open. C02b's original weaker miss is retained only as historical evidence.
+resolver preserves audited absence and common writers; controlled native paired
+sharing/file acceptance passed, while public mirrored adoption remains separate. C02b's original weaker miss is retained only as historical evidence.
 Read the [prototype](graphevo-2-native-identity-experiment.md),
 [query contract](graphevo-2-queries.md) and [post-alpha checklist](graphevo-2-post-alpha-checklist.md).
 
@@ -231,3 +231,25 @@ including native attachments, remains open before public mirrored selection.
 The [readiness result](results/native-identity-paired-lab-2026-10-29.md) records
 512 local tests, 13 sanitizer tests, both offline load orders and the successful
 iOS host build, with the unstarted physical run retained as an open gate.
+
+
+## Controlled paired device acceptance
+
+The [device result](results/native-identity-paired-devices-2026-10-29.md) supersedes
+the initial connectivity block for this acceptance scope. Owner iPadOS 27.0 and
+different-account XR iOS 18.7.10 passed native setup, A5/B5 to A8/B5 independent
+recovery, details/permissions, explicit interruption recovery, revoke/reinvite/
+leave and a separate native-column A6 file lifecycle with exact 10-MiB content,
+stable replacement IDs, deletion/cascade and preserved B. Full native integrity
+ran on the controlled graphs, alongside mapping and independent peer checks.
+
+The first recovery attempt returned Cocoa merge error 133020; the original ledger
+survived. A later explicit recoverSharedOperation completed that same intent and
+the owner recovered its value without another native assignment. No library
+merge policy change, automatic body replay, imported-identity repair or error
+suppression was added. Keep both observations and the bounded run scope.
+
+This closes controlled native paired/file feasibility for the selected model.
+Public mirrored schema selection remains a separate reviewed adoption; defaults,
+quotas, account/cache policy, broad conflict/crash guarantees and v1 migration
+are not settled by this run.

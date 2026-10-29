@@ -1,5 +1,9 @@
 # Native identity paired laboratory readiness — 2026-10-29
 
+Later the same day, [physical acceptance](native-identity-paired-devices-2026-10-29.md)
+completed the controlled A5/A6 scope. This readiness record retains the initial
+local checks and connectivity block as history.
+
 ## Outcome
 
 The internal native-column paired opener and a disposable A5 host are ready for
