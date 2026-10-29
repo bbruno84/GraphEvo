@@ -282,12 +282,15 @@ package enum GraphTypedStoreAdapter {
         var root: Entity?
         var membership: Action?
         private var metadata: GraphRuntimeMetadata?
+        private let allowUnprojectedRows: Bool
 
-        init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false, maximumCandidates: Int? = nil) throws {
+        init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false, maximumCandidates: Int? = nil,
+             allowUnprojectedRows: Bool = false) throws {
             graph = facade(context)
             self.context = context
             self.graphID = graphID
             self.database = database
+            self.allowUnprojectedRows = allowUnprojectedRows
             try GraphValueDecodingDiagnostics.checking {
                 let all = try maximumCandidates.map { try boundedNodes(graph, limit: $0) } ?? allNodes(graph)
                 nativeCandidateCount = all.count
@@ -415,6 +418,7 @@ package enum GraphTypedStoreAdapter {
         }
 
         func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, propertyRows: GraphRuntimeMetadata? = nil, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
+            if !allowUnprojectedRows { try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: id.rawValue) }
             let projected: [String: Any]? = propertyKeys.flatMap { keys in
                 propertyRows.map { rows in
                     keys.reduce(into: [:]) { values, key in

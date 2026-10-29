@@ -1415,3 +1415,46 @@ predicates or traversal keeps conservative materialization. Skipped bodies are
 not certified. Query signatures, cursor semantics and the reported bounded
 inventory strategy are unchanged. See the
 [query contract](../design/graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
+
+## Explicit local native-identity schema (alpha)
+
+```swift
+public enum GraphDatabaseSchema: Sendable {
+    case current
+    case nativeIdentity
+}
+
+extension GraphDatabase {
+    public static func open(at url: URL, schema: GraphDatabaseSchema) async throws -> GraphDatabase
+    public static func inMemory(schema: GraphDatabaseSchema) async throws -> GraphDatabase
+    public func validateIntegrity(of graphID: GraphID) async throws -> Int
+}
+```
+
+`nativeIdentity` creates a new local store or reopens its compatible fresh-alpha
+layout. It uses optional native graph/node String projections and a configured
+compound fetch index; no uniqueness constraint or specific SQL-plan guarantee is
+implied. It does not convert an existing current/prototype store or erase an
+incompatible path. Graph creation activates only newly allocated empty controls.
+Incompatible alpha layouts start from empty stores under M13.
+
+Existing no-schema overloads and `current` retain the previous model. Mirrored
+opening still selects that model; the new choice is local-only at this increment.
+Single-graph v1 adoption APIs retain their existing separate scope.
+
+Native point hits validate targets/references; misses audit the same-view native
+routing/identity inventory before returning nil. Mutations use common typed
+writers. Queries remain bounded inventory/memory evaluation with full documented
+candidate allowances and identity-guarded property loading; selecting this schema
+does not select an indexed SQL query strategy. Scoped snapshots validate native
+projections of consulted nodes, and descriptor/codec errors remain visible.
+
+`validateIntegrity(of:)` supports both public database schemas and returns the
+selected graph's application-row count, including attachments and excluding hidden
+controls. It explicitly scans identities, structure and stored payloads/file
+integrity. It does not invoke application model initializers, follow query byte
+budgets or certify domain validity, another replica or CloudKit import completion.
+The operation can load complete large file bodies; metadata-only listing has a
+different scope. A graph absent from the current catalog reports `missingGraph`.
+
+See the [fresh native store contract](../design/graphevo-2-native-identity-integration.md#fresh-local-native-schema-api).

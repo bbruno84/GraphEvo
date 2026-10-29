@@ -422,7 +422,8 @@ extension GraphNativeIdentityPrototypeTests {
                 #expect(throws: GraphStoreError.self) { try session.patch(GraphRecordPatch(id: id, properties: ["name": .set(.string("bad"))])) }
                 #expect(throws: GraphStoreError.self) { try session.delete(id) }
                 #expect(node.node.value(forKey: GraphNativeIdentityPrototype.nodeAttribute) == nil)
-                #expect(try session.snapshot(node, id: id).properties["name"] == .string("keep"))
+                let bytes = try #require(node[dynamicMember: "name"] as? Data)
+                #expect(try GraphValueCodec.decode(bytes) == .string("keep"))
             }
         }
         #expect(try await graph.read { try $0.record(for: id)?.properties["name"] } == .string("keep"))
