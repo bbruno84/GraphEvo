@@ -103,3 +103,7 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [Common native identity writer acceptance](design/results/native-identity-writers-2026-10-29.md):
   common local writes/files/rollback/reopen on the optional-column model, guarded
   partial imports and remaining native/conversion gates.
+
+- [Fresh native local store acceptance](design/results/native-fresh-local-stores-2026-10-29.md):
+  explicit public native schema, create-only activation, compatible reopen and
+  storage integrity; native paired/mirrored acceptance remains separate.

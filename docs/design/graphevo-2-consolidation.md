@@ -235,3 +235,13 @@ history. Next: create/validate fresh local stores, then controlled fresh mirrore
 private/shared fixtures, while maintaining writer, query and observation guards.
 Mandatory v1 local/cloud migration remains separate. No automatic erasure of
 incompatible existing files or CloudKit data is introduced.
+
+
+## Fresh native local opening
+
+The next reviewed increment explicitly selects `GraphDatabaseSchema.nativeIdentity`
+for local SQLite/memory resources, with distinct public protocol activation and no
+alpha conversion. The shared persistence resolver replaces production dependence
+on the old laboratory enum. Existing defaults and mirrored paths are unchanged;
+fresh paired native initialization is the next acceptance step. Explicit storage
+integrity validation, guarded reads and bounded queries retain distinct scopes.

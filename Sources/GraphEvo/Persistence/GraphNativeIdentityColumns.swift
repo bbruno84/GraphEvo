@@ -8,6 +8,25 @@ enum GraphNativeIdentityColumns {
     static let graphAttribute = "ge2GraphID"
     static let nodeAttribute = "ge2NodeID"
 
+    static func makeModel(indexed: Bool) -> NSManagedObjectModel {
+        let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
+        let model = Model.makeModel()
+        for name in kinds {
+            let entity = model.entitiesByName[name]!
+            for key in [graphAttribute, nodeAttribute] {
+                let attribute = NSAttributeDescription()
+                attribute.name = key; attribute.attributeType = .stringAttributeType; attribute.isOptional = true
+                entity.properties.append(attribute)
+            }
+            if indexed {
+                entity.indexes.append(NSFetchIndexDescription(name: name + "_ge2_identity", elements: [graphAttribute, nodeAttribute].map {
+                    NSFetchIndexElementDescription(property: entity.attributesByName[$0]!, collationType: .binary)
+                }))
+            }
+        }
+        return model
+    }
+
     private static func enabled(_ entity: NSEntityDescription) throws -> Bool {
         let graph = entity.attributesByName[graphAttribute], node = entity.attributesByName[nodeAttribute]
         if graph == nil && node == nil { return false }

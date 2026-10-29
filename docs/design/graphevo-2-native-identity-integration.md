@@ -1,10 +1,9 @@
 # GraphEvo 2 — native identity integration
 
-Status: staged alpha integration after review of #84/#85. C02b proved useful
-local point-access costs but its original index miss could hide missing columns.
-This contract defines the next implementation boundaries. The first increment
-closes that unsafe absence result within the package-only laboratory; it does
-not change default schemas/openers or assert CloudKit conversion readiness.
+Status: fresh local native identity layout available as an explicit alpha schema
+selection. Default/current and mirrored opens retain the prior model. The shared
+resolver preserves audited absence and common writers; native paired acceptance
+remains open. C02b's original weaker miss is retained only as historical evidence.
 Read the [prototype](graphevo-2-native-identity-experiment.md),
 [query contract](graphevo-2-queries.md) and [post-alpha checklist](graphevo-2-post-alpha-checklist.md).
 
@@ -14,8 +13,8 @@ Logical GraphID/GraphNodeID remain persistent UUID values. Native graph/node
 String columns are queryable routing projections, cross-checked against archived
 logical identity metadata. Never derive identity from Core Data URIs or native
 CloudKit mappings. A configured compound index supplies no global uniqueness or
-cross-replica completion guarantee. Optional native fields remain a candidate;
-this document does not activate them on public opens.
+cross-replica completion guarantee. Optional native fields are selected only by the explicit local native schema;
+default and mirrored opens remain on the previous model.
 
 | Operation | Evidence and outcome |
 |---|---|
@@ -149,9 +148,9 @@ actions, independent graphs, integrity checks and reopen. It also verifies that 
 bad persisted projection cannot be repaired by stamping/patch/deletion, and a
 partial model fails before control creation or raw logical identity edits.
 
-Fresh-store opening/validation and native paired-store acceptance remain before
-public model selection. Prior alpha conversion tooling is not required under
-the maintainer's fresh-store policy. Projection maintenance alone does not
+Fresh local opening now selects this model explicitly. Native paired-store
+acceptance remains before mirrored selection. Prior alpha conversion tooling is
+not required under the maintainer's fresh-store policy. Projection maintenance alone does not
 select the default schema, enter beta or promote an integration/tag.
 
 
@@ -164,3 +163,47 @@ coverage, not native CloudKit import/assignment acceptance.
 The [writer acceptance record](results/native-identity-writers-2026-10-29.md)
 separates 507 local tests, 31 targeted sanitizer tests and the Release functional
 probe from physical native-column sharing/conversion acceptance.
+
+
+## Fresh local native schema API
+
+The local adoption increment offers explicit `GraphDatabase.open(at:schema:)`
+and `inMemory(schema:)` selection with `GraphDatabaseSchema.nativeIdentity`.
+No-schema/current opens and existing mirrored opens keep their prior schema;
+this is an explicit local alpha option, not a silent default-model replacement.
+
+A shared GraphNativeIdentityAccess resolver now lives in persistence code. Its
+persisted marker distinguishes fresh public `nativeIdentityLayout = alpha.1`
+controls from historical laboratory `nativeIdentityPrototype = local.1` controls,
+although their native column shapes can match. Public creation activates only
+new, empty, unstaged controls with valid projections. No backfill/copy/migration
+path is called by the public native opener. Historical helpers remain package-only.
+Old/current incompatible models and old prototype markers are refused; their
+original paths/data remain available to their original reader.
+
+Point reads retain the audited native hit/miss contract. All ordinary writes use
+the common typed adapter, with graph protocol checks before operations. Bounded
+queries still inventory the resource group, preserving existing allowances,
+related dependencies and property materialization semantics. Snapshots validate
+native projections for consulted nodes, even when their payload is skipped.
+Only the explicit historical backfill scope can read unprojected source snapshots.
+Metadata attachment listing validates native identity inventory without reading
+file bodies. No indexed SQL query or total-memory promise is introduced.
+
+`GraphDatabase.validateIntegrity(of:)` is explicit and works with current and native
+local schemas. It validates storage-level graph identities, endpoints and payloads,
+including attachment content/ownership, without invoking app model decoders. It
+returns application-node count and is separate from query budgets, metadata-only
+listing and native import completion. It can materialize complete large files.
+
+Local acceptance includes fresh SQLite/in-memory stores, empty catalog, multiple
+graphs, independent leases, files and reopen; refusal of current/prototype data
+without conversion; projection corruption surfaced by point/query/integrity and
+observed failure/recovery. An external Swift 6 Release consumer exercises the
+public product, native opening, typed model, query, Combine and reopen without
+package/test access.
+
+Native-column mirrored initialization/assignment/import and physical private/shared
+acceptance remain the next step. Local selection does not make a fresh local path
+proof of an empty cloud container. M13 removes alpha-conversion work; mandatory
+v1 data migration and beta compatibility remain separate release requirements.

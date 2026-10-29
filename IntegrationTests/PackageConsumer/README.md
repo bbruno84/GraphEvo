@@ -24,3 +24,9 @@ swift run --package-path IntegrationTests/PackageConsumer ModelConsumer
 
 The fixture manifest requires Swift tools 6.0. The legacy executable retains
 Swift 5 language mode; ModelConsumer uses Swift 6 language mode.
+
+
+ModelConsumer also exercises the explicit fresh local native-identity schema
+through the public product: SQLite creation, a typed model, storage integrity,
+query/Combine and reopen. This does not enable native-column mirrored selection
+or assert cross-device synchronization.

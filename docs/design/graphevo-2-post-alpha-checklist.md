@@ -363,3 +363,18 @@ or protected alpha-conversion recovery are superseded: they are not adoption
 or beta gates. Historical migration experiments remain evidence only. Fresh
 local/mirrored initialization and native behavior still require acceptance.
 Mandatory v1 migration and beta compatibility/backup requirements remain.
+
+
+## Fresh native store acceptance
+
+- [ ] Review explicit local native schema selection, create-only activation,
+  incompatible model/prototype refusal and compatible reopen.
+- [ ] Preserve fresh SQLite/memory, independent graph/lease, file, public-product
+  consumer and query/observation corruption-recovery regressions.
+- [ ] Validate fresh native private/shared initialization and actual cross-user
+  assignment/import/recovery before selecting this schema in mirrored opens.
+- [ ] Retain v1 migration feasibility and beta data compatibility gates; alpha
+  conversion is not required by M13.
+
+The local API and [validation scopes](graphevo-2-native-identity-integration.md#fresh-local-native-schema-api)
+do not turn bounded queries into indexed SQL or certify cloud completion.

@@ -82,7 +82,22 @@ private struct Profile: GraphModel {
             throw GraphStoreError.missingNode
         }
         try await first.close(); try await control.close()
-        print("GraphEvo Swift 6 typed store and graph catalog consumer passed")
+        let nativeURL = directory.appendingPathComponent("Native.sqlite")
+        let native = try await GraphDatabase.open(at: nativeURL, schema: .nativeIdentity)
+        guard try await native.graphIDs().isEmpty else { throw GraphModelError.invalidValue }
+        let nativeGraph = try await native.createGraph()
+        let nativeProfile = Profile(id: nativeGraph.makeNodeID(), displayName: "Grace")
+        try await nativeGraph.insert(nativeProfile)
+        guard try await native.validateIntegrity(of: nativeGraph.id) == 1 else { throw GraphModelError.invalidValue }
+        let nativeQuery = GraphQuery<Profile>(budget: try GraphQueryBudget(maximumCandidates: 128)).where(.id(nativeProfile.id))
+        guard try await nativeGraph.query(nativeQuery).items.first?.displayName == "Grace" else { throw GraphModelError.invalidValue }
+        try await checkCombine(nativeGraph, query: nativeQuery)
+        try await nativeGraph.close(); try await native.close()
+        let nativeReopen = try await GraphDatabase.open(at: nativeURL, schema: .nativeIdentity)
+        let nativeReader = try await nativeReopen.openGraph(nativeGraph.id)
+        guard try await nativeReader.fetch(nativeProfile.id, as: Profile.self)?.displayName == "Grace" else { throw GraphStoreError.missingNode }
+        try await nativeReader.close(); try await nativeReopen.close()
+        print("GraphEvo Swift 6 typed store, graph catalog and native schema consumer passed")
     }
 }
 

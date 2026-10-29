@@ -671,3 +671,17 @@ layout work targets fresh local and controlled mirrored store initialization.
 Do not automatically erase incompatible existing files or cloud data. Mandatory
 v1-to-v2 migration and beta data compatibility remain distinct requirements.
 See the delivery plan and native identity integration contract.
+
+
+## Explicit fresh native local schema
+
+GraphDatabaseSchema.nativeIdentity selects the public fresh local alpha layout;
+no-schema/current and mirrored opens keep the previous model at this increment.
+Use the shared GraphNativeIdentityAccess resolver, with distinct public/prototype
+activation markers. Public graph activation requires new empty controls; never
+call historical backfill/copy helpers from ordinary native opens. Snapshots check
+consulted native projections; allowUnprojectedRows is only for explicit historical
+backfill. Queries retain full bounded inventory and existing property policies.
+validateIntegrity(of:) is explicit full storage/payload validation, not app-domain
+validation or a CloudKit certificate. Fresh paired/native physical acceptance and
+v1 migration remain separate. See the fresh local native schema contract.

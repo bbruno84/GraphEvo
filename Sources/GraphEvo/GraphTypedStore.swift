@@ -58,3 +58,38 @@ extension GraphDatabase {
         catch { try await database.close(); throw error }
     }
 }
+
+
+/// Alpha native-model selection. Incompatible layouts require fresh stores, not automatic conversion.
+public enum GraphDatabaseSchema: Sendable {
+    case current
+    /// Fresh local indexed identity model. Mirrored opens do not select this model yet.
+    case nativeIdentity
+}
+
+extension GraphDatabase {
+    /// Opens a fresh or compatible local store with an explicit native schema.
+    public static func open(at url: URL, schema: GraphDatabaseSchema) async throws -> GraphDatabase {
+        switch schema {
+        case .current: return try await open(at: url)
+        case .nativeIdentity:
+            return try await open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.nativeIdentity,
+                                  adapter: GraphNativeIdentityDatabaseAdapter.database)
+        }
+    }
+
+    public static func inMemory(schema: GraphDatabaseSchema) async throws -> GraphDatabase {
+        switch schema {
+        case .current: return try await inMemory()
+        case .nativeIdentity:
+            return try await open(configuration: .init(location: .inMemory(UUID())), schema: GraphRuntimeSchema.nativeIdentity,
+                                  adapter: GraphNativeIdentityDatabaseAdapter.database)
+        }
+    }
+
+    /// Checks this local graph's storage-level identities, structure and payloads; returns application row count.
+    /// Does not invoke application model decoders or certify CloudKit/import completion.
+    public func validateIntegrity(of graphID: GraphID) async throws -> Int {
+        try await contextRead { try GraphNativeIdentityDatabaseAdapter.validate($0, graphID: graphID) }
+    }
+}
