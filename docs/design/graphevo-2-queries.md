@@ -202,3 +202,10 @@ Native logical identity columns remain a separate integration candidate. Before
 selecting them publicly, settle missing columns, old writers, imported partial
 rows, private/shared conversion and mandatory v1 migration. This increment does
 not change store opening, migrations, share assignment or attachment ownership.
+
+
+The [retained public comparison](results/identity-guarded-queries-2026-10-29.md)
+records 501 tests, 44 selected sanitizer tests and 72 matched Release rows.
+On the 500-node scalar fixture, 32 shared-query startup falls from 4.74 to 2.55 s;
+32 mixed updates remain about 2.50 s despite improvement. These are local
+measurements, not physical/native acceptance or a product performance envelope.

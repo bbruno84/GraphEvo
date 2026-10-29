@@ -309,3 +309,7 @@ Sources: A6 backup contract, specification S11, V05/V08.
   columns, import/old-writer absence semantics and v1 data migration remain open.
 
 Source: [query materialization contract](graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
+
+Local implementation evidence: [501 tests, 44 targeted sanitizer tests and 72
+matched Release rows](results/identity-guarded-queries-2026-10-29.md). This evidence
+does not close the review/native-SDK or indexed identity/query gates above.
