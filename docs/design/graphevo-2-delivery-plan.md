@@ -221,8 +221,10 @@ v1 guidance remains accessible.
 
 ## Migration manager renewal
 
-The [M1–M5 plan](graphevo-2-migration-manager.md) renews the manager alongside
-mandatory v1 conversion. Evaluate a compatibility adapter on MyHomeBills
-RecoveryV2 instead of assuming either full source compatibility or no adapter.
+The [M1–M6 plan](graphevo-2-migration-manager.md) renews the manager alongside
+mandatory v1 conversion. Consumers define native-schema and application-data migrations; GraphEvo manages
+execution and compatibility of later imported records as well as whole migrations.
+Evaluate the optional v1 adapter on independent consumers, using MyHomeBills
+RecoveryV2 as one production example rather than an architectural template.
 The first package-only journal increment is not a public executor or a migration
 readiness certificate. Local/cloud conversion feasibility remains a beta gate.

@@ -99,3 +99,13 @@ read-only readers are implemented as a candidate path, with separate-process
 macOS evidence. This does not settle iOS sandbox/suspension or interactive writes;
 see [extension access](graphevo-2-app-extension-access.md). The maintainer rejects
 forcing concurrent native cloud synchronizers or unsafe lifetime locks.
+
+
+2026-10-29 migration-service clarification (D07/O04): consumers define native
+Core Data schema and application-data migrations; GraphEvo manages execution and
+ongoing compatibility of imported individual records, including updates after a
+whole migration completed. Native layout, logical record format and operation
+versions are distinct. RecoveryV2 is one production validation case rather than
+the architectural template. Unknown formats require visible admission states;
+no guessed pre-import interception, silent downgrade or query omission. See the
+[manager contract](graphevo-2-migration-manager.md) for M1–M6 and acceptance.

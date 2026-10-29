@@ -125,4 +125,4 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 - [V2 migration manager renewal](design/graphevo-2-migration-manager.md): awaited
   manager plan, concrete RecoveryV2 compatibility evaluation, checkpoint foundation
-  and remaining admission/local/cloud conversion increments.
+  and remaining admission/schema/data/cloud compatibility increments.

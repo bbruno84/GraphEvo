@@ -1,7 +1,7 @@
 # GraphEvo 2 — migration manager renewal
 
 Status: M1 implements a package-only Swift 6 checkpoint foundation. No public
-migration executor, source conversion, runtime admission or cloud cutover is
+migration executor, source conversion, runtime admission, import compatibility pipeline or cloud cutover is
 activated. The existing v1 manager and registered application migrations retain
 their behavior. See specification section 11 and PA08 in the post-alpha checklist.
 
@@ -12,6 +12,16 @@ compatibility is optional, but evaluate a compatibility layer using real existin
 migrations before choosing its supported subset. Do not exclude it prematurely or
 let it determine the new core design. Alpha-to-alpha conversion remains excluded;
 mandatory v1 data conversion and beta compatibility remain required.
+
+RecoveryV2 is a representative production consumer, not an architectural template
+or the only supported migration shape. Design the manager independently and use
+that example plus unrelated synthetic consumers to validate generality.
+
+Maintainer clarification: consumer-authored migrations must cover both native
+Core Data schema changes and internal application-data changes. The library owns
+execution and lifecycle. Compatibility management must cover whole migrations
+and individual records/updates arriving later from incompatible versions.
+A completed full-store migration cannot disable subsequent compatibility work.
 
 The target is an awaited manager with typed failures, detached progress/state,
 explicit resource admission, protected source/backup handling, checkpointed
@@ -30,7 +40,7 @@ The maintainer identifies this migration as deployed in production; this work
 inspected its implementation/tests without executing production data or claiming
 an independent production acceptance test. No application source is copied.
 
-The example establishes requirements beyond adapting a callback:
+The example illustrates requirements to test beyond adapting a callback:
 
 - `preInit` discovers/protects sources and prepares an archived reconciliation
   result; `ready` publishes through the actual Graph. A phase callback's `.done`
@@ -53,6 +63,130 @@ Useful existing consumer tests include `testV2LifecycleCommitsBeforeLedgerDoneAn
 `testPublisherNoOpAndConcurrentEditProtection` and
 `testOfflinePreparationRetainsBackupsWithoutPublishing`. Their code was inspected;
 these application tests were not run by M1.
+
+## Consumer-defined migrations, library-managed execution
+
+Use one migration service with separate execution adapters, rather than requiring
+every migration to resemble a whole-store RecoveryV2 reconciliation.
+
+| Migration class | Consumer definition | GraphEvo responsibility |
+|---|---|---|
+| Native Core Data schema | Source/target schema references, supported route, prerequisites, optional pre/post data transformations and semantic checks | Inspect the actual store model, resolve the registered route, coordinate resource closure/admission, select a validated native migration mechanism, protect the source, reopen and verify |
+| Application data | Logical format/type versions, selection/dependencies, typed transformation and validation, repeat/recovery policy | Admit awaited work, scoped transactions, durable checkpoints, cancellation, progress, conflict/recovery handling and publication of usable state |
+| Imported record compatibility | Recognized source/target formats, discriminators/defaults for declared legacy formats, affected dependencies and deterministic upgrade policy | Discover affected local rows after native import, enqueue durable compatibility work, revalidate the source revision, transform or hold as incompatible, and refresh supported readers |
+
+Registration precedes opening and declares stable IDs, versions, dependencies,
+supported source ranges and target formats. Resolve a deterministic route or
+return an explicit unsupported/ambiguous route; do not guess a conversion.
+The registration contract and public names are not fixed by M1. Core Data schema
+references travel through a privileged backend adapter; ordinary typed Graph
+migration scopes do not expose implementation Managed objects. GraphEvo-owned
+native model revisions remain library-defined routes. This does not yet promise
+support for arbitrary consumer-supplied native models or every mapping technique.
+
+Schema and data work may interleave: prepare data under schema A, transition
+A to B, then complete a transformation under B. Per-step source capabilities and
+validation must be explicit. A plan cannot request a B-only query before B exists.
+Data-only migrations must work without a native model change. Schema changes
+must be validated on local and mirrored resources separately; a successful local
+migration does not establish CloudKit production compatibility.
+
+Apple provides [NSStagedMigrationManager](https://developer.apple.com/documentation/coredata/nsstagedmigrationmanager)
+and [NSCustomMigrationStage](https://developer.apple.com/documentation/coredata/nscustommigrationstage)
+for ordered native transitions and custom pre/post work. Evaluate these and other
+supported Core Data migration routes in a protected laboratory before selecting
+an adapter. Do not enable automatic migration on ordinary Graph opens or promise
+that every local schema transformation can be mirrored. Apple's
+[CloudKit model guidance](https://developer.apple.com/documentation/coredata/creating-a-core-data-model-for-cloudkit)
+and [schema deployment rules](https://developer.apple.com/documentation/cloudkit/deploying-an-icloud-container-s-schema)
+require additive production evolution; incompatible changes need a separately
+validated transition policy.
+
+## Version domains and cloud lifecycle
+
+Keep native model/layout version, application data-format version and migration
+operation identity distinct. The application build number or one global done
+flag is insufficient. Per-record format discrimination is required where mixed
+formats may coexist. Its storage location/envelope and legacy defaults remain
+schema decisions to validate; do not freeze a new native field just for M1.
+An old record without version metadata is accepted only through a declared legacy
+format rule, never by guessing from whichever decoder happens to succeed.
+
+Whole-store migration and ongoing import compatibility have distinct state:
+
+- Whole migrations register local progress, semantic completion and activation.
+  A remote completion projection is informational; each local replica must still
+  establish schema compatibility and usable data. Fresh/partial replicas cannot
+  skip initialization or treat absence as a complete empty source.
+- After an import, changed records and dependency closures are checked against
+  supported logical formats. A later old-format update to an already upgraded
+  record must be evaluated again. Deduplication binds graph/node, source format,
+  validated source revision/fingerprint and transformation version, not node ID
+  alone. Do not assume a public CloudKit record version is available or atomic.
+- Changes and destination-format metadata/commit evidence must be persisted in
+  the same admitted transaction. Recheck consulted source revisions/dependencies
+  before writing; if import or user edits changed them, discard the stale plan and
+  re-evaluate current data. Completion markers are not a global transaction.
+- Define conversion to converge without producing endless old/new rewrite loops.
+  Delayed delivery, duplicate history, interrupted conversion, same-record edits,
+  partially imported endpoints and deletes must not duplicate or resurrect data.
+  Account/store identity changes invalidate inappropriate pending work.
+
+Native CloudKit imports are owned by NSPersistentCloudKitContainer. Apple's
+[TN3163](https://developer.apple.com/documentation/technotes/tn3163-understanding-the-synchronization-of-nspersistentcloudkitcontainer)
+explains that imports apply remote data to the local store. [TN3164](https://developer.apple.com/documentation/technotes/tn3164-debugging-the-synchronization-of-nspersistentcloudkitcontainer)
+directs applications to consume persistent history after remote-change signals;
+scheduling is controlled by the system. Build a local compatibility-admission
+pipeline around this, not an assumed pre-import interceptor or sync pause.
+
+Persistent history/native signals discover work; the journal and an internal
+processing contract retain retry/recovery responsibility. Bind cursors to the
+correct resource/account and atomically enqueue durable work before advancing
+discovery, or retain the cursor on failure. History loss requires a bounded,
+resumable rescan. A coalesced observation invalidation or container event alone
+is not a durable work queue or an import-completion certificate. This manager
+requires its own processing contract; it does not silently close A8/O04.
+
+Do not publish incompatible payloads as normal typed query/observation results.
+Define an explicit pending/incompatible/update-required state with the narrowest
+safe scope: record/dependency closure, graph, or resource when routing is unknown.
+Do not omit records and return a smaller successful result. Native import itself
+may already have changed the SQLite store; this is a library read/write admission
+boundary, not a claim to hide bytes from native import or repair an unmodifiable
+store. Queries, observation, snapshots and local writers must share the policy.
+The exact snapshot/isolation mechanism is an M2/M6 experiment, not delivered M1.
+
+Supported older data may be converted by a registered consumer transformation.
+Unknown future formats are retained and reported without lossy downgrade. An
+unsupported native model or failed native import is a schema/sync error; a logical
+record converter cannot make an undecodable/unimported native row available.
+Shared read-only participants and widgets cannot persist upgrades. Hold the
+required state until an authorized owner/upgraded writer establishes compatible
+data; no bypass of A5 permissions or second synchronizer is permitted.
+
+KVS completion, local completion, local export, native import and independent
+replica validation remain different evidence. For the agreed v1-to-v2 cutover,
+v1 writers still stop before conversion. The general post-migration pipeline
+also covers later stale/incompatible deliveries, but does not magically prevent
+old unsupported clients from writing or establish source completeness.
+
+## General acceptance matrix
+
+Validate the service with independent consumer-authored definitions as well as
+RecoveryV2. Required cases include:
+
+- Data-only format conversion without a model change; native schema-only and
+  interleaved schema/data transitions; unsupported and ambiguous paths.
+- Full migration followed by a delayed old-format insert and an old-format update
+  to the same converted record; duplicate delivery and restart after effect commit.
+- Newer unknown format and unknown legacy format; missing/partial dependencies;
+  semantic conflict, deletion and conflict during conversion; no silent omission.
+- Two replicas at different supported versions, fresh-replica recovery, failed
+  export, delayed imports, repeated conversion and bounded convergence.
+- History expiration, pending-work crash, account switch, widget-before-app and
+  shared read-only participant; no unauthorized mutation or cursor-based loss.
+- Existing v1 consumer phase/ledger compatibility, plus a minimal unrelated app
+  with custom data transformations. No app-specific repair policy in the manager.
 
 ## Compatibility evaluation
 
@@ -125,9 +259,11 @@ until explicit admission is implemented.
    ownership, backup protection, awaited phase execution, bounded progress and
    recovery hooks. Define widget-before-app and close/cancellation behavior;
    never retain a cross-process lifetime lock across iOS suspension.
-3. **M3 — v1 compatibility experiment:** import actual ledger fixtures and port a
-   representative preparation/publication slice of RecoveryV2 with an independent
-   library consumer. Publish the precise supported adapter subset and porting guide.
+3. **M3 — v1 compatibility experiment:** import actual ledger fixtures and evaluate
+   representative existing migrations, including a RecoveryV2 slice. Validate
+   separate minimal consumer-authored data and native-schema plans so no one
+   application's lifecycle defines the service. Publish the supported adapter
+   subset and porting guide.
 4. **M4 — v1 local conversion:** frozen source/codec matrix, graph-scoped identity
    mappings, all node/value/topology/file cases, validated destination activation
    and fault-injected recovery. Source copies and backups remain protected.
@@ -135,6 +271,11 @@ until explicit admission is implemented.
    source, one conversion authority, duplicate prevention, late/offline old clients,
    graph/share destination policy and independent v2 replica recovery. KVS cannot
    establish this fence. Do not activate an empty cloud destination as success.
+6. **M6 — ongoing cloud format compatibility:** durable import processing,
+   per-record format policy, dependency/admission gating, authorized upgrades,
+   stale/future format handling and cross-replica convergence. Design this with
+   M2/M4/M5, not after freezing their APIs. Separate full-operation completion
+   from later incompatible inserts/updates; validate the general matrix above.
 
 Representative local/cloud feasibility still gates beta. Full tooling, real-store
 conversion and interruption/recovery acceptance gate stable 2.0. Neither this

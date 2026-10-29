@@ -766,3 +766,12 @@ phase success, validation, activation and remote completion. Evaluate the v1
 compatibility layer against RecoveryV2; do not copy application-specific repair,
 deduplication, reset or cache policies into the library. Preserve v1 behavior and
 keep PA08 open until representative local/cloud feasibility is established.
+
+The manager is a general consumer-defined schema/data migration service;
+RecoveryV2 is one validation case, not its template. Whole-migration completion
+must not suppress compatibility checks on later cloud inserts/updates. Separate
+native model, logical record format and operation versions. Native import remains
+owned by NSPersistentCloudKitContainer; incompatible data must have explicit
+admission states, not silent query omission or guessed pre-import interception.
+M6 requires durable processing, revision/dependency checks, permission safety and
+cross-replica convergence. These are design requirements, not M1 capabilities.
