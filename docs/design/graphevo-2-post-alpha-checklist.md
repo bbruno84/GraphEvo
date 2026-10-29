@@ -327,3 +327,8 @@ does not close the review/native-SDK or indexed identity/query gates above.
   the existing local mapping prototype. Mandatory v1 migration remains open.
 - [ ] Retain changed negative-lookup/audit costs and high-degree action coverage.
   Default native schema and query row-coverage gates remain open.
+
+First native readiness evidence: [504 tests, 16 selected sanitizer tests and 120
+focused Release rows](results/native-identity-readiness-2026-10-29.md), retaining
+stronger negative-lookup costs and unrouted/staged/native-body regressions. This
+does not close public schema, paired-store conversion or v1 migration gates.

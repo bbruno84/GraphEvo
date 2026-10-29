@@ -21,7 +21,7 @@ this document does not activate them on public opens.
 |---|---|
 | Native point hit | Validate the matched target, native/raw identity, membership and referenced endpoints; detect native-column duplicates across every node kind. This is not a whole-graph integrity certificate. |
 | Native point miss | Audit the complete logical/native identity inventory on the same context/local view before returning nil. Missing, mismatched, malformed, duplicate or misrouted columns are errors, not absence. No persisted activation marker substitutes for this check. |
-| Known staged rows | A valid staged row makes the absence audit fail with pendingNativeOperation, even when its native columns have not arrived. Do not infer import progress from an arbitrary missing field. |
+| Known staged rows | A valid staged row in the selected graph makes the absence audit fail with pendingNativeOperation, even when its native columns have not arrived. Do not infer import progress from an arbitrary missing field. |
 | Metadata identity audit | First reject unroutable native rows across the resource group, then check this graph's routing identities, existing membership/format metadata and exact backing-row coverage; no application property bodies are decoded and no IDs are repaired. A malformed unrelated app body does not prevent an otherwise valid metadata absence check. |
 | Full integrity | Add complete payload, endpoint and attachment-owner validation. This is separately invoked/timed and remains distinct from the metadata audit. |
 
@@ -118,3 +118,9 @@ before beta; complete and validate mandatory migration tooling before stable 2.0
 4. Add selective query execution only where row coverage and related dependency
    bounds are established. Re-measure public startup/mixed descriptors and
    complete v1 migration feasibility; do not freeze schema or enter beta early.
+
+
+The [first retained result](results/native-identity-readiness-2026-10-29.md)
+records 504 tests, 16 sanitizer tests and 120 focused Release rows. Safe native
+absence on 500 nodes costs about 52 ms; positive indexed hits remain 2.6–3.5 ms.
+These are local validation scopes, not interchangeable production guarantees.
