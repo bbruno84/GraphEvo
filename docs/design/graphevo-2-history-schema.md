@@ -78,8 +78,9 @@ unresolved states, then atomically persist pending work with its history checkpo
 before advancing the cursor. Prepare immutable batches from coherent current reads
 and preserve newer generations when older sends are acknowledged.
 
-That processor, pending-state storage, crash/power-loss recovery and CKSyncEngine
-activation are not implemented by this model increment. No typed mutation journal
+That processor and pending-state storage are implemented separately in the
+[package-only PH continuation](graphevo-2-history-processing.md). Real crash/power-loss
+recovery and CKSyncEngine activation remain unimplemented by this model increment. No typed mutation journal
 or interception of every consumer edit is introduced. Retain beta gates for
 history pruning/expiry, copied/replaced stores, account/conflict policy and scale.
 

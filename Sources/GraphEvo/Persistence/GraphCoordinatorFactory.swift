@@ -9,7 +9,7 @@ enum GraphCoordinatorFactory {
 
     static var adapter: GraphCoordinatorAdapter {
         let native = GraphNativeIdentityDatabaseAdapter.database
-        return GraphCoordinatorAdapter(graph: native.graph) { context, id, creating in
+        return GraphCoordinatorAdapter(graph: native.graph, sync: GraphSyncCheckpointAdapter.adapter) { context, id, creating in
             guard !(context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer),
                   context.persistentStoreCoordinator?.persistentStores.count == 1 else {
                 throw GraphStoreError.unsupportedLayout
@@ -32,6 +32,8 @@ enum GraphCoordinatorFactory {
                 }
             }
             _ = try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: id)
+            if creating { try GraphSyncCheckpointAdapter.reservePurpose(context, graphID: id) }
+            else { try GraphSyncCheckpointAdapter.requirePurpose(context, graphID: id) }
         }
     }
 }

@@ -63,13 +63,17 @@ activation remain unimplemented.
 
 M18 selects Persistent History after the retained PH01 experiment, instead of a
 per-mutation intent journal. [S03 runtime adoption, #107](https://github.com/bbruno84/GraphEvo/pull/107)
-supplies six preservation flags and schema.3 with no new entities/columns.
-History processing,
-durable pending/checkpoint publication and send acknowledgements remain next work;
-no experimental implementation is merged. Its local checkpoint passes 578 tests
-(331 legacy, 153 store, 71 runtime, 23 model), the Swift 6 consumer and selected
-iOS Simulator checks (24 test functions / 29 expanded cases). Remote CI remains
-a separate pre-integration requirement.
+is reviewed/merged as `25ba9c9`, with exact-head iOS/macOS CI `41133455664` green.
+It supplies six preservation flags and schema.3 with no new entities/columns;
+its local checkpoint passes 578 tests and the Swift 6 consumer.
+
+The focused `codex/v2-history-pending` increment implements the package-only
+[PH processor, durable pending checkpoint and immutable attempts](graphevo-2-history-processing.md).
+It has not yet been integrated. Local validation passes 595 tests and selected
+iOS Simulator checks (35 functions / 44 expanded cases). Controlled incoming
+patches are observed without upload feedback; engine transport, full incoming
+operations and real crash/cloud acceptance remain open. No experimental
+implementation is merged.
 
 ## Integrated alpha implementation
 
@@ -112,10 +116,11 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Implement the per-graph PH processor and durable pending/checkpoint
-   publication on the S03 coordinator; retain import authors and safe replay.
-2. Establish durable changes/queue/import recovery in the actual implementation,
-   then automatic sync, graph pause, conflicts/deletes/assets and sharing lifecycle.
+1. Review/check/integrate the focused PH pending increment before starting
+   another implementation branch.
+2. Add ContextManager engine ownership and zone routing over the pending foundation;
+   establish engine/incoming recovery, then automatic sync, graph pause,
+   conflicts/deletes/assets and sharing lifecycle.
 3. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 4. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
