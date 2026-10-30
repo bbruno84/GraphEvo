@@ -33,24 +33,25 @@ New public opening and custom engine activation remain later work.
 
 ## Selected v2 native schema
 
-Read [S02](docs/design/graphevo-2-identity-schema.md) before native model work.
-M16 supersedes S01: retain twelve entities and optional `ge2GraphID`/`ge2NodeID`
-with existing compound identity indexes; remove native/public application data
-versioning and the proposed format registry. Explicit `.nativeIdentity` openings
-use `GraphEvo.v2.schema.2`. Default opening paths remain unchanged. Old S01 and
-laboratory files are refused before loading, never relabeled/migrated/erased.
-Application meaning, optional version properties and compatibility belong to the
-consumer. Native schema migration remains internal GraphEvo work. Preserve
-historical experiments and their exact models; S02 cloud/device acceptance is
-open separately from S01 evidence. Record concrete evidence and migration/local/
-cloud effects before another native revision.
+Read [S03](docs/design/graphevo-2-history-schema.md) before native model work.
+M18 retains S02's twelve entities, optional ge2GraphID/ge2NodeID and compound
+indexes; it enables deletion-history preservation on these six node attributes.
+Explicit `.nativeIdentity` and coordinated openings use `GraphEvo.v2.schema.3`.
+No-schema/current/v1 defaults stay unchanged. S02/S01/lab files are refused before
+loading, never relabelled/migrated/erased; fresh alpha stores follow M13. Preserve
+historical factories and their actual flags/models. Application meaning and
+optional versions remain consumer-owned under M16; no format registry or native
+data-version column returns. PH01 remains an unmerged experiment. S03 adoption
+does not implement a history processor/outbox or establish cloud acceptance.
+Record concrete evidence and migration/local/cloud effects before another native
+revision. Native schema migration and mandatory v1 conversion remain library work.
 
 The [S01 device protocol](Experiments/S01NativeProbe/README.md) extends the public
 file fixture with guarded empty replicas and same-process seed/invitation. Keep
 writers alive through independent peer observation; never replay a consumed
 mutation or copy native stores into a supposedly fresh replica. Its
 [16-stage result](docs/design/results/s01-native-sharing-recovery-2026-10-30.md)
-closes only the bounded historical S01 sharing/recovery item. S02 device
+closes only the bounded historical S01 sharing/recovery item. S03 device
 acceptance, migration execution, v1 conversion and broader native/account/
 conflict gates remain open. Application-format admission is withdrawn by M16.
 

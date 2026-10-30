@@ -11,7 +11,7 @@ as `32ae83f` after exact-head iOS/macOS CI `41119977677` passed.
 `GraphCoordinatorFactory.shared` is the single internal production
 `GraphContextManager`. The store target compiles its manager/coordinator and
 consumer lease lifecycle in Swift 6; the legacy target supplies only the
-Node-facade adapter and S02 model factory. Tests inject independent registries
+Node-facade adapter and selected native model factory (now S03). Tests inject independent registries
 and lifecycle gates. This is process-local ownership, not a cross-process lock.
 
 The package manager has two operations:
@@ -20,7 +20,7 @@ The package manager has two operations:
   requested identity. An existing file is refused, including an empty existing
   store. Concurrent matching requests admitted during the same creation share
   that job; a subsequent creation request is a duplicate.
-- `openGraph(id:at:)` opens an existing S02 store whose only graph has that ID.
+- `openGraph(id:at:)` opens an existing selected-native store whose only graph has that ID.
   It creates neither a missing directory nor a missing graph. It may join an
   already admitted matching creation. Empty, multi-graph, foreign-ID and
   incompatible stores are refused without identity edits or automatic conversion.
@@ -44,8 +44,9 @@ that has acquired another graph or foreign rows.
 
 ## Validation and persistence
 
-The physical model remains S02, `GraphEvo.v2.schema.2`; no native column, logical
-layout or cloud payload is added. Creation uses existing catalog/membership and
+The initial checkpoint used S02. [S03](graphevo-2-history-schema.md) now supplies
+the selected model, `GraphEvo.v2.schema.3`, with deletion-history identity
+preservation. No native column, logical layout or cloud payload is added. Creation uses existing catalog/membership and
 identity activation through one runtime-owned transaction/save. Existing-store
 opening performs its validation in a pinned read scope.
 

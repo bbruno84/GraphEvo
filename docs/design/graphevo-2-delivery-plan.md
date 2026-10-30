@@ -1,6 +1,12 @@
 # GraphEvo 2 — delivery plan
 
-Current amendment M16: [S02](graphevo-2-identity-schema.md) supersedes S01's
+Current amendment M18: [S03](graphevo-2-history-schema.md) keeps the S02 shape
+and preserves the six graph/node identity attributes in deletion history.
+Persistent History is the selected discovery source; production processing and
+durable pending/checkpoint publication follow model adoption. No per-mutation
+intent journal is selected. The earlier milestones retain their historical scope.
+
+Historical amendment M16: [S02](graphevo-2-identity-schema.md) supersedes S01's
 application-version column. Application meaning/optional versions are consumer
 properties; the proposed format registry and global refusal are withdrawn.
 Historical milestone evidence below retains its original scope. Next migration

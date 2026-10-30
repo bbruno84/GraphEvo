@@ -63,7 +63,7 @@ extension GraphDatabase {
 /// Alpha native-model selection. Incompatible layouts require fresh stores, not automatic conversion.
 public enum GraphDatabaseSchema: Sendable {
     case current
-    /// S02: indexed native graph/node identities; application data is consumer-owned.
+    /// S03: indexed native identities retained on deletion; application data is consumer-owned.
     /// Select explicitly for local or mirrored stores; this is not a data-migration gate.
     case nativeIdentity
 }

@@ -1455,9 +1455,10 @@ Incompatible alpha layouts start from empty stores under M13.
 
 Existing no-schema overloads and `current` retain the previous model, including
 mirrored opens. Native mirroring requires an explicit `schema: .nativeIdentity`.
-The explicit native schema uses [S02](../design/graphevo-2-identity-schema.md)
-with model version identifier `GraphEvo.v2.schema.2`. It retains indexed graph/node
-UUID projections and has no native application-version column. Previous S01
+The explicit native schema uses [S03](../design/graphevo-2-history-schema.md)
+with model version identifier `GraphEvo.v2.schema.3`. It retains indexed graph/node
+UUID projections, preserves them in deletion history and has no native
+application-version column. Previous S02/S01
 files are incompatible alpha inputs, never silently converted or relabeled.
 The runtime validates this public Core Data
 metadata before loading any existing resource, as well as native entity hashes.

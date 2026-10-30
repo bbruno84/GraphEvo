@@ -1,6 +1,10 @@
 # GraphEvo 2 — identity-only native schema (S02)
 
-Status: selected alpha revision following maintainer decision M16. This supersedes
+**Superseded by [S03](graphevo-2-history-schema.md), decision M18.** S03 retains
+this shape and enables six identity-preservation flags. The following records
+S02 and its original scope.
+
+Status: historical alpha revision following maintainer decision M16. This supersedes
 [S01](graphevo-2-persistent-schema.md) for explicit `.nativeIdentity` openings.
 The public schema choice remains `.nativeIdentity`; its physical model identifier
 is now `GraphEvo.v2.schema.2`. Default/current opening paths are unchanged.
