@@ -81,15 +81,15 @@ implementation is merged.
 The PH increment #108 is reviewed/merged as `0ddd613`, with exact-head iOS/macOS
 CI `41139921643` green. Its merge tree matches reviewed head `53468a9`.
 
-The focused [#109](https://github.com/bbruno84/GraphEvo/pull/109),
-`codex/v2-sync-engine-foundation`, supplies [shared engine sessions,
+The reviewed implementation in [#109](https://github.com/bbruno84/GraphEvo/pull/109)
+returns directly from `codex/v2-sync-engine-foundation` and supplies [shared engine sessions,
 zone bindings and a durable incoming inbox](graphevo-2-sync-engine-foundation.md).
-It is not yet integrated. Native engines are manually scheduled, package-only;
+The PR records exact-head CI and merge disposition. Native engines are manually scheduled, package-only;
 no upload, GraphRecord import or automatic synchronization is activated. The
 state directory is separate from graph PH checkpoints; S03 is unchanged.
 Its local checkpoint passes 616 tests (331 legacy, 191 store, 71 runtime,
 23 model), selected iOS Simulator checks (55 functions / 65 expanded cases)
-and the Swift 6 consumer. Remote CI/review remain pre-integration requirements.
+and the Swift 6 consumer. Physical native-engine delivery remains a separate gate.
 
 ## Integrated alpha implementation
 
@@ -101,6 +101,7 @@ and the Swift 6 consumer. Remote CI/review remain pre-integration requirements.
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
+| Engine foundation | ContextManager-owned private/shared sessions, exact zone routes and persisted incoming inbox (#109) | Package-only manual fetch; no upload, graph import, assets or automatic sync acceptance |
 | PH pending | Per-graph discovery, durable pending/checkpoint, immutable attempts and generation-safe acknowledgements (#108) | Package-only; controlled patches only, full engine/incoming/crash gates remain open |
 | Native identity | M16 removed application versioning; M18/S03 preserves graph/node IDs in deletion history through #107 | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
 | App/widget | Local read-only extension access and ownership safeguards | Broader lifecycle/account/protected-data/OS acceptance remains bounded by the reports |
@@ -133,8 +134,7 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Review/check/integrate the engine foundation before the next increment. Then
-   add the cloud record codec and upload/import effect recovery over the PH/inbox
+1. Add the cloud record codec and upload/import effect recovery over the PH/inbox
    foundations; complete assets, automatic sync, pause, conflicts and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
