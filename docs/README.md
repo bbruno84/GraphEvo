@@ -16,6 +16,7 @@ guides. For an introduction to the project, see the [main README](../README.md).
 | observe changes | [Watchers](guides/watchers.md) |
 | validate saved graph structure | [Structural validation](guides/structural-validation.md) |
 | manage migrations | [Migrations](migrations/overview.md) |
+| inspect v1 native schema migration experiments | [SM01–SM03 result](design/results/schema-migration-2026-10-30.md) |
 | manage backups | [Backups](migrations/backups.md) |
 | understand remote changes | [Persistent History](migrations/persistent-history.md) |
 | consult utilities and tools | [Utilities](api/utilities.md) |

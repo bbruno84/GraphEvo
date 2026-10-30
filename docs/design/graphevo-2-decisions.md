@@ -99,3 +99,13 @@ read-only readers are implemented as a candidate path, with separate-process
 macOS evidence. This does not settle iOS sandbox/suspension or interactive writes;
 see [extension access](graphevo-2-app-extension-access.md). The maintainer rejects
 forcing concurrent native cloud synchronizers or unsafe lifetime locks.
+
+
+2026-10-30 native migration boundary: GraphEvo owns native Core Data schema
+transitions internally; the consumer migration manager targets application data,
+not native schema registration. Consumer-specific external native interventions
+cannot be prevented, but are not automatically supported/certified by the manager.
+Keep the data-driven native shape stable where practical. The
+[SM01–SM03 result](results/schema-migration-2026-10-30.md) confirms bounded additive
+local/cloud migration and final staged-handler replication. Experimental node
+version storage is not a production model decision or complete v1 data conversion.
