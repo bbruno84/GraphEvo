@@ -265,8 +265,8 @@ registration/admission was subsequently withdrawn by M16.
 
 M2b.1 historically added format declarations and conservative native refusal;
 M16 removes them in favor of [consumer-owned data](graphevo-2-data-formats.md).
-Complete production
-version-aware store admission and migration activation remain open.
+Production resource readiness, protected-source handling and migration activation
+remain open.
 
 The [completed internal SM01–SM03 experiment](results/schema-migration-2026-10-30.md)
 and S01 public device fixture supply bounded native evidence. They do not provide
