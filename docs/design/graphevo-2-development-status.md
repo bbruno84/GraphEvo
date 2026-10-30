@@ -81,7 +81,8 @@ implementation is merged.
 The PH increment #108 is reviewed/merged as `0ddd613`, with exact-head iOS/macOS
 CI `41139921643` green. Its merge tree matches reviewed head `53468a9`.
 
-The focused `codex/v2-sync-engine-foundation` supplies [shared engine sessions,
+The focused [#109](https://github.com/bbruno84/GraphEvo/pull/109),
+`codex/v2-sync-engine-foundation`, supplies [shared engine sessions,
 zone bindings and a durable incoming inbox](graphevo-2-sync-engine-foundation.md).
 It is not yet integrated. Native engines are manually scheduled, package-only;
 no upload, GraphRecord import or automatic synchronization is activated. The
