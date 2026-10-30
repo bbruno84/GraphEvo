@@ -17,8 +17,9 @@ context on completion; failures roll back unsaved changes.
 A FIFO writer gate belongs to the physical `StoreResources` owner, shared by
 all its handles. It covers the complete body, save and context cleanup. A second
 writer cannot read its starting state until the previous writer has finished.
-Different stores can write independently; readers do not acquire the writer
-gate and cannot see another operation's pending edits. Actor isolation alone
+Different stores can write independently. SQLite readers retain concurrent
+access to committed state; in-memory reads also use the gate as described below.
+Neither sees another operation's pending edits. Actor isolation alone
 would not provide this guarantee across native asynchronous execution.
 
 A transaction saves once after its body returns. The body cannot suspend and

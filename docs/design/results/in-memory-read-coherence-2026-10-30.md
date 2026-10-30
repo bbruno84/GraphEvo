@@ -31,5 +31,7 @@ same resource while awaiting completion.
 
 Selected migration/observation and runtime transaction suites pass after the
 change, including the before/after regression and cancelled queued reader.
+The complete local suite passes 555 tests (331 legacy, 135 store, 66 runtime,
+23 model); the independent Swift 6 ModelConsumer and manifest validation pass.
 Raw local logs remain outside Git under `/tmp/graphevo-memory-read-*` and
 `/tmp/graphevo-m2a-coherent-*`. Exact-head CI must pass before #100 is merged.
