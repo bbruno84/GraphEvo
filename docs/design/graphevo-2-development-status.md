@@ -1,6 +1,6 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-10-30. This is the single entry point for **integrated work,
+Updated: 2026-10-31. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
@@ -45,7 +45,8 @@ and expanded old-model refusal cases. S02 device/cloud acceptance is still open.
 M17 selects explicit CloudKit sync after the successful bounded CS01 experiment.
 The selected design assigns private/shared CKSyncEngine ownership to the
 ContextManager and one graph/store with migration/pause lifecycle to each
-GraphCoordinator. Engine implementation remains pending.
+GraphCoordinator. The package-only engine foundation is now implemented on its
+focused branch; public activation and end-to-end custom sync remain pending.
 See the [transition contract](graphevo-2-custom-sync-transition.md) for rationale,
 retained experiment evidence, cleanup scope and implementation order.
 
@@ -77,6 +78,19 @@ patches are observed without upload feedback; engine transport, full incoming
 operations and real crash/cloud acceptance remain open. No experimental
 implementation is merged.
 
+The PH increment #108 is reviewed/merged as `0ddd613`, with exact-head iOS/macOS
+CI `41139921643` green. Its merge tree matches reviewed head `53468a9`.
+
+The reviewed implementation in [#109](https://github.com/bbruno84/GraphEvo/pull/109)
+returns directly from `codex/v2-sync-engine-foundation` and supplies [shared engine sessions,
+zone bindings and a durable incoming inbox](graphevo-2-sync-engine-foundation.md).
+The PR records exact-head CI and merge disposition. Native engines are manually scheduled, package-only;
+no upload, GraphRecord import or automatic synchronization is activated. The
+state directory is separate from graph PH checkpoints; S03 is unchanged.
+Its local checkpoint passes 616 tests (331 legacy, 191 store, 71 runtime,
+23 model), selected iOS Simulator checks (55 functions / 65 expanded cases)
+and the Swift 6 consumer. Physical native-engine delivery remains a separate gate.
+
 ## Integrated alpha implementation
 
 | Area | Implemented | Remaining acceptance limits |
@@ -87,6 +101,7 @@ implementation is merged.
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
+| Engine foundation | ContextManager-owned private/shared sessions, exact zone routes and persisted incoming inbox (#109) | Package-only manual fetch; no upload, graph import, assets or automatic sync acceptance |
 | PH pending | Per-graph discovery, durable pending/checkpoint, immutable attempts and generation-safe acknowledgements (#108) | Package-only; controlled patches only, full engine/incoming/crash gates remain open |
 | Native identity | M16 removed application versioning; M18/S03 preserves graph/node IDs in deletion history through #107 | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
 | App/widget | Local read-only extension access and ownership safeguards | Broader lifecycle/account/protected-data/OS acceptance remains bounded by the reports |
@@ -119,9 +134,8 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Add ContextManager engine ownership and zone routing over the pending foundation;
-   establish engine/incoming recovery, then automatic sync, graph pause,
-   conflicts/deletes/assets and sharing lifecycle.
+1. Add the cloud record codec and upload/import effect recovery over the PH/inbox
+   foundations; complete assets, automatic sync, pause, conflicts and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).

@@ -900,3 +900,22 @@ or clear a newer generation using an older receipt. Complete or abandon every
 prepared batch, including empty batches. Count limits are not total resource bounds.
 The package patch seam is not full incoming/conflict/inbox support. Retain actual
 process-kill, engine ordering, history retention and physical-cloud gates.
+
+
+## V2 CKSyncEngine foundation
+
+Read [the engine contract](docs/design/graphevo-2-sync-engine-foundation.md) before
+session/routing/inbox work. ContextManager owns one private/shared engine pair,
+not one engine per graph. Reserve the container before asynchronous account checks;
+keep ownership and the directory lock on failed cleanup. The environment label
+namespaces disk state, while signing entitlements select the actual cloud environment.
+
+Preserve incoming events before engine-state advancement in the same local
+session document. Never confuse that inbox with a graph's PH pending checkpoint,
+consume events before an import/effect protocol exists, or silently reset corrupt
+state. Delegate failure blocks later checkpoints and schedules cancellation outside
+the callback. Stop drains admitted work; late callbacks cannot recreate state.
+Native scheduling is manual/package-only, with no outgoing changes or GraphRecord
+imports. CKAsset values (including encrypted/array fields) are refused without
+advancing the cursor until durable asset staging exists. Keep physical-engine,
+actual crash/power-loss, rewrite-cost, account, asset and end-to-end gates open.

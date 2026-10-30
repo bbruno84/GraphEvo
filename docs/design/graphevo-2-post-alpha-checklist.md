@@ -128,7 +128,10 @@ engine or cross-process acceptance. Retain this scope when integrating it.
 - [ ] **B** Implement exclusive per-graph stores/controllers and ContextManager
   ownership of at most one engine per configured CloudKit private/shared database
   in the synchronization process. Route exact zones, scope account state and keep
-  private graphs unshared until requested.
+  private graphs unshared until requested. The
+  [engine foundation](graphevo-2-sync-engine-foundation.md) supplies package-only
+  ownership/manual fetch and durable inbox retention. Physical native-engine
+  behavior, public activation, record import/upload and sharing remain open.
 - [ ] **R** Measure the incremental disk/retention cost of S03 identity tombstones
   and representative PH processing, separately from queued payload and attachment
   costs. The six-flag model decision does not establish a storage envelope.
@@ -143,6 +146,11 @@ engine or cross-process acceptance. Retain this scope when integrating it.
 - [ ] **B** Prove durable local change discovery/publication and incoming application
   across interruption, including store/queue/engine-state ordering and outgoing
   acknowledgement races. Explicit fixture queueing is not this acceptance.
+  Engine-foundation tests cover file publication failures, reopen/replay and
+  drain/late-callback behavior. True crash/power-loss, inbox consumption/effect
+  receipts, CKAsset staging and joint queue/engine ordering remain open.
+- [ ] **R** Measure full-document engine-state/inbox rewrite costs and retained
+  inbox growth; count/encoded-byte limits are not total memory/I/O envelopes.
 - [ ] **B** Validate graph-level pause/resume with automatic and in-flight work,
   migrated local stores, pending changes and independent progress of other graphs.
   Cancelling an engine is not a graph-level completion barrier.

@@ -1543,3 +1543,13 @@ not public GraphStore APIs or activated CloudKit transport. Newly coordinated
 stores retain a native purpose marker: old mirrored single/pair openings refuse
 them before cloud loading; compatible local/read-only readers remain supported.
 Unmarked older-alpha S03 stores are not silently adopted by the coordinator.
+
+
+## V2 package-only engine foundation
+
+The [engine foundation](../design/graphevo-2-sync-engine-foundation.md) adds
+internal ContextManager session start/stop, exact zone binding, manual fetch,
+status, route lookup and bounded read-only inbox access. Native activation is
+availability-gated to iOS 17/macOS 14 and refused in app extensions. Package
+platform floors and public signatures are unchanged. The implementation retains
+opaque incoming events; it does not upload records or apply them to GraphStores.
