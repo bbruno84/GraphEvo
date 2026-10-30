@@ -4,9 +4,11 @@ Question: can a consumer modify a closed copy locally and return the complete
 store, then let NSPersistentCloudKitContainer export those already committed
 transactions after publication, without a Graph diff or post-open application save?
 
-This is an isolated experiment, not a public migration manager. Start from
-`codex/graphevo-2`, integrate the bounded result directly there after review/CI,
-and close the experiment branch. Do not create an experiment-parent stack.
+This is an isolated experiment, not a public migration manager. PR #104 was
+closed without merge at the maintainer's direction. Preserve the branch and
+evidence as references; do not integrate this experiment implementation. Develop
+a selected production solution separately from `codex/graphevo-2`. No copy-based
+manager architecture or per-graph publication contract is selected by this result.
 
 ## Local matrix
 

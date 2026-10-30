@@ -17,22 +17,6 @@ proposed common format registry. [Consumer data](graphevo-2-data-formats.md) and
 a historical isolated laboratory, not the intended public version contract.
 Production backup, resource readiness and migration activation remain open.
 
-## MC01 working-copy direction
-
-The [MC01 result](results/mc01-store-copy-history-2026-10-30.md) demonstrates
-physical closed-store copy, local-only consumer edits and publication retaining
-native history, followed by independent shared/fresh recovery without an
-application save after mirrored reopen. Prefer this bounded route over a Graph
-diff/custom mutation log when designing a working-graph interface. The consumer
-returns the provided working resource; Graph does not interpret application quality.
-
-A physical copy covers the whole store, not one logical graph. The manager must
-exclude all local original writers, bind the prepared source/resource identity,
-protect backups and refuse stale publication. Native replacement alone overwrites
-unrelated later edits, as demonstrated by the counterexample. Store/pair activation,
-interruption recovery, participant copies and ongoing remote conflicts remain
-open; the experiment helper must not become a public opener/activation shortcut.
-
 ## Maintainer decisions
 
 Renew the migration manager as part of mandatory v1 data migration. Source API

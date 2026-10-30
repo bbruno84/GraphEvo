@@ -21,10 +21,9 @@ use `GraphEvo.v2.schema.2`. Default opening paths remain unchanged. Old S01 and
 laboratory files are refused before loading, never relabeled/migrated/erased.
 Application meaning, optional version properties and compatibility belong to the
 consumer. Native schema migration remains internal GraphEvo work. Preserve
-historical experiments and their exact models. S02 now has bounded owner
-sharing/file/fresh-recovery evidence in MC01, separate
-from S01. Broader participant/account/conflict/scale acceptance remains open.
-Record concrete evidence and migration/local/cloud effects before another native revision.
+historical experiments and their exact models; S02 cloud/device acceptance is
+open separately from S01 evidence. Record concrete evidence and migration/local/
+cloud effects before another native revision.
 
 The [S01 device protocol](Experiments/S01NativeProbe/README.md) extends the public
 file fixture with guarded empty replicas and same-process seed/invitation. Keep
@@ -862,19 +861,3 @@ Missing markers alone do not prove no effect. Never replay the consumer closure
 for a retained prepared artifact or mistake journal completion for public-store
 activation. Cloud/native imports, ordinary app/widget admission and production
 backup/retention are outside this laboratory's accepted scope.
-
-
-## MC01 physical working-store experiment
-
-Read [MC01](Experiments/StoreCopyProbe/README.md) and its
-[result](docs/design/results/mc01-store-copy-history-2026-10-30.md) before copy-based
-migration work. The experiment uses only closed synthetic S02 stores and public
-Core Data copy/metadata/history APIs. It proves bounded owner-private copy/edit/
-publish and independent shared/fresh recovery without a post-open application
-save. It does not expose a public migration manager or certify arbitrary clones.
-Store replacement is whole-resource and overwrites later original edits. Require
-exclusive local ownership, source binding/protection, auxiliary-ledger backups and
-durable recovery before production activation. Participant copies, private/shared
-pair atomicity, remote conflicts and read-only-first startup remain open. Preserve
-exact source/host hashes and original failures; never replay consumed mutation
-stages, reset cloud implicitly or copy native files into a fresh peer replica.

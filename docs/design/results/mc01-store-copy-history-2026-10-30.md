@@ -1,9 +1,10 @@
 # MC01 — closed working-store copy and native-history publication
 
-Date: 2026-10-30. Result: **bounded feasibility demonstrated**. Select a closed,
-exclusively controlled whole-store copy/return route for further migration-manager
-work. Do not implement a Graph diff or custom mutation log merely to republish
-this tested case. No public migration/activation API is enabled by this result.
+Date: 2026-10-30. Result: **bounded whole-store feasibility demonstrated**.
+Experiment-only branch; [PR #104](https://github.com/bbruno84/GraphEvo/pull/104)
+was closed without merge. The integration branch remains unchanged. This result
+informs a future separately developed solution; it does not select a copy-based
+manager architecture, per-graph publication contract or public activation API.
 
 ## Question and procedure
 
@@ -79,8 +80,8 @@ validate widget-before-app/readonly activation during manager lifecycle work.
 
 The initial full local suite passes **560 tests**: 331 legacy, 140 store (three
 new MC01 functions, including a two-method parameterized case), 66 runtime,
-23 model. Manifest/diff checks and physical Debug host build pass. Exact-head
-macOS/iOS CI and review are required before integration.
+23 model. Manifest/diff checks and physical Debug host build pass. Any CI result validates only this experiment; it is not authorization to merge
+the experimental implementation.
 
 This is not proof of:
 
@@ -99,13 +100,18 @@ This is not proof of:
 
 ## Direction
 
-Continue with a consumer-facing working-graph model backed by an isolated whole
-resource, conditional on explicit source protection and exclusive local ownership.
-Graph remains responsible for publication infrastructure, not application semantic
-quality. Before a public API, define durable prepare/publish/recover phases,
-resource/account binding, source-change refusal and widget readiness. Keep cloud
-conflict/cutover policy and mandatory v1 conversion separate. Never substitute a
-working copy for a fresh replica or claim that retained history is a lock.
+Before implementation, settle the distinction between logical graph migration
+and whole-store replacement. Current GraphDatabase resources can contain several
+logical GraphStore graphs. The demonstrated copy route requires control of the
+whole resource, including unrelated graphs; it is not independent per-graph
+publication. Preserve this as one technically feasible option, not an accepted
+production architecture.
+
+Once the scope is agreed, develop the solution separately from the experiment.
+Graph owns infrastructure, not application semantic quality. Source protection,
+resource/account binding, stale-source refusal, durable recovery, widget readiness,
+remote conflicts and mandatory v1 conversion remain open. Do not create an
+experiment-parent integration stack or merge this laboratory as production code.
 
 References: Apple's [persistent history](https://developer.apple.com/documentation/coredata/persistent-history),
 [store replacement](https://developer.apple.com/documentation/coredata/nspersistentstorecoordinator/replacepersistentstore(at:destinationoptions:withpersistentstorefrom:sourceoptions:type:)),

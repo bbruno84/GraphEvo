@@ -226,18 +226,6 @@ Consolidates earlier findings; D07–D09/D14.
 - Exit: actionable states/errors, explicit destructive boundaries, and supported
   transition options; unresolved cases remain visible in the specification.
 
-### MC01 — physical working-store copies and native history
-
-[Procedure](../../Experiments/StoreCopyProbe/README.md) and
-[result](results/mc01-store-copy-history-2026-10-30.md): closed Core Data/directory
-copies, history/identity/file preservation, original-URL publication without
-post-open application save, independent other-account observation and fresh
-recovery. The bounded owner-private S02 route passes. Whole-store overwrite of
-later original edits is a demonstrated limitation; production exclusion,
-source protection, interruption/pair/readonly activation and remote conflicts
-remain manager work. Integrate the focused result directly into v2 and close
-the experiment branch; no new experiment-parent stack.
-
 ## Evidence and specification gate
 
 For each Vxx, retain a short result with question, fixture, environment, procedure,
