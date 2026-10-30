@@ -67,10 +67,10 @@ is reviewed/merged as `25ba9c9`, with exact-head iOS/macOS CI `41133455664` gree
 It supplies six preservation flags and schema.3 with no new entities/columns;
 its local checkpoint passes 578 tests and the Swift 6 consumer.
 
-The focused [#108](https://github.com/bbruno84/GraphEvo/pull/108),
-`codex/v2-history-pending`, implements the package-only
+The reviewed implementation in [#108](https://github.com/bbruno84/GraphEvo/pull/108)
+returns directly from `codex/v2-history-pending` to the v2 integration line. It supplies the package-only
 [PH processor, durable pending checkpoint and immutable attempts](graphevo-2-history-processing.md).
-It has not yet been integrated; remote CI/review remain required. Local
+The PR records exact-head automated checks and its merge disposition. Local
 validation passes 595 tests, the Swift 6 consumer and selected
 iOS Simulator checks (35 functions / 44 expanded cases). Controlled incoming
 patches are observed without upload feedback; engine transport, full incoming
@@ -87,6 +87,7 @@ implementation is merged.
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
+| PH pending | Per-graph discovery, durable pending/checkpoint, immutable attempts and generation-safe acknowledgements (#108) | Package-only; controlled patches only, full engine/incoming/crash gates remain open |
 | Native identity | M16 removed application versioning; M18/S03 preserves graph/node IDs in deletion history through #107 | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
 | App/widget | Local read-only extension access and ownership safeguards | Broader lifecycle/account/protected-data/OS acceptance remains bounded by the reports |
 | Application data | M16 supersedes M2b.1: consumer-owned meaning/optional versions, no registry or global format block | Production migration execution remains open |
@@ -118,14 +119,12 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Review/check/integrate the focused PH pending increment before starting
-   another implementation branch.
-2. Add ContextManager engine ownership and zone routing over the pending foundation;
+1. Add ContextManager engine ownership and zone routing over the pending foundation;
    establish engine/incoming recovery, then automatic sync, graph pause,
    conflicts/deletes/assets and sharing lifecycle.
-3. Complete protected application-data migration and mandatory v1 conversion on
+2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
-4. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
+3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
    Prior native backend acceptance does not certify the replacement. Alpha
    integration is not beta acceptance or a release/tag request.
 
