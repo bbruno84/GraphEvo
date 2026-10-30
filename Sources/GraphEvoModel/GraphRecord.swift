@@ -53,12 +53,10 @@ public struct GraphRecord: Sendable, Equatable {
     public let tags: Set<String>
     public let groups: Set<String>
     public let createdDate: Date?
-    public let dataVersion: Int64?
 
     public init(id: GraphNodeID, type: String, endpoints: GraphEndpoints = .entity,
                 properties: [String: GraphValue] = [:], tags: Set<String> = [],
-                groups: Set<String> = [], createdDate: Date? = nil, dataVersion: Int64? = nil) throws {
-        guard dataVersion.map({ $0 >= 0 }) ?? true else { throw GraphDataFormatError.invalidVersion }
+                groups: Set<String> = [], createdDate: Date? = nil) throws {
         guard !type.isEmpty, properties.keys.allSatisfy({ !$0.isEmpty }) else {
             throw GraphModelError.invalidRecord("Type and property keys must be nonempty.")
         }
@@ -72,7 +70,6 @@ public struct GraphRecord: Sendable, Equatable {
         self.tags = tags
         self.groups = groups
         self.createdDate = createdDate
-        self.dataVersion = dataVersion
     }
 
     public func value<Value: GraphPropertyValue>(for key: String, as type: Value.Type = Value.self) throws -> Value {
@@ -83,7 +80,6 @@ public struct GraphRecord: Sendable, Equatable {
 
     public func decoded<Model: GraphModel>(as type: Model.Type = Model.self) throws -> Model {
         try validate(type: Model.graphType, kind: Model.graphKind)
-        guard Model.graphDataFormat.canRead(dataVersion) else { throw GraphDataFormatError.unreadableVersion(dataVersion) }
         let model = try Model(graphRecord: self)
         guard model.id == id else { throw GraphModelError.identityMismatch }
         return model
@@ -92,9 +88,6 @@ public struct GraphRecord: Sendable, Equatable {
     public init<Model: GraphModel>(_ model: Model) throws {
         let record = try model.graphRecord()
         try record.validate(type: Model.graphType, kind: Model.graphKind)
-        guard Model.graphDataFormat.canWrite(record.dataVersion) else {
-            throw GraphDataFormatError.unwritableVersion(record.dataVersion)
-        }
         guard record.id == model.id else { throw GraphModelError.identityMismatch }
         self = record
     }
@@ -110,13 +103,8 @@ public protocol GraphModel: Sendable {
     var id: GraphNodeID { get }
     static var graphType: String { get }
     static var graphKind: GraphNodeKind { get }
-    static var graphDataFormat: GraphDataFormat { get }
     init(graphRecord: GraphRecord) throws
     func graphRecord() throws -> GraphRecord
-}
-
-extension GraphModel {
-    public static var graphDataFormat: GraphDataFormat { .undeclared }
 }
 
 public enum GraphModelError: Error {

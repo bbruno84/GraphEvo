@@ -51,7 +51,6 @@ public enum GraphQueryAggregate: Sendable { case sum(String), minimum(String), m
 package struct GraphQueryDefinition: Sendable, Equatable {
     package let type: String
     package let kind: GraphNodeKind
-    package var dataFormat: GraphDataFormat = .undeclared
     package var predicate: GraphQueryPredicate = .all
     package var sorts: [GraphQuerySort] = []
 }
@@ -71,7 +70,7 @@ public struct GraphQuery<Model: GraphModel>: Sendable {
     package var rowLimit: Int?
     package var cursor: GraphQueryCursor?
     public init(_ model: Model.Type = Model.self, budget: GraphQueryBudget) {
-        definition = GraphQueryDefinition(type: Model.graphType, kind: Model.graphKind, dataFormat: Model.graphDataFormat); self.budget = budget
+        definition = GraphQueryDefinition(type: Model.graphType, kind: Model.graphKind); self.budget = budget
     }
     /// Successive filters combine with AND; OR requires an explicit expression.
     public func `where`(_ predicate: GraphQueryPredicate) -> Self {

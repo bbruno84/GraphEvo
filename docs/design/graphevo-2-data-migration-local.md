@@ -1,5 +1,10 @@
 # M2a — local data versioning and migration execution
 
+**Historical laboratory contract:** M16 removes the public/native application
+versioning direction. This exact isolated fixture remains to preserve recovery
+evidence. See [consumer data](graphevo-2-data-formats.md) and
+[S02](graphevo-2-identity-schema.md) for current production direction.
+
 Status: package-only vertical slice following the aligned M1 journal. Read with
 [the manager roadmap](graphevo-2-migration-manager.md) and
 [S01](graphevo-2-persistent-schema.md). This implements a local data effect and

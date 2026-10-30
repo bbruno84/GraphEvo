@@ -46,7 +46,6 @@ public final class GraphMutation: GraphReadScope {
 
     @discardableResult public func insert(_ record: GraphRecord) throws -> GraphNodeID {
         guard record.id.graphID == graphID else { throw GraphStoreError.foreignGraph }
-        guard record.dataVersion == nil else { throw GraphStoreError.dataFormatAdmissionRequired }
         try withContext { try $1.insert($0, graphID, record) }
         return record.id
     }
@@ -58,9 +57,6 @@ public final class GraphMutation: GraphReadScope {
 
     public func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) throws -> Model {
         guard let current = try record(for: patch.id) else { throw GraphStoreError.missingNode }
-        guard Model.graphDataFormat.canWrite(current.dataVersion) else {
-            throw GraphDataFormatError.unwritableVersion(current.dataVersion)
-        }
         let model = try patch.applying(to: current).decoded(as: type)
         _ = try self.patch(patch)
         return model

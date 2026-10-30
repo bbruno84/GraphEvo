@@ -1,4 +1,9 @@
-# GraphEvo 2 — selected persistent schema (S01)
+# GraphEvo 2 — historical persistent schema (S01)
+
+**Superseded by [S02](graphevo-2-identity-schema.md), decision M16.** The following
+records the original S01 selection and its evidence. Current explicit native
+openings use identity-only S02; application versioning and admission were removed.
+
 
 Status: native target selected on 2026-10-30 after reviewing queries,
 attachments, sharing and migration evidence. Explicit `.nativeIdentity` runtime

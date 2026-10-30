@@ -6,13 +6,13 @@ import XCTest
 @MainActor final class GraphPersistentSchemaTests: XCTestCase {
     private let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
 
-    func testS01IsExactlyTheSelectedAdditiveShapeWithStableIdentity() throws {
+    func testS02IsExactlyTheSelectedAdditiveShapeWithStableIdentity() throws {
         let base = Model.makeModel(), model = GraphRuntimeSchema.makeNativeModel()
-        XCTAssertEqual(model.versionIdentifiers, ["GraphEvo.v2.schema.1"])
+        XCTAssertEqual(model.versionIdentifiers, ["GraphEvo.v2.schema.2"])
         XCTAssertEqual(model.entities.count, 12)
         XCTAssertEqual(Set(model.entitiesByName.keys), Set(base.entitiesByName.keys))
         XCTAssertEqual(model.entityVersionHashesByName, GraphRuntimeSchema.nativeIdentity.entityVersionHashes)
-        XCTAssertEqual(GraphRuntimeSchema.nativeIdentity.requiredModelVersionIdentifier, "GraphEvo.v2.schema.1")
+        XCTAssertEqual(GraphRuntimeSchema.nativeIdentity.requiredModelVersionIdentifier, "GraphEvo.v2.schema.2")
         let second = GraphRuntimeSchema.makeNativeModel()
         XCTAssertFalse(model === second)
         XCTAssertEqual(model.entityVersionHashesByName, second.entityVersionHashesByName)
@@ -21,10 +21,10 @@ import XCTest
             XCTAssertTrue(entity.uniquenessConstraints.isEmpty)
             XCTAssertEqual(Set(entity.relationshipsByName.keys), Set(original.relationshipsByName.keys))
             if kinds.contains(name) {
-                XCTAssertEqual(Set(entity.attributesByName.keys), Set(original.attributesByName.keys).union(["ge2GraphID", "ge2NodeID", "ge2DataVersion"]))
-                for key in ["ge2GraphID", "ge2NodeID", "ge2DataVersion"] {
+                XCTAssertEqual(Set(entity.attributesByName.keys), Set(original.attributesByName.keys).union(["ge2GraphID", "ge2NodeID"]))
+                for key in ["ge2GraphID", "ge2NodeID"] {
                     let attribute = try XCTUnwrap(entity.attributesByName[key])
-                    XCTAssertEqual(attribute.attributeType, key == "ge2DataVersion" ? .integer64AttributeType : .stringAttributeType)
+                    XCTAssertEqual(attribute.attributeType, .stringAttributeType)
                     XCTAssertTrue(attribute.isOptional); XCTAssertNil(attribute.defaultValue)
                     XCTAssertFalse(attribute.isTransient)
                 }
@@ -42,13 +42,14 @@ import XCTest
     }
 
     @available(iOS 17, macOS 14, *)
-    func testS01MatchesVersionedMigrationEvidenceButNotHistoricalIdentityOnlyModels() {
+    func testS02RetainsIdentityShapeButRejectsHistoricalVersionedShape() {
         XCTAssertEqual(GraphRuntimeSchema.nativeIdentity.entityVersionHashes,
-                       GraphSchemaMigrationLaboratory.model(.versioned).entityVersionHashesByName)
+                       GraphSchemaMigrationLaboratory.model(.native).entityVersionHashesByName)
         XCTAssertNotEqual(GraphRuntimeSchema.nativeIdentity.entityVersionHashes,
-                          GraphSchemaMigrationLaboratory.model(.native).entityVersionHashesByName)
-        XCTAssertNil(GraphNativeIdentityPrototype.makeModel(indexed: true)
-            .entitiesByName[ModelIdentifier.entityName]?.attributesByName["ge2DataVersion"])
+                          GraphSchemaMigrationLaboratory.model(.versioned).entityVersionHashesByName)
+        for name in kinds {
+            XCTAssertNil(GraphRuntimeSchema.makeNativeModel().entitiesByName[name]?.attributesByName["ge2DataVersion"])
+        }
     }
 
     private func validate(_ model: NSManagedObjectModel) throws -> Bool {
@@ -58,22 +59,21 @@ import XCTest
         return try context.performAndWait { try GraphNativeIdentityColumns.validateModel(in: context) }
     }
 
-    func testModelPreflightRejectsPartialMalformedOrUnindexedVersionedShapes() throws {
+    func testModelPreflightRejectsPartialOrMalformedIdentityShapes() throws {
         XCTAssertTrue(try validate(GraphRuntimeSchema.makeNativeModel()))
         XCTAssertTrue(try validate(GraphNativeIdentityPrototype.makeModel(indexed: false)))
         XCTAssertFalse(try validate(Model.makeModel()))
-        for variant in 0..<7 {
+        for variant in 0..<6 {
             let model = GraphRuntimeSchema.makeNativeModel()
             let entity = try XCTUnwrap(model.entitiesByName[ModelIdentifier.actionName])
-            let version = try XCTUnwrap(entity.attributesByName["ge2DataVersion"])
+            let identity = try XCTUnwrap(entity.attributesByName["ge2NodeID"])
             switch variant {
-            case 0: entity.properties.removeAll { $0.name == "ge2DataVersion" }
-            case 1: version.attributeType = .stringAttributeType
-            case 2: version.isOptional = false
-            case 3: version.defaultValue = NSNumber(value: 1)
+            case 0: entity.properties.removeAll { $0.name == "ge2NodeID" }
+            case 1: identity.attributeType = .integer64AttributeType
+            case 2: identity.isOptional = false
+            case 3: identity.defaultValue = "invalid"
             case 4: entity.properties.removeAll { $0.name == "ge2GraphID" || $0.name == "ge2NodeID" }
-            case 5: version.isTransient = true
-            default: entity.indexes = []
+            default: identity.isTransient = true
             }
             XCTAssertThrowsError(try validate(model)) { error in
                 guard case GraphStoreError.unsupportedLayout = error else {

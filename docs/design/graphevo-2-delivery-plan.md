@@ -1,5 +1,12 @@
 # GraphEvo 2 — delivery plan
 
+Current amendment M16: [S02](graphevo-2-identity-schema.md) supersedes S01's
+application-version column. Application meaning/optional versions are consumer
+properties; the proposed format registry and global refusal are withdrawn.
+Historical milestone evidence below retains its original scope. Next migration
+work is protected-source lifecycle and consumer-plan execution, not registry
+activation. Revised S02 sharing/recovery still needs its own device evidence.
+
 Status: delivery roadmap. For current implementation/integration status, use
 [development status](graphevo-2-development-status.md). Read with the
 [specification](graphevo-2-specification.md) and
@@ -10,8 +17,10 @@ native 2.0 target following the query/attachment/sharing/migration review.
 The runtime adoption increment now supplies the optional record-version field
 and stable physical-model ID `GraphEvo.v2.schema.1` for explicit native openings.
 The [selected-model device result](results/s01-native-sharing-recovery-2026-10-30.md)
-now passes the bounded public sharing/file/fresh-recovery fixture. Next complete
-consumer-format admission and mandatory v1 conversion. Default/current openers
+passed its bounded public sharing/file/fresh-recovery fixture. M16 subsequently
+selects identity-only S02 and removes the format registry/admission direction.
+Next complete S02 device acceptance and production migration execution, including
+mandatory v1 conversion. Default/current openers
 retain their original model. Native adoption is not beta entry or completion of
 migration work.
 
@@ -251,11 +260,13 @@ readiness certificate. Local/cloud conversion feasibility remains a beta gate.
 The [M2a local manager slice](graphevo-2-data-migration-local.md) now exercises
 consumer-defined data conversion on an isolated S01-shaped laboratory store,
 including atomic version/effect publication and checkpoint recovery. Public
-format admission, resource readiness/backup policy and M3–M6 remain open.
+resource readiness/backup policy and M3–M6 remain open. Application format
+registration/admission was subsequently withdrawn by M16.
 
-[M2b.1](graphevo-2-data-formats.md) adds detached public format declarations,
-checked serialization/decoding and conservative native refusal. Complete public
-version-aware store admission and migration activation remain open.
+M2b.1 historically added format declarations and conservative native refusal;
+M16 removes them in favor of [consumer-owned data](graphevo-2-data-formats.md).
+Production resource readiness, protected-source handling and migration activation
+remain open.
 
 The [completed internal SM01–SM03 experiment](results/schema-migration-2026-10-30.md)
 and S01 public device fixture supply bounded native evidence. They do not provide

@@ -5,7 +5,7 @@ import GraphEvoRuntime
 import GraphEvoStore
 
 /// Local-only M2a laboratory. Its model identifier prevents normal public opening
-/// of versioned records before public data-format admission is implemented.
+/// of the historical versioned fixture; this is not the selected public schema.
 package actor GraphDataMigrationLaboratory {
     package static let modelIdentifier = "GraphEvo.dataMigration.lab.1"
     package let graphID: GraphID
@@ -18,10 +18,10 @@ package actor GraphDataMigrationLaboratory {
 
     package static func open(at url: URL, graphID: GraphID? = nil) async throws -> GraphDataMigrationLaboratory {
         let schema = StoreSchema(identifier: modelIdentifier,
-            entityVersionHashes: GraphRuntimeSchema.nativeIdentity.entityVersionHashes,
+            entityVersionHashes: GraphHistoricalVersionedModel.makeModel().entityVersionHashesByName,
             requiredModelVersionIdentifier: modelIdentifier) {
                 GraphValueTransformer.register()
-                let model = GraphRuntimeSchema.makeNativeModel()
+                let model = GraphHistoricalVersionedModel.makeModel()
                 model.versionIdentifiers = [modelIdentifier]
                 return model
             }
@@ -53,7 +53,7 @@ package actor GraphDataMigrationLaboratory {
                     // Seed an archived source shape, including an actually absent date.
                     // Ordinary insertion's generated timestamp remains unchanged.
                     if row.record.createdDate == nil { node.node.setValue(nil, forKey: "createdDate") }
-                    node.node.setValue(row.dataVersion.map(NSNumber.init(value:)), forKey: GraphNativeIdentityColumns.dataVersionAttribute)
+                    node.node.setValue(row.dataVersion.map(NSNumber.init(value:)), forKey: GraphHistoricalVersionedModel.versionAttribute)
                 }
             }
         }
@@ -72,7 +72,7 @@ package actor GraphDataMigrationLaboratory {
         return try ids.map { id in
             guard id.graphID == graphID else { throw GraphStoreError.foreignGraph }
             guard let node = session.nodes[id] else { throw GraphStoreError.missingNode }
-            let version = (node.node.value(forKey: GraphNativeIdentityColumns.dataVersionAttribute) as? NSNumber)?.int64Value
+            let version = (node.node.value(forKey: GraphHistoricalVersionedModel.versionAttribute) as? NSNumber)?.int64Value
             return try GraphDataMigrationRow(record: session.snapshot(node, id: id), dataVersion: version)
         }
     }
@@ -127,7 +127,7 @@ package actor GraphDataMigrationLaboratory {
                             addingTags: record.tags.subtracting(old.record.tags), removingTags: old.record.tags.subtracting(record.tags),
                             addingGroups: record.groups.subtracting(old.record.groups), removingGroups: old.record.groups.subtracting(record.groups)))
                         guard let node = session.nodes[record.id] else { throw GraphStoreError.missingNode }
-                        node.node.setValue(next.dataVersion.map(NSNumber.init(value:)), forKey: GraphNativeIdentityColumns.dataVersionAttribute)
+                        node.node.setValue(next.dataVersion.map(NSNumber.init(value:)), forKey: GraphHistoricalVersionedModel.versionAttribute)
                     }
                     let actual = try Self.rows(context, graphID: id, ids: ids)
                     guard try GraphDataMigrationPublication.fingerprint(actual, maximumBytes: publication.maximumArtifactBytes) == publication.targetFingerprint else {

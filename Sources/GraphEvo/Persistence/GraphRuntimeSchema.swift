@@ -12,11 +12,11 @@ package enum GraphRuntimeSchema {
         return Model.makeModel()
     }
 
-    static let nativeModelIdentifier = "GraphEvo.v2.schema.1"
+    static let nativeModelIdentifier = "GraphEvo.v2.schema.2"
 
-    /// A fresh S01 model, separate from the identity-only historical laboratories.
+    /// A fresh S02 model with a distinct physical identity from historical laboratories.
     static func makeNativeModel() -> NSManagedObjectModel {
-        let model = GraphNativeIdentityColumns.makeModel(indexed: true, includingDataVersion: true)
+        let model = GraphNativeIdentityColumns.makeModel(indexed: true)
         model.versionIdentifiers = [nativeModelIdentifier]
         return model
     }

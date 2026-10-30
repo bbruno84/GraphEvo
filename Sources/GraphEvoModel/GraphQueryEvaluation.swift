@@ -255,9 +255,6 @@ package final class GraphQueryEvaluation {
         let matching = try records.filter { record in
             try step()
             guard record.type == request.definition.type, record.endpoints.kind == request.definition.kind else { return false }
-            guard request.definition.dataFormat.canRead(record.dataVersion) else {
-                throw GraphDataFormatError.unreadableVersion(record.dataVersion)
-            }
             return try matches(request.definition.predicate, record)
         }
         func output(_ rows: [GraphRecord] = [], cursor: GraphQueryCursor? = nil, count: Int, value: GraphValue? = nil) -> GraphQueryOutput {

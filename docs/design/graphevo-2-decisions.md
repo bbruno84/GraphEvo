@@ -24,12 +24,14 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 | M13 | Incompatible alpha layouts start from empty stores; no alpha-to-alpha conversion, downgrade or interrupted alpha-conversion recovery | Remove alpha conversion tooling from adoption gates; reject existing incompatible paths without automatic erasure. Mandatory v1 migration and beta compatibility remain separate |
 | M14 | GraphEvo owns native schema evolution; the consumer migration manager handles application data | Supersedes consumer-native-schema registration in the earlier manager proposal; external native interventions are not automatically certified |
 | M15 | Fix the 2.0 native target to S01 after the four-area review | Preserve the twelve-entity model; select only graph/node UUID projections, optional node data version and compound identity indexes. Adoption and beta gates remain open |
+| M16 | Keep application data meaning, optional versions and compatibility consumer-owned; adopt identity-only S02 | Supersedes M15's version column and M2b.1: retain graph/node UUIDs, remove ge2DataVersion/public format APIs/global refusal, and do not introduce a format registry. Migration execution and native schema remain Graph responsibilities |
 
 M13 records the 2026-10-29 fresh-store decision.
 M14/M15 record the 2026-10-30 migration boundary and
 [selected native schema](graphevo-2-persistent-schema.md). The subsequent runtime
 increment adopts S01 for explicit native openings with `GraphEvo.v2.schema.1`;
-consumer-format admission and mandatory data conversion remain open.
+M16 supersedes that target with [S02](graphevo-2-identity-schema.md); mandatory
+data conversion and production migration lifecycle remain open.
 
 M01–M04 and M09–M11 reflect the discussion following the 2026-10-26 laboratory results.
 M05–M08 carry forward the initial agreed requirements. M12 records the

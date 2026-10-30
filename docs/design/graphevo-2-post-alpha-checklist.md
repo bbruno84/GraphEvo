@@ -59,10 +59,11 @@ remain open. This is progress evidence, not closure of PA05/PA06/PA07.
   through the public factory: [16-stage iPad/XR result](results/s01-native-sharing-recovery-2026-10-30.md),
   two independently empty participant pairs, byte-exact 10-MiB exports and actual
   S01 metadata on eight native resources. Scope is the A6 entity/file fixture;
-  broader PA03/PA05/PA08 and application-format admission remain open. Retain
+  broader PA03/PA05/PA08 remain open. S02 requires separate device acceptance. Retain
   SM01–SM03's same-shape laboratory evidence separately from runtime activation.
-- [ ] **B** Implement optional consumer format declarations/admission, including atomic
-  local version/value writes and unknown/mixed/partial remote format cases.
+- [x] M16 withdraws library-owned application format declarations/admission.
+  Consumer transformations and protected migration execution remain PA08 work;
+  this is a scope correction, not acceptance of cloud compatibility.
 - [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported
   API/schema with the specification before freezing them for beta.
 - [ ] **B** Settle durable graph/node identity, reference and membership rules,
@@ -244,14 +245,15 @@ close O04 or mark the wider beta/stable items above complete.
   not public-store activation or complete M2 admission. The
   [553-test result](results/m2a-local-data-migration-2026-10-30.md) records the exact
   accepted scope and retained fixture/type-inference corrections.
-- [x] Introduce [M2b.1 detached format contracts](graphevo-2-data-formats.md):
-  explicit read compatibility, current-format serialization, version-preserving
-  patches and conservative normal-store refusal before application payload reads.
-  This does not enable normal versioned persistence or complete M2b admission.
-- [ ] **B** Complete public format declarations/admission across read/write/query/
-  traversal/file/observation paths before exposing versioned records, with actual
-  resource/process readiness, backup/retention and later-import policy. M2a's
-  isolated model identifier must not be removed as an admission shortcut.
+- [x] M16 supersedes M2b.1 application-version contracts and the proposed format
+  registry with [consumer-owned data](graphevo-2-data-formats.md). S02 removes the
+  native version column and global format refusal. Historical results retain scope.
+- [ ] **B** Validate [S02](graphevo-2-identity-schema.md) sharing and independent
+  recovery on explicitly prepared physical/cloud fixtures. S01's previous device
+  result does not close this revised-schema gate.
+- [ ] **B** Complete consumer-defined migration execution with resource/process
+  readiness, protected-source backups, retention, recovery and activation. Keep
+  the exact M2a fixture isolated; no public format registry is required.
 
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,

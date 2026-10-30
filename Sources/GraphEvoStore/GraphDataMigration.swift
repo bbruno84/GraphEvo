@@ -7,20 +7,18 @@ package enum GraphDataMigrationError: Error, Equatable {
     case invalidTransformation, destinationMismatch, sourceChanged, reconciliationRequired, busy
 }
 
-/// Detached format metadata. Nil is undeclared, never an inferred legacy version.
+/// Historical M2a laboratory metadata, separate from the public GraphRecord contract.
 package struct GraphDataMigrationRow: Sendable, Equatable {
     package let record: GraphRecord
-    package var dataVersion: Int64? { record.dataVersion }
+    package let dataVersion: Int64?
     package init(record: GraphRecord, dataVersion: Int64?) throws {
         guard dataVersion.map({ $0 >= 0 }) ?? true else { throw GraphDataMigrationError.sourceFormatMismatch }
-        self.record = try GraphRecord(id: record.id, type: record.type, endpoints: record.endpoints,
-            properties: record.properties, tags: record.tags, groups: record.groups,
-            createdDate: record.createdDate, dataVersion: dataVersion)
+        self.record = record; self.dataVersion = dataVersion
     }
 }
 
 /// M2a: pure per-record data conversion, no structural edits, file lifecycle or external writes.
-/// Package-only until all normal public read/write/query paths support format admission.
+/// Historical package-only experiment; public execution must follow consumer-owned data rules.
 package struct GraphDataMigrationDefinition: Sendable {
     package let descriptor: GraphDataMigrationDescriptor
     package let transform: @Sendable (GraphRecord) throws -> GraphRecord
@@ -216,8 +214,7 @@ package actor GraphDataMigrationManager {
                 try Task.checkCancellation()
                 let record = try definition.transform(row.record)
                 guard record.id == row.record.id, record.type == row.record.type,
-                      record.endpoints == row.record.endpoints, record.createdDate == row.record.createdDate,
-                      record.dataVersion == row.record.dataVersion else {
+                      record.endpoints == row.record.endpoints, record.createdDate == row.record.createdDate else {
                     throw GraphDataMigrationError.invalidTransformation
                 }
                 target.append(try GraphDataMigrationRow(record: record, dataVersion: descriptor.targetVersion))
