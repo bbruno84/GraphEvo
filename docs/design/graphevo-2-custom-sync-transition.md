@@ -72,7 +72,9 @@ process ownership and cross-process migration coordination retain their gates.
    this local foundation; public activation remains later work.
    Reuse typed CRUD, values/codecs, attachments, queries, observation and registry
    safeguards. Avoid rewriting them solely because transport changes.
-3. Implement durable local change discovery and outgoing publication, incoming
+3. M18 selects Persistent History discovery and [S03](graphevo-2-history-schema.md)
+   deleted-identity preservation, rather than a consumer mutation journal.
+   Implement durable local change discovery and outgoing publication, incoming
    persistence/application and recovery. Verify interruption boundaries before
    building the rest of sync on top of them; this is the first alpha acceptance
    increment, not another general-purpose experiment branch.

@@ -45,6 +45,11 @@ remain open. This is progress evidence, not closure of PA05/PA06/PA07.
 
 ## PA01 — schema, identities and application models
 
+M18 selects [S03](graphevo-2-history-schema.md): preserve graph/node UUIDs in
+deleted-node history through six flags, without new columns. PH01 remains
+experimental evidence; model adoption does not close history processing,
+checkpoint/queue recovery or selected-model/custom-sync cloud gates.
+
 - [x] Select the native 2.0 target after reviewing query, attachment, sharing and
   migration requirements: [S01](graphevo-2-persistent-schema.md), 2026-10-30.
   Retain twelve entities; select graph/node projections, optional node data
@@ -124,6 +129,13 @@ engine or cross-process acceptance. Retain this scope when integrating it.
   ownership of at most one engine per configured CloudKit private/shared database
   in the synchronization process. Route exact zones, scope account state and keep
   private graphs unshared until requested.
+- [ ] **R** Measure the incremental disk/retention cost of S03 identity tombstones
+  and representative PH processing, separately from queued payload and attachment
+  costs. The six-flag model decision does not establish a storage envelope.
+- [ ] **B** Implement scoped PH processing with safe deleted-detail/owner
+  correlation, token/store binding, pruning/expiry policy and durable pending
+  publication before checkpoint advancement. S03 retains deletion IDs; it does
+  not reconstruct pre-preservation tombstones or certify processor recovery.
 - [ ] **B** Prove durable local change discovery/publication and incoming application
   across interruption, including store/queue/engine-state ordering and outgoing
   acknowledgement races. Explicit fixture queueing is not this acceptance.
@@ -270,7 +282,7 @@ close O04 or mark the wider beta/stable items above complete.
 - [x] M16 supersedes M2b.1 application-version contracts and the proposed format
   registry with [consumer-owned data](graphevo-2-data-formats.md). S02 removes the
   native version column and global format refusal. Historical results retain scope.
-- [ ] **B** Validate [S02](graphevo-2-identity-schema.md) sharing and independent
+- [ ] **B** Validate the selected [S03](graphevo-2-history-schema.md) sharing and independent
   recovery on explicitly prepared physical/cloud fixtures. S01's previous device
   result does not close this revised-schema gate.
 - [ ] **B** Complete consumer-defined migration execution with resource/process

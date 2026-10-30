@@ -6,13 +6,13 @@ import XCTest
 @MainActor final class GraphPersistentSchemaTests: XCTestCase {
     private let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
 
-    func testS02IsExactlyTheSelectedAdditiveShapeWithStableIdentity() throws {
+    func testS03IsExactlyTheSelectedAdditiveShapeWithStableIdentity() throws {
         let base = Model.makeModel(), model = GraphRuntimeSchema.makeNativeModel()
-        XCTAssertEqual(model.versionIdentifiers, ["GraphEvo.v2.schema.2"])
+        XCTAssertEqual(model.versionIdentifiers, ["GraphEvo.v2.schema.3"])
         XCTAssertEqual(model.entities.count, 12)
         XCTAssertEqual(Set(model.entitiesByName.keys), Set(base.entitiesByName.keys))
         XCTAssertEqual(model.entityVersionHashesByName, GraphRuntimeSchema.nativeIdentity.entityVersionHashes)
-        XCTAssertEqual(GraphRuntimeSchema.nativeIdentity.requiredModelVersionIdentifier, "GraphEvo.v2.schema.2")
+        XCTAssertEqual(GraphRuntimeSchema.nativeIdentity.requiredModelVersionIdentifier, "GraphEvo.v2.schema.3")
         let second = GraphRuntimeSchema.makeNativeModel()
         XCTAssertFalse(model === second)
         XCTAssertEqual(model.entityVersionHashesByName, second.entityVersionHashesByName)
@@ -27,6 +27,7 @@ import XCTest
                     XCTAssertEqual(attribute.attributeType, .stringAttributeType)
                     XCTAssertTrue(attribute.isOptional); XCTAssertNil(attribute.defaultValue)
                     XCTAssertFalse(attribute.isTransient)
+                    XCTAssertTrue(attribute.preservesValueInHistoryOnDeletion)
                 }
                 XCTAssertTrue(try XCTUnwrap(entity.attributesByName["createdDate"]).isOptional)
                 let index = try XCTUnwrap(entity.indexes.first)
@@ -42,9 +43,11 @@ import XCTest
     }
 
     @available(iOS 17, macOS 14, *)
-    func testS02RetainsIdentityShapeButRejectsHistoricalVersionedShape() {
-        XCTAssertEqual(GraphRuntimeSchema.nativeIdentity.entityVersionHashes,
+    func testS03RetainsIdentityShapeButChangesHistoricalHashes() {
+        XCTAssertEqual(GraphNativeIdentityColumns.makeModel(indexed: true).entityVersionHashesByName,
                        GraphSchemaMigrationLaboratory.model(.native).entityVersionHashesByName)
+        XCTAssertNotEqual(GraphRuntimeSchema.nativeIdentity.entityVersionHashes,
+                          GraphSchemaMigrationLaboratory.model(.native).entityVersionHashesByName)
         XCTAssertNotEqual(GraphRuntimeSchema.nativeIdentity.entityVersionHashes,
                           GraphSchemaMigrationLaboratory.model(.versioned).entityVersionHashesByName)
         for name in kinds {

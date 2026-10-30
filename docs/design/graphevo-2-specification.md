@@ -1,5 +1,10 @@
 # GraphEvo 2 — initial specification
 
+Current native amendment: M18 selects [S03](graphevo-2-history-schema.md),
+retaining the identity-only shape and enabling six deletion-history flags.
+Persistent History discovery replaces the proposed per-mutation intent journal;
+processor/queue/checkpoint execution remains a separate implementation increment.
+
 Status: initial specification, 2026-10-26. The
 [A1 runtime increment](graphevo-2-store-runtime.md) implements the first local
 ownership foundation; other working contracts are not implied to be implemented.

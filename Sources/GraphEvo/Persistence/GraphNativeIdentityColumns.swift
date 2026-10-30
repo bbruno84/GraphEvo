@@ -3,13 +3,13 @@ import Foundation
 import GraphEvoModel
 
 /// Projection maintenance for explicitly selected native-column models only.
-/// S02 projects graph/node identity without interpreting application properties.
+/// S03 retains native identity projections in deletion history without interpreting application properties.
 enum GraphNativeIdentityColumns {
     static let graphAttribute = "ge2GraphID"
     static let nodeAttribute = "ge2NodeID"
-    private enum Layout: Hashable { case current, identityOnly }
+    private enum Layout: Hashable { case current, identityOnly(preserved: Bool) }
 
-    static func makeModel(indexed: Bool) -> NSManagedObjectModel {
+    static func makeModel(indexed: Bool, preservesIdentityOnDeletion: Bool = false) -> NSManagedObjectModel {
         let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
         let model = Model.makeModel()
         for name in kinds {
@@ -17,6 +17,7 @@ enum GraphNativeIdentityColumns {
             for key in [graphAttribute, nodeAttribute] {
                 let attribute = NSAttributeDescription()
                 attribute.name = key; attribute.attributeType = .stringAttributeType; attribute.isOptional = true
+                attribute.preservesValueInHistoryOnDeletion = preservesIdentityOnDeletion
                 entity.properties.append(attribute)
             }
             if indexed {
@@ -35,10 +36,11 @@ enum GraphNativeIdentityColumns {
         }
         guard let graph, let node, graph.attributeType == .stringAttributeType,
               node.attributeType == .stringAttributeType, graph.isOptional, node.isOptional,
-              graph.defaultValue == nil, node.defaultValue == nil, !graph.isTransient, !node.isTransient else {
+              graph.defaultValue == nil, node.defaultValue == nil, !graph.isTransient, !node.isTransient,
+              graph.preservesValueInHistoryOnDeletion == node.preservesValueInHistoryOnDeletion else {
             throw GraphStoreError.unsupportedLayout
         }
-        return .identityOnly
+        return .identityOnly(preserved: graph.preservesValueInHistoryOnDeletion)
     }
 
     /// Preflight before reserving any external shared intent.

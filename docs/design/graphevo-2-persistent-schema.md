@@ -2,7 +2,8 @@
 
 **Superseded by [S02](graphevo-2-identity-schema.md), decision M16.** The following
 records the original S01 selection and its evidence. Current explicit native
-openings use identity-only S02; application versioning and admission were removed.
+openings use [S03](graphevo-2-history-schema.md), retaining S02 identity-only shape
+and preserving deleted IDs; application versioning and admission were removed.
 
 
 Status: native target selected on 2026-10-30 after reviewing queries,

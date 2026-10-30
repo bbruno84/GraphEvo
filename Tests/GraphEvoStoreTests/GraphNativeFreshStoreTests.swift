@@ -34,7 +34,7 @@ private struct FreshNativeItem: GraphModel {
         let url = folder.appendingPathComponent("Native.sqlite")
         let db = try await GraphDatabase.open(at: url, schema: .nativeIdentity)
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
-        #expect(metadata[NSStoreModelVersionIdentifiersKey] as? [String] == ["GraphEvo.v2.schema.2"])
+        #expect(metadata[NSStoreModelVersionIdentifiersKey] as? [String] == ["GraphEvo.v2.schema.3"])
         #expect(try await db.graphIDs().isEmpty)
         let graph = try await db.createGraph(), second = try await db.createGraph()
         let a = graph.makeNodeID(), b = graph.makeNodeID(), edge = graph.makeNodeID(), action = graph.makeNodeID()
@@ -162,7 +162,8 @@ private struct FreshNativeItem: GraphModel {
     }
 
     private static func historicalModel(includingVersion: Bool, identifier: String) -> NSManagedObjectModel {
-        let model = includingVersion ? GraphHistoricalVersionedModel.makeModel() : GraphNativeIdentityColumns.makeModel(indexed: true)
+        // The unversioned case deliberately matches the selected shape with an invalid marker.
+        let model = includingVersion ? GraphHistoricalVersionedModel.makeModel() : GraphRuntimeSchema.makeNativeModel()
         model.versionIdentifiers = [identifier]
         return model
     }
