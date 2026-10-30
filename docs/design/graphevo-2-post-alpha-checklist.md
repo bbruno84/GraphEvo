@@ -59,10 +59,11 @@ remain open. This is progress evidence, not closure of PA05/PA06/PA07.
   through the public factory: [16-stage iPad/XR result](results/s01-native-sharing-recovery-2026-10-30.md),
   two independently empty participant pairs, byte-exact 10-MiB exports and actual
   S01 metadata on eight native resources. Scope is the A6 entity/file fixture;
-  broader PA03/PA05/PA08 and application-format admission remain open. Retain
+  broader PA03/PA05/PA08 remain open. S02 requires separate device acceptance. Retain
   SM01–SM03's same-shape laboratory evidence separately from runtime activation.
-- [ ] **B** Implement optional consumer format declarations/admission, including atomic
-  local version/value writes and unknown/mixed/partial remote format cases.
+- [x] M16 withdraws library-owned application format declarations/admission.
+  Consumer transformations and protected migration execution remain PA08 work;
+  this is a scope correction, not acceptance of cloud compatibility.
 - [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported
   API/schema with the specification before freezing them for beta.
 - [ ] **B** Settle durable graph/node identity, reference and membership rules,

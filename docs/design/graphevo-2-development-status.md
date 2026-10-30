@@ -33,6 +33,13 @@ branches are historical references, not alternative integration lines. Do not
 start new features there. `develop` remains v1, `master` stable. The documentation-
 only design PR #68 retains its separate purpose.
 
+The focused [M16/S02 change, #103](https://github.com/bbruno84/GraphEvo/pull/103)
+removes native/public application versioning and the proposed format registry.
+Its local checkpoint passes 557 tests (331 legacy, 137 store, 66 runtime, 23 model)
+and the public Swift 6 consumer. The earlier 567-test checkpoint above remains
+historical; removed format-policy tests are replaced by consumer-data behavior
+and expanded old-model refusal cases. S02 device/cloud acceptance is still open.
+
 ## Integrated alpha implementation
 
 | Area | Implemented | Remaining acceptance limits |

@@ -83,8 +83,10 @@ sharing writes have not been revalidated. C02/C03/C04 gates remain open.
 The [S01 review](graphevo-2-persistent-schema.md) has selected the native shape;
 the explicit native factory now adopts it and the
 [bounded public device fixture](results/s01-native-sharing-recovery-2026-10-30.md)
-passes sharing/files/fresh recovery. Optional consumer-format admission and
-broader native acceptance remain open. No further
+passes its original sharing/files/fresh-recovery case. M16 supersedes S01 with
+[S02](graphevo-2-identity-schema.md), removes application versioning/registry and
+retains graph/node identity. S02 device acceptance, production migration execution
+and broader native acceptance remain open. No further
 native columns/entities are planned without concrete correctness or measured
 evidence. The historical experiment sections below retain their original scope.
 

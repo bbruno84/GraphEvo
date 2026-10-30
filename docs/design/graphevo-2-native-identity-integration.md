@@ -269,8 +269,10 @@ it remains full storage validation, not application decoding or cloud completion
 
 The public factory originally recorded Core Data model version identifier
 `GraphEvo.nativeIdentity.alpha.2`. [S01 adoption](graphevo-2-persistent-schema.md)
-now records `GraphEvo.v2.schema.1`, adds optional node `ge2DataVersion` and retains
-the root's alpha.1 logical protocol. Historical laboratory factories are kept
+recorded `GraphEvo.v2.schema.1` with optional node `ge2DataVersion`. M16 now
+selects identity-only [S02](graphevo-2-identity-schema.md), identifier
+`GraphEvo.v2.schema.2`, retaining the root's alpha.1 logical protocol.
+Historical laboratory factories are kept
 separate. StoreSchema requires the selected native identifier
 in existing store metadata, checking every resource before creating/loading a
 mirrored container. The requirement also participates in runtime lease
