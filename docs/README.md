@@ -25,6 +25,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
+- [GraphEvo 2 selected persistent schema](design/graphevo-2-persistent-schema.md):
+  S01 native shape, four-area review, record-version semantics and adoption gates.
 - [GraphEvo 2 initial specification](design/graphevo-2-specification.md): current
   requirements and proposed contracts, including mandatory v1 data migration.
 - [GraphEvo 2 delivery plan](design/graphevo-2-delivery-plan.md): alpha sequence,

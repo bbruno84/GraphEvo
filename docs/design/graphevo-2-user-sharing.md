@@ -7,6 +7,13 @@ Native model hashes remain unchanged; this is still an alpha API and protocol.
 
 ## One owner for both physical stores
 
+The subsequent [S01 schema review](graphevo-2-persistent-schema.md) retains the
+paired resources, hidden graph roots/membership and local operation ledgers.
+Native share APIs remain authoritative; no substitute native zone, permission
+or synchronization-status columns are selected. Statements below about the
+unchanged A5 model describe that increment, not the later S01 identity/version
+column target. Account, revocation and recovery gates remain open.
+
 ```swift
 let database = try await GraphDatabase.openMirrored(
     privateStoreAt: privateURL,

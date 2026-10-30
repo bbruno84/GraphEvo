@@ -1,5 +1,19 @@
 # GraphEvo — instructions for AI agents
 
+## Selected v2 native schema
+
+Read [S01](docs/design/graphevo-2-persistent-schema.md) before native model work.
+The selected 2.0 target retains the twelve-entity model and adds only optional
+`ge2GraphID`, `ge2NodeID`, `ge2DataVersion` on each node kind, with the existing
+compound identity indexes. The production native factory is still alpha.2 with
+only the identity columns; S01 adoption is a separate increment. Do not silently
+change default opening paths, migrate/relabel old files or treat schema selection
+as beta acceptance. Record versions are optional consumer-format declarations,
+not revisions/import completion; retain the legacy property `appDataVersion`.
+Native schema migration is internal library work. Consumer migrations target
+application data. Reopen S01 only with concrete correctness/measurement evidence
+and documented migration and local/cloud validation effects.
+
 This file is the operational entry point for agents working in the repository.
 Before changing code, read `README.md` for the project overview and consult the
 relevant documentation in `docs/`.

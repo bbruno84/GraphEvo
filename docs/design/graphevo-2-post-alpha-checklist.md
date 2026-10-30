@@ -41,6 +41,14 @@ remain open. This is progress evidence, not closure of PA05/PA06/PA07.
 
 ## PA01 — schema, identities and application models
 
+- [x] Select the native 2.0 target after reviewing query, attachment, sharing and
+  migration requirements: [S01](graphevo-2-persistent-schema.md), 2026-10-30.
+  Retain twelve entities; select graph/node projections, optional node data
+  version and compound identity indexes. This closes the shape decision only.
+- [ ] **B** Adopt S01 in the native factory/shape checks and opening matrix;
+  validate the selected model on local, mirrored and extension read-only paths.
+  Implement optional consumer format declarations/admission, including atomic
+  local version/value writes and unknown/mixed/partial remote format cases.
 - [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported
   API/schema with the specification before freezing them for beta.
 - [ ] **B** Settle durable graph/node identity, reference and membership rules,
@@ -210,6 +218,10 @@ resource invalidation, with live rescan hints for processing. This does not
 close O04 or mark the wider beta/stable items above complete.
 
 ## PA08 — mandatory v1 local and cloud migration
+
+- [ ] **B** Align the pending migration-manager contract/PR #95 with M14/S01:
+  consumer-defined application-data plans only; native schema routes are internal.
+  The earlier consumer-native-schema registration proposal is superseded.
 
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,
@@ -514,4 +526,6 @@ A failed pre-handler can leave saved changes; a protected copy retains baseline.
 Six controls and the full 526-test suite pass. This does not close PA08: historical
 v1 store/codec coverage, process-kill/activation recovery, concurrent cloud edits,
 Production deployment and full graph/data conversion remain open. The optional
-version field is experimental; no production model or default opener changed.
+version field was experimental in this result; S01 now selects its target shape.
+The runtime factory and default openers have not adopted it yet. Native shape
+selection does not close any of the remaining PA08 data-conversion gates.
