@@ -59,7 +59,11 @@ peer paths and obtain records from CloudKit, never from copied owner SQLite.
 
 CloudKit Development, native sharing/assignment/import and an existing accepted
 share are used. No reset, purge, production schema deployment, invitation to an
-unrelated account or direct CKRecord data mutation occurs. The schema change's
+unrelated account or direct CKRecord data mutation occurs. Test records/shares
+remain in Development; future tests must not assume an empty or fully converted
+cloud container merely because they use fresh local files. After final independent
+recovery the exact remaining probe processes were stopped; stores and reports
+were preserved. The schema change's
 local success, native setup, exported data and recovered replica are separate
 facts; replica results provide the actual remote-data evidence.
 
