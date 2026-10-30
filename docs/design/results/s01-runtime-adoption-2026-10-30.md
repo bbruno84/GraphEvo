@@ -65,3 +65,7 @@ Optional consumer-format APIs, admission/reconciliation of partial or later
 old-format imports and mandatory logical v1 conversion are not implemented by
 adding the column. No application version is inferred from the old property-row
 `appDataVersion`, and no incompatible file is automatically converted or erased.
+
+Subsequent [physical S01 acceptance](s01-native-sharing-recovery-2026-10-30.md)
+separately closes the bounded public sharing/files/fresh-recovery item. It does
+not turn this increment's offline paired tests into replication evidence.

@@ -15,6 +15,14 @@ Native schema migration is internal library work. Consumer migrations target
 application data. Reopen S01 only with concrete correctness/measurement evidence
 and documented migration and local/cloud validation effects.
 
+The [S01 device protocol](Experiments/S01NativeProbe/README.md) extends the public
+file fixture with guarded empty replicas and same-process seed/invitation. Keep
+writers alive through independent peer observation; never replay a consumed
+mutation or copy native stores into a supposedly fresh replica. Its
+[16-stage result](docs/design/results/s01-native-sharing-recovery-2026-10-30.md)
+closes only the bounded selected-model sharing/recovery item. Consumer-format
+admission, v1 conversion and broader native/account/conflict gates remain open.
+
 This file is the operational entry point for agents working in the repository.
 Before changing code, read `README.md` for the project overview and consult the
 relevant documentation in `docs/`.
