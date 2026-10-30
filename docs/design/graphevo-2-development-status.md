@@ -40,6 +40,23 @@ and the public Swift 6 consumer. The earlier 567-test checkpoint above remains
 historical; removed format-policy tests are replaced by consumer-data behavior
 and expanded old-model refusal cases. S02 device/cloud acceptance is still open.
 
+## Selected synchronization transition
+
+M17 selects explicit CloudKit sync after the successful bounded CS01 experiment.
+The ContextManager owns one CKSyncEngine per private/shared database; each
+GraphCoordinator will own one graph/store and its migration/pause lifecycle.
+See the [transition contract](graphevo-2-custom-sync-transition.md) for rationale,
+retained experiment evidence, cleanup scope and implementation order.
+
+The focused `codex/v2-sync-transition-cleanup` branch isolates native mirroring
+from local runtime code. It is not yet integrated and does not implement custom
+production sync or retire existing alpha entry points. Its local checkpoint passes
+559 tests (331 legacy, 137 store, 68 runtime, 23 model), plus manifest/diff checks.
+Existing A4/A5 native
+mirroring and their evidence below remain historical implementation status;
+they do not establish acceptance of the replacement transport. No experiment
+implementation is merged or adopted as production code.
+
 ## Integrated alpha implementation
 
 | Area | Implemented | Remaining acceptance limits |
@@ -81,13 +98,15 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Validate S02 on explicitly prepared cloud/device fixtures without replaying
-   old stages. Current local acceptance: 557 tests and public Swift 6 consumer.
-2. Complete M2's protected-source backup/readiness/recovery/activation with
-   consumer-defined data transformations, then mandatory v1 conversion and durable
-   later-import processing. Do not reintroduce a central format registry.
-3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
-   Alpha integration is not beta acceptance or a release/tag request.
+1. Review/integrate the focused native-mirroring isolation, then implement the
+   transition's exclusive per-graph ownership and ContextManager engine ownership.
+2. Establish durable changes/queue/import recovery in the actual implementation,
+   then automatic sync, graph pause, conflicts/deletes/assets and sharing lifecycle.
+3. Complete protected application-data migration and mandatory v1 conversion on
+   the selected architecture; retain existing schema/format decisions and backups.
+4. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
+   Prior native backend acceptance does not certify the replacement. Alpha
+   integration is not beta acceptance or a release/tag request.
 
 New focused `codex/v2-<topic>` branches start from `codex/graphevo-2` and return
 directly through PRs to that branch. Finish review/checks/integration before the
