@@ -228,3 +228,17 @@ Evaluate the optional v1 adapter on independent consumers, using MyHomeBills
 RecoveryV2 as one production example rather than an architectural template.
 The first package-only journal increment is not a public executor or a migration
 readiness certificate. Local/cloud conversion feasibility remains a beta gate.
+
+### Native schema migration experiment (scheduled 2026-10-30)
+
+Before selecting the manager's native adapter, execute
+[SM01–SM03](graphevo-2-migration-manager.md#planned-native-migration-experiment--sm01sm03):
+lightweight migration, local staged migration with custom pre/post work and
+failure/interruption, then mirrored-store migration with independent replica
+verification. First isolate framework behavior with a minimal model; then validate
+the relevant Graph transition. Local migration success does not certify export of
+handler-produced changes. These experiments are planned, not accepted results.
+
+Keep native schema evolution uncommon by using Graph's data-driven logical
+formats for ordinary application changes. This does not eliminate record-level
+format migration or the need for a supported future native-schema route.

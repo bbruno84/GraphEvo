@@ -102,6 +102,46 @@ and [schema deployment rules](https://developer.apple.com/documentation/cloudkit
 require additive production evolution; incompatible changes need a separately
 validated transition policy.
 
+## Data-driven model direction
+
+Maintainer direction, 2026-10-30: use Graph's data-driven representation to keep
+native Core Data schema changes uncommon. Prefer consumer-defined logical type,
+property and format evolution over adding native entities/attributes for every
+application feature. Consolidate native identity/routing/version needs before
+beta, while retaining explicit logical record format evolution and migrations.
+This is a design objective, not a promise that native schema changes disappear
+or that a data-only change needs no compatibility handling. Change the native
+schema when correctness or measured costs justify it, under a supported route.
+
+## Planned native migration experiment — SM01–SM03
+
+Status: scheduled, not implemented or executed. Run before selecting the M2/M3
+native-schema adapter. Start with a minimal, separately versioned Core Data model
+in a disposable laboratory; repeat the meaningful accepted transition against
+the Graph candidate model before claiming Graph integration support.
+
+| ID | Experiment | Required evidence |
+|---|---|---|
+| SM01 | Explicitly enabled lightweight migration between compatible models | Protected populated source; actual destination model compatibility, exact identities/values/references, close/reopen and rejected unsupported source. Distinguish physical migration from any application data transformation. |
+| SM02 | Local staged migration with custom pre/post transformations | Declared source/intermediate/target models, handler order and visible model capabilities; exact transformed data; injected handler failure and process interruption at stage boundaries, including retry/reopen outcome with source preservation. |
+| SM03 | Lightweight/staged transition of an already mirrored store | Establish a populated cloud/replica baseline first; migrate one controlled writer, then verify exact values/topology from an independent peer and a fresh replica. Separately measure physical-schema outcome and export/import of changes made by pre/post handlers versus ordinary post-open context saves. |
+
+SM03 must explicitly test the observation that physical/pre-open transformations
+may not be replicated like normal mirrored context saves. Do not assume either
+that all pre-open changes export or that none can export. Record retained history,
+model/store versions, operation identity, native setup/import/export outcomes and
+independent data recovery separately. Event success alone is insufficient.
+Include a delayed incoming supported-format edit during publication and verify
+stale-analysis rejection/reconciliation; do not claim that the manager's writer
+gate pauses native imports. Distinguish a conflict from an unsupported route.
+
+Use synthetic external stores and a separately authorized Development fixture,
+never production/user stores. No implicit cloud reset, original-store rewrite,
+blind stage replay or simultaneous independent ownership of one local file.
+Bind each result to toolchain/OS/model hashes and preserve failed outcomes.
+Publish a result with accepted routes and limitations before implementing the
+native adapter; native and cloud success remain separate acceptance criteria.
+
 ## Version domains and cloud lifecycle
 
 Keep native model/layout version, application data-format version and migration
@@ -258,7 +298,9 @@ until explicit admission is implemented.
 2. **M2 — manager/admission and artifact lifecycle:** connect explicit resource
    ownership, backup protection, awaited phase execution, bounded progress and
    recovery hooks. Define widget-before-app and close/cancellation behavior;
-   never retain a cross-process lifetime lock across iOS suspension.
+   never retain a cross-process lifetime lock across iOS suspension. Complete
+   SM01–SM03 before selecting the native migration adapter; do not infer export
+   behavior from a successful local schema transition.
 3. **M3 — v1 compatibility experiment:** import actual ledger fixtures and evaluate
    representative existing migrations, including a RecoveryV2 slice. Validate
    separate minimal consumer-authored data and native-schema plans so no one

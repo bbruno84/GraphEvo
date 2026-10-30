@@ -217,6 +217,10 @@ feasibility, resource admission or compatibility gates. Consumer-authored schema
 compatibility belong to the general manager contract. RecoveryV2 is one concrete
 compatibility/regression consumer, not the manager's architectural template.
 
+- [ ] **B** Execute [SM01–SM03](graphevo-2-migration-manager.md#planned-native-migration-experiment--sm01sm03)
+  before selecting the native migration adapter: lightweight, staged pre/post
+  transformation and interrupted recovery, then actual mirrored export/import
+  verified independently. Preserve a separate result for each guarantee.
 - [ ] **B** Define and demonstrate consumer-registered native-schema and data-only
   plans, supported version routes and interleaved schema/data stages.
 - [ ] **B** Define per-record format discrimination and a durable import processing/
