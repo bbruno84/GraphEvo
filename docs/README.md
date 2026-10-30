@@ -7,6 +7,7 @@ guides. For an introduction to the project, see the [main README](../README.md).
 
 | If you want to... | Read... |
 |---|---|
+| understand current GraphEvo 2 progress and the active development branch | [V2 development status](design/graphevo-2-development-status.md) |
 | understand every public API | [API reference](api/public-api.md) |
 | integrate GraphEvo for the first time | [Getting started](guides/getting-started.md) |
 | understand the graph model | [Graph model](concepts/graph-model.md) |

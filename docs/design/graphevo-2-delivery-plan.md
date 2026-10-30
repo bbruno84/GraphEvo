@@ -1,6 +1,7 @@
 # GraphEvo 2 — delivery plan
 
-Status: initial plan, 2026-10-26. Read with the
+Status: delivery roadmap. For current implementation/integration status, use
+[development status](graphevo-2-development-status.md). Read with the
 [specification](graphevo-2-specification.md) and
 [decision register](graphevo-2-decisions.md).
 
@@ -45,7 +46,12 @@ Each alpha is a coherent usable increment with its model/API revision and
 known limits recorded. Alpha stage numbers below are planning milestones,
 not a promise of one prerelease tag per stage. Remain alpha through stage 8.
 
-## Integration checkpoint — 2026-10-27
+## Historical integration checkpoint — 2026-10-27
+
+The table below records the earlier checkpoint. Consolidation and subsequent
+S01/migration increments are integrated into `codex/graphevo-2` through #81.
+Use [development status](graphevo-2-development-status.md) for current progress;
+this historical table is not an outstanding branch-promotion instruction.
 
 | Area | Current status |
 |---|---|

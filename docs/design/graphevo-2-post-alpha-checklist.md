@@ -1,5 +1,9 @@
 # GraphEvo 2 — end-of-alpha and release checklist
 
+For implementation and integration progress, start with
+[development status](graphevo-2-development-status.md). This checklist owns
+beta/stable gates, not a competing branch-status summary.
+
 Status: open consolidation register, 2026-10-27. This collects follow-ups from
 A1–A8 and the specification so they survive individual PRs. It complements the
 [delivery plan](graphevo-2-delivery-plan.md), [decision register](graphevo-2-decisions.md)

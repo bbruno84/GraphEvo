@@ -1,0 +1,96 @@
+# GraphEvo 2 — current development status
+
+Updated: 2026-10-30. This is the single entry point for **integrated work,
+laboratory-only work and next steps**. The specification defines contracts, the
+delivery plan defines milestones, and experiment reports retain historical
+evidence. A successful experiment or merged child PR alone does not establish
+integration into the main v2 branch or beta readiness.
+
+## Active branch and completed reorganization
+
+Develop on **`codex/graphevo-2`**. C01 #78 is integrated as `f47776f`; cumulative
+consolidation #81 as `4ae3468`. The latter merge tree was verified identical to
+reviewed head `b1def55`, with exact-head macOS/iOS CI `41078884832` green. The
+complete local suite at that checkpoint passes **567 tests** (331 legacy,
+142 store, 66 runtime, 28 model). CI for integration merge commits is separate.
+
+| PR | Final disposition |
+|---|---|
+| [#78](https://github.com/bbruno84/GraphEvo/pull/78) | Reviewed/merged baseline harness and measurements into v2 |
+| [#79](https://github.com/bbruno84/GraphEvo/pull/79) | Closed as superseded; all commits plus corrections are included through #81 |
+| [#80](https://github.com/bbruno84/GraphEvo/pull/80) | Closed as superseded; all commits plus corrections are included through #81 |
+| [#81](https://github.com/bbruno84/GraphEvo/pull/81) | Retargeted directly to v2, reviewed and merged as the final implementation |
+
+#79/#80's old CI failed on non-Sendable test-closure transfer. Successor commits
+`b5defcd`/`1011398` corrected queue transfer/context creation; the final head passes
+CI. No red intermediate was independently merged as accepted. Branches, commits,
+rejected variants and measurements remain available; history was not rewritten.
+No experiment store/mutation was replayed for this cleanup.
+
+The old `codex/v2-consolidation-costs`, `codex/v2-cost-experiments`,
+`codex/v2-attachment-metadata-experiment` and `codex/v2-cost-experiment-matrix`
+branches are historical references, not alternative integration lines. Do not
+start new features there. `develop` remains v1, `master` stable. The documentation-
+only design PR #68 retains its separate purpose.
+
+## Integrated alpha implementation
+
+| Area | Implemented | Remaining acceptance limits |
+|---|---|---|
+| A1–A3 | Resource ownership, awaited scopes, persistent IDs, GraphModel/GraphRecord and typed CRUD | Full distributed/platform boundary and concurrency stress gates |
+| A4–A5 | Graph catalog/membership, paired resources, sharing and interrupted-assignment ledgers | Account/offline/conflict/recovery and scale gates |
+| A6 files | Separate attachment identity, exclusive owner, split metadata/content, binary Data, integrity and cascades | Whole-content backups, providers and physical resource envelopes |
+| A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
+| A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
+| Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
+| S01 | Explicit `.nativeIdentity` opening uses the selected twelve-entity model, three optional node columns and existing identity indexes | Default/current openers retain their original model; no implicit conversion or beta acceptance |
+| App/widget | Local read-only extension access and ownership safeguards | Broader lifecycle/account/protected-data/OS acceptance remains bounded by the reports |
+| M2b.1 | Public dataVersion/graphDataFormat, checked mapping/query compatibility and conservative refusal | **Normal versioned persistence is not enabled**; native declared versions block application access across the resource group |
+
+Contracts: [typed store](graphevo-2-typed-store.md), [sharing](graphevo-2-user-sharing.md),
+[files](graphevo-2-attachments.md), [queries](graphevo-2-queries.md),
+[observation](graphevo-2-observation.md), [S01](graphevo-2-persistent-schema.md),
+[formats](graphevo-2-data-formats.md). The
+[16-stage S01 device result](results/s01-native-sharing-recovery-2026-10-30.md)
+proves its specified sharing/file/recovery fixture, not all broader release gates.
+
+## Laboratory-only and unfinished migration work
+
+| Work | Actual status |
+|---|---|
+| Native schema SM01–SM03 | Bounded lightweight/staged local/cloud experiment, not full v1 conversion |
+| M1 journal | Package-only checkpoint/intent foundation, no production consumer executor |
+| M2a conversion | Isolated package-only model; atomic data/version/marker publication and native reopen/recovery tested; no public activation or CloudKit admission |
+| Historical identity/observation alternatives | Retained probes and reports, not selected by default public opening paths |
+| Complete M2b | **Not implemented**: shared resource-bound registry/policy, complete admission, protected-source lifecycle, process readiness, route scheduling and public activation |
+| M3–M5 | **Not implemented** end to end: v1 source/codec matrix, full data/topology/file conversion, recovery and evaluated optional API adapter |
+| M6 | **Not implemented**: durable discovery and later incompatible/partial/old cloud updates with bounded convergence |
+
+See the [manager sequence](graphevo-2-migration-manager.md) and
+[M2a](graphevo-2-data-migration-local.md). Consumers migrate application data;
+native schema transitions are library-internal. Source API compatibility is
+optional; v1 data migration is mandatory, with coordinated v1 writers stopped
+before conversion. Public format DTOs do not constitute a production manager.
+
+## Next steps and operating rule
+
+1. Complete M2b in reviewed slices, starting with the common format registry/
+   admission design. Keep current refusal until participating public paths share
+   a valid policy; never expose versioned laboratory files implicitly.
+2. Add protected-source backup/readiness/recovery/activation, followed by v1
+   conversion and later-import work in the manager sequence.
+3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
+   Alpha integration is not beta acceptance or a release/tag request.
+
+New focused `codex/v2-<topic>` branches start from `codex/graphevo-2` and return
+directly through PRs to that branch. Finish review/checks/integration before the
+next increment; do not accumulate another experiment-parent stack. If a framework
+question needs an experiment, state the question, retain its result and explicitly
+select adoption or rejection. Package-only probes may remain while their
+production activation remains prohibited.
+
+Update this page when implementation/integration status changes, with contract
+and evidence links. Update the post-alpha checklist when gates change. Keep old
+reports and dated checkpoints historical, rather than competing current-status
+documents. No release branch/tag, schema/API freeze or cloud reset is part of
+this reorganization.

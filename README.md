@@ -18,6 +18,8 @@ The companion demonstration app is maintained separately in the
 
 ## 📚 Documentation
 
+- [GraphEvo 2 development status](docs/design/graphevo-2-development-status.md)
+
 - [Complete public API reference](docs/api/public-api.md)
 - [Operational instructions for AI agents](AGENTS.md)
 - [Documentation index](docs/README.md)
