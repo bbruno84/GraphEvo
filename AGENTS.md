@@ -1,5 +1,16 @@
 # GraphEvo — instructions for AI agents
 
+## Current v2 development entry point
+
+Read [development status](docs/design/graphevo-2-development-status.md) before
+choosing v2 work or a base branch. Consolidation is integrated into
+`codex/graphevo-2` through #78/#81. Historical cost/metadata/matrix branches are
+not active integration lines. New focused v2 branches start from and return
+directly to `codex/graphevo-2`. Complete review/checks/integration before the
+next increment; do not rebuild the former experiment-parent stack. Preserve
+historical reports/branches and their actual scope. Update the status page on
+integration changes and the post-alpha checklist on gate changes.
+
 ## Selected v2 native schema
 
 Read [S01](docs/design/graphevo-2-persistent-schema.md) before native model work.

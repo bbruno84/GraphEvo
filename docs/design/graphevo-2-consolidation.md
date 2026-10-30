@@ -1,5 +1,11 @@
 # GraphEvo 2 — consolidation after A1–A8
 
+Current integration: the selected implementation is merged into `codex/graphevo-2`
+through #78/#81. Start with [development status](graphevo-2-development-status.md).
+The dated campaign descriptions below preserve experimental provenance and
+trade-offs. References to preferred experiment branches describe historical
+checkpoints, not today's development base or production/beta acceptance.
+
 Status: started 2026-10-27 after A8 PR #77 merged into `codex/graphevo-2`
 (`caa12129cd535c2ffd8bfbbf7e302a223d04815a`). Remain alpha: this is the
 integration baseline for consolidation, not schema/API freeze or beta entry.

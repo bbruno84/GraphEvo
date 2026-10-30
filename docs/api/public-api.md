@@ -973,7 +973,8 @@ entities and valid empty actions. New IDs and required property-format metadata 
 properties; missing format metadata is reported as corrupt identity metadata rather
 than exposing envelope bytes as application Data. Untouched adopted v1 nodes have
 an explicit empty format list; they are not derived from local URI paths. `fetchAll` has a stable UUID
-ordering but currently builds a linear index; the A7 query engine is pending.
+ordering. Descriptor queries use the bounded A7 execution contract documented
+below; fetchAll remains separate from indexed query execution and inventory costs.
 
 `GraphV1AdoptionReport` has read-only Sendable `graphID: GraphID`,
 `nodeIDs: [String: GraphNodeID]` and `backupURL: URL?`. The map keys are original
