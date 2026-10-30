@@ -87,3 +87,26 @@ do not parse private SQLite or CloudKit tables.
 
 The [GI01 result](../../docs/design/results/gi01-graph-store-isolation-2026-10-30.md)
 records the counterexamples and scope. The integration branch stays unchanged.
+
+## Single-owner control: B's store never opened
+
+The initial stages retain both original native owners, so they do not isolate
+whether B must be open elsewhere. Follow up with the one-use `recover-A-only`
+stage on the already exported fixture, using a new `single-private-A` directory:
+
+1. Record and stop confirmed laboratory processes on both devices. Verify none
+   remains before launching the controlled owner process.
+2. Open exactly one private GraphDatabase/native owner on iPad. Open/validate
+   only graph A; never open graph B or any original/fresh B store in this process.
+3. Retain the sole owner for a bounded 90-second native import window after A
+   becomes complete. Perform no application writes, invitations or reassignment.
+4. Await native owner close before writing the completed stage report. The report
+   leaves B content inspection deferred; its default counterexample flag is not
+   an isolation result for this stage.
+5. Collect only this closed directory into new protected evidence. Inspect A/B
+   through the offline public read-only inspector, without a CloudKit container.
+   This avoids loading a B graph handle while cloud mirroring is active.
+
+A complete B in that file is a positive counterexample with B's store closed;
+absence after this finite window would remain inconclusive. Preserve the process
+inventories, sole-owner count, source/executable hashes and offline result.

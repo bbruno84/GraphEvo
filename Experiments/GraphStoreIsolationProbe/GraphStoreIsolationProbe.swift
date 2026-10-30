@@ -22,6 +22,8 @@ import UIKit
         var succeeded = false
         var physicalIsolationCounterexample = false
         var distinctNativeBoundaries: Bool?
+        var openedNativeOwnerCount: Int?
+        var inspectionDeferredUntilClosed: Bool?
         var samples: [Sample] = []
         var checks: [String] = []
         var errorDomain: String?; var errorCode: Int?
@@ -130,7 +132,7 @@ import UIKit
                   let container = Bundle.main.object(forInfoDictionaryKey: "GraphEvoDemoCloudKitContainer") as? String,
                   container == "iCloud.com.valerioburiani.GraphCKDemo" else { throw Failure.arguments }
             let stage = arguments[flag + 1]; runID = run
-            guard ["prepare", "identity", "seed-recover", "accept-separate", "recover-shared"].contains(stage) else { throw Failure.arguments }
+            guard ["prepare", "identity", "seed-recover", "accept-separate", "recover-shared", "recover-A-only"].contains(stage) else { throw Failure.arguments }
             report = Report(stage: stage, processID: report.processID, launchTicket: ticket)
             let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("GraphEvoLaboratory/GraphStoreIsolation/" + run.uuidString)
@@ -173,6 +175,26 @@ import UIKit
                 report.physicalIsolationCounterexample = report.samples.contains { $0.containsOtherGraph }
                 guard report.samples.count >= 2, report.samples[0].completeA, report.samples[1].completeB else { throw Failure.deadline }
                 report.checks.append("fresh-private-resources-no-source-files")
+            } else if stage == "recover-A-only" {
+                let f = try read(Fixture.self, at: root.appendingPathComponent("fixture.json"), run: run)
+                let directory = root.appendingPathComponent("single-private-A")
+                guard owners.isEmpty, !FileManager.default.fileExists(atPath: directory.path) else { throw Failure.replay }
+                let db = try await open(directory, container: container, paired: false)
+                report.openedNativeOwnerCount = owners.count
+                guard report.openedNativeOwnerCount == 1 else { throw Failure.fixture }
+                var recoveredA = false
+                for _ in 0..<120 {
+                    if await complete(db, fixture: f, a: true) { recoveredA = true; break }
+                    try await Task.sleep(for: .seconds(2))
+                }
+                guard recoveredA else { throw Failure.deadline }
+                log("Only A was opened; retaining the sole native owner for a bounded import window.")
+                for _ in 0..<45 { try await Task.sleep(for: .seconds(2)) }
+                // Do not open B, inspect its catalog or validate its content while cloud is active.
+                // Collect this closed store and inspect B offline, with no CloudKit container.
+                try await db.close()
+                report.inspectionDeferredUntilClosed = true
+                report.checks += ["one-native-owner-only", "fresh-single-private-resource", "A-content-recovered", "no-store-B-opened", "no-graph-B-handle-opened", "no-application-writes", "bounded-90-second-window", "native-owner-closed-before-offline-inspection"]
             } else {
                 let f = try read(Fixture.self, at: root.appendingPathComponent("fixture.json"), run: run)
                 let prefix = stage == "recover-shared" ? "fresh-pair" : "participant-pair"

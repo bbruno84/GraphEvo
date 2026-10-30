@@ -99,6 +99,46 @@ An initial external inspector build attempted an awaited check inside a Boolean
 short-circuit autoclosure; it was corrected to await the count first, before any
 file inspection. No library change or data mutation was needed.
 
+## Follow-up: only A's store loaded, no B graph handle
+
+The initial experiment kept original B's native owner alive in another container.
+Those observations alone did not isolate whether B must remain open elsewhere.
+The maintainer asked for this distinction; a separate one-use `recover-A-only`
+control now removes it.
+
+The measured follow-up host adds only this stage; its exact source SHA-256 is
+`bd7583819ac01c243838eebd29662034f3ce3e981e89151d13b600ddc91a1536`.
+Protected evidence retains its executable/source manifest and source snapshot.
+The production library/model are unchanged.
+
+1. Inventory and stop confirmed GraphEvoDemo laboratory processes on iPad and XR.
+   Verify zero matching processes on either device before the controlled launch.
+2. Launch a new acknowledged iPad process with exactly one GraphDatabase/native
+   owner and one strictly new private SQLite in `single-private-A`. No original
+   A/B store or other fresh store is opened in that process.
+3. Recover/validate A only. No graph B handle is created, no explicit B catalog/
+   content inspection is requested, and no application writes/invitations occur.
+   Retain the sole native owner for 90 seconds after A becomes complete.
+4. Await native owner close. The PID/ticket-bound report confirms one owner,
+   no B store/handle, no app writes and deferred offline inspection. Its default
+   `physicalIsolationCounterexample = false` does not classify B: this stage
+   intentionally does not inspect B while CloudKit is active.
+5. Stop the acknowledged process and collect the closed directory separately.
+   Confirm no XR laboratory process at completion. Use the public offline
+   read-only inspector, without CloudKit, to inspect this file.
+
+**Result: complete A and complete B are both physically present.** Each has exact
+fixture root/child properties, edge/action endpoints and four-record integrity.
+The native metadata is S02 with a new independent store UUID. B's local store
+was not loaded during this control, and loading a B graph handle could not have
+triggered the import: the first such handle was created during offline inspection
+after the only mirrored owner had closed.
+
+This closes the specific local co-loading ambiguity for the tested configuration.
+It does not assert that other clients worldwide were offline, control server
+scheduling, or prove a per-graph import filter exists. Already exported B records
+remain on the server independently of its original local store being open.
+
 ## Interpretation and limits
 
 Reject the inference **one native controller/file seeded with one graph ⇒ only
