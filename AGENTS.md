@@ -511,3 +511,18 @@ with positive demand, one pending newest value and serialized callbacks; it does
 not provide durable replay or control native writers. Keep O04 open until stable
 processing scope is selected. Retain physical remote evidence separately from
 injected signals and keep alpha/beta gates in the post-alpha checklist updated.
+
+## V2 consolidation cost measurements
+
+Read the [consolidation plan](docs/design/graphevo-2-consolidation.md) and
+[C01 procedure](Experiments/ConsolidationCosts/README.md) before cost-driven
+schema/execution changes. The standalone Release consumer uses only public
+GraphDatabase/GraphStore APIs and new external temporary local fixtures. Never
+point it at application/device/cloud stores, retry failed seeds or commit its
+stores/raw logs. Retain expected budget refusals and semantic assertions; do
+not silently increase budgets or remove ownership/integrity checks to improve
+measurements. Distinguish whole-process sampled peaks, operation latency, open
+costs and synthetic desktop results from supported production envelopes. CI
+runs a functional smoke only, with no timing pass threshold. Candidate metadata/
+binary changes retain accepted file identity/ownership and require migration,
+whole-content backup and actual native sharing validation before selection.

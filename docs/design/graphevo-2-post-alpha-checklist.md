@@ -24,6 +24,16 @@ review and the migration feasibility review precede consolidation; they are not 
 calling this a post-alpha checklist. No release branch or tag follows from
 creating this document.
 
+## Consolidation evidence
+
+A8 is reviewed/merged. [C01](results/c01-cost-baseline-2026-10-27.md) begins the
+cost review with 182 validated samples across eight local synthetic configurations.
+It measures identity/session overhead, file/query coupling and repeated observer
+work. The [consolidation plan](graphevo-2-consolidation.md) proposes C02–C04;
+these measurements do not yet select final representation or supported envelopes,
+so PA01/PA05/PA06/PA07 beta gates remain open. Physical/production validation and
+mandatory migration feasibility still require their own evidence.
+
 ## PA01 — schema, identities and application models
 
 - [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported
