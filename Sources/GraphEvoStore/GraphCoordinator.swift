@@ -50,6 +50,11 @@ package actor GraphCoordinator {
         }
     }
 
+    func validateCloudBinding(_ initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) async throws {
+        let id = id
+        try await handle.read { try initialize($0, id, false) }
+    }
+
     func lease(onClose: @escaping @Sendable () async throws -> Void) async throws -> GraphStore {
         let lease = try await handle.newLease()
         return GraphStore.attached(id: id, handle: lease, adapter: adapter,

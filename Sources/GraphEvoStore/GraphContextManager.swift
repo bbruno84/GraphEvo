@@ -2,7 +2,7 @@ import Foundation
 import GraphEvoModel
 import GraphEvoRuntime
 
-/// Process-local graph orchestration. CloudKit engine ownership is a later increment.
+/// Process-local graph orchestration and explicit package-only CloudKit sessions.
 package actor GraphContextManager {
     private struct Entry {
         let generation = UUID()
@@ -17,6 +17,84 @@ package actor GraphContextManager {
     private let schema: StoreSchema
     private let adapter: GraphCoordinatorAdapter
     private var entries: [GraphID: Entry] = [:]
+    private struct CloudOpening {
+        let id = UUID()
+        let configuration: GraphCloudConfiguration
+        let task: Task<GraphCloudSession, any Error>
+    }
+    private var cloudSessions: [String: CloudOpening] = [:]
+
+    @available(iOS 17, macOS 14, *)
+    package func startCloudSession(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudStatus {
+        try await startCloudSession(configuration, adapter: .live)
+    }
+
+    func startCloudSession(_ configuration: GraphCloudConfiguration, adapter: GraphCloudAdapter,
+                           disk: GraphCloudDisk = .live) async throws -> GraphCloudStatus {
+        try Task.checkCancellation()
+        let key = configuration.namespace
+        if let existing = cloudSessions[key] {
+            guard existing.configuration == configuration else { throw GraphCloudError.ownershipConflict }
+        } else {
+            let task = Task.detached { try await GraphCloudSession.open(configuration, adapter: adapter, disk: disk) }
+            cloudSessions[key] = CloudOpening(configuration: configuration, task: task)
+        }
+        let opening = cloudSessions[key]!
+        let session: GraphCloudSession
+        do { session = try await opening.task.value }
+        catch {
+            if !(error is GraphCloudQuarantine), cloudSessions[key]?.id == opening.id { cloudSessions.removeValue(forKey: key) }
+            throw error
+        }
+        return try await session.startStatus()
+    }
+
+    private func cloud(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudSession {
+        guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { throw GraphCloudError.stopped }
+        return try await opening.task.value
+    }
+
+    package func bindCloudZone(_ zone: GraphCloudZone, to graphID: GraphID,
+                               configuration: GraphCloudConfiguration) async throws {
+        guard let entry = entries[graphID], entry.closing == nil else { throw GraphStoreError.missingGraph }
+        let owner = try await entry.opening.value
+        try await owner.validateCloudBinding(adapter.initialize)
+        guard case .sqlite(let path) = entry.key else { throw GraphStoreError.unsupportedLayout }
+        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(URL(fileURLWithPath: path)), exclusiveGraphID: graphID.rawValue))
+        guard case .sqlite(let url) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
+        try await cloud(configuration).bind(GraphCloudBinding(zone: zone, graphID: graphID, storeURL: url))
+    }
+
+    package func fetchCloudChanges(_ scope: GraphCloudScope, configuration: GraphCloudConfiguration) async throws {
+        try await cloud(configuration).fetch(scope)
+    }
+    package func cloudStatus(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudStatus {
+        await (try cloud(configuration)).status()
+    }
+    package func cloudInbox(_ configuration: GraphCloudConfiguration, limit: Int = 100) async throws -> [GraphCloudInboxEntry] {
+        try await cloud(configuration).inbox(limit: limit)
+    }
+    package func cloudBinding(for zone: GraphCloudZone, configuration: GraphCloudConfiguration) async throws -> GraphCloudBinding? {
+        await (try cloud(configuration)).binding(for: zone)
+    }
+    package func stopCloudSession(_ configuration: GraphCloudConfiguration) async throws {
+        guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { return }
+        let session: GraphCloudSession
+        do { session = try await opening.task.value }
+        catch let quarantine as GraphCloudQuarantine { session = quarantine.session }
+        try await session.stop()
+        if cloudSessions[configuration.namespace]?.id == opening.id { cloudSessions.removeValue(forKey: configuration.namespace) }
+    }
+
+    deinit {
+        for opening in cloudSessions.values {
+            Task {
+                do { try await opening.task.value.stop() }
+                catch let quarantine as GraphCloudQuarantine { try? await quarantine.session.stop() }
+                catch { }
+            }
+        }
+    }
 
     // Internal lifecycle diagnostics for deterministic ownership tests.
     var registeredGraphCount: Int { entries.count }

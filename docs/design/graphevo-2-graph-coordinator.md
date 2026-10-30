@@ -109,3 +109,12 @@ macOS/iOS checks remain required before integration. Public activation, engine
 ownership, durable changes/outbox/inbox, graph pause/migration and account-aware
 routing are later increments. Existing physical native-sharing results do not
 certify those contracts. The beta/stable checklist retains their gates.
+
+
+## Package-only engine continuation
+
+The [engine foundation](graphevo-2-sync-engine-foundation.md) adds explicit
+ContextManager-owned sessions separate from consumer/store leases. Zone binding
+validates the live coordinator; the durable route outlives an individual lease.
+Native stores remain plain local S03 stores. There is no engine per coordinator,
+public opener, graph import or implicit cloud activation.

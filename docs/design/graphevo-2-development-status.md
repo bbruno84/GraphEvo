@@ -1,6 +1,6 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-10-30. This is the single entry point for **integrated work,
+Updated: 2026-10-31. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
@@ -45,7 +45,8 @@ and expanded old-model refusal cases. S02 device/cloud acceptance is still open.
 M17 selects explicit CloudKit sync after the successful bounded CS01 experiment.
 The selected design assigns private/shared CKSyncEngine ownership to the
 ContextManager and one graph/store with migration/pause lifecycle to each
-GraphCoordinator. Engine implementation remains pending.
+GraphCoordinator. The package-only engine foundation is now implemented on its
+focused branch; public activation and end-to-end custom sync remain pending.
 See the [transition contract](graphevo-2-custom-sync-transition.md) for rationale,
 retained experiment evidence, cleanup scope and implementation order.
 
@@ -76,6 +77,18 @@ iOS Simulator checks (35 functions / 44 expanded cases). Controlled incoming
 patches are observed without upload feedback; engine transport, full incoming
 operations and real crash/cloud acceptance remain open. No experimental
 implementation is merged.
+
+The PH increment #108 is reviewed/merged as `0ddd613`, with exact-head iOS/macOS
+CI `41139921643` green. Its merge tree matches reviewed head `53468a9`.
+
+The focused `codex/v2-sync-engine-foundation` supplies [shared engine sessions,
+zone bindings and a durable incoming inbox](graphevo-2-sync-engine-foundation.md).
+It is not yet integrated. Native engines are manually scheduled, package-only;
+no upload, GraphRecord import or automatic synchronization is activated. The
+state directory is separate from graph PH checkpoints; S03 is unchanged.
+Its local checkpoint passes 616 tests (331 legacy, 191 store, 71 runtime,
+23 model), selected iOS Simulator checks (55 functions / 65 expanded cases)
+and the Swift 6 consumer. Remote CI/review remain pre-integration requirements.
 
 ## Integrated alpha implementation
 
@@ -119,9 +132,9 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Add ContextManager engine ownership and zone routing over the pending foundation;
-   establish engine/incoming recovery, then automatic sync, graph pause,
-   conflicts/deletes/assets and sharing lifecycle.
+1. Review/check/integrate the engine foundation before the next increment. Then
+   add the cloud record codec and upload/import effect recovery over the PH/inbox
+   foundations; complete assets, automatic sync, pause, conflicts and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).

@@ -80,7 +80,10 @@ process ownership and cross-process migration coordination retain their gates.
    supplies discovery/checkpoint/attempts and a controlled patch seam, not full
    incoming or crash acceptance; this is the first alpha acceptance
    increment, not another general-purpose experiment branch.
-4. Implement shared private/shared engine ownership, zone routing, automatic sync
+4. The [package-only engine foundation](graphevo-2-sync-engine-foundation.md)
+   supplies shared private/shared ownership, exact zone routing and a retained
+   incoming inbox with manual fetches. No record upload/application is activated.
+   Complete effect/acknowledgement recovery, automatic sync
    and graph-level pause/resume. Exercise in-flight operations and restart.
 5. Complete conflicts, deletes, assets and sharing lifecycle through reviewed
    alpha increments; retain production hardening gates for beta.
