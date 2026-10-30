@@ -401,6 +401,12 @@ The original overload must perform no trace history reads.
 
 ## GraphEvo 2 async runtime
 
+SQLite reads pin their query generation. In-memory read scopes instead join the
+local writer gate for coherent multi-fetch views; a reader behind an active
+memory writer waits for its commit. Preserve queued-reader cancellation/draining
+and independent-resource progress. Privileged in-memory native callbacks must
+not reenter a read on the same resource while retaining that gate.
+
 The package-internal StoreHandle transaction boundary serializes local writers
 per StoreResources owner and drains admitted reads/writes before detachment.
 Adapter closures are synchronous, return Sendable values, and must never save

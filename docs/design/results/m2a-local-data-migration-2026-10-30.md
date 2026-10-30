@@ -55,6 +55,12 @@ prepared payload artifacts, journal files or raw logs are committed.
 
 ## Limits
 
+The first external CI passed iOS but exposed an unrelated in-memory observation
+failure on macOS. The [coherence follow-up](in-memory-read-coherence-2026-10-30.md)
+records the original failure, a deterministic mixed-view regression and the
+runtime correction. The original 553-test local result above remains historical;
+the corrected complete suite adds two runtime behavior tests.
+
 Failures are injected around native publication followed by actual store reopen;
 there is no process-kill/power-loss or cross-process acceptance claim. The local
 adapter's source/effect proof does not apply to NSPersistentCloudKitContainer
