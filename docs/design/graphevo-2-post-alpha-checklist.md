@@ -45,9 +45,16 @@ remain open. This is progress evidence, not closure of PA05/PA06/PA07.
   migration requirements: [S01](graphevo-2-persistent-schema.md), 2026-10-30.
   Retain twelve entities; select graph/node projections, optional node data
   version and compound identity indexes. This closes the shape decision only.
-- [ ] **B** Adopt S01 in the native factory/shape checks and opening matrix;
-  validate the selected model on local, mirrored and extension read-only paths.
-  Implement optional consumer format declarations/admission, including atomic
+- [x] Adopt S01 in the explicit native factory/shape checks and opening matrix:
+  stable model ID, exact shape, local CRUD/files/reopen, offline paired routing,
+  read-only paths and refusal preserving older/wrong-marker source data. These local
+  controls do not close selected-model physical sharing/recovery acceptance;
+  [530-test adoption result](results/s01-runtime-adoption-2026-10-30.md) records
+  exact source-file checks and the volatile SHM limitation.
+- [ ] **B** Validate selected S01 native sharing/recovery, including attachments,
+  through the public factory. Retain SM01–SM03's same-shape laboratory evidence
+  separately from public runtime activation.
+- [ ] **B** Implement optional consumer format declarations/admission, including atomic
   local version/value writes and unknown/mixed/partial remote format cases.
 - [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported
   API/schema with the specification before freezing them for beta.
@@ -454,7 +461,8 @@ concurrency and mandatory v1 migration gates remain open.
 
 The explicit public native overloads cover private-only and paired resources;
 no-schema/current defaults remain unchanged. The native factory requires standard
-Core Data model version GraphEvo.nativeIdentity.alpha.2 before existing-file load,
+Core Data model version GraphEvo.nativeIdentity.alpha.2 before existing-file load
+in that increment (now superseded by S01 / GraphEvo.v2.schema.1),
 so an old same-hash prototype cannot start export before catalog refusal. The
 [adoption result](results/native-public-mirrored-schema-2026-10-29.md) separates
 513 local tests, 14 sanitizer tests, Swift 6 Release consumption, successful
@@ -527,5 +535,6 @@ Six controls and the full 526-test suite pass. This does not close PA08: histori
 v1 store/codec coverage, process-kill/activation recovery, concurrent cloud edits,
 Production deployment and full graph/data conversion remain open. The optional
 version field was experimental in this result; S01 now selects its target shape.
-The runtime factory and default openers have not adopted it yet. Native shape
-selection does not close any of the remaining PA08 data-conversion gates.
+Explicit native runtime openings now adopt S01; default/current openers retain
+their original model. Neither shape adoption nor the laboratory result closes
+the remaining PA08 data-conversion gates.

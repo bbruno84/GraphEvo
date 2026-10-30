@@ -27,8 +27,9 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 
 M13 records the 2026-10-29 fresh-store decision.
 M14/M15 record the 2026-10-30 migration boundary and
-[selected native schema](graphevo-2-persistent-schema.md). This is a target
-decision; the runtime native factory still uses the two-column alpha.2 shape.
+[selected native schema](graphevo-2-persistent-schema.md). The subsequent runtime
+increment adopts S01 for explicit native openings with `GraphEvo.v2.schema.1`;
+consumer-format admission and mandatory data conversion remain open.
 
 M01–M04 and M09–M11 reflect the discussion following the 2026-10-26 laboratory results.
 M05–M08 carry forward the initial agreed requirements. M12 records the

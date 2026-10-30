@@ -75,7 +75,8 @@ sharing writes have not been revalidated. C02/C03/C04 gates remain open.
 ## Before beta
 
 The [S01 review](graphevo-2-persistent-schema.md) has selected the native shape;
-factory adoption and optional consumer-format admission remain open. No further
+the explicit native factory now adopts it; optional consumer-format admission
+and selected-model native assignment/recovery acceptance remain open. No further
 native columns/entities are planned without concrete correctness or measured
 evidence. The historical experiment sections below retain their original scope.
 

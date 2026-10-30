@@ -63,7 +63,8 @@ extension GraphDatabase {
 /// Alpha native-model selection. Incompatible layouts require fresh stores, not automatic conversion.
 public enum GraphDatabaseSchema: Sendable {
     case current
-    /// Indexed native identity alpha model. Select explicitly for local or mirrored stores.
+    /// S01: indexed native identities and an optional record-format version.
+    /// Select explicitly for local or mirrored stores; this is not a data-migration gate.
     case nativeIdentity
 }
 

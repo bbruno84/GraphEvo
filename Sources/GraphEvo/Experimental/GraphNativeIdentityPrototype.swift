@@ -12,7 +12,7 @@ package enum GraphNativeIdentityPrototype {
     private static let activationVersion = "local.1"
 
     package static func makeModel(indexed: Bool) -> NSManagedObjectModel {
-        GraphNativeIdentityColumns.makeModel(indexed: indexed)
+        GraphNativeIdentityColumns.makeModel(indexed: indexed, includingDataVersion: false)
     }
 
     /// Package-only local lab: retain the normal runtime owner, leases, scopes and commit guards.

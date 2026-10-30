@@ -34,7 +34,7 @@ private struct FreshNativeItem: GraphModel {
         let url = folder.appendingPathComponent("Native.sqlite")
         let db = try await GraphDatabase.open(at: url, schema: .nativeIdentity)
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
-        #expect(metadata[NSStoreModelVersionIdentifiersKey] as? [String] == ["GraphEvo.nativeIdentity.alpha.2"])
+        #expect(metadata[NSStoreModelVersionIdentifiersKey] as? [String] == ["GraphEvo.v2.schema.1"])
         #expect(try await db.graphIDs().isEmpty)
         let graph = try await db.createGraph(), second = try await db.createGraph()
         let a = graph.makeNodeID(), b = graph.makeNodeID(), edge = graph.makeNodeID(), action = graph.makeNodeID()
@@ -46,6 +46,16 @@ private struct FreshNativeItem: GraphModel {
         }
         let source = folder.appendingPathComponent("input.bin"); try Data([1,2,3]).write(to: source)
         let file = try await graph.importAttachment(from: source, ownedBy: edge)
+        try await db.nativeOperation { native in
+            try await native.performBackgroundTask { context in
+                for kind in [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName] {
+                    let request = NSFetchRequest<NSFetchRequestResult>(entityName: kind)
+                    request.predicate = NSPredicate(format: "ge2DataVersion != nil")
+                    let count = try context.count(for: request)
+                    #expect(count == 0)
+                }
+            }
+        }
         #expect(try await db.validateIntegrity(of: graph.id) == 5)
         #expect(try await db.validateIntegrity(of: second.id) == 0)
         let query = GraphQuery<FreshNativeItem>(budget: try GraphQueryBudget(maximumCandidates: 32)).where(.id(a))
@@ -93,7 +103,7 @@ private struct FreshNativeItem: GraphModel {
         _ = try await protoGraph.transaction { try $0.insert(GraphRecord(id: protoID, type: "prototype")) }
         try await protoGraph.close(); try await prototype.close()
         await #expect(throws: GraphStoreError.self) { try await GraphDatabase.open(at: protoURL, schema: .nativeIdentity) }
-        // The native shape matches, but its unversioned protocol is rejected before mirroring starts.
+        // Historical shape/protocol is rejected before mirroring starts.
         try await expectPreloadIncompatibility {
             try await GraphDatabase.openMirrored(at: protoURL, containerIdentifier: "iCloud.example.invalid", schema: .nativeIdentity)
         }
@@ -151,6 +161,71 @@ private struct FreshNativeItem: GraphModel {
         #expect(recovered)
         #expect(try await db.validateIntegrity(of: graph.id) == 1)
         observation.cancel(); try await graph.close(); try await db.close()
+    }
+
+    private static func historicalModel(includingVersion: Bool) -> NSManagedObjectModel {
+        let model = GraphNativeIdentityColumns.makeModel(indexed: true, includingDataVersion: includingVersion)
+        model.versionIdentifiers = ["GraphEvo.nativeIdentity.alpha.2"]
+        return model
+    }
+
+    private func files(in folder: URL) throws -> [String: Data] {
+        var result: [String: Data] = [:]
+        for url in try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isRegularFileKey]) {
+            if try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
+                result[url.lastPathComponent] = try Data(contentsOf: url)
+            }
+        }
+        return result
+    }
+
+    @Test(arguments: [false, true])
+    func oldAlphaAndSameShapeWrongMarkerAreRefusedWithoutChangingFiles(includingVersion: Bool) async throws {
+        let folder = try root(); defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("OldAlpha.sqlite")
+        let oldSchema = StoreSchema(identifier: "GraphEvo.nativeIdentity.alpha.2",
+            entityVersionHashes: Self.historicalModel(includingVersion: includingVersion).entityVersionHashesByName,
+            requiredModelVersionIdentifier: "GraphEvo.nativeIdentity.alpha.2") {
+                Self.historicalModel(includingVersion: includingVersion)
+            }
+        let old = try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: oldSchema,
+                                               adapter: GraphNativeIdentityDatabaseAdapter.database)
+        let graph = try await old.createGraph(), id = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: "preserve", properties: ["value": .integer(42)])) }
+        try await graph.close(); try await old.close()
+        let before = try files(in: folder)
+        _ = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
+        let inspected = try files(in: folder)
+        #expect(Set(inspected.keys) == Set(before.keys))
+        // Even public metadata-only inspection can refresh SQLite's volatile SHM
+        // coordination cache. Durable SQLite/WAL and every other artifact must match.
+        let sharedMemory = url.lastPathComponent + "-shm"
+        for (name, data) in before where name != sharedMemory { #expect(inspected[name] == data) }
+        try await expectPreloadIncompatibility { try await GraphDatabase.open(at: url, schema: .nativeIdentity) }
+        try await expectPreloadIncompatibility { try await GraphDatabase.openReadOnly(at: url, schema: .nativeIdentity) }
+        try await expectPreloadIncompatibility {
+            try await GraphDatabase.openMirrored(at: url, containerIdentifier: "iCloud.example.invalid", schema: .nativeIdentity)
+        }
+        let missing = folder.appendingPathComponent("NeverCreated.sqlite")
+        try await expectPreloadIncompatibility {
+            try await GraphDatabase.openMirrored(privateStoreAt: url, sharedStoreAt: missing,
+                                                containerIdentifier: "iCloud.example.invalid", schema: .nativeIdentity)
+        }
+        try await expectPreloadIncompatibility {
+            try await GraphDatabase.openMirrored(privateStoreAt: missing, sharedStoreAt: url,
+                                                containerIdentifier: "iCloud.example.invalid", schema: .nativeIdentity)
+        }
+        let after = try files(in: folder)
+        #expect(Set(after.keys) == Set(before.keys))
+        for (name, data) in before where name != sharedMemory {
+            #expect(after[name] == data, "Durable source artifact changed: \(name)")
+        }
+        #expect(!FileManager.default.fileExists(atPath: missing.path))
+        let preserved = try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: oldSchema,
+                                                     adapter: GraphNativeIdentityDatabaseAdapter.database)
+        let view = try await preserved.openGraph(graph.id)
+        #expect(try await view.read { try $0.record(for: id)?.properties["value"] } == .integer(42))
+        try await view.close(); try await preserved.close()
     }
 
     @Test(arguments: [GraphDatabaseSchema.current, .nativeIdentity])
