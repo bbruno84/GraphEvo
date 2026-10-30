@@ -67,9 +67,11 @@ is reviewed/merged as `25ba9c9`, with exact-head iOS/macOS CI `41133455664` gree
 It supplies six preservation flags and schema.3 with no new entities/columns;
 its local checkpoint passes 578 tests and the Swift 6 consumer.
 
-The focused `codex/v2-history-pending` increment implements the package-only
+The focused [#108](https://github.com/bbruno84/GraphEvo/pull/108),
+`codex/v2-history-pending`, implements the package-only
 [PH processor, durable pending checkpoint and immutable attempts](graphevo-2-history-processing.md).
-It has not yet been integrated. Local validation passes 595 tests and selected
+It has not yet been integrated; remote CI/review remain required. Local
+validation passes 595 tests, the Swift 6 consumer and selected
 iOS Simulator checks (35 functions / 44 expanded cases). Controlled incoming
 patches are observed without upload feedback; engine transport, full incoming
 operations and real crash/cloud acceptance remain open. No experimental
