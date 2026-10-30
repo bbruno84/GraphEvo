@@ -267,9 +267,11 @@ now delegates to these public APIs rather than maintaining another opener.
 Public validateIntegrity(of:) checks the current local view on either topology;
 it remains full storage validation, not application decoding or cloud completion.
 
-The public factory records Core Data model version identifier
-`GraphEvo.nativeIdentity.alpha.2`; native entity hashes and the root's alpha.1
-logical protocol are unchanged. StoreSchema optionally requires that identifier
+The public factory originally recorded Core Data model version identifier
+`GraphEvo.nativeIdentity.alpha.2`. [S01 adoption](graphevo-2-persistent-schema.md)
+now records `GraphEvo.v2.schema.1`, adds optional node `ge2DataVersion` and retains
+the root's alpha.1 logical protocol. Historical laboratory factories are kept
+separate. StoreSchema requires the selected native identifier
 in existing store metadata, checking every resource before creating/loading a
 mirrored container. The requirement also participates in runtime lease
 compatibility. Standard native model creation persists the identifier; no manual

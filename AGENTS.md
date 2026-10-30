@@ -1,5 +1,28 @@
 # GraphEvo — instructions for AI agents
 
+## Selected v2 native schema
+
+Read [S01](docs/design/graphevo-2-persistent-schema.md) before native model work.
+The selected 2.0 target retains the twelve-entity model and adds only optional
+`ge2GraphID`, `ge2NodeID`, `ge2DataVersion` on each node kind, with the existing
+compound identity indexes. Explicit `.nativeIdentity` openings now use S01 with
+physical-model identifier `GraphEvo.v2.schema.1`. Historical identity-only
+laboratories explicitly omit the version column. Do not silently
+change default opening paths, migrate/relabel old files or treat schema selection
+as beta acceptance. Record versions are optional consumer-format declarations,
+not revisions/import completion; retain the legacy property `appDataVersion`.
+Native schema migration is internal library work. Consumer migrations target
+application data. Reopen S01 only with concrete correctness/measurement evidence
+and documented migration and local/cloud validation effects.
+
+The [S01 device protocol](Experiments/S01NativeProbe/README.md) extends the public
+file fixture with guarded empty replicas and same-process seed/invitation. Keep
+writers alive through independent peer observation; never replay a consumed
+mutation or copy native stores into a supposedly fresh replica. Its
+[16-stage result](docs/design/results/s01-native-sharing-recovery-2026-10-30.md)
+closes only the bounded selected-model sharing/recovery item. Consumer-format
+admission, v1 conversion and broader native/account/conflict gates remain open.
+
 This file is the operational entry point for agents working in the repository.
 Before changing code, read `README.md` for the project overview and consult the
 relevant documentation in `docs/`.
@@ -717,13 +740,16 @@ broader crash/conflict/account/scale coverage and v1 migration remain separate.
 
 Both openMirrored overload shapes accept explicit GraphDatabaseSchema selection.
 The native factory requires standard model version identifier
-GraphEvo.nativeIdentity.alpha.2 in every existing resource before native loading;
+GraphEvo.v2.schema.1 in every existing resource before native loading;
 matching entity hashes alone must not activate unversioned prototype data.
 New local/mirrored native files get the identifier from their fresh model factory.
 Do not manually stamp old files, use another native coordinator, convert or erase
 as an opening side effect. No-schema/current opens retain their prior model.
-The root alpha.1 protocol and native columns are unchanged; this is a local
-pre-load version gate, not remote compatibility or import completion proof.
+The root alpha.1 logical protocol is retained. S01 adds nullable ge2DataVersion;
+the physical-model gate is not application-format admission or import completion.
+Ordinary unversioned writes leave ge2DataVersion nil. Do not derive it from the
+legacy per-property appDataVersion or advertise a working migration gate before
+the consumer data manager implements it. Reject mixed/malformed node shapes.
 validateIntegrity(of:) supports both legitimate mirrored topologies but remains
 a current-local full payload check. Use the public consumer host to distinguish
 published API evidence from historical @testable laboratory coverage.
@@ -754,24 +780,47 @@ macOS independent-process observation evidence is not physical-widget coverage.
 Keep the library independent of WidgetKit and refresh queries after resume.
 
 
-## V2 migration manager foundation
+## Actual WidgetKit laboratory
 
-Read `docs/design/graphevo-2-migration-manager.md` before extending the manager.
-The package-only journal records intents and confirmations; it neither executes
-bodies nor excludes Graph/widget/remote writers. Do not wire it to production
-conversion before admission, protected backups and destination marker adapters.
-Pending intents require reconciliation; missing markers alone do not authorize
-replay. Keep data+marker in the same future destination transaction and separate
-phase success, validation, activation and remote completion. Evaluate the v1
-compatibility layer against RecoveryV2; do not copy application-specific repair,
-deduplication, reset or cache policies into the library. Preserve v1 behavior and
-keep PA08 open until representative local/cloud feasibility is established.
+`Experiments/WidgetAccessProbe` prepares a disposable configured demo with a real
+embedded WidgetKit extension and App Group, using only public Graph APIs.
+Keep account-specific project/signing changes and original demo edits out of
+tracked source. The app owns the native mirrored pair; the widget opens existing
+resources read-only and closes every lease per invocation. Its manifest has IDs
+and mode, never the counter value used as query evidence. Preview data is not a
+provider read. Retain exact run/value, PID, public refusal and separate liveness/
+render evidence; never replay reserved writes to refresh a widget. Keep reports
+under App Group Library/Application Support so native device transport can read
+them. Simulator tests require ad-hoc signing for real group mapping. The actual
+hardware baseline is scoped in `docs/design/results/widget-app-group-2026-10-29.md`;
+iOS 18 real-widget, lifecycle/account/protected-data and interactive writes remain
+open. Do not infer cloud export/recovery from a local widget or publish personal
+Home Screen images or generated stores/logs.
 
-The manager is a general consumer-defined schema/data migration service;
-RecoveryV2 is one validation case, not its template. Whole-migration completion
-must not suppress compatibility checks on later cloud inserts/updates. Separate
-native model, logical record format and operation versions. Native import remains
-owned by NSPersistentCloudKitContainer; incompatible data must have explicit
-admission states, not silent query omission or guessed pre-import interception.
-M6 requires durable processing, revision/dependency checks, permission safety and
-cross-replica convergence. These are design requirements, not M1 capabilities.
+
+## Native schema migration laboratory
+
+`Experiments/SchemaMigrationProbe` and internal GraphSchemaMigrationLaboratory
+exercise explicit owned synthetic v1/native/versioned models. Never select this
+loader from public opens, stamp alpha activation or mistake physical schema
+migration for full v1 identity/catalog/value conversion. Generic Core Data writes
+inside native staged handlers are confined to this framework experiment; normal
+operations use Node facades. Native schema migration is internal library work;
+consumer migrations target application data. Keep the optional node version
+experimental and distinguish it from existing property-row appDataVersion.
+Use distinct transport/report filenames, one-use assignment intents and exact
+launch process/ticket binding. Missing mappings never authorize reassignment.
+Retain initial harness failures, source copies and independent replica evidence.
+A thrown pre-handler may already have saved; do not blindly replay it. Read
+`docs/design/results/schema-migration-2026-10-30.md` for accepted scope and open
+historical-store, concurrency, interruption and Production gates.
+
+
+## V2 migration journal foundation
+
+Read [the manager contract](docs/design/graphevo-2-migration-manager.md) before
+migration-manager work. M1 is package-only bookkeeping, with no public executor
+or runtime/import admission. Consumers define application-data migrations; native
+schema routes are internal GraphEvo work. Never treat a journal marker, KVS flag
+or missing destination marker as a distributed fence or proof of no effect.
+Preserve source/backup ownership, pending intents and separate validation/activation.

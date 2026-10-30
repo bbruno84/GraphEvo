@@ -94,5 +94,5 @@ server-enforcement, wider payload/performance or mandatory v1 migration gates.
 than the historical compatibility wrapper. For a public-only A6/private consumer
 and separate read-only failure diagnosis, use
 [PublicMirroredProbe](../PublicMirroredProbe/README.md). Current native files
-require model version GraphEvo.nativeIdentity.alpha.2; original unversioned
+require model version GraphEvo.v2.schema.1 (S01); original alpha.2/unversioned
 laboratory files are retained as history and are not silently adopted.

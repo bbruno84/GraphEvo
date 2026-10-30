@@ -41,6 +41,24 @@ remain open. This is progress evidence, not closure of PA05/PA06/PA07.
 
 ## PA01 — schema, identities and application models
 
+- [x] Select the native 2.0 target after reviewing query, attachment, sharing and
+  migration requirements: [S01](graphevo-2-persistent-schema.md), 2026-10-30.
+  Retain twelve entities; select graph/node projections, optional node data
+  version and compound identity indexes. This closes the shape decision only.
+- [x] Adopt S01 in the explicit native factory/shape checks and opening matrix:
+  stable model ID, exact shape, local CRUD/files/reopen, offline paired routing,
+  read-only paths and refusal preserving older/wrong-marker source data. These local
+  controls do not close selected-model physical sharing/recovery acceptance;
+  [530-test adoption result](results/s01-runtime-adoption-2026-10-30.md) records
+  exact source-file checks and the volatile SHM limitation.
+- [x] Validate selected S01 native sharing/recovery, including attachments,
+  through the public factory: [16-stage iPad/XR result](results/s01-native-sharing-recovery-2026-10-30.md),
+  two independently empty participant pairs, byte-exact 10-MiB exports and actual
+  S01 metadata on eight native resources. Scope is the A6 entity/file fixture;
+  broader PA03/PA05/PA08 and application-format admission remain open. Retain
+  SM01–SM03's same-shape laboratory evidence separately from runtime activation.
+- [ ] **B** Implement optional consumer format declarations/admission, including atomic
+  local version/value writes and unknown/mixed/partial remote format cases.
 - [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported
   API/schema with the specification before freezing them for beta.
 - [ ] **B** Settle durable graph/node identity, reference and membership rules,
@@ -211,24 +229,10 @@ close O04 or mark the wider beta/stable items above complete.
 
 ## PA08 — mandatory v1 local and cloud migration
 
-Manager renewal is tracked in the [M1–M6 contract](graphevo-2-migration-manager.md).
-M1 provides package-only checkpoint bookkeeping; it does not close migration
-feasibility, resource admission or compatibility gates. Consumer-authored schema/data migrations and ongoing imported-record format
-compatibility belong to the general manager contract. RecoveryV2 is one concrete
-compatibility/regression consumer, not the manager's architectural template.
-
-- [ ] **B** Execute [SM01–SM03](graphevo-2-migration-manager.md#planned-native-migration-experiment--sm01sm03)
-  before selecting the native migration adapter: lightweight, staged pre/post
-  transformation and interrupted recovery, then actual mirrored export/import
-  verified independently. Preserve a separate result for each guarantee.
-- [ ] **B** Define and demonstrate consumer-registered native-schema and data-only
-  plans, supported version routes and interleaved schema/data stages.
-- [ ] **B** Define per-record format discrimination and a durable import processing/
-  admission contract after whole-migration completion. Cover late old-format
-  inserts/updates, future formats, incomplete dependencies and unauthorized writers;
-  retain explicit incompatible states without silent query omissions.
-- [ ] **B** Settle the awaited manager/admission contract, legacy completion import
-  and tested v1 adapter subset; document Graph-dependent migrations that need porting.
+- [x] Align PR #95's migration-manager contract with M14/S01: consumer-defined
+  application-data plans only; native schema routes are internal. M1 remains a
+  package-only journal, with no production execution/admission or cloud fence.
+  See [the renewed contract](graphevo-2-migration-manager.md).
 
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,
@@ -461,7 +465,8 @@ concurrency and mandatory v1 migration gates remain open.
 
 The explicit public native overloads cover private-only and paired resources;
 no-schema/current defaults remain unchanged. The native factory requires standard
-Core Data model version GraphEvo.nativeIdentity.alpha.2 before existing-file load,
+Core Data model version GraphEvo.nativeIdentity.alpha.2 before existing-file load
+in that increment (now superseded by S01 / GraphEvo.v2.schema.1),
 so an old same-hash prototype cannot start export before catalog refusal. The
 [adoption result](results/native-public-mirrored-schema-2026-10-29.md) separates
 513 local tests, 14 sanitizer tests, Swift 6 Release consumption, successful
@@ -509,3 +514,31 @@ one store. Native account/revocation policy remains open in PA03.
 Evidence: [520 tests, 7 selected sanitizer tests, external Swift 6 Release
 process/bundle consumers and generic iOS build](results/extension-readonly-access-2026-10-29.md).
 This closes the first protective increment only; the iOS gate above stays open.
+
+
+### Actual app/widget App Group baseline (2026-10-29)
+
+[Physical WidgetKit evidence](results/widget-app-group-2026-10-29.md) now covers
+signed App Groups with app-owned private/shared mirroring and local read-only
+widgets on iPadOS 27.0 and iOS 27.2. Native mirroring/mutation refusals, independent
+PIDs, 0→1→2, iPad owner close/reopen and visible small/medium rendering are retained.
+This closes the **first physical read-only baseline experiment**, not PA02/O03
+as a whole. Preserve the iOS 18 actual-widget gap and the remaining suspension,
+protected-data, concurrent migration/reset, account/cache/revocation, performance
+and interactive-write decisions. No beta/tag promotion follows from this result.
+
+
+### Native schema migration experiment (2026-10-30)
+
+[SM01–SM03 result](results/schema-migration-2026-10-30.md) validates additive
+v1-shape→native-plus-optional-node-version migration locally and on iPad/XR
+Development sharing. Final staged-handler values and native version 1 were
+recovered by an existing peer and a fresh pair before ordinary post-open writes.
+A failed pre-handler can leave saved changes; a protected copy retains baseline.
+Six controls and the full 526-test suite pass. This does not close PA08: historical
+v1 store/codec coverage, process-kill/activation recovery, concurrent cloud edits,
+Production deployment and full graph/data conversion remain open. The optional
+version field was experimental in this result; S01 now selects its target shape.
+Explicit native runtime openings now adopt S01; default/current openers retain
+their original model. Neither shape adoption nor the laboratory result closes
+the remaining PA08 data-conversion gates.

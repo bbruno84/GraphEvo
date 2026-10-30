@@ -13,7 +13,7 @@ import Testing
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appendingPathComponent("private.sqlite")
-        let container = NSPersistentCloudKitContainer(name: "OfflineNativePrivate", managedObjectModel: GraphNativeIdentityColumns.makeModel(indexed: true))
+        let container = NSPersistentCloudKitContainer(name: "OfflineNativePrivate", managedObjectModel: GraphRuntimeSchema.makeNativeModel())
         let store = try container.persistentStoreCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: url)
         defer { try? container.persistentStoreCoordinator.remove(store) }
         try await container.performBackgroundTask { context in
@@ -45,7 +45,7 @@ import Testing
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let privateURL = directory.appendingPathComponent("private.sqlite"), sharedURL = directory.appendingPathComponent("shared.sqlite")
-        let container = NSPersistentCloudKitContainer(name: "OfflineNativePair", managedObjectModel: GraphNativeIdentityColumns.makeModel(indexed: true))
+        let container = NSPersistentCloudKitContainer(name: "OfflineNativePair", managedObjectModel: GraphRuntimeSchema.makeNativeModel())
         for url in sharedLoadsFirst ? [sharedURL, privateURL] : [privateURL, sharedURL] {
             _ = try container.persistentStoreCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: url)
         }

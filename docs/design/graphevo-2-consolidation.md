@@ -74,6 +74,14 @@ sharing writes have not been revalidated. C02/C03/C04 gates remain open.
 
 ## Before beta
 
+The [S01 review](graphevo-2-persistent-schema.md) has selected the native shape;
+the explicit native factory now adopts it and the
+[bounded public device fixture](results/s01-native-sharing-recovery-2026-10-30.md)
+passes sharing/files/fresh recovery. Optional consumer-format admission and
+broader native acceptance remain open. No further
+native columns/entities are planned without concrete correctness or measured
+evidence. The historical experiment sections below retain their original scope.
+
 After the cost/representation review, reconcile schema/API and supported query,
 file and observer envelopes. Resolve the stable processing contract (O04),
 platform/process scope, account/conflict/recovery limitations and alpha-store

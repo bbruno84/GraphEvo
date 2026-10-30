@@ -4,6 +4,16 @@ Status: initial plan, 2026-10-26. Read with the
 [specification](graphevo-2-specification.md) and
 [decision register](graphevo-2-decisions.md).
 
+2026-10-30 schema milestone: [S01](graphevo-2-persistent-schema.md) fixes the
+native 2.0 target following the query/attachment/sharing/migration review.
+The runtime adoption increment now supplies the optional record-version field
+and stable physical-model ID `GraphEvo.v2.schema.1` for explicit native openings.
+The [selected-model device result](results/s01-native-sharing-recovery-2026-10-30.md)
+now passes the bounded public sharing/file/fresh-recovery fixture. Next complete
+consumer-format admission and mandatory v1 conversion. Default/current openers
+retain their original model. Native adoption is not beta entry or completion of
+migration work.
+
 ## Release policy
 
 Develop directly toward 2.0 through alpha and beta releases. Keep v1 fixes on
@@ -42,7 +52,7 @@ not a promise of one prerelease tag per stage. Remain alpha through stage 8.
 | A1–A7 | Reviewed and merged into `codex/graphevo-2` through PRs #70–#76: runtime, async scopes, models/typed CRUD, graph boundaries, user sharing, files and queries |
 | A8 | Reviewed and merged through PR #77, including both concurrency corrections; async current state, Combine and live rescan hints have retained local and cross-account dependency/deletion evidence |
 | Consolidation | Started with [C01 and the C02a metadata experiment](graphevo-2-consolidation.md); the B candidate remains on the experiment branch. Content separation, shared observer work, schema/API, stable processing and other supported envelopes remain open |
-| Migration | Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
+| Migration | [SM01–SM03](results/schema-migration-2026-10-30.md) adds bounded additive local/cloud schema migration evidence, including final staged-handler data recovered before normal post-open saves. Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
 | Beta | Not declared. Eight implementation candidates do not alone satisfy the entry gate below |
 
 ## Alpha sequence
@@ -222,22 +232,19 @@ v1 guidance remains accessible.
 ## Migration manager renewal
 
 The [M1–M6 plan](graphevo-2-migration-manager.md) renews the manager alongside
-mandatory v1 conversion. Consumers define native-schema and application-data migrations; GraphEvo manages
+mandatory v1 conversion. Consumers define application-data migrations; native schema evolution remains
+internal GraphEvo work. GraphEvo manages
 execution and compatibility of later imported records as well as whole migrations.
 Evaluate the optional v1 adapter on independent consumers, using MyHomeBills
 RecoveryV2 as one production example rather than an architectural template.
 The first package-only journal increment is not a public executor or a migration
 readiness certificate. Local/cloud conversion feasibility remains a beta gate.
 
-### Native schema migration experiment (scheduled 2026-10-30)
+### Internal native schema evidence (2026-10-30)
 
-Before selecting the manager's native adapter, execute
-[SM01–SM03](graphevo-2-migration-manager.md#planned-native-migration-experiment--sm01sm03):
-lightweight migration, local staged migration with custom pre/post work and
-failure/interruption, then mirrored-store migration with independent replica
-verification. First isolate framework behavior with a minimal model; then validate
-the relevant Graph transition. Local migration success does not certify export of
-handler-produced changes. These experiments are planned, not accepted results.
+The [completed internal SM01–SM03 experiment](results/schema-migration-2026-10-30.md)
+and S01 public device fixture supply bounded native evidence. They do not provide
+a consumer native-schema registration API or complete logical v1 conversion.
 
 Keep native schema evolution uncommon by using Graph's data-driven logical
 formats for ordinary application changes. This does not eliminate record-level

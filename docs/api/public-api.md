@@ -1444,14 +1444,21 @@ Incompatible alpha layouts start from empty stores under M13.
 
 Existing no-schema overloads and `current` retain the previous model, including
 mirrored opens. Native mirroring requires an explicit `schema: .nativeIdentity`.
-The current native alpha uses model version identifier
-`GraphEvo.nativeIdentity.alpha.2`. The runtime validates this public Core Data
+The explicit native schema now uses [S01](../design/graphevo-2-persistent-schema.md)
+with model version identifier `GraphEvo.v2.schema.1`. It retains indexed graph/node
+UUID projections and adds optional Integer64 `ge2DataVersion` on all three node
+kinds, with no default. Ordinary unversioned writes leave it absent; it is not
+exposed as an implemented consumer compatibility/migration gate yet.
+The runtime validates this public Core Data
 metadata before loading any existing resource, as well as native entity hashes.
-Unversioned alpha/prototype files are refused even when their hashes match;
+Historical alpha.2 and unversioned prototype files are refused, including a
+same-shape file carrying the wrong model identifier;
 there is no automatic stamp, conversion or wipe. New local and mirrored native
 files use the same versioned factory. Root protocol `nativeIdentityLayout =
-alpha.1` and native entity shape are unchanged; the new local version gate prevents
-old same-shape prototype data from starting export before catalog validation.
+alpha.1` is retained. No-schema/current defaults retain the original native
+model. The local model-version gate prevents incompatible data from starting
+export before catalog validation; it does not control native remote writers or
+certify that a record's values have all arrived.
 
 Mirrored opening reserves the whole topology before loading: exactly one private
 resource or an explicit private/shared pair, using the same schema for both.

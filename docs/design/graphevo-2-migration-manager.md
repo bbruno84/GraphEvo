@@ -17,9 +17,10 @@ RecoveryV2 is a representative production consumer, not an architectural templat
 or the only supported migration shape. Design the manager independently and use
 that example plus unrelated synthetic consumers to validate generality.
 
-Maintainer clarification: consumer-authored migrations must cover both native
-Core Data schema changes and internal application-data changes. The library owns
-execution and lifecycle. Compatibility management must cover whole migrations
+Maintainer decision M14 supersedes the earlier broader proposal: consumers define
+application-data migrations; GraphEvo owns native Core Data schema changes
+internally. External native interventions are not automatically supported by the
+consumer manager. The library owns execution and lifecycle. Compatibility management must cover whole migrations
 and individual records/updates arriving later from incompatible versions.
 A completed full-store migration cannot disable subsequent compatibility work.
 
@@ -66,41 +67,24 @@ these application tests were not run by M1.
 
 ## Consumer-defined migrations, library-managed execution
 
-Use one migration service with separate execution adapters, rather than requiring
-every migration to resemble a whole-store RecoveryV2 reconciliation.
+Consumers register logical application-data transformations, with stable IDs,
+revision, declared source/target formats and explicit dependency/selection rules.
+GraphEvo manages admission, scoped transactions, durable effect/checkpoint
+reconciliation, cancellation and publication of usable state. Ongoing imported
+record compatibility is a separate pipeline under the same format policy; whole
+migration completion cannot disable later incompatible inserts/updates.
 
-| Migration class | Consumer definition | GraphEvo responsibility |
-|---|---|---|
-| Native Core Data schema | Source/target schema references, supported route, prerequisites, optional pre/post data transformations and semantic checks | Inspect the actual store model, resolve the registered route, coordinate resource closure/admission, select a validated native migration mechanism, protect the source, reopen and verify |
-| Application data | Logical format/type versions, selection/dependencies, typed transformation and validation, repeat/recovery policy | Admit awaited work, scoped transactions, durable checkpoints, cancellation, progress, conflict/recovery handling and publication of usable state |
-| Imported record compatibility | Recognized source/target formats, discriminators/defaults for declared legacy formats, affected dependencies and deterministic upgrade policy | Discover affected local rows after native import, enqueue durable compatibility work, revalidate the source revision, transform or hold as incompatible, and refresh supported readers |
+Native Core Data model references, mappings and staged routes are library-internal
+implementation concerns, not consumer migration definitions. Ordinary Graph scopes
+never expose Managed objects. The manager cannot promise that an arbitrary external
+model change is supported, pause native imports or infer export from local save.
+Internal schema transitions may bracket application-data work, but the consumer
+contract describes logical capabilities rather than native model registration.
 
-Registration precedes opening and declares stable IDs, versions, dependencies,
-supported source ranges and target formats. Resolve a deterministic route or
-return an explicit unsupported/ambiguous route; do not guess a conversion.
-The registration contract and public names are not fixed by M1. Core Data schema
-references travel through a privileged backend adapter; ordinary typed Graph
-migration scopes do not expose implementation Managed objects. GraphEvo-owned
-native model revisions remain library-defined routes. This does not yet promise
-support for arbitrary consumer-supplied native models or every mapping technique.
-
-Schema and data work may interleave: prepare data under schema A, transition
-A to B, then complete a transformation under B. Per-step source capabilities and
-validation must be explicit. A plan cannot request a B-only query before B exists.
-Data-only migrations must work without a native model change. Schema changes
-must be validated on local and mirrored resources separately; a successful local
-migration does not establish CloudKit production compatibility.
-
-Apple provides [NSStagedMigrationManager](https://developer.apple.com/documentation/coredata/nsstagedmigrationmanager)
-and [NSCustomMigrationStage](https://developer.apple.com/documentation/coredata/nscustommigrationstage)
-for ordered native transitions and custom pre/post work. Evaluate these and other
-supported Core Data migration routes in a protected laboratory before selecting
-an adapter. Do not enable automatic migration on ordinary Graph opens or promise
-that every local schema transformation can be mirrored. Apple's
-[CloudKit model guidance](https://developer.apple.com/documentation/coredata/creating-a-core-data-model-for-cloudkit)
-and [schema deployment rules](https://developer.apple.com/documentation/cloudkit/deploying-an-icloud-container-s-schema)
-require additive production evolution; incompatible changes need a separately
-validated transition policy.
+Resolve deterministic supported data routes or report unsupported/ambiguous input;
+do not guess a source format from successful decoding. Data-only evolution works
+without a native model change. Keep native model/layout, GraphValue codec, consumer
+record format and migration operation versions distinct.
 
 ## Data-driven model direction
 
@@ -113,42 +97,30 @@ This is a design objective, not a promise that native schema changes disappear
 or that a data-only change needs no compatibility handling. Change the native
 schema when correctness or measured costs justify it, under a supported route.
 
-## Planned native migration experiment — SM01–SM03
+## Internal native schema evidence — SM01–SM03
 
-Status: scheduled, not implemented or executed. Run before selecting the M2/M3
-native-schema adapter. Start with a minimal, separately versioned Core Data model
-in a disposable laboratory; repeat the meaningful accepted transition against
-the Graph candidate model before claiming Graph integration support.
+The [completed experiment](results/schema-migration-2026-10-30.md) covers additive
+lightweight/staged local transitions and final staged-handler replication on
+iPad/XR, including fresh recovery before ordinary post-open saves. This is bounded
+fixture evidence; historical stores/codecs, real process interruption, concurrent
+imports and Production rollout remain separate gates. It does not implement
+complete logical v1 conversion or certify arbitrary native routes.
 
-| ID | Experiment | Required evidence |
-|---|---|---|
-| SM01 | Explicitly enabled lightweight migration between compatible models | Protected populated source; actual destination model compatibility, exact identities/values/references, close/reopen and rejected unsupported source. Distinguish physical migration from any application data transformation. |
-| SM02 | Local staged migration with custom pre/post transformations | Declared source/intermediate/target models, handler order and visible model capabilities; exact transformed data; injected handler failure and process interruption at stage boundaries, including retry/reopen outcome with source preservation. |
-| SM03 | Lightweight/staged transition of an already mirrored store | Establish a populated cloud/replica baseline first; migrate one controlled writer, then verify exact values/topology from an independent peer and a fresh replica. Separately measure physical-schema outcome and export/import of changes made by pre/post handlers versus ordinary post-open context saves. |
-
-SM03 must explicitly test the observation that physical/pre-open transformations
-may not be replicated like normal mirrored context saves. Do not assume either
-that all pre-open changes export or that none can export. Record retained history,
-model/store versions, operation identity, native setup/import/export outcomes and
-independent data recovery separately. Event success alone is insufficient.
-Include a delayed incoming supported-format edit during publication and verify
-stale-analysis rejection/reconciliation; do not claim that the manager's writer
-gate pauses native imports. Distinguish a conflict from an unsupported route.
-
-Use synthetic external stores and a separately authorized Development fixture,
-never production/user stores. No implicit cloud reset, original-store rewrite,
-blind stage replay or simultaneous independent ownership of one local file.
-Bind each result to toolchain/OS/model hashes and preserve failed outcomes.
-Publish a result with accepted routes and limitations before implementing the
-native adapter; native and cloud success remain separate acceptance criteria.
+[S01](graphevo-2-persistent-schema.md) fixes the native shape and its public
+[device acceptance](results/s01-native-sharing-recovery-2026-10-30.md) verifies
+sharing/files/fresh recovery. Native schema evolution stays internal. Do not
+replay reserved stages, reset cloud data implicitly or treat events as a global
+synchronization certificate.
 
 ## Version domains and cloud lifecycle
 
 Keep native model/layout version, application data-format version and migration
 operation identity distinct. The application build number or one global done
 flag is insufficient. Per-record format discrimination is required where mixed
-formats may coexist. Its storage location/envelope and legacy defaults remain
-schema decisions to validate; do not freeze a new native field just for M1.
+formats may coexist. S01 selects optional native `ge2DataVersion` on each node kind, without a default.
+It is distinct from legacy property-row `appDataVersion`. A missing version is
+undeclared, never automatically zero/latest. Format APIs and admission are not
+implemented merely by adding that column.
 An old record without version metadata is accepted only through a declared legacy
 format rule, never by guessing from whichever decoder happens to succeed.
 
@@ -215,8 +187,9 @@ old unsupported clients from writing or establish source completeness.
 Validate the service with independent consumer-authored definitions as well as
 RecoveryV2. Required cases include:
 
-- Data-only format conversion without a model change; native schema-only and
-  interleaved schema/data transitions; unsupported and ambiguous paths.
+- Consumer data-only format conversion without a model change, unsupported and
+  ambiguous formats; separately test library-internal native transitions and their
+  ordering with data work, without consumer native-schema registration.
 - Full migration followed by a delayed old-format insert and an old-format update
   to the same converted record; duplicate delivery and restart after effect commit.
 - Newer unknown format and unknown legacy format; missing/partial dependencies;
@@ -299,12 +272,12 @@ until explicit admission is implemented.
    ownership, backup protection, awaited phase execution, bounded progress and
    recovery hooks. Define widget-before-app and close/cancellation behavior;
    never retain a cross-process lifetime lock across iOS suspension. Complete
-   SM01–SM03 before selecting the native migration adapter; do not infer export
-   behavior from a successful local schema transition.
+   library-internal native migration evidence; do not infer export behavior from
+   a successful local schema transition. Consumer plans never register native routes.
 3. **M3 — v1 compatibility experiment:** import actual ledger fixtures and evaluate
    representative existing migrations, including a RecoveryV2 slice. Validate
-   separate minimal consumer-authored data and native-schema plans so no one
-   application's lifecycle defines the service. Publish the supported adapter
+   separate minimal consumer-authored data plans and internal schema fixtures so
+   no one application's lifecycle defines the service. Publish the supported adapter
    subset and porting guide.
 4. **M4 — v1 local conversion:** frozen source/codec matrix, graph-scoped identity
    mappings, all node/value/topology/file cases, validated destination activation

@@ -41,8 +41,7 @@ struct GraphNativeIdentityAccess: Sendable {
     }
 
     private func requireModel(_ context: NSManagedObjectContext) throws {
-        guard let model = context.persistentStoreCoordinator?.managedObjectModel,
-              kinds.allSatisfy({ name in [graphAttribute, nodeAttribute].allSatisfy { model.entitiesByName[name]?.attributesByName[$0] != nil } }) else {
+        guard try GraphNativeIdentityColumns.validateModel(in: context) else {
             throw GraphStoreError.unsupportedLayout
         }
         if context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer {

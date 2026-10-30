@@ -3,12 +3,15 @@ import Foundation
 import GraphEvoModel
 
 /// Projection maintenance for explicitly selected native-column models only.
-/// Default schemas have neither field; existing rows are validated, never repaired here.
+/// Historical laboratories select identity-only models explicitly. S01 also stores
+/// an optional application version; its presence does not implement data admission.
 enum GraphNativeIdentityColumns {
     static let graphAttribute = "ge2GraphID"
     static let nodeAttribute = "ge2NodeID"
+    static let dataVersionAttribute = "ge2DataVersion"
+    private enum Layout: Hashable { case current, identityOnly, s01 }
 
-    static func makeModel(indexed: Bool) -> NSManagedObjectModel {
+    static func makeModel(indexed: Bool, includingDataVersion: Bool) -> NSManagedObjectModel {
         let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
         let model = Model.makeModel()
         for name in kinds {
@@ -16,6 +19,13 @@ enum GraphNativeIdentityColumns {
             for key in [graphAttribute, nodeAttribute] {
                 let attribute = NSAttributeDescription()
                 attribute.name = key; attribute.attributeType = .stringAttributeType; attribute.isOptional = true
+                entity.properties.append(attribute)
+            }
+            if includingDataVersion {
+                let attribute = NSAttributeDescription()
+                attribute.name = dataVersionAttribute
+                attribute.attributeType = .integer64AttributeType
+                attribute.isOptional = true
                 entity.properties.append(attribute)
             }
             if indexed {
@@ -27,14 +37,27 @@ enum GraphNativeIdentityColumns {
         return model
     }
 
-    private static func enabled(_ entity: NSEntityDescription) throws -> Bool {
+    private static func layout(_ entity: NSEntityDescription) throws -> Layout {
         let graph = entity.attributesByName[graphAttribute], node = entity.attributesByName[nodeAttribute]
-        if graph == nil && node == nil { return false }
+        let version = entity.attributesByName[dataVersionAttribute]
+        if graph == nil && node == nil {
+            guard version == nil else { throw GraphStoreError.unsupportedLayout }
+            return .current
+        }
         guard let graph, let node, graph.attributeType == .stringAttributeType,
-              node.attributeType == .stringAttributeType, graph.isOptional, node.isOptional else {
+              node.attributeType == .stringAttributeType, graph.isOptional, node.isOptional,
+              graph.defaultValue == nil, node.defaultValue == nil, !graph.isTransient, !node.isTransient else {
             throw GraphStoreError.unsupportedLayout
         }
-        return true
+        guard let version else { return .identityOnly }
+        guard version.attributeType == .integer64AttributeType, version.isOptional,
+              version.defaultValue == nil, !version.isTransient,
+              entity.indexes.contains(where: { index in
+                  index.name == entity.name! + "_ge2_identity" &&
+                  index.elements.compactMap(\.propertyName) == [graphAttribute, nodeAttribute] &&
+                  index.elements.allSatisfy { $0.collationType == .binary }
+              }) else { throw GraphStoreError.unsupportedLayout }
+        return .s01
     }
 
     /// Preflight before reserving any external shared intent.
@@ -42,20 +65,20 @@ enum GraphNativeIdentityColumns {
         guard let model = context.persistentStoreCoordinator?.managedObjectModel else { throw GraphStoreError.unsupportedLayout }
         let states = try [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName].map { name in
             guard let entity = model.entitiesByName[name] else { throw GraphStoreError.unsupportedLayout }
-            return try enabled(entity)
+            return try layout(entity)
         }
         guard Set(states).count == 1 else { throw GraphStoreError.unsupportedLayout }
-        return states[0]
+        return states[0] != .current
     }
 
     static func validate(_ node: Node, graphID: GraphID, nodeID: UUID?) throws {
-        guard try enabled(node.node.entity) else { return }
+        guard try layout(node.node.entity) != .current else { return }
         guard node.node.value(forKey: graphAttribute) as? String == graphID.rawValue.uuidString,
               node.node.value(forKey: nodeAttribute) as? String == nodeID?.uuidString else { throw GraphStoreError.corruptIdentity }
     }
 
     static func stamp(_ node: Node, graphID: GraphID, nodeID: UUID?) throws {
-        guard try enabled(node.node.entity) else { return }
+        guard try layout(node.node.entity) != .current else { return }
         guard node.node.isInserted else {
             try validate(node, graphID: graphID, nodeID: nodeID)
             return

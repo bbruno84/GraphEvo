@@ -10,6 +10,12 @@ its merge commit. The original stack has been reconciled without rewriting histo
 
 ## Descriptor and execution contract
 
+The subsequent [S01 schema review](graphevo-2-persistent-schema.md) retains this
+bounded execution strategy and selective property materialization, with native
+graph/node identity indexes for point lookup. It selects no scalar-query table
+or per-property native columns. Production query envelopes remain PA06 work;
+the schema decision does not turn this engine into indexed SQL value queries.
+
 ```swift
 let budget = try GraphQueryBudget(maximumCandidates: 2_000)
 let query = GraphQuery<Person>(budget: budget)

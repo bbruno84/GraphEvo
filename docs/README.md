@@ -16,6 +16,7 @@ guides. For an introduction to the project, see the [main README](../README.md).
 | observe changes | [Watchers](guides/watchers.md) |
 | validate saved graph structure | [Structural validation](guides/structural-validation.md) |
 | manage migrations | [Migrations](migrations/overview.md) |
+| inspect v1 native schema migration experiments | [SM01–SM03 result](design/results/schema-migration-2026-10-30.md) |
 | manage backups | [Backups](migrations/backups.md) |
 | understand remote changes | [Persistent History](migrations/persistent-history.md) |
 | consult utilities and tools | [Utilities](api/utilities.md) |
@@ -24,6 +25,13 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
+- [Migration manager renewal](design/graphevo-2-migration-manager.md): M1 journal,
+  consumer-defined application-data plans and remaining M2–M6 admission/conversion work.
+
+- [GraphEvo 2 selected persistent schema](design/graphevo-2-persistent-schema.md):
+  S01 native shape, four-area review, record-version semantics and adoption gates.
+- [S01 public device acceptance](design/results/s01-native-sharing-recovery-2026-10-30.md):
+  iPad/XR sharing, attachment lifecycle, two empty replicas and persisted-model evidence.
 - [GraphEvo 2 initial specification](design/graphevo-2-specification.md): current
   requirements and proposed contracts, including mandatory v1 data migration.
 - [GraphEvo 2 delivery plan](design/graphevo-2-delivery-plan.md): alpha sequence,
@@ -123,6 +131,5 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [Extension access safeguard result](design/results/extension-readonly-access-2026-10-29.md):
   520 tests, selected sanitizer and independent-process public reader evidence.
 
-- [V2 migration manager renewal](design/graphevo-2-migration-manager.md): awaited
-  manager plan, concrete RecoveryV2 compatibility evaluation, checkpoint foundation
-  and remaining admission/schema/data/cloud compatibility increments.
+- [Actual WidgetKit / App Group result](design/results/widget-app-group-2026-10-29.md):
+  signed app-owned cloud synchronization with read-only widgets; physical iPad/iPhone evidence.

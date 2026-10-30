@@ -107,3 +107,15 @@ CloudKit owner plus local reader, or suspension/termination evidence. Before
 beta, verify those on iOS independently, including widget-before-app, missing
 paired resource, protected-data availability, reopen/refresh, account/revocation
 behavior and the selected widget write scope. PA02/O03 remain open.
+
+
+## Actual WidgetKit baseline
+
+The [hardware result](results/widget-app-group-2026-10-29.md) adds actual signed
+App Group / WidgetKit evidence on iPadOS 27.0 and iOS 27.2, with the app retaining
+its mirrored private/shared owner and the widget reading locally. Small/medium
+rendering on the maintainer's phone was confirmed with a supplied photo.
+The iPad also covers explicit owner close and original-store reopen. XR/iOS 18
+has installation/instruction-launch evidence only; real widget execution remains
+unverified. This narrows the physical baseline gap, not the broader account,
+protected-data/suspension, migration or interactive-write gates.
