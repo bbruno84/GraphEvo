@@ -1,9 +1,10 @@
 # GraphEvo 2 — selected persistent schema (S01)
 
 Status: native target selected on 2026-10-30 after reviewing queries,
-attachments, sharing and migration evidence. This fixes the intended 2.0 native
-shape. Adoption in the model factory and application-version APIs is a separate
-implementation increment; this documentation change does not migrate or open stores.
+attachments, sharing and migration evidence. Explicit `.nativeIdentity` runtime
+openings now adopt this shape. Application-format APIs/admission and mandatory
+v1 conversion remain separate implementation work; model adoption is not a
+data migration or beta admission decision.
 
 ## Native model
 
@@ -109,30 +110,35 @@ registration proposal is superseded.
 
 ## Adoption and migration work remaining
 
-The current explicit native factory still selects
-`GraphEvo.nativeIdentity.alpha.2`, with the two identity columns only. Default
-`.current` opening paths still use the original model. The migration laboratory
-has exercised the three-column target using laboratory model identifiers.
-**Selection here does not claim that the runtime already implements this target.**
+The explicit native factory now selects `GraphEvo.v2.schema.1` for local,
+in-memory, private-only mirrored, paired mirrored and local read-only native
+openings. Existing alpha.2, unversioned and incorrectly labeled same-shape files
+are refused before native loading, without conversion, relabeling or erasure.
+Default `.current` opening paths still use the original model. Historical
+laboratories retain their identity-only or separately versioned factories;
+the versioned migration fixture has the same entity hashes as S01.
 
-Adopt S01 in one focused implementation increment:
+Adoption status and remaining work:
 
-1. Add the optional version attribute to the production native factory and
-   shape validation. Reserve the stable physical-model identifier
-   `GraphEvo.v2.schema.1`; use it only when the factory actually has this shape.
+1. **Implemented:** optional version attribute, uniform shape validation and
+   stable physical-model identifier `GraphEvo.v2.schema.1` in the native factory.
    App/alpha/beta release names must not change a physical schema identifier
    without a model change. Keep logical layout and codec versions independent.
-2. Test exact attributes/types/optionality/defaults/indexes and model hashes;
-   exercise local, mirrored and extension read-only selection consistently.
-   Do not silently relabel or repair an existing incompatible file.
-3. Implement application-format declarations and admission in the data manager,
+2. **Implemented local controls:** exact attributes/types/optionality/defaults/
+   indexes and model hashes, malformed/mixed-shape rejection, local CRUD/files/
+   reopening, offline paired routing and read-only selection. Durable source
+   SQLite/WAL bytes, other artifacts and companion-path noncreation are checked
+   across incompatible opening shapes. Metadata reads may refresh volatile SHM;
+   see the [adoption result](results/s01-runtime-adoption-2026-10-30.md).
+   Offline containers do not establish actual native assignment or replication.
+3. **Open:** implement application-format declarations and admission in the data manager,
    including atomic local version/value writes, undeclared/future formats,
    compatible partial edits and mixed/out-of-order remote imports. Do not expose
    a field as a working compatibility gate before these behaviors exist.
-4. Repeat the selected-model native sharing/recovery controls, including files,
+4. **Open:** repeat the selected-model native sharing/recovery controls, including files,
    and preserve source protection. The current physical migration result is
    bounded evidence, not acceptance of all final model/data behavior.
-5. Complete the mandatory v1 mapping: identities, catalog/membership, property
+5. **Open:** complete the mandatory v1 mapping: identities, catalog/membership, property
    codecs, topology, tags/groups/dates and binary content. Preserve unknown or
    corrupt source material with explicit findings. Adding columns alone does
    not activate a valid v2 graph. Where v1 did not encode original graph

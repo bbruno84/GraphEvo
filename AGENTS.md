@@ -5,8 +5,9 @@
 Read [S01](docs/design/graphevo-2-persistent-schema.md) before native model work.
 The selected 2.0 target retains the twelve-entity model and adds only optional
 `ge2GraphID`, `ge2NodeID`, `ge2DataVersion` on each node kind, with the existing
-compound identity indexes. The production native factory is still alpha.2 with
-only the identity columns; S01 adoption is a separate increment. Do not silently
+compound identity indexes. Explicit `.nativeIdentity` openings now use S01 with
+physical-model identifier `GraphEvo.v2.schema.1`. Historical identity-only
+laboratories explicitly omit the version column. Do not silently
 change default opening paths, migrate/relabel old files or treat schema selection
 as beta acceptance. Record versions are optional consumer-format declarations,
 not revisions/import completion; retain the legacy property `appDataVersion`.
@@ -731,13 +732,16 @@ broader crash/conflict/account/scale coverage and v1 migration remain separate.
 
 Both openMirrored overload shapes accept explicit GraphDatabaseSchema selection.
 The native factory requires standard model version identifier
-GraphEvo.nativeIdentity.alpha.2 in every existing resource before native loading;
+GraphEvo.v2.schema.1 in every existing resource before native loading;
 matching entity hashes alone must not activate unversioned prototype data.
 New local/mirrored native files get the identifier from their fresh model factory.
 Do not manually stamp old files, use another native coordinator, convert or erase
 as an opening side effect. No-schema/current opens retain their prior model.
-The root alpha.1 protocol and native columns are unchanged; this is a local
-pre-load version gate, not remote compatibility or import completion proof.
+The root alpha.1 logical protocol is retained. S01 adds nullable ge2DataVersion;
+the physical-model gate is not application-format admission or import completion.
+Ordinary unversioned writes leave ge2DataVersion nil. Do not derive it from the
+legacy per-property appDataVersion or advertise a working migration gate before
+the consumer data manager implements it. Reject mixed/malformed node shapes.
 validateIntegrity(of:) supports both legitimate mirrored topologies but remains
 a current-local full payload check. Use the public consumer host to distinguish
 published API evidence from historical @testable laboratory coverage.

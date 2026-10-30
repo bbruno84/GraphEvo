@@ -1,3 +1,4 @@
+import CoreData
 import GraphEvoRuntime
 
 /// The current graph schema supplied to the v2 owner without retaining a shared native model.
@@ -11,15 +12,22 @@ package enum GraphRuntimeSchema {
         return Model.makeModel()
     }
 
+    static let nativeModelIdentifier = "GraphEvo.v2.schema.1"
+
+    /// A fresh S01 model, separate from the identity-only historical laboratories.
+    static func makeNativeModel() -> NSManagedObjectModel {
+        let model = GraphNativeIdentityColumns.makeModel(indexed: true, includingDataVersion: true)
+        model.versionIdentifiers = [nativeModelIdentifier]
+        return model
+    }
+
     package static let nativeIdentity = StoreSchema(
-        identifier: "GraphEvo.nativeIdentity.alpha.2",
-        entityVersionHashes: GraphNativeIdentityColumns.makeModel(indexed: true).entityVersionHashesByName,
-        requiredModelVersionIdentifier: "GraphEvo.nativeIdentity.alpha.2"
+        identifier: nativeModelIdentifier,
+        entityVersionHashes: makeNativeModel().entityVersionHashesByName,
+        requiredModelVersionIdentifier: nativeModelIdentifier
     ) {
         GraphValueTransformer.register()
-        let model = GraphNativeIdentityColumns.makeModel(indexed: true)
-        model.versionIdentifiers = ["GraphEvo.nativeIdentity.alpha.2"]
-        return model
+        return makeNativeModel()
     }
 
 }

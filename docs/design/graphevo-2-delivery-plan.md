@@ -6,10 +6,12 @@ Status: initial plan, 2026-10-26. Read with the
 
 2026-10-30 schema milestone: [S01](graphevo-2-persistent-schema.md) fixes the
 native 2.0 target following the query/attachment/sharing/migration review.
-Next adopt the optional record-version field and stable physical-model ID in
-one focused increment, then complete data admission and mandatory v1 conversion.
-The current native alpha.2 factory/default openers remain unchanged by this
-decision. Shape selection is not beta entry or completion of migration work.
+The runtime adoption increment now supplies the optional record-version field
+and stable physical-model ID `GraphEvo.v2.schema.1` for explicit native openings.
+Next complete consumer-format admission and mandatory v1 conversion; retained
+selected-model device checks remain a separate gate. Default/current openers
+retain their original model. Native adoption is not beta entry or completion of
+migration work.
 
 ## Release policy
 
