@@ -228,3 +228,24 @@ library acceptance matrix pass, with documented recovery/downgrade boundaries.
 Review any optional v1 API adapter separately; it cannot block or weaken the
 core design. Documentation and examples move to the actual v2 contracts while
 v1 guidance remains accessible.
+
+## Migration manager renewal
+
+The [M1–M6 plan](graphevo-2-migration-manager.md) renews the manager alongside
+mandatory v1 conversion. Consumers define application-data migrations; native schema evolution remains
+internal GraphEvo work. GraphEvo manages
+execution and compatibility of later imported records as well as whole migrations.
+Evaluate the optional v1 adapter on independent consumers, using MyHomeBills
+RecoveryV2 as one production example rather than an architectural template.
+The first package-only journal increment is not a public executor or a migration
+readiness certificate. Local/cloud conversion feasibility remains a beta gate.
+
+### Internal native schema evidence (2026-10-30)
+
+The [completed internal SM01–SM03 experiment](results/schema-migration-2026-10-30.md)
+and S01 public device fixture supply bounded native evidence. They do not provide
+a consumer native-schema registration API or complete logical v1 conversion.
+
+Keep native schema evolution uncommon by using Graph's data-driven logical
+formats for ordinary application changes. This does not eliminate record-level
+format migration or the need for a supported future native-schema route.

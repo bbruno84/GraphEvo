@@ -465,6 +465,29 @@ IDs or an explicit graph-scoped old-to-new identity mapping. Do not promise
 unchanged physical object/cloud IDs as a substitute for logical preservation.
 Source identity and translated references must be verified together.
 
+### General migration service
+
+Consumer-authored migrations cover native Core Data schema transitions and
+application-data transformations; GraphEvo manages registration, route selection,
+resource admission, awaited execution, recovery, validation and activation.
+Schema/data stages may interleave under explicit source/target capabilities.
+RecoveryV2 is one real compatibility/regression example, not the service template.
+
+Whole-migration completion does not disable compatibility processing of later
+cloud records. Version native layout, logical record formats and migration
+operations independently. After native imports, detect supported old-format
+inserts/updates and apply registered transformations under revision/dependency
+and permission checks. Retain future/unknown data with explicit incompatible or
+update-required states; never silently downgrade or omit incompatible rows from
+successful typed results. Do not assume a pre-import interception mechanism.
+
+The [manager renewal contract](graphevo-2-migration-manager.md) details the
+consumer/library boundary, native framework limits, compatibility experiment,
+durable processing and required acceptance matrix. These requirements are not
+implemented by the package-only M1 journal. The coordinated initial v1 cutover
+below remains required; general compatibility processing cannot stop unsupported
+old clients or certify complete source synchronization.
+
 ### Working migration protocol
 
 1. Identify source model/version, graph scope, codecs, cloud environment and

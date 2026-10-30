@@ -814,3 +814,13 @@ Retain initial harness failures, source copies and independent replica evidence.
 A thrown pre-handler may already have saved; do not blindly replay it. Read
 `docs/design/results/schema-migration-2026-10-30.md` for accepted scope and open
 historical-store, concurrency, interruption and Production gates.
+
+
+## V2 migration journal foundation
+
+Read [the manager contract](docs/design/graphevo-2-migration-manager.md) before
+migration-manager work. M1 is package-only bookkeeping, with no public executor
+or runtime/import admission. Consumers define application-data migrations; native
+schema routes are internal GraphEvo work. Never treat a journal marker, KVS flag
+or missing destination marker as a distributed fence or proof of no effect.
+Preserve source/backup ownership, pending intents and separate validation/activation.

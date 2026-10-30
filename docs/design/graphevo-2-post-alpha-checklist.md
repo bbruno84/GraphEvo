@@ -229,9 +229,10 @@ close O04 or mark the wider beta/stable items above complete.
 
 ## PA08 — mandatory v1 local and cloud migration
 
-- [ ] **B** Align the pending migration-manager contract/PR #95 with M14/S01:
-  consumer-defined application-data plans only; native schema routes are internal.
-  The earlier consumer-native-schema registration proposal is superseded.
+- [x] Align PR #95's migration-manager contract with M14/S01: consumer-defined
+  application-data plans only; native schema routes are internal. M1 remains a
+  package-only journal, with no production execution/admission or cloud fence.
+  See [the renewed contract](graphevo-2-migration-manager.md).
 
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,

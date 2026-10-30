@@ -25,6 +25,9 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
+- [Migration manager renewal](design/graphevo-2-migration-manager.md): M1 journal,
+  consumer-defined application-data plans and remaining M2–M6 admission/conversion work.
+
 - [GraphEvo 2 selected persistent schema](design/graphevo-2-persistent-schema.md):
   S01 native shape, four-area review, record-version semantics and adoption gates.
 - [S01 public device acceptance](design/results/s01-native-sharing-recovery-2026-10-30.md):
