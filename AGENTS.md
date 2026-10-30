@@ -770,3 +770,21 @@ hardware baseline is scoped in `docs/design/results/widget-app-group-2026-10-29.
 iOS 18 real-widget, lifecycle/account/protected-data and interactive writes remain
 open. Do not infer cloud export/recovery from a local widget or publish personal
 Home Screen images or generated stores/logs.
+
+
+## Native schema migration laboratory
+
+`Experiments/SchemaMigrationProbe` and internal GraphSchemaMigrationLaboratory
+exercise explicit owned synthetic v1/native/versioned models. Never select this
+loader from public opens, stamp alpha activation or mistake physical schema
+migration for full v1 identity/catalog/value conversion. Generic Core Data writes
+inside native staged handlers are confined to this framework experiment; normal
+operations use Node facades. Native schema migration is internal library work;
+consumer migrations target application data. Keep the optional node version
+experimental and distinguish it from existing property-row appDataVersion.
+Use distinct transport/report filenames, one-use assignment intents and exact
+launch process/ticket binding. Missing mappings never authorize reassignment.
+Retain initial harness failures, source copies and independent replica evidence.
+A thrown pre-handler may already have saved; do not blindly replay it. Read
+`docs/design/results/schema-migration-2026-10-30.md` for accepted scope and open
+historical-store, concurrency, interruption and Production gates.

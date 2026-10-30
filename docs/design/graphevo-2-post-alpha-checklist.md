@@ -502,3 +502,16 @@ This closes the **first physical read-only baseline experiment**, not PA02/O03
 as a whole. Preserve the iOS 18 actual-widget gap and the remaining suspension,
 protected-data, concurrent migration/reset, account/cache/revocation, performance
 and interactive-write decisions. No beta/tag promotion follows from this result.
+
+
+### Native schema migration experiment (2026-10-30)
+
+[SM01–SM03 result](results/schema-migration-2026-10-30.md) validates additive
+v1-shape→native-plus-optional-node-version migration locally and on iPad/XR
+Development sharing. Final staged-handler values and native version 1 were
+recovered by an existing peer and a fresh pair before ordinary post-open writes.
+A failed pre-handler can leave saved changes; a protected copy retains baseline.
+Six controls and the full 526-test suite pass. This does not close PA08: historical
+v1 store/codec coverage, process-kill/activation recovery, concurrent cloud edits,
+Production deployment and full graph/data conversion remain open. The optional
+version field is experimental; no production model or default opener changed.

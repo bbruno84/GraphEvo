@@ -42,7 +42,7 @@ not a promise of one prerelease tag per stage. Remain alpha through stage 8.
 | A1–A7 | Reviewed and merged into `codex/graphevo-2` through PRs #70–#76: runtime, async scopes, models/typed CRUD, graph boundaries, user sharing, files and queries |
 | A8 | Reviewed and merged through PR #77, including both concurrency corrections; async current state, Combine and live rescan hints have retained local and cross-account dependency/deletion evidence |
 | Consolidation | Started with [C01 and the C02a metadata experiment](graphevo-2-consolidation.md); the B candidate remains on the experiment branch. Content separation, shared observer work, schema/API, stable processing and other supported envelopes remain open |
-| Migration | Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
+| Migration | [SM01–SM03](results/schema-migration-2026-10-30.md) adds bounded additive local/cloud schema migration evidence, including final staged-handler data recovered before normal post-open saves. Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
 | Beta | Not declared. Eight implementation candidates do not alone satisfy the entry gate below |
 
 ## Alpha sequence
