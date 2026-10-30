@@ -180,9 +180,14 @@ actor StoreResources {
         defer { finish() }
         let cancellation = OperationCancellation()
         let sqlite = resolved.url != nil
+        let memoryRequest = sqlite ? nil : UUID()
         let configuration = resolved.configuration, container = container
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
+            // In-memory stores cannot pin a query generation. Keep their whole
+            // multi-fetch read coherent with admitted local writers instead.
+            if let memoryRequest { try await acquireWriter(memoryRequest, cancellation: cancellation) }
+            defer { if memoryRequest != nil { releaseWriter() } }
             return try await container.performBackgroundTask { @Sendable context in
                 Self.prepare(context, configuration: configuration, container: container)
                 let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
@@ -195,7 +200,10 @@ actor StoreResources {
                 try cancellation.check()
                 return value
             }
-        } onCancel: { cancellation.cancel() }
+        } onCancel: {
+            cancellation.cancel()
+            if let memoryRequest { Task { await self.cancelWriter(memoryRequest) } }
+        }
     }
 
     /// FIFO among admitted local writers; native save is the cancellation boundary.

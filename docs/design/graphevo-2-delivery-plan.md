@@ -242,6 +242,11 @@ readiness certificate. Local/cloud conversion feasibility remains a beta gate.
 
 ### Internal native schema evidence (2026-10-30)
 
+The [M2a local manager slice](graphevo-2-data-migration-local.md) now exercises
+consumer-defined data conversion on an isolated S01-shaped laboratory store,
+including atomic version/effect publication and checkpoint recovery. Public
+format admission, resource readiness/backup policy and M3–M6 remain open.
+
 The [completed internal SM01–SM03 experiment](results/schema-migration-2026-10-30.md)
 and S01 public device fixture supply bounded native evidence. They do not provide
 a consumer native-schema registration API or complete logical v1 conversion.

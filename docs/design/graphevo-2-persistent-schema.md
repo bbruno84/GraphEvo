@@ -135,6 +135,9 @@ Adoption status and remaining work:
    including atomic local version/value writes, undeclared/future formats,
    compatible partial edits and mixed/out-of-order remote imports. Do not expose
    a field as a working compatibility gate before these behaviors exist.
+   [M2a](graphevo-2-data-migration-local.md) now proves the local atomic
+   values/version/marker and checkpoint-recovery slice on isolated laboratory
+   stores. It does not close the public admission or native-import cases.
 4. **Implemented bounded native acceptance:** [S01 public iPad/XR result](results/s01-native-sharing-recovery-2026-10-30.md)
    passes the entity/attachment lifecycle and two fresh participant recoveries,
    with actual S01 metadata on all eight resources. Source protection and broader

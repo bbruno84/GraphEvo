@@ -401,6 +401,12 @@ The original overload must perform no trace history reads.
 
 ## GraphEvo 2 async runtime
 
+SQLite reads pin their query generation. In-memory read scopes instead join the
+local writer gate for coherent multi-fetch views; a reader behind an active
+memory writer waits for its commit. Preserve queued-reader cancellation/draining
+and independent-resource progress. Privileged in-memory native callbacks must
+not reenter a read on the same resource while retaining that gate.
+
 The package-internal StoreHandle transaction boundary serializes local writers
 per StoreResources owner and drains admitted reads/writes before detachment.
 Adapter closures are synchronous, return Sendable values, and must never save
@@ -824,3 +830,16 @@ or runtime/import admission. Consumers define application-data migrations; nativ
 schema routes are internal GraphEvo work. Never treat a journal marker, KVS flag
 or missing destination marker as a distributed fence or proof of no effect.
 Preserve source/backup ownership, pending intents and separate validation/activation.
+
+## M2a local data migration laboratory
+
+Read [M2a](docs/design/graphevo-2-data-migration-local.md) before changing the
+package-only manager or adapter. Keep the laboratory model identifier separate
+from public S01; no normal read/write/query path has public format admission yet.
+Consumer transformations are pure detached-value callbacks. Publish values,
+native version and effect marker atomically under the runtime writer boundary;
+recheck the full selected preimage and verify actual target state on recovery.
+Missing markers alone do not prove no effect. Never replay the consumer closure
+for a retained prepared artifact or mistake journal completion for public-store
+activation. Cloud/native imports, ordinary app/widget admission and production
+backup/retention are outside this laboratory's accepted scope.

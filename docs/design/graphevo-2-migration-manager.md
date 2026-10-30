@@ -1,9 +1,15 @@
 # GraphEvo 2 — migration manager renewal
 
-Status: M1 implements a package-only Swift 6 checkpoint foundation. No public
-migration executor, source conversion, runtime admission, import compatibility pipeline or cloud cutover is
+Status: M1 implements the package-only Swift 6 checkpoint foundation; M2a adds
+isolated local execution. No public migration executor, production source
+conversion, runtime admission, import compatibility pipeline or cloud cutover is
 activated. The existing v1 manager and registered application migrations retain
 their behavior. See specification section 11 and PA08 in the post-alpha checklist.
+
+The subsequent [M2a local vertical slice](graphevo-2-data-migration-local.md)
+adds declared data versions, prepared pure consumer transformations, atomic
+data/version/marker publication and checkpoint reconciliation on isolated local
+stores. It does not activate public version-aware opening or cloud processing.
 
 ## Maintainer decisions
 

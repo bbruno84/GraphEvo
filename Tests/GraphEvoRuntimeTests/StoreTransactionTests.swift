@@ -26,6 +26,36 @@ private struct NativeGate: Sendable {
 }
 
 @Suite(.timeLimit(.minutes(1))) struct StoreTransactionTests {
+    @Test func inMemoryReadKeepsOneLocalViewWhileAWriterWaits() async throws {
+        let events = AsyncStream<String>.makeStream()
+        let gate = NativeGate()
+        await gate.entered.release()
+        let registry = StoreRegistry(hooks: .init(afterCommit: { events.continuation.yield("committed") },
+            didQueueWriter: { events.continuation.yield("queued") }))
+        let handle = try await registry.open(.init(location: .inMemory(UUID())), schema: fixtureSchema())
+        try await handle.transaction { insert("before", in: $0) }
+        var iterator = events.stream.makeAsyncIterator()
+        _ = await iterator.next()
+        let reader = Task {
+            try await handle.read { context in
+                let first = try values(context)
+                try gate.block()
+                return (first, try values(context))
+            }
+        }
+        await gate.entered.waitForArrivals()
+        let writer = Task { try await handle.transaction { insert("after", in: $0) } }
+        let event = await iterator.next()
+        #expect(event == "queued")
+        gate.resume.signal()
+        let observed = try await reader.value
+        #expect(observed.0 == ["before"] && observed.1 == ["before"])
+        try await writer.value
+        #expect(try await handle.read(values) == ["after", "before"])
+        events.continuation.finish()
+        try await handle.close()
+    }
+
     @Test func writesCommitAndSurviveReopening() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -244,9 +274,15 @@ private struct NativeGate: Sendable {
         try await writer.close()
     }
 
-    @Test func pendingWritesAreInvisibleAndOtherStoresCanWriteIndependently() async throws {
-        let registry = StoreRegistry()
-        let first = try await registry.open(.init(location: .inMemory(UUID())), schema: fixtureSchema())
+    @Test(arguments: [false, true])
+    func pendingWritesAreInvisibleAndOtherStoresCanWriteIndependently(memory: Bool) async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let queued = LifecycleGate()
+        await queued.release()
+        let registry = StoreRegistry(hooks: .init(didQueueWriter: { await queued.enter() }))
+        let location: StoreLocation = memory ? .inMemory(UUID()) : .sqlite(directory.appendingPathComponent("Main.sqlite"))
+        let first = try await registry.open(.init(location: location), schema: fixtureSchema())
         let other = try await registry.open(.init(location: .inMemory(UUID())), schema: fixtureSchema())
         let gate = NativeGate()
         await gate.entered.release()
@@ -254,14 +290,45 @@ private struct NativeGate: Sendable {
             try await first.transaction { context in insert("pending", in: context); try gate.block() }
         }
         await gate.entered.waitForArrivals()
-        #expect(try await first.read(values).isEmpty)
+        let reader: Task<[String], any Error>?
+        if memory {
+            reader = Task { try await first.read(values) }
+            await queued.waitForArrivals()
+        } else {
+            reader = nil
+            #expect(try await first.read(values).isEmpty)
+        }
         try await other.transaction { context in insert("independent", in: context) }
         #expect(try await other.read(values) == ["independent"])
         gate.resume.signal()
         try await writing.value
+        if let reader { #expect(try await reader.value == ["pending"]) }
         #expect(try await first.read(values) == ["pending"])
         try await first.close()
         try await other.close()
+    }
+
+    @Test func cancelledQueuedMemoryReadDoesNotInvokeItsBodyOrBlockTheNextWriter() async throws {
+        let gate = NativeGate(), queued = LifecycleGate()
+        await gate.entered.release(); await queued.release()
+        let registry = StoreRegistry(hooks: .init(didQueueWriter: { await queued.enter() }))
+        let handle = try await registry.open(.init(location: .inMemory(UUID())), schema: fixtureSchema())
+        let writer = Task { try await handle.transaction { context in insert("kept", in: context); try gate.block() } }
+        await gate.entered.waitForArrivals()
+        let reader = Task {
+            try await handle.read { _ -> Int in
+                Issue.record("Cancelled queued read body executed.")
+                return 0
+            }
+        }
+        await queued.waitForArrivals()
+        reader.cancel()
+        await #expect(throws: CancellationError.self) { try await reader.value }
+        gate.resume.signal()
+        try await writer.value
+        try await handle.transaction { insert("next", in: $0) }
+        #expect(try await handle.read(values) == ["kept", "next"])
+        try await handle.close()
     }
 
     @Test func nonUIConsumerUsesGraphFacadesAndReturnsOnlyValues() async throws {
