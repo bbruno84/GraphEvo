@@ -5,7 +5,7 @@ import Foundation
 /// Identity mapping is supplied explicitly; this does not derive durable IDs from local URIs.
 package enum GraphRecordMapper {
     package static func snapshot(
-        _ node: Node, id: GraphNodeID, excludingRoot root: Entity? = nil,
+        _ node: Node, id: GraphNodeID, excludingRoot root: Entity? = nil, propertyKeys: Set<String>? = nil, projectedProperties: [String: Any]? = nil,
         referenceID: (Entity) throws -> GraphNodeID
     ) throws -> GraphRecord {
         try GraphValueDecodingDiagnostics.checking {
@@ -29,9 +29,10 @@ package enum GraphRecordMapper {
                 throw GraphModelError.unexpectedKind
             }
             var properties: [String: GraphValue] = [:]
-            for (key, value) in node.properties { properties[key] = try detached(value, key: key) }
+            for (key, value) in projectedProperties ?? propertyKeys.map({ node.runtimeProperties(including: $0) }) ?? node.properties { properties[key] = try detached(value, key: key) }
             return try GraphRecord(id: id, type: node.type, endpoints: endpoints, properties: properties,
-                                   tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent)
+                                   tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent,
+                                   dataVersion: GraphDataFormatAdmission.version(of: node))
         }
     }
 

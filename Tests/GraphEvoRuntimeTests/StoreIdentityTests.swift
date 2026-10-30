@@ -166,8 +166,10 @@ import Testing
             }
         }
         let missing = directory.appendingPathComponent("Missing.sqlite")
-        await #expect(throws: StoreRuntimeError.self) {
+        await #expect {
             try await registry.open(StoreConfiguration(location: .sqlite(missing), access: .readOnly), schema: graphSchema())
+        } throws: { error in
+            if case StoreRuntimeError.missingStore = error { return true }; return false
         }
         #expect(!FileManager.default.fileExists(atPath: missing.path))
     }

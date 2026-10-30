@@ -5,6 +5,8 @@ import GraphEvoRuntime
 
 public enum GraphStoreError: Error {
     case closed
+    case readOnly
+    case synchronizationUnavailableInExtension
     case ownershipConflict
     case expiredScope
     case foreignGraph
@@ -12,12 +14,14 @@ public enum GraphStoreError: Error {
     case corruptIdentity
     case missingNode
     case missingGraph
+    case missingStore
     case permissionDenied
     case sharedInsertionRequiresPreparation
     case pendingNativeOperation
     case unresolvedReference
     case legacyStoreRequiresAdoption
     case unsupportedLayout
+    case dataFormatAdmissionRequired
     case reservedName
     case persistence(underlying: any Error)
 }
@@ -40,6 +44,7 @@ package struct GraphStoreAdapter: Sendable {
     package let insert: @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void
     package let patch: @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord
     package let delete: @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void
+    package let attachmentMetadata: (@Sendable (NSManagedObjectContext, GraphID) throws -> [GraphAttachmentMetadata])?
     package let query: (@Sendable (NSManagedObjectContext, GraphID, GraphQueryRequest) throws -> GraphQueryOutput)?
 
     package init(
@@ -49,10 +54,11 @@ package struct GraphStoreAdapter: Sendable {
         insert: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void,
         patch: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord,
         delete: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void,
+        attachmentMetadata: (@Sendable (NSManagedObjectContext, GraphID) throws -> [GraphAttachmentMetadata])? = nil,
         query: (@Sendable (NSManagedObjectContext, GraphID, GraphQueryRequest) throws -> GraphQueryOutput)? = nil
     ) {
         self.initialize = initialize; self.fetch = fetch; self.fetchAll = fetchAll
-        self.insert = insert; self.patch = patch; self.delete = delete; self.query = query
+        self.insert = insert; self.patch = patch; self.delete = delete; self.query = query; self.attachmentMetadata = attachmentMetadata
     }
 }
 
@@ -61,6 +67,7 @@ public actor GraphStore {
     public nonisolated let id: GraphID
     private let handle: StoreHandle
     private let adapter: GraphStoreAdapter
+    private var observationCoordinator: GraphObservationCoordinator?
 
     private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) {
         self.id = id; self.handle = handle; self.adapter = adapter
@@ -95,6 +102,26 @@ public actor GraphStore {
     package func observationFeed() async throws -> StoreInvalidationFeed {
         do { return try await handle.invalidationFeed() }
         catch { throw Self.translate(error) }
+    }
+
+    // Created on this actor before suspension; concurrent first subscribers share one coordinator.
+    func queryObservationCoordinator() -> GraphObservationCoordinator {
+        if let observationCoordinator { return observationCoordinator }
+        let coordinator = GraphObservationCoordinator(graph: self)
+        observationCoordinator = coordinator
+        return coordinator
+    }
+
+    package var sharedObservationDiagnostics: GraphSharedObservationSnapshot {
+        get async {
+            guard let observationCoordinator else { return GraphSharedObservationSnapshot() }
+            return await observationCoordinator.diagnostics
+        }
+    }
+
+    /// Admission only, without opening another feed.
+    package func observationAdmission() async throws {
+        do { _ = try await handle.snapshot() } catch { throw Self.translate(error) }
     }
 
     public nonisolated func makeNodeID() -> GraphNodeID { GraphNodeID(graphID: id) }
@@ -150,6 +177,9 @@ public actor GraphStore {
     package static func translate(_ error: any Error) -> any Error {
         guard let runtime = error as? StoreRuntimeError else { return error }
         switch runtime {
+        case .missingStore: return GraphStoreError.missingStore
+        case .readOnlyStore: return GraphStoreError.readOnly
+        case .synchronizationUnavailableInExtension: return GraphStoreError.synchronizationUnavailableInExtension
         case .closedHandle: return GraphStoreError.closed
         case .configurationConflict: return GraphStoreError.ownershipConflict
         default: return GraphStoreError.persistence(underlying: error)
@@ -160,6 +190,10 @@ public actor GraphStore {
 extension GraphStoreError: LocalizedError {
     public var errorDescription: String? {
         switch self {
+        case .dataFormatAdmissionRequired: return "Declared record formats require version-aware store admission, which is not enabled for this store."
+        case .missingStore: return "The local store is unavailable until the containing app initializes it."
+        case .readOnly: return "The graph store is open for local reading only."
+        case .synchronizationUnavailableInExtension: return "Cloud synchronization must be owned by the containing app; use local read-only access in the extension."
         case .ownershipConflict: return "The store has an incompatible persistence owner."
         case .closed: return "The graph store handle is closed."
         case .expiredScope: return "The graph operation scope has expired."

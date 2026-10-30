@@ -7,6 +7,13 @@ Native model hashes remain unchanged; this is still an alpha API and protocol.
 
 ## One owner for both physical stores
 
+The subsequent [S01 schema review](graphevo-2-persistent-schema.md) retains the
+paired resources, hidden graph roots/membership and local operation ledgers.
+Native share APIs remain authoritative; no substitute native zone, permission
+or synchronization-status columns are selected. Statements below about the
+unchanged A5 model describe that increment, not the later S01 identity/version
+column target. Account, revocation and recovery gates remain open.
+
 ```swift
 let database = try await GraphDatabase.openMirrored(
     privateStoreAt: privateURL,
@@ -176,3 +183,22 @@ changes/access-cache policy, old-cloud-layout cutover and returning old devices,
 zone quotas, larger performance envelopes and native sharing UI adapters. The
 host controls presentation and invitation transport. Current polling probes do
 not certify live observation or selective graph download.
+
+## Native identity schema follow-on
+
+The internal fresh native-column pair has separate
+[device acceptance](results/native-identity-paired-devices-2026-10-29.md) on owner
+iPadOS 27.0 and different-account XR iOS 18.7.10: exact A-only import, participant
+additions/details and independent owner recovery, read-only/restored permissions,
+revoke/reinvite/leave and interruption recovery. Its first recovery save returned
+a Core Data merge conflict; retained intent was later explicitly recovered without
+replaying assignment. Both outcomes remain evidence. This does not change public
+mirrored defaults or close the broader conflict/account/scale/migration gates.
+
+Public mirrored schema adoption is recorded separately in the
+[public consumer result](results/native-public-mirrored-schema-2026-10-29.md).
+The first invitation was not usable on XR (unknownItem); read-only server lookup
+returned an owner-only share. One explicit same-recipient persistence returned
+the identical capability and enabled acceptance/import. This finding keeps
+invitation readiness/error/continuation guidance open before beta; no automatic
+reinvite, new zone or structural assignment replay was added.

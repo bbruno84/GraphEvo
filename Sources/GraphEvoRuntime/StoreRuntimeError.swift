@@ -5,12 +5,14 @@ package enum StoreRuntimeError: Error {
     case invalidConfiguration(String)
     case invalidModel(String)
     case configurationConflict(URL?)
+    case missingStore(URL)
     case incompatibleStore(URL)
     case unsupportedFileAlias(URL)
     case storeReplaced(URL)
     case loadFailed(URL?, underlying: any Error)
     case shutdownFailed(URL?, underlying: any Error)
     case closedHandle
+    case synchronizationUnavailableInExtension
     case readOnlyStore
     case mutationInReadScope
 }
@@ -21,12 +23,14 @@ extension StoreRuntimeError: LocalizedError {
         case .invalidConfiguration(let reason): return "Invalid store configuration: \(reason)"
         case .invalidModel(let identifier): return "The store model does not match its declared identity: \(identifier)."
         case .configurationConflict: return "The store already has an incompatible runtime owner."
+        case .missingStore: return "The requested local store does not exist; the containing app must initialize it first."
         case .incompatibleStore: return "The existing store requires an explicit data migration."
         case .unsupportedFileAlias: return "The SQLite file uses an unsupported filesystem alias."
         case .storeReplaced: return "The SQLite file changed identity while owned by this runtime."
         case .loadFailed: return "The persistent store could not be loaded."
         case .shutdownFailed: return "The store could not be detached; its runtime ownership is retained."
         case .closedHandle: return "The store handle is closed."
+        case .synchronizationUnavailableInExtension: return "Cloud synchronization must be owned by the containing app."
         case .readOnlyStore: return "The store does not permit transactions."
         case .mutationInReadScope: return "A read operation attempted to change persistent data."
         }

@@ -138,6 +138,11 @@ extension GraphReadScope {
         guard let owner = try record(for: ownerID), owner.type != GraphAttachmentPayload.graphType else {
             throw GraphAttachmentError.missingOwner
         }
-        return try fetchAll(GraphAttachmentPayload.self).filter { $0.ownerID == ownerID }.map { $0.content.metadata }
+        return try withContext { context, adapter in
+            let metadata: [GraphAttachmentMetadata]
+            if let project = adapter.attachmentMetadata { metadata = try project(context, graphID) }
+            else { metadata = try adapter.fetchAll(context, graphID, GraphAttachmentPayload.graphType, .entity).map { try GraphAttachmentPayload.metadata(from: $0) } }
+            return metadata.filter { $0.ownerID == ownerID }
+        }
     }
 }

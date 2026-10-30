@@ -16,6 +16,7 @@ guides. For an introduction to the project, see the [main README](../README.md).
 | observe changes | [Watchers](guides/watchers.md) |
 | validate saved graph structure | [Structural validation](guides/structural-validation.md) |
 | manage migrations | [Migrations](migrations/overview.md) |
+| inspect v1 native schema migration experiments | [SM01–SM03 result](design/results/schema-migration-2026-10-30.md) |
 | manage backups | [Backups](migrations/backups.md) |
 | understand remote changes | [Persistent History](migrations/persistent-history.md) |
 | consult utilities and tools | [Utilities](api/utilities.md) |
@@ -24,6 +25,18 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
+- [M2b.1 record formats](design/graphevo-2-data-formats.md): detached public
+  declarations, version-preserving mapping and normal-store admission refusal.
+
+- [Migration manager renewal](design/graphevo-2-migration-manager.md): M1 journal,
+  consumer-defined application-data plans and remaining M2–M6 admission/conversion work.
+- [M2a local data migration](design/graphevo-2-data-migration-local.md): isolated
+  data/version publication, prepared artifacts and interruption reconciliation.
+
+- [GraphEvo 2 selected persistent schema](design/graphevo-2-persistent-schema.md):
+  S01 native shape, four-area review, record-version semantics and adoption gates.
+- [S01 public device acceptance](design/results/s01-native-sharing-recovery-2026-10-30.md):
+  iPad/XR sharing, attachment lifecycle, two empty replicas and persisted-model evidence.
 - [GraphEvo 2 initial specification](design/graphevo-2-specification.md): current
   requirements and proposed contracts, including mandatory v1 data migration.
 - [GraphEvo 2 delivery plan](design/graphevo-2-delivery-plan.md): alpha sequence,
@@ -52,6 +65,15 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   current state, live rescan hints and demand-aware Combine adapters.
 - [GraphEvo 2 consolidation](design/graphevo-2-consolidation.md): integrated
   cost baseline and proposed selective-access, file and observation improvements.
+- [GraphEvo 2 metadata experiment](design/graphevo-2-metadata-experiment.md):
+  C02a baseline/A/B comparisons and scope-confined metadata batching candidate.
+- [GraphEvo 2 attachment metadata experiment](design/graphevo-2-attachment-metadata-experiment.md):
+  C03a split metadata, legacy fallback and local cost/correctness evaluation.
+- [GraphEvo 2 native identity experiment](design/graphevo-2-native-identity-experiment.md):
+  C02b isolated native model, explicit copy conversion and selective point lookup.
+- [GraphEvo 2 experiment matrix](design/graphevo-2-experiment-matrix.md):
+  binary/query variants, regression and owner/participant native lifecycle, with
+  [measured outcomes](design/results/cost-matrix-2026-10-27.md).
 - [GraphEvo 2 design outline](design/graphevo-2-outline.md): discussion draft
   retaining the original goals and architectural questions. The specification
   supersedes it for current decisions; neither describes the v1 public API.
@@ -62,3 +84,57 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   evidence, remaining tests and their scope.
 - [GraphEvoDemo initial assessment](design/graphevo-demo-initial-assessment.md):
   source state, existing coverage, build evidence, and laboratory preparation.
+
+- [C02b native identity results](design/results/c02b-native-identities-2026-10-27.md):
+  selective reads/patches, retained endpoint regressions, bounded topology and
+  metadata batching, explicit integrity costs and remaining migration/cloud gates.
+
+- [C04a shared observation experiment](design/graphevo-2-shared-observation-experiment.md):
+  exact-descriptor grouping, per-consumer decoding/cancellation, unchanged broad
+  invalidation and a startup/update CPU/memory matrix.
+
+- [C04a shared observation results](design/results/c04a-shared-observation-2026-10-27.md):
+  repeated startup/update wall/CPU/RSS comparisons, execution attempts versus
+  delivered views, retained preflight correction and remaining adoption gates.
+
+- [C04 public observation adoption checks](design/results/c04-public-observation-2026-10-29.md):
+  per-handle public async/Combine wiring, lifecycle checks and retained targeted
+  Release comparison; physical adoption and startup/query costs remain open.
+
+- [Identity-guarded query materialization result](design/results/identity-guarded-queries-2026-10-29.md):
+  same-schema public query body selection, native transformer checks and matched
+  baseline/candidate Release rows; complete structural inventory remains.
+
+- [Native identity integration contract](design/graphevo-2-native-identity-integration.md):
+  same-view absence safety, metadata versus full integrity, all-writer invariants
+  and protected-source conversion/native adoption gates.
+
+- [Native identity readiness result](design/results/native-identity-readiness-2026-10-29.md):
+  fail-closed negative reads, resource routing, native body exclusion and separate
+  metadata/full-integrity costs; public/native schema adoption remains open.
+
+- [Common native identity writer acceptance](design/results/native-identity-writers-2026-10-29.md):
+  common local writes/files/rollback/reopen on the optional-column model, guarded
+  partial imports and remaining native/conversion gates.
+
+- [Fresh native local store acceptance](design/results/native-fresh-local-stores-2026-10-29.md):
+  explicit public native schema, create-only activation, compatible reopen and
+  storage integrity; native paired/mirrored acceptance remains separate.
+
+- [Fresh native identity paired acceptance laboratory](../Experiments/NativeIdentityPairedProbe/README.md) — internal host, offline checks and pending physical matrix.
+
+- [Native identity paired device acceptance](design/results/native-identity-paired-devices-2026-10-29.md) — controlled iPad/XR sharing, explicit conflict recovery and native attachment lifecycle.
+
+- [Public native mirrored schema adoption](design/results/native-public-mirrored-schema-2026-10-29.md) — explicit schema overloads, pre-load version guard and separate public consumer evidence.
+
+- [Public adoption causal triage](design/results/native-public-causal-triage-2026-10-29.md):
+  reproduced launch acknowledgement defect, traced invitations and unresolved historical causes.
+
+- [Containing app and extension access](design/graphevo-2-app-extension-access.md):
+  app-owned synchronization, extension refusal and local read-only opening; iOS gate remains open.
+
+- [Extension access safeguard result](design/results/extension-readonly-access-2026-10-29.md):
+  520 tests, selected sanitizer and independent-process public reader evidence.
+
+- [Actual WidgetKit / App Group result](design/results/widget-app-group-2026-10-29.md):
+  signed app-owned cloud synchronization with read-only widgets; physical iPad/iPhone evidence.

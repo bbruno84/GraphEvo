@@ -1,5 +1,28 @@
 # GraphEvo — instructions for AI agents
 
+## Selected v2 native schema
+
+Read [S01](docs/design/graphevo-2-persistent-schema.md) before native model work.
+The selected 2.0 target retains the twelve-entity model and adds only optional
+`ge2GraphID`, `ge2NodeID`, `ge2DataVersion` on each node kind, with the existing
+compound identity indexes. Explicit `.nativeIdentity` openings now use S01 with
+physical-model identifier `GraphEvo.v2.schema.1`. Historical identity-only
+laboratories explicitly omit the version column. Do not silently
+change default opening paths, migrate/relabel old files or treat schema selection
+as beta acceptance. Record versions are optional consumer-format declarations,
+not revisions/import completion; retain the legacy property `appDataVersion`.
+Native schema migration is internal library work. Consumer migrations target
+application data. Reopen S01 only with concrete correctness/measurement evidence
+and documented migration and local/cloud validation effects.
+
+The [S01 device protocol](Experiments/S01NativeProbe/README.md) extends the public
+file fixture with guarded empty replicas and same-process seed/invitation. Keep
+writers alive through independent peer observation; never replay a consumed
+mutation or copy native stores into a supposedly fresh replica. Its
+[16-stage result](docs/design/results/s01-native-sharing-recovery-2026-10-30.md)
+closes only the bounded selected-model sharing/recovery item. Consumer-format
+admission, v1 conversion and broader native/account/conflict gates remain open.
+
 This file is the operational entry point for agents working in the repository.
 Before changing code, read `README.md` for the project overview and consult the
 relevant documentation in `docs/`.
@@ -378,6 +401,12 @@ The original overload must perform no trace history reads.
 
 ## GraphEvo 2 async runtime
 
+SQLite reads pin their query generation. In-memory read scopes instead join the
+local writer gate for coherent multi-fetch views; a reader behind an active
+memory writer waits for its commit. Preserve queued-reader cancellation/draining
+and independent-resource progress. Privileged in-memory native callbacks must
+not reenter a read on the same resource while retaining that gate.
+
 The package-internal StoreHandle transaction boundary serializes local writers
 per StoreResources owner and drains admitted reads/writes before detachment.
 Adapter closures are synchronous, return Sendable values, and must never save
@@ -389,6 +418,19 @@ Do not replay arbitrary bodies. See
 [the A2 contract](docs/design/graphevo-2-async-transactions.md).
 
 ## GraphEvo 2 model contracts
+
+Read [M2b.1](docs/design/graphevo-2-data-formats.md) before format work.
+GraphRecord.dataVersion is optional/nonnegative; GraphModel.graphDataFormat
+defaults to undeclared. Check readability before consumer decoding, require the
+current format on serialization/typed patch, and preserve versions in copies.
+Normal stores reject versioned inserts and conservatively refuse application
+data access across the resource group when native versions are present. Keep
+this metadata preflight before property-row reads, including pending changes;
+do not bypass it in point/query/file/observation paths. Control-only status and
+access reduction remain available. The exact M2a laboratory model is the sole
+package exception; its files remain refused by normal public openers. A shared
+format registry, production activation, backup/readiness and cloud policy remain
+open; detached contracts do not authorize versioned production persistence.
 
 GraphEvoModel compiles detached GraphModel/GraphRecord/value/patch contracts in
 Swift 6; GraphEvo exposes explicit aliases through its existing product. The
@@ -459,12 +501,15 @@ seam is test infrastructure and must remain absent in Release.
 
 Read the [A6 contract](docs/design/graphevo-2-attachments.md) before changing
 attachment persistence. The alpha uses reserved logical type
-`GraphEvo.Attachment.v1` and one versioned content value over the unchanged
-native model. Validate the complete envelope, identity, same-graph exclusive
+`GraphEvo.Attachment.v1` over the unchanged native model. C03a experiments with
+separate `attachmentMetadata` and `content` values; retain dual reads and preserve
+legacy envelopes on replacement, with no implicit conversion/downgrade claim.
+Metadata-only listing does not certify content availability/integrity; full reads
+and native sharing checks must still validate both values. Validate identity, same-graph exclusive
 owner, byte count and digest; no owner transfer or attachment-owned attachment.
 Prepare security-scoped coordinated I/O outside write scopes. Participant
 imports use A5 assignment/journal recovery; replacement edits the existing
-property under permission/revision checks. Do not replay partial native import.
+values under permission/revision checks. Do not replay partial native import.
 Owner deletion must include files on implicitly deleted edges, with dependency
 and permission checks before edits. Preserve rollback and surviving actions.
 Use whole-directory backups from a quiescent closed source for external content;
@@ -477,8 +522,13 @@ Read the [A7 contract](docs/design/graphevo-2-queries.md) before changing query
 execution. Descriptors require explicit candidate allowance; current encoded
 properties use bounded native inventory plus memory evaluation, never a silent
 fallback. Candidate allowance includes all local native node rows in the resource
-group; only scoped application records enter evaluation. Charge payload before
-typed envelope decoding and reject limits without partial output. This is not
+group; only scoped application records enter evaluation. Charge consulted payload before
+typed envelope decoding and reject limits without partial output. The M03
+experiment retains full node identity/membership/endpoint/format-list inventory
+but selects descriptor-referenced properties for non-returned types and
+non-record operations. Collect nested related predicates, sort/projection and
+aggregate keys; full model-type results retain all fields. Do not certify
+skipped payloads or evade a budget on an explicitly requested body. This is not
 a total memory/time or SQL-I/O bound. Preserve AND composition, literal strings,
 missing/null distinction, exact numeric cases and UUID ordering tie-breaks.
 Cursors bind graph/descriptor, are current-state values and never certify a
@@ -526,3 +576,283 @@ costs and synthetic desktop results from supported production envelopes. CI
 runs a functional smoke only, with no timing pass threshold. Candidate metadata/
 binary changes retain accepted file identity/ownership and require migration,
 whole-content backup and actual native sharing validation before selection.
+
+## C02a experimental metadata lookup
+
+The [C02a contract](docs/design/graphevo-2-metadata-experiment.md) describes the
+preferred B variant on the experiment branch. Metadata rows are Session/context
+confined, fetched only for reserved keys, with lazy value access and explicit
+native-store routing. Temporary/new owners and tiny persisted inventories use
+the original facade lookup; include pending edits on persisted owners. Never
+retain the native row index across scopes, cache decoded user values globally,
+obtain permanent IDs or save as a lookup side effect. Preserve full inventory,
+membership/identity/format checks, typed errors and query allowances. C02a is
+not complete selective lookup, file-content separation or a shared-observer
+engine. Retain A's insertion regression and B's observer-memory trade-off in
+comparisons; read-only device evidence is not new native-assignment coverage.
+
+
+## Cost matrix binary envelope experiment
+
+M02 encodes top-level GraphValue.data with a distinct binary magic, version and
+big-endian declared byte length. Keep legacy JSON decoding and nested/opaque
+payload semantics; reject unsupported versions and truncated/extended bodies.
+No alpha downgrade support or automatic rewrite is implied. See the
+[matrix](docs/design/graphevo-2-experiment-matrix.md). Native synchronization,
+full content checksum checks and mandatory v1 migration remain binding.
+
+M03b also filters requested native property rows before reading their values,
+using Session-confined explicit-store batches with pending changes. Complete
+model-type records still use complete snapshots. Keep native transformer-error
+capture active across property fetch/value access and evaluation; a requested
+legacy decoder failure must not silently become an absent value. The unique
+native-transformer probe must distinguish skipped-body reads from requested
+failures. No row index may survive its query/scope.
+
+For database Sessions, route native owners by graphID before fetching any
+per-graph ID/format/staging metadata. Do not rely on deferred native transformer
+execution: older Core Data can transform fetched values eagerly. Preserve the
+full native candidate count while excluding foreign per-graph payload rows.
+
+
+## C02b local native identity laboratory
+
+The [C02b contract](docs/design/graphevo-2-native-identity-experiment.md) defines a
+package-only model/opener experiment. Never select it from default public opens,
+automatically migrate an incompatible file or activate a partial backfill. It
+uses normal runtime ownership/scopes but validates point targets/references;
+full graph integrity is explicit and separately timed. Missing columns/old
+writers/cloud imports remain integration gates, not proof of node absence.
+Protect the closed source directory and migrate only an owned disposable copy
+to a new destination. Native UUIDs come from archived logical IDs, never local
+URIs or CloudKit mappings. No uniqueness constraint or cloud acceptance is
+inferred from configured local indexes. Retain action fan-out costs and failures.
+
+
+C02b endpoint checks batch up to 128 UUIDs across all node kinds and only selected
+identity/staging property rows. Topology prefetch must not fetch property sets or
+endpoint payload bodies. Changed owners use facade reads for their pending local
+view; retain staged, missing, duplicate and raw-mismatched endpoint regressions.
+The internal executable adds a package scheme: use `GraphEvo-Package` for Xcode
+package tests. Keep its `@main` source out of a file named `main.swift` for Xcode
+16 compatibility.
+
+
+## C04a shared observation laboratory
+
+The [C04a contract](docs/design/graphevo-2-shared-observation-experiment.md) keeps
+public observe/publisher behavior unchanged. Group only exact validated query
+shapes/budgets and concrete model types within one explicit laboratory/handle.
+Share immutable query records, not application model construction. Late joins
+require a new read; no replay cache or cross-handle lease is permitted. Keep broad
+relationship/action/file/native invalidation. The last cancellation must retire
+worker and native source atomically against new joins; finish/delivery and value
+destruction occur outside locks. Account changes supersede in-flight reads.
+Injected sources/checkpoints are deterministic local tests, not CloudKit proof.
+Keep baseline/sample counts, startup overhead and mixed-query outcomes even if
+they regress. Default schemas, observer APIs and query budgets are not changed.
+
+
+## C04 public observation consolidation
+
+The first adoption branch routes public observe/publisher through one lazy
+GraphStore-owned coordinator; the [adoption contract](docs/design/graphevo-2-observation.md#c04-consolidation-adoption)
+settles shared view identity and join/refresh semantics. Keep idle graph/source
+references weak to avoid a handle cycle. Exact query/model/limit/budgets share
+native detached records; model decoding and delivery remain subscriber-owned.
+The package-only independent A8 path is retained solely as a cost control, and
+shared measurements must exercise public observe. Do not claim public startup,
+heavy-decoder or physical native acceptance from C04a local timing alone. Schema,
+migration and integration-line promotion remain separate reviewed work.
+
+
+## Identity-guarded query materialization
+
+Leading finite ID guards may skip same-model property rows/bodies, while complete
+bounded native identity/membership/endpoint/format inventory remains. Preserve
+Boolean order: do not use a later ID to hide an earlier property error. Related
+predicates and traversal disable this optimization. Keep complete fields for all
+potentially eligible model records and unchanged candidate/step/structural charges.
+Empty-key owners must be excluded before native property fetching; retain the
+same-model native transformer poison probe. See the [query contract](docs/design/graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
+No schema/native identity activation, SQL predicate capability, total-memory bound
+or certification of skipped bodies is implied.
+
+
+## Native identity integration readiness
+
+Read the [integration contract](docs/design/graphevo-2-native-identity-integration.md).
+The package-only native lookup now audits complete same-view identity metadata
+before returning nil. Missing/misrouted projections are errors; valid staged
+rows block the audit with pendingNativeOperation. Do not decode unrelated bodies,
+repair identities or cache an audit across scopes. Found targets remain targeted;
+full integrity is explicit and separate. Retain the extra negative-lookup cost.
+All-writer projection maintenance, protected-source conversion/recovery and native
+private/shared adoption remain gates; default schemas/openers are unchanged.
+
+
+## Common native identity writers
+
+GraphNativeIdentityColumns is an optional-model helper: default models have no
+columns and retain existing behavior. New application/control rows use common
+stamping before membership/assignment. Persisted projections are validated,
+never silently filled; explicit conversion owns backfill. Reject partial/mixed
+column definitions before shared intent reservation. Common mutation admission
+and shared finalization preserve native projection checks and pending intent.
+The package-only `openLab(fullAdapter: true)` tests ordinary local APIs without
+the old prototype's mutation workaround. It is not a public schema opener or
+physical native-column sharing proof. See the [writer contract](docs/design/graphevo-2-native-identity-integration.md#common-writer-projection-maintenance).
+
+
+## Fresh alpha stores (M13)
+
+Incompatible alpha layouts start from empty stores. Do not build alpha-to-alpha
+conversion, downgrade or interrupted alpha-conversion recovery as an adoption
+gate. This supersedes earlier alpha-conversion follow-ups above. Next native
+layout work targets fresh local and controlled mirrored store initialization.
+Do not automatically erase incompatible existing files or cloud data. Mandatory
+v1-to-v2 migration and beta data compatibility remain distinct requirements.
+See the delivery plan and native identity integration contract.
+
+
+## Explicit fresh native local schema
+
+GraphDatabaseSchema.nativeIdentity selects the public fresh local alpha layout;
+no-schema/current opens keep the previous model; explicit mirrored selection
+uses the public native overloads described below.
+Use the shared GraphNativeIdentityAccess resolver, with distinct public/prototype
+activation markers. Public graph activation requires new empty controls; never
+call historical backfill/copy helpers from ordinary native opens. Snapshots check
+consulted native projections; allowUnprojectedRows is only for explicit historical
+backfill. Queries retain full bounded inventory and existing property policies.
+validateIntegrity(of:) is explicit full storage/payload validation, not app-domain
+validation or a CloudKit certificate. Fresh paired/native physical acceptance and
+v1 migration remain separate. See the fresh local native schema contract.
+
+
+## Fresh native paired laboratory
+
+GraphNativeIdentityPairedLaboratory is internal physical-test infrastructure.
+Its compatibility wrapper now delegates to public schema overloads. Mirrored
+admission permits exactly one private resource or a private/shared pair matching
+runtime URLs. Local/prototype adapters remain local-only; no-schema mirrored
+opens retain the current model. Use the
+[one-use host](Experiments/NativeIdentityPairedProbe/README.md) with new controlled
+fixtures and protected run-bound transports. Offline container tests have no
+cloud options and prove no assignment/import. Do not replay mutations, reset
+clouds implicitly, backfill imported projections or treat a reset confirmation
+as proof that another old writer cannot run later. Controlled native paired and
+attachment acceptance is recorded below; public mirrored adoption is separate.
+
+
+The [controlled device result](docs/design/results/native-identity-paired-devices-2026-10-29.md)
+now records native A5 sharing/recovery/lifecycle and separate A6 file acceptance
+on iPad/XR; it supersedes the initial connectivity block for that bounded scope.
+Retain the first Cocoa merge-conflict recovery failure and later successful
+explicit recovery of its original ledger without reassignment. The host's
+recover-after-conflict ticket is explicit journal recovery, not permission to
+replay patchShared or arbitrary transaction bodies. Public mirrored adoption,
+broader crash/conflict/account/scale coverage and v1 migration remain separate.
+
+
+## Public native mirrored schema
+
+Both openMirrored overload shapes accept explicit GraphDatabaseSchema selection.
+The native factory requires standard model version identifier
+GraphEvo.v2.schema.1 in every existing resource before native loading;
+matching entity hashes alone must not activate unversioned prototype data.
+New local/mirrored native files get the identifier from their fresh model factory.
+Do not manually stamp old files, use another native coordinator, convert or erase
+as an opening side effect. No-schema/current opens retain their prior model.
+The root alpha.1 logical protocol is retained. S01 adds nullable ge2DataVersion;
+the physical-model gate is not application-format admission or import completion.
+Ordinary unversioned writes leave ge2DataVersion nil. Do not derive it from the
+legacy per-property appDataVersion or advertise a working migration gate before
+the consumer data manager implements it. Reject mixed/malformed node shapes.
+validateIntegrity(of:) supports both legitimate mirrored topologies but remains
+a current-local full payload check. Use the public consumer host to distinguish
+published API evidence from historical @testable laboratory coverage.
+
+Public mirrored host launches use a fresh `--launch-ticket` receipt bound to
+CoreDevice PID and scene activation. Launch success or a termination signal is
+not proof that new CLI arguments reached the app. A receipt is not a native
+stage/export certificate; never replay reserved writes to recover missing host
+acknowledgements. Invitation trace instrumentation belongs only in the external
+copy made by `Experiments/PublicMirroredProbe/prepare_invite_triage.py`, never
+the shipping library. The maintainer authorized continuing after the launcher
+fix while waiting for the historical anomalies to recur; retain them as open
+incidents without claiming established causes.
+
+
+## V2 containing app and extension access
+
+Read `docs/design/graphevo-2-app-extension-access.md`. The containing app owns
+CloudKit synchronization. The v2 runtime rejects mirrored configuration from
+an extension bundle before native model/loading and gateway claims. `openReadOnly` uses
+ordinary native read-only containers for existing single/paired files; missing
+resources, mutations and extension mirroring have public typed errors. Never
+create a store in a widget as a fallback, start a second cloud synchronizer,
+relax same-process ownership, or retain a lifetime file lock across suspension.
+The role check is not a universal process lock or third-party-writer detector.
+Local extension writes and iOS App Group/suspension/account policy remain gates;
+macOS independent-process observation evidence is not physical-widget coverage.
+Keep the library independent of WidgetKit and refresh queries after resume.
+
+
+## Actual WidgetKit laboratory
+
+`Experiments/WidgetAccessProbe` prepares a disposable configured demo with a real
+embedded WidgetKit extension and App Group, using only public Graph APIs.
+Keep account-specific project/signing changes and original demo edits out of
+tracked source. The app owns the native mirrored pair; the widget opens existing
+resources read-only and closes every lease per invocation. Its manifest has IDs
+and mode, never the counter value used as query evidence. Preview data is not a
+provider read. Retain exact run/value, PID, public refusal and separate liveness/
+render evidence; never replay reserved writes to refresh a widget. Keep reports
+under App Group Library/Application Support so native device transport can read
+them. Simulator tests require ad-hoc signing for real group mapping. The actual
+hardware baseline is scoped in `docs/design/results/widget-app-group-2026-10-29.md`;
+iOS 18 real-widget, lifecycle/account/protected-data and interactive writes remain
+open. Do not infer cloud export/recovery from a local widget or publish personal
+Home Screen images or generated stores/logs.
+
+
+## Native schema migration laboratory
+
+`Experiments/SchemaMigrationProbe` and internal GraphSchemaMigrationLaboratory
+exercise explicit owned synthetic v1/native/versioned models. Never select this
+loader from public opens, stamp alpha activation or mistake physical schema
+migration for full v1 identity/catalog/value conversion. Generic Core Data writes
+inside native staged handlers are confined to this framework experiment; normal
+operations use Node facades. Native schema migration is internal library work;
+consumer migrations target application data. Keep the optional node version
+experimental and distinguish it from existing property-row appDataVersion.
+Use distinct transport/report filenames, one-use assignment intents and exact
+launch process/ticket binding. Missing mappings never authorize reassignment.
+Retain initial harness failures, source copies and independent replica evidence.
+A thrown pre-handler may already have saved; do not blindly replay it. Read
+`docs/design/results/schema-migration-2026-10-30.md` for accepted scope and open
+historical-store, concurrency, interruption and Production gates.
+
+
+## V2 migration journal foundation
+
+Read [the manager contract](docs/design/graphevo-2-migration-manager.md) before
+migration-manager work. M1 is package-only bookkeeping, with no public executor
+or runtime/import admission. Consumers define application-data migrations; native
+schema routes are internal GraphEvo work. Never treat a journal marker, KVS flag
+or missing destination marker as a distributed fence or proof of no effect.
+Preserve source/backup ownership, pending intents and separate validation/activation.
+
+## M2a local data migration laboratory
+
+Read [M2a](docs/design/graphevo-2-data-migration-local.md) before changing the
+package-only manager or adapter. Keep the laboratory model identifier separate
+from public S01; no normal read/write/query path has public format admission yet.
+Consumer transformations are pure detached-value callbacks. Publish values,
+native version and effect marker atomically under the runtime writer boundary;
+recheck the full selected preimage and verify actual target state on recovery.
+Missing markers alone do not prove no effect. Never replay the consumer closure
+for a retained prepared artifact or mistake journal completion for public-store
+activation. Cloud/native imports, ordinary app/widget admission and production
+backup/retention are outside this laboratory's accepted scope.

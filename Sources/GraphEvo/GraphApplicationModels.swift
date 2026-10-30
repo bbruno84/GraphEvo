@@ -13,3 +13,5 @@ public typealias GraphPropertyChange = GraphEvoModel.GraphPropertyChange
 public typealias GraphRecordPatch = GraphEvoModel.GraphRecordPatch
 public typealias GraphModel = GraphEvoModel.GraphModel
 public typealias GraphModelError = GraphEvoModel.GraphModelError
+public typealias GraphDataFormat = GraphEvoModel.GraphDataFormat
+public typealias GraphDataFormatError = GraphEvoModel.GraphDataFormatError

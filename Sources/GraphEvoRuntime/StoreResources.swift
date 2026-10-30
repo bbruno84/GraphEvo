@@ -5,6 +5,7 @@ import os
 
 /// Test seams for native lifecycle boundaries, never exposed by the Graph API.
 struct StoreLifecycleHooks: Sendable {
+    var processRole: StoreProcessRole?
     var beforeLoad: (@Sendable () async throws -> Void)?
     var didReserveHandle: (@Sendable () async -> Void)?
     var afterCommit: (@Sendable () -> Void)?
@@ -44,16 +45,18 @@ actor StoreResources {
         hooks: StoreLifecycleHooks,
         owner: UUID
     ) async throws -> StoreResources {
+        try (hooks.processRole ?? StoreProcessRole.current).validate(resolved.configuration)
         let members = try resolved.resources
         let gateways = try members.map { try StoreGatewayLease.acquire($0.configuration, owner: owner) }
         try await hooks.beforeLoad?()
         let model = schema.makeModel()
         guard !schema.identifier.isEmpty, !schema.entityVersionHashes.isEmpty,
-              model.entityVersionHashesByName == schema.entityVersionHashes else {
+              model.entityVersionHashesByName == schema.entityVersionHashes,
+              schema.requiredModelVersionIdentifier.map({ model.versionIdentifiers == [AnyHashable($0)] }) ?? true else {
             throw StoreRuntimeError.invalidModel(schema.identifier)
         }
         let descriptions = try members.enumerated().map { index, member in
-            let description = try storeDescription(member, model: model)
+            let description = try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier)
             if let identifier = resolved.configuration.cloudKitContainerIdentifier {
                 guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       resolved.url != nil, resolved.configuration.access == .readWrite else {
@@ -85,7 +88,8 @@ actor StoreResources {
         return resources
     }
 
-    private static func storeDescription(_ resolved: ResolvedStore, model: NSManagedObjectModel) throws -> NSPersistentStoreDescription {
+    private static func storeDescription(_ resolved: ResolvedStore, model: NSManagedObjectModel,
+                                         requiredModelVersionIdentifier: String?) throws -> NSPersistentStoreDescription {
         let description: NSPersistentStoreDescription
         switch resolved.configuration.location {
         case .sqlite(let url):
@@ -93,11 +97,12 @@ actor StoreResources {
                 let metadata: [String: Any]
                 do { metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url) }
                 catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
-                guard model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else {
+                guard model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata),
+                      requiredModelVersionIdentifier.map({ metadata[NSStoreModelVersionIdentifiersKey] as? [String] == [$0] }) ?? true else {
                     throw StoreRuntimeError.incompatibleStore(url)
                 }
             } else if resolved.configuration.access == .readOnly {
-                throw StoreRuntimeError.invalidConfiguration("A read-only SQLite store must already exist.")
+                throw StoreRuntimeError.missingStore(url)
             }
             do { try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true) }
             catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
@@ -175,9 +180,14 @@ actor StoreResources {
         defer { finish() }
         let cancellation = OperationCancellation()
         let sqlite = resolved.url != nil
+        let memoryRequest = sqlite ? nil : UUID()
         let configuration = resolved.configuration, container = container
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
+            // In-memory stores cannot pin a query generation. Keep their whole
+            // multi-fetch read coherent with admitted local writers instead.
+            if let memoryRequest { try await acquireWriter(memoryRequest, cancellation: cancellation) }
+            defer { if memoryRequest != nil { releaseWriter() } }
             return try await container.performBackgroundTask { @Sendable context in
                 Self.prepare(context, configuration: configuration, container: container)
                 let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
@@ -190,7 +200,10 @@ actor StoreResources {
                 try cancellation.check()
                 return value
             }
-        } onCancel: { cancellation.cancel() }
+        } onCancel: {
+            cancellation.cancel()
+            if let memoryRequest { Task { await self.cancelWriter(memoryRequest) } }
+        }
     }
 
     /// FIFO among admitted local writers; native save is the cancellation boundary.

@@ -10,6 +10,12 @@ its merge commit. The original stack has been reconciled without rewriting histo
 
 ## Descriptor and execution contract
 
+The subsequent [S01 schema review](graphevo-2-persistent-schema.md) retains this
+bounded execution strategy and selective property materialization, with native
+graph/node identity indexes for point lookup. It selects no scalar-query table
+or per-property native columns. Production query envelopes remain PA06 work;
+the schema decision does not turn this engine into indexed SQL value queries.
+
 ```swift
 let budget = try GraphQueryBudget(maximumCandidates: 2_000)
 let query = GraphQuery<Person>(budget: budget)
@@ -64,11 +70,15 @@ A budget is therefore not a result count or a promise of graph-selective I/O.
 Before decoding typed property envelopes, the implementation charges user keys,
 raw Data lengths, UTF-8 strings/type/unique tag-group names, and a small structural
 allowance for legacy values/containers. Diagnostics expose propertyBytesCharged,
-not physical store size or exact allocated bytes. All selected-graph records are
-currently snapshotted, including nonmatching model types and attachment content.
-This is visible work, bounded by the supplied allowance, rather than an implicit
-optimization. Attachment storage/ownership remains unchanged; representation
-costs will be assessed at the agreed end-of-alpha review.
+not physical store size or exact allocated bytes. On the matrix experiment branch,
+M03 retains full identity/membership/endpoint inventory but materializes only
+query-referenced property keys on non-returned model types and non-record
+operations. References include nested related predicates, sort, projection and
+aggregate keys. All properties remain materialized for the requested model
+type/kind when returning complete records. Skipped payloads are not validated or
+certified by an unrelated query. Explicit file-body references still load/charge
+that value; complete file reads and sharing integrity keep full validation.
+Budgets remain unchanged. See the [matrix](graphevo-2-experiment-matrix.md).
 
 Steps bound predicate visits, relationship/action inspections, endpoint visits,
 ordering and aggregation work. They are logical work units, not CPU instructions
@@ -142,3 +152,66 @@ A8 will reuse these descriptors for observation with explicit dependency
 invalidation and slow-consumer/cancellation semantics; this increment adds no
 watcher or processing-replay promise. V1 data migration remains mandatory, with
 query AND/string/null/numeric differences recorded for application adaptation.
+
+
+M03b filters native property rows by the complete dependency set before reading
+values, in explicit-store batches including pending changes. The lookup remains
+query/context scoped, uses no persistent cache, and preserves complete model
+snapshots. Transformer-error capture surrounds lookup and execution so requested
+malformed legacy values cannot become silently absent. This reduces native body
+faults as well as value-codec work; it is still not a hard memory/I/O bound or
+native indexed identity/query engine.
+
+
+The older-runtime CI probe also requires graph-ID-only routing before any
+per-graph metadata batch. Fetching foreign format/staging rows and merely
+accessing their values lazily is insufficient: native transformation can be
+eager. The corrected reader fetches per-graph metadata only for routed owners,
+retaining the full native candidate inventory and all selected-graph checks.
+
+
+## C02 consolidation: identity-guarded materialization
+
+The first selective-materialization increment retains the current native schema
+and the complete bounded node/identity/membership/endpoint/format-list inventory.
+It avoids fetching property rows or decoding property bodies for same-model nodes
+that a leading finite identity guard rejects. Candidate/scoped-node diagnostics,
+structural validation, cancellation and evaluation steps retain their scope;
+`explain()` still reports `boundedInventoryAndMemory`. This is not indexed native
+row selection or a native COUNT/projection implementation.
+
+An ID predicate, `none`, or an OR whose every branch has a finite identity guard
+can establish a bound. An AND may reach such a guard only through earlier
+property-free conditions, including the query builder's initial `all`. Boolean
+order is preserved: `id(a) && property(...)` can skip other IDs, while
+`property(...) && id(a)` stays conservative so an earlier comparison/decoder
+error cannot disappear. An unbounded OR or NOT does not itself establish a finite
+bound. Related predicates anywhere in the descriptor and traversal disable this
+optimization: excluded top-level IDs can still supply related property values.
+
+All potentially eligible IDs retain the previous field policy: complete records
+load every application property, and count/projection/aggregate operations load
+all descriptor-referenced keys. Limits and cursors do not prune that set before
+validation; matching models remain complete. Nonselected same-model property
+bodies are neither charged nor certified, just as unrelated-type bodies are not
+certified by M03b. Structural/type/tag/group charges and the full resource-group
+candidate allowance remain. A query for a missing ID still validates inventory;
+this does not adopt C02b's unresolved missing-column absence semantics.
+
+Native property-row batches exclude owners with an empty selected-key set before
+fetching transformable values. Keep decoder-error capture around inventory,
+property fetching/access and evaluation: older Core Data may transform fetched
+values eagerly. Regression probes must demonstrate zero transformation of an
+excluded same-model poison body and failure when that body is requested.
+
+Native logical identity columns remain a separate integration candidate. Before
+selecting them publicly, settle missing columns, old writers, imported partial
+rows, private/shared conversion and mandatory v1 migration. This increment does
+not change store opening, migrations, share assignment or attachment ownership.
+
+
+The [retained public comparison](results/identity-guarded-queries-2026-10-29.md)
+records 501 tests, 44 selected sanitizer tests and 72 matched Release rows.
+On the 500-node scalar fixture, 32 shared-query startup falls from 4.74 to 2.55 s;
+32 mixed updates remain about 2.50 s despite improvement. These are local
+measurements, not physical/native acceptance or a product performance envelope.

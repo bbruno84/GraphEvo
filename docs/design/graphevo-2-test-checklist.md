@@ -103,7 +103,7 @@ and does not yet replace the legacy public Graph facade. The [A2 contract](graph
 | V03.6 | Close/reopen/invalidation while tasks are pending; main-thread responsiveness | Partial: [A1](graphevo-2-store-runtime.md) drains admitted native reads, orders reopen after final detach, releases deallocated handles and retains failed-shutdown ownership. Earlier [V03 follow-up](results/v03-cancellation-process-2026-10-26.md) covers a probe save; [A2](graphevo-2-async-transactions.md) additionally drains active and queued admitted writes during a cancelled close. Broader stress/responsiveness pending |
 | V03.7 | Native sharing invocation timing versus callback completion; evaluate off-main context ownership | Partial: [T6](results/v01-t6-ipad-diagnosis-2026-10-24.md) proves synchronous work despite callbacks; off-main design not run |
 | V03.8 | Concurrent remote import and local edits with explicit merge policy | Partial: [V09](results/v09-shared-graph-files-2026-10-26.md) coordinated disjoint edits at a common future start on two accounts; both independently recovered the combined graph. Remote import/save overlap and same-object conflict policy remain unverified |
-| V03.9 | App/extension access to one App Group store across processes | Partial local control: [two macOS processes](results/v03-cancellation-process-2026-10-26.md) exposed duplicate insertion and Core Data merge error 133020 without distributed ownership. Physical iOS App Group/extension test remains unrun |
+| V03.9 | App/extension access to one App Group store across processes | Partial local control: [two macOS processes](results/v03-cancellation-process-2026-10-26.md) exposed duplicate insertion and Core Data merge error 133020 without distributed ownership. Actual signed read-only WidgetKit/App Group baseline now passes on iPadOS 27.0 and iOS 27.2: [hardware result](results/widget-app-group-2026-10-29.md). iOS 18 widget execution, interactive writes and broader lifecycle/account cases remain open |
 
 ## V04 — typed application models
 
@@ -245,3 +245,13 @@ V05/V06/V07 cost evidence with explicit scalar-query budget refusals, file/list
 costs, fresh-process identity reads and one/eight-observer cycles. It does not
 establish physical-device, CloudKit, real-data or supported production limits.
 No semantic test, query allowance or existing schema was relaxed for a timing.
+
+## C02a — reserved metadata experiment
+
+[Baseline/A/B results](results/c02a-metadata-costs-2026-10-27.md) retain 596
+local Release measurements, 469 regression tests and 19 targeted TSan tests.
+B retains batched persisted metadata with per-store routing and pending-owner
+fallback, without removing integrity or budget checks. Read-only checks on the
+retained iPad/XR stores pass, including B's exact file control/isolation. This
+does not certify fresh import/new shared assignment, schema selection or the
+remaining C02–C04/production envelopes; the increased observer memory is retained.

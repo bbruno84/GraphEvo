@@ -43,27 +43,54 @@ package enum GraphTypedStoreAdapter {
             insert: { context, graphID, record in try Session(context, graphID, database: database).insert(record) },
             patch: { context, graphID, patch in try Session(context, graphID, database: database).patch(patch) },
             delete: { context, graphID, id in try Session(context, graphID, database: database).delete(id) },
+            attachmentMetadata: { context, graphID in
+                let session = try Session(context, graphID, database: database)
+                return try session.nodes.compactMap { id, node -> GraphAttachmentMetadata? in
+                    guard node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType else { return nil }
+                    guard session.kind(node) == .entity else { throw GraphAttachmentError.notAnAttachment }
+                    // A metadata projection must not decode the body or unrelated application values.
+                    let formats = try session.encodedKeys(node)
+                    let key = formats.contains(GraphAttachmentPayload.metadataKey) ? GraphAttachmentPayload.metadataKey : GraphAttachmentPayload.contentKey
+                    guard formats.contains(key), let bytes = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
+                    let record = try GraphRecord(id: id, type: node.type, properties: [key: GraphValueCodec.decode(bytes)])
+                    return try GraphAttachmentPayload.metadata(from: record)
+                }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
+            },
             query: { context, graphID, request in
-                let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
-                try checkCancellation()
-                try GraphQueryValidation.request(request, graphID: graphID)
-                let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
-                var remaining = request.budget.maximumPropertyBytes
-                var records: [GraphRecord] = []
-                for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+                try GraphValueDecodingDiagnostics.checking {
+                    let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
                     try checkCancellation()
-                    guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
-                    records.append(try session.snapshot(node, id: id) { raw in
-                        try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
-                        for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
-                        for (key, value) in raw.properties where !key.hasPrefix(prefix) {
-                            try GraphQueryStoredCost.charge(key.utf8.count, remaining: &remaining)
-                            try GraphQueryStoredCost.charge(value, remaining: &remaining)
-                        }
-                    })
+                    try GraphQueryValidation.request(request, graphID: graphID)
+                    let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
+                    for node in session.nodes.values {
+                        try checkCancellation()
+                        guard node.type == request.definition.type, session.kind(node) == request.definition.kind else { continue }
+                        let version = GraphDataFormatAdmission.version(of: node)
+                        guard request.definition.dataFormat.canRead(version) else { throw GraphDataFormatError.unreadableVersion(version) }
+                    }
+                    let propertyPlan = GraphQueryPropertyPlan(request)
+                    let partial = session.nodes.compactMap { id, node -> Node? in
+                        guard let keys = propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), !keys.isEmpty else { return nil }
+                        return node
+                    }
+                    let propertyRows = try GraphRuntimeMetadata(nodes: partial, keys: propertyPlan.referencedKeys, context: context, minimumPersistedOwners: 0)
+                    var remaining = request.budget.maximumPropertyBytes
+                    var records: [GraphRecord] = []
+                    for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+                        try checkCancellation()
+                        guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
+                        records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), propertyRows: propertyRows) { raw in
+                            try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
+                            for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
+                            for (key, value) in raw.properties where !key.hasPrefix(prefix) {
+                                try GraphQueryStoredCost.charge(key.utf8.count, remaining: &remaining)
+                                try GraphQueryStoredCost.charge(value, remaining: &remaining)
+                            }
+                        })
+                    }
+                    return try GraphQueryEvaluation(request: request, graphID: graphID, records: records, checkCancellation: checkCancellation)
+                        .execute(nativeCandidates: session.nativeCandidateCount, propertyBytesCharged: request.budget.maximumPropertyBytes - remaining)
                 }
-                return try GraphQueryEvaluation(request: request, graphID: graphID, records: records, checkCancellation: checkCancellation)
-                    .execute(nativeCandidates: session.nativeCandidateCount, propertyBytesCharged: request.budget.maximumPropertyBytes - remaining)
             }
         )
     }
@@ -118,12 +145,15 @@ package enum GraphTypedStoreAdapter {
 
     private static func createGraph(_ context: NSManagedObjectContext, id: GraphID) throws {
         guard !(try catalog(context)).contains(id) else { throw GraphStoreError.duplicateIdentity }
+        try GraphNativeIdentityColumns.validateModel(in: context)
         let graph = facade(context)
         let root = Entity(rootType, graph: graph)
         root[dynamicMember: graphKey] = id.rawValue.uuidString
         root[dynamicMember: layoutKey] = databaseVersion
+        try GraphNativeIdentityColumns.stamp(root, graphID: id, nodeID: nil)
         let membership = Action(membersType, graph: graph)
         membership[dynamicMember: graphKey] = id.rawValue.uuidString
+        try GraphNativeIdentityColumns.stamp(membership, graphID: id, nodeID: nil)
         membership.add(subjects: root)
         if let store = StoreNativeContext.privateStore(in: context) {
             try root.runtimeAssignOwnedObjects(to: store, in: context)
@@ -144,6 +174,8 @@ package enum GraphTypedStoreAdapter {
         _ = try MigrationBackupManager.backupStore(at: url, migrationID: "GraphEvo2-A3-to-A4", rootOverride: backupRoot)
         let membership = Action(membersType, graph: graph)
         membership[dynamicMember: graphKey] = text
+        try GraphNativeIdentityColumns.stamp(membership, graphID: id, nodeID: nil)
+        try GraphNativeIdentityColumns.stamp(root, graphID: id, nodeID: nil)
         membership.add(subjects: root)
         for node in session.nodes.values {
             if let entity = node as? Entity { membership.add(objects: entity) }
@@ -227,18 +259,20 @@ package enum GraphTypedStoreAdapter {
                     migrationID: "GraphEvo2-LocalIdentity-A3", conflictPolicy: .duplicate, rootOverride: backupRoot).folderURL
             }
             for (node, nodeID, oldID) in identities {
-                stamp(node, id: nodeID)
+                try stamp(node, id: nodeID)
                 node[dynamicMember: legacyKey] = oldID
                 node[dynamicMember: formatsKey] = [String]()
             }
             let root = Entity(rootType, graph: graph)
             root[dynamicMember: graphKey] = id.rawValue.uuidString
             root[dynamicMember: layoutKey] = layoutVersion
+            try GraphNativeIdentityColumns.stamp(root, graphID: id, nodeID: nil)
             return GraphV1AdoptionReport(graphID: id, nodeIDs: mapping, backupURL: backupURL)
         }
     }
 
-    static func stamp(_ node: Node, id: GraphNodeID) {
+    static func stamp(_ node: Node, id: GraphNodeID) throws {
+        try GraphNativeIdentityColumns.stamp(node, graphID: id.graphID, nodeID: id.rawValue)
         node[dynamicMember: idKey] = id.rawValue.uuidString
         node[dynamicMember: graphKey] = id.graphID.rawValue.uuidString
     }
@@ -250,32 +284,46 @@ package enum GraphTypedStoreAdapter {
         var nodes: [GraphNodeID: Node] = [:]
         let database: Bool
         private(set) var nativeCandidateCount = 0
+        private(set) var stagedNodeIDs = Set<GraphNodeID>()
         var root: Entity?
         var membership: Action?
+        private var metadata: GraphRuntimeMetadata?
+        private let allowUnprojectedRows: Bool
 
-        init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false, maximumCandidates: Int? = nil) throws {
+        init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false, maximumCandidates: Int? = nil,
+             allowUnprojectedRows: Bool = false) throws {
+            try GraphDataFormatAdmission.requireUndeclared(in: context)
             graph = facade(context)
             self.context = context
             self.graphID = graphID
             self.database = database
+            self.allowUnprojectedRows = allowUnprojectedRows
             try GraphValueDecodingDiagnostics.checking {
                 let all = try maximumCandidates.map { try boundedNodes(graph, limit: $0) } ?? allNodes(graph)
                 nativeCandidateCount = all.count
-                let roots = all.filter { $0.runtimeTypeIfPresent == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
+                // Route by graph ID before fetching per-graph metadata. Older Core Data versions
+                // can eagerly transform fetched values even when application access is deferred.
+                let scoped: [Node]
+                if database {
+                    let routing = try GraphRuntimeMetadata(nodes: all, keys: [graphKey], context: context)
+                    scoped = all.filter { routing.value(for: $0, key: graphKey) as? String == graphID.rawValue.uuidString }
+                } else { scoped = all }
+                metadata = try GraphRuntimeMetadata(nodes: scoped, keys: [graphKey, idKey, formatsKey, layoutKey, stageKey], context: context)
+                let roots = scoped.filter { $0.runtimeTypeIfPresent == rootType && (!database || $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString) }
                 guard roots.count == 1, let selected = roots[0] as? Entity,
-                      selected[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
-                      selected[dynamicMember: layoutKey] as? String == (database ? databaseVersion : layoutVersion) else { throw GraphStoreError.corruptIdentity }
+                      metadataValue(selected, graphKey) as? String == graphID.rawValue.uuidString,
+                      metadataValue(selected, layoutKey) as? String == (database ? databaseVersion : layoutVersion) else { throw GraphStoreError.corruptIdentity }
                 root = selected
                 if database {
-                    let candidates = all.filter { $0.type == membersType && $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString }
+                    let candidates = scoped.filter { $0.type == membersType && $0[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString }
                     guard candidates.count == 1, let action = candidates[0] as? Action else { throw GraphStoreError.corruptIdentity }
                     membership = action
                 }
-                for node in all where node.runtimeTypeIfPresent != rootType && (!database || node.runtimeTypeIfPresent != membersType) {
-                    if database, node[dynamicMember: graphKey] as? String != graphID.rawValue.uuidString { continue }
-                    if database, let staged = node[dynamicMember: stageKey] {
+                for node in scoped where node.runtimeTypeIfPresent != rootType && (!database || node.runtimeTypeIfPresent != membersType) {
+                    if database, metadataValue(node, graphKey) as? String != graphID.rawValue.uuidString { continue }
+                    if database, let staged = metadataValue(node, stageKey) {
                         guard node.runtimeTypeIfPresent != nil, let text = staged as? String, UUID(uuidString: text) != nil,
-                              let nodeID = node[dynamicMember: idKey] as? String, UUID(uuidString: nodeID) != nil else {
+                              let nodeID = metadataValue(node, idKey) as? String, let stagedUUID = UUID(uuidString: nodeID) else {
                             throw GraphStoreError.corruptIdentity
                         }
                         _ = try encodedKeys(node)
@@ -289,11 +337,12 @@ package enum GraphTypedStoreAdapter {
                         if let edge = node as? Relationship, edge.subject != nil || edge.object != nil {
                             throw GraphStoreError.corruptIdentity
                         }
+                        stagedNodeIDs.insert(GraphNodeID(graphID: graphID, rawValue: stagedUUID))
                         continue
                     }
                     guard let type = node.runtimeTypeIfPresent, !type.hasPrefix(prefix),
-                          node[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
-                          let text = node[dynamicMember: idKey] as? String, let uuid = UUID(uuidString: text) else {
+                          metadataValue(node, graphKey) as? String == graphID.rawValue.uuidString,
+                          let text = metadataValue(node, idKey) as? String, let uuid = UUID(uuidString: text) else {
                         throw GraphStoreError.corruptIdentity
                     }
                     let id = GraphNodeID(graphID: graphID, rawValue: uuid)
@@ -320,6 +369,10 @@ package enum GraphTypedStoreAdapter {
             }
         }
 
+        private func metadataValue(_ node: Node, _ key: String) -> Any? {
+            metadata?.value(for: node, key: key)
+        }
+
         var isShared: Bool { StoreNativeContext.isShared(root?.runtimeObjectID.persistentStore, in: context) }
 
         func requireWriteAccess(completing operationID: UUID? = nil) throws {
@@ -335,6 +388,13 @@ package enum GraphTypedStoreAdapter {
             }
             if isShared, let pending = try GraphSharedInsertionJournal.read(graphID: graphID, context: context),
                pending.operationID != operationID { throw GraphStoreError.pendingNativeOperation }
+            if try GraphNativeIdentityColumns.validateModel(in: context) {
+                guard stagedNodeIDs.isEmpty || operationID != nil else { throw GraphStoreError.pendingNativeOperation }
+                guard let root else { throw GraphStoreError.corruptIdentity }
+                try GraphNativeIdentityColumns.validate(root, graphID: graphID, nodeID: nil)
+                if let membership { try GraphNativeIdentityColumns.validate(membership, graphID: graphID, nodeID: nil) }
+                for (id, node) in nodes { try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: id.rawValue) }
+            }
         }
 
         func assign(_ node: Node) throws {
@@ -350,12 +410,13 @@ package enum GraphTypedStoreAdapter {
 
         func node(_ id: GraphNodeID) throws -> Node? {
             guard id.graphID == graphID else { throw GraphStoreError.foreignGraph }
+            if let node = nodes[id] { try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: id.rawValue) }
             return nodes[id]
         }
 
         func referenceID(_ entity: Entity) throws -> GraphNodeID {
-            guard entity[dynamicMember: graphKey] as? String == graphID.rawValue.uuidString,
-                  let value = entity[dynamicMember: idKey] as? String, let uuid = UUID(uuidString: value) else {
+            guard metadataValue(entity, graphKey) as? String == graphID.rawValue.uuidString,
+                  let value = metadataValue(entity, idKey) as? String, let uuid = UUID(uuidString: value) else {
                 throw GraphStoreError.unresolvedReference
             }
             let id = GraphNodeID(graphID: graphID, rawValue: uuid)
@@ -363,16 +424,25 @@ package enum GraphTypedStoreAdapter {
             return id
         }
 
-        func snapshot(_ node: Node, id: GraphNodeID, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
-            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil, referenceID: referenceID)
+        func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, propertyRows: GraphRuntimeMetadata? = nil, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
+            if !allowUnprojectedRows { try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: id.rawValue) }
+            let projected: [String: Any]? = propertyKeys.flatMap { keys in
+                propertyRows.map { rows in
+                    keys.reduce(into: [:]) { values, key in
+                        if let value = rows.value(for: node, key: key) { values[key] = value }
+                    }
+                }
+            }
+            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil,
+                propertyKeys: propertyKeys, projectedProperties: projected, referenceID: referenceID)
             try charging?(raw)
             var properties = raw.properties.filter { !$0.key.hasPrefix(prefix) }
-            for key in try encodedKeys(node) {
+            for key in try encodedKeys(node) where propertyKeys == nil || propertyKeys!.contains(key) {
                 guard let value = properties[key], case .data(let data) = value else { throw GraphStoreError.corruptIdentity }
                 properties[key] = try GraphValueCodec.decode(data)
             }
             return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: properties,
-                                   tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+                                   tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, dataVersion: raw.dataVersion)
         }
 
         func record(_ id: GraphNodeID) throws -> GraphRecord? {
@@ -380,7 +450,7 @@ package enum GraphTypedStoreAdapter {
         }
 
         func encodedKeys(_ node: Node) throws -> Set<String> {
-            guard let raw = node[dynamicMember: formatsKey], let keys = raw as? [String], Set(keys).count == keys.count,
+            guard let raw = metadataValue(node, formatsKey), let keys = raw as? [String], Set(keys).count == keys.count,
                   keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.corruptIdentity }
             return Set(keys)
         }
@@ -429,6 +499,7 @@ package enum GraphTypedStoreAdapter {
         }
 
         func insert(_ record: GraphRecord) throws {
+            try GraphDataFormatAdmission.requireInsert(record, in: context)
             try requireWriteAccess()
             guard !isShared else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             try validate(record)
@@ -441,7 +512,7 @@ package enum GraphTypedStoreAdapter {
             case .relationship: node = Relationship(record.type, graph: graph)
             case .action: node = Action(record.type, graph: graph)
             }
-            stamp(node, id: record.id)
+            try stamp(node, id: record.id)
             if database, let entity = node as? Entity { membership?.add(objects: entity) }
             node[dynamicMember: formatsKey] = values.keys.sorted()
             for (key, value) in values { node[dynamicMember: key] = value }
@@ -486,7 +557,7 @@ package enum GraphTypedStoreAdapter {
 
         func delete(_ id: GraphNodeID) throws {
             try requireWriteAccess()
-            guard nodes[id] != nil else { throw GraphStoreError.missingNode }
+            guard try node(id) != nil else { throw GraphStoreError.missingNode }
             var filesByOwner: [GraphNodeID: [GraphNodeID]] = [:]
             for (candidateID, candidate) in nodes where candidate.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
                 let payload = try GraphAttachmentPayload(graphRecord: snapshot(candidate, id: candidateID))

@@ -18,8 +18,21 @@ private struct Profile: GraphModel {
     }
 }
 
+private struct VersionedProfile: GraphModel {
+    static let graphType = "example.versioned.profile"
+    static let graphKind: GraphNodeKind = .entity
+    static let graphDataFormat = try! GraphDataFormat(currentVersion: 2, readableVersions: [1, 2])
+    let record: GraphRecord
+    var id: GraphNodeID { record.id }
+    init(graphRecord: GraphRecord) throws { record = graphRecord }
+    func graphRecord() throws -> GraphRecord { record }
+}
+
 @main struct ModelConsumer {
     static func main() async throws {
+        let detached = try GraphRecord(id: GraphNodeID(graphID: GraphID()), type: VersionedProfile.graphType, dataVersion: 2)
+        guard try GraphRecord(detached.decoded(as: VersionedProfile.self)) == detached,
+              !GraphDataFormat.undeclared.canRead(0) else { throw GraphModelError.invalidValue }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvo-TypedConsumer-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("Graph.sqlite")
@@ -82,7 +95,41 @@ private struct Profile: GraphModel {
             throw GraphStoreError.missingNode
         }
         try await first.close(); try await control.close()
-        print("GraphEvo Swift 6 typed store and graph catalog consumer passed")
+        let nativeURL = directory.appendingPathComponent("Native.sqlite")
+        let native = try await GraphDatabase.open(at: nativeURL, schema: .nativeIdentity)
+        guard try await native.graphIDs().isEmpty else { throw GraphModelError.invalidValue }
+        let nativeGraph = try await native.createGraph()
+        let nativeProfile = Profile(id: nativeGraph.makeNodeID(), displayName: "Grace")
+        try await nativeGraph.insert(nativeProfile)
+        guard try await native.validateIntegrity(of: nativeGraph.id) == 1 else { throw GraphModelError.invalidValue }
+        let nativeQuery = GraphQuery<Profile>(budget: try GraphQueryBudget(maximumCandidates: 128)).where(.id(nativeProfile.id))
+        guard try await nativeGraph.query(nativeQuery).items.first?.displayName == "Grace" else { throw GraphModelError.invalidValue }
+        try await checkCombine(nativeGraph, query: nativeQuery)
+        try await nativeGraph.close(); try await native.close()
+        let nativeReopen = try await GraphDatabase.open(at: nativeURL, schema: .nativeIdentity)
+        let nativeReader = try await nativeReopen.openGraph(nativeGraph.id)
+        guard try await nativeReader.fetch(nativeProfile.id, as: Profile.self)?.displayName == "Grace" else { throw GraphStoreError.missingNode }
+        try await nativeReader.close(); try await nativeReopen.close()
+        try await checkMirroredOverloadValidation()
+        print("GraphEvo Swift 6 typed store, graph catalog and native schema consumer passed")
+    }
+}
+
+/// Compile and exercise both public schema overloads without native cloud loading or credentials.
+private func checkMirroredOverloadValidation() async throws {
+    let invalid = URL(string: "https://example.invalid/not-a-local-store.sqlite")!
+    for schema in [GraphDatabaseSchema.current, .nativeIdentity] {
+        do {
+            let database = try await GraphDatabase.openMirrored(at: invalid, containerIdentifier: "iCloud.example.invalid", schema: schema)
+            try await database.close()
+            throw GraphModelError.invalidValue
+        } catch GraphStoreError.persistence(underlying: _) {}
+        do {
+            let database = try await GraphDatabase.openMirrored(privateStoreAt: invalid, sharedStoreAt: invalid,
+                                                               containerIdentifier: "iCloud.example.invalid", schema: schema)
+            try await database.close()
+            throw GraphModelError.invalidValue
+        } catch GraphStoreError.persistence(underlying: _) {}
     }
 }
 

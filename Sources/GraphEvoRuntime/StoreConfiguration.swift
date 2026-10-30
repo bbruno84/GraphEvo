@@ -34,20 +34,24 @@ package struct StoreConfiguration: Sendable, Equatable {
 package struct StoreSchema: Sendable {
     package let identifier: String
     package let entityVersionHashes: [String: Data]
+    package let requiredModelVersionIdentifier: String?
     let makeModel: @Sendable () -> NSManagedObjectModel
 
     package init(
         identifier: String,
         entityVersionHashes: [String: Data],
+        requiredModelVersionIdentifier: String? = nil,
         makeModel: @escaping @Sendable () -> NSManagedObjectModel
     ) {
         self.identifier = identifier
         self.entityVersionHashes = entityVersionHashes
+        self.requiredModelVersionIdentifier = requiredModelVersionIdentifier
         self.makeModel = makeModel
     }
 
     func isCompatible(with other: StoreSchema) -> Bool {
-        identifier == other.identifier && entityVersionHashes == other.entityVersionHashes
+        identifier == other.identifier && entityVersionHashes == other.entityVersionHashes &&
+            requiredModelVersionIdentifier == other.requiredModelVersionIdentifier
     }
 }
 

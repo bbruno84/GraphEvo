@@ -21,6 +21,15 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 | M10 | Keep v1 on `develop`, integrate v2 on `codex/graphevo-2` from the planning branch, and use focused `codex/v2-<topic>` PRs into v2 | Alpha tags come from v2 integration; `release/2.0` starts there at beta, with fixes returning to v2. Stable 2.0 is promoted to `master` and `develop` through reviewed PRs |
 | M11 | V2 minimum OS versions may be raised as technically appropriate without inheriting v1 deployment constraints | Choose floors from API/architecture needs and validate their runtime matrix; A1's current iOS 16/macOS 12 declarations are provisional |
 | M12 | Keep A6's attachment identity/ownership approach and assess representation costs at alpha completion | The maintainer accepted the model; defer file-cost redesign while completing queries/observation, then consolidate schema/API before beta |
+| M13 | Incompatible alpha layouts start from empty stores; no alpha-to-alpha conversion, downgrade or interrupted alpha-conversion recovery | Remove alpha conversion tooling from adoption gates; reject existing incompatible paths without automatic erasure. Mandatory v1 migration and beta compatibility remain separate |
+| M14 | GraphEvo owns native schema evolution; the consumer migration manager handles application data | Supersedes consumer-native-schema registration in the earlier manager proposal; external native interventions are not automatically certified |
+| M15 | Fix the 2.0 native target to S01 after the four-area review | Preserve the twelve-entity model; select only graph/node UUID projections, optional node data version and compound identity indexes. Adoption and beta gates remain open |
+
+M13 records the 2026-10-29 fresh-store decision.
+M14/M15 record the 2026-10-30 migration boundary and
+[selected native schema](graphevo-2-persistent-schema.md). The subsequent runtime
+increment adopts S01 for explicit native openings with `GraphEvo.v2.schema.1`;
+consumer-format admission and mandatory data conversion remain open.
 
 M01–M04 and M09–M11 reflect the discussion following the 2026-10-26 laboratory results.
 M05–M08 carry forward the initial agreed requirements. M12 records the
@@ -45,7 +54,7 @@ M05–M08 carry forward the initial agreed requirements. M12 records the
 | D09 — availability/recovery | Proposed: explicit local/cloud/access states, no silent substitute for a configured cloud graph | Account switching, permission loss and cached shared-data access policy need dedicated scenarios | A4/A5, consolidated A8 |
 | D10 — cloud separation | Direction agreed; owner-only share-zone route is the working candidate | Separate stores did not isolate cloud data; V01 independent recovery and V09 support zones. Selective download/zone scale are not established | A4 |
 | D11 — model protocol | First candidate implemented: GraphModel/GraphPropertyValue, detached records, explicit keys and partial patches | [A3 contracts](graphevo-2-application-models.md) have public Swift 6 consumer and package SQLite tests; typed public CRUD and persisted local IDs are implemented in the [continuation](graphevo-2-typed-store.md); remaining legacy codecs and remote identity still need validation | A3, reviewed A7/A8 |
-| D12 — attachments | A6 alpha candidate: dedicated owned lifecycle over one native transformable content value | A6 selects exclusive same-graph ownership, unchanged native model, a 10-MiB buffered limit and closed whole-directory copies. V09 remains separate surrogate evidence; account/cache, larger-file and conflict envelopes remain release work | A6 |
+| D12 — attachments | S01 retains A6 logical identity/exclusive same-graph ownership and selects split metadata/content over existing native property storage | [S01](graphevo-2-persistent-schema.md) records the cost/native-sharing evidence and legacy-envelope retention. No native attachment entity is needed. Size, account/cache, backup and conflict envelopes remain PA05 work | Target selected; acceptance before beta/stable |
 | D13 — queries | A7 alpha typed descriptors with explicit bounded inventory/memory strategy, Boolean composition and deterministic order | [A7 candidate](graphevo-2-queries.md) supplies an explicit bounded strategy, scalar capability matrix, related predicates/BFS, projections/aggregations and moving cursors; indexing/production envelopes remain consolidation work | A7 |
 | D14 — identity/integrity/conflicts | Proposed graph-scoped durable logical IDs, explicit incomplete structures and no blind transaction replay | A3 stores graph/node UUIDs in reserved detail rows and maps old facade IDs during backed-up local adoption. Replica recovery is unverified. V09 disjoint edits converged; same-property conflicts and imported deletion races remain open | Initial A3/A4; consolidated A8 |
 
@@ -67,10 +76,10 @@ envelope decision remains open after this first local screen.
 |---|---|---|---|
 | O01 | How is the agreed coordinated cloud cutover established and verified, including pending writes and returning old devices? | M09 removes concurrent v1/v2 writing as a requirement but does not provide a distributed fence | Product choice resolved with the maintainer; technical mechanism remains open |
 | O02 | Which minimum OS/toolchain runtime matrix should stable v2 certify? | A1 needs Swift tools 6.0 but retains current OS floors; declared availability is not complete runtime verification | Continue availability review; validate/confirm the supported matrix before beta |
-| O03 | Does 2.0 include concurrent app/extension writes to an App Group store? | A process-local owner is insufficient; same-file conflicts were observed in the macOS control | No cross-process safety claim; assess iOS support/cost during alpha |
+| O03 | Which app/widget read/write roles and synchronization owner are supported on the same App Group graph? | Maintainer requires concurrent app/widget access before beta (2026-10-29); process-local ownership is insufficient. Read-only widget access is a candidate, while interactive writes remain a scope decision | Design, implement and validate iOS multiprocess behavior before beta under PA02; no current cross-process safety claim |
 | O04 | Does processing require durable replay in the first 2.0? | Determines history retention, consumer cursors, acknowledgements and gap recovery | A8 supplies live invalidation plus explicit rescan as its alpha candidate; select stable scope during consolidation and do not conflate it with durable processing |
 | O05 | How are empty actions, detached optional edges and incomplete imported structures exposed? | The v1 migration must preserve valid optional forms without legitimizing damaged graphs | Inventory v1 fixtures and define domain invariants during A3/A4 |
-| O06 | Which alpha stores need migration to later prereleases? | Early adopters need an explicit data-retention promise before using alphas for real data | Synthetic/disposable until a release explicitly states a supported path |
+| O06 | Resolved by M13: no migration between incompatible alpha stores | Alphas start from empty stores; do not use them with a data-retention promise | Remove alpha conversion tooling from adoption gates; preserve v1 migration and beta rules |
 
 The only initial maintainer question was the mixed-version policy, resolved
 as M09. Other choices remain visible without blocking independent specification
@@ -88,3 +97,23 @@ alternatives, affected contracts, evidence and remaining limitations. Keep
 experimental success separate from a supported release guarantee. A schema
 change records its v1 migration effect even if alpha files remain disposable.
 Do not mark D01–D14 universally closed because one native probe succeeded.
+
+
+2026-10-29 O03 first increment: containing app owns CloudKit synchronization;
+v2 mirrored openings are rejected from an app-extension bundle. Explicit local
+read-only readers are implemented as a candidate path, with separate-process
+macOS evidence. This does not settle iOS sandbox/suspension or interactive writes;
+see [extension access](graphevo-2-app-extension-access.md). The maintainer rejects
+forcing concurrent native cloud synchronizers or unsafe lifetime locks.
+
+
+2026-10-30 native migration boundary: GraphEvo owns native Core Data schema
+transitions internally; the consumer migration manager targets application data,
+not native schema registration. Consumer-specific external native interventions
+cannot be prevented, but are not automatically supported/certified by the manager.
+Keep the data-driven native shape stable where practical. The
+[SM01–SM03 result](results/schema-migration-2026-10-30.md) confirms bounded additive
+local/cloud migration and final staged-handler replication. Experimental node
+version storage was experimental in that result. The subsequent S01 review
+selects it for the target; production adoption and complete v1 data conversion
+remain separate work.

@@ -862,7 +862,7 @@ available for v1 stores. See the
   `init(graphValue: GraphValue) throws`. Conformances: GraphValue,
   GraphEncodedValue, String, Bool, Int, Int64, UInt64, Double, Decimal, Data,
   Date, URL, UUID, and conditional Optional, Array and string-keyed Dictionary.
-- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:) throws`:
+- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:dataVersion:) throws`:
   read-only fields; endpoints defaults to `.entity`, properties/tags/groups to
   empty and creation date to nil. Type/property keys must be nonempty and
   references must have the same graph ID.
@@ -871,9 +871,25 @@ available for v1 stores. See the
 - `GraphModel: Sendable`: read-only `id: GraphNodeID`; static `graphType: String`
   and `graphKind: GraphNodeKind`; `init(graphRecord: GraphRecord) throws` and
   `graphRecord() throws -> GraphRecord`.
+  Static `graphDataFormat: GraphDataFormat` defaults to `.undeclared`.
 - `GraphRecord.init<Model: GraphModel>(_ model: Model) throws` and
   `decoded<Model: GraphModel>(as: Model.Type = Model.self) throws -> Model`:
-  checked mapping validates type, kind and identity.
+  checked mapping validates type, kind, identity and application data format.
+  Reading checks declared compatibility before invoking the consumer decoder;
+  serialization requires the current version without silently stamping it.
+- `GraphRecord.dataVersion: Int64?` is immutable, defaults to nil and rejects
+  negatives. Nil is undeclared, distinct from zero; patches preserve this field.
+- `GraphDataFormat: Sendable, Equatable, Hashable` exposes `currentVersion: Int64?`,
+  `readableVersions: Set<Int64>` and `acceptsUndeclared: Bool`. `.undeclared` reads
+  and writes only nil. `init(currentVersion:readableVersions:acceptsUndeclared:) throws`
+  requires a nonnegative current version and readable versions containing it;
+  readable versions default to only current, acceptsUndeclared to false.
+  `canRead(_ version: Int64?)` checks explicit readability; `canWrite(_:)` accepts
+  only the current version. Read compatibility does not imply write permission.
+  Query descriptors capture this policy; non-record queries check it as well.
+- `GraphDataFormatError: Error, Sendable, Equatable, LocalizedError` distinguishes
+  `invalidDeclaration`, `invalidVersion`, `unreadableVersion(Int64?)` and
+  `unwritableVersion(Int64?)`.
 - `GraphPropertyChange`: `.set(GraphValue)` and `.remove`; setting null is
   distinct from removing a property in the detached contract.
 - `GraphRecordPatch(id:properties:addingTags:removingTags:addingGroups:
@@ -887,7 +903,18 @@ available for v1 stores. See the
 
 These detached values alone do not establish persistent membership, resolve
 endpoint existence or commit edits. The typed persistence scopes below supply
-identity, reference checks and value envelopes. Complete legacy translation and
+identity, reference checks and value envelopes. M2b.1 provides detached format
+contracts; normal stores still reject declared-version insertion and refuse
+application data access when S01 native version metadata is present, using
+`GraphStoreError.dataFormatAdmissionRequired`. Refusal is conservative across
+the resource group; no public version-aware opener or migration activation is
+enabled. Catalog/control-only access reduction remains available. See the
+[format/admission contract](../design/graphevo-2-data-formats.md).
+On the matrix experiment branch,
+top-level Data uses a length-checked versioned binary envelope with legacy JSON
+reads; nested and opaque values keep their existing representation. Older alpha
+readers cannot consume the new format; no automatic conversion/downgrade is implied.
+Complete legacy translation and
 cloud cutover remain unfinished. Never apply a stale encoded model as a
 whole-record replacement that drops unknown properties.
 
@@ -959,6 +986,7 @@ incompatible native model.
 `GraphStoreError: Error, LocalizedError` distinguishes `closed`, `ownershipConflict`, `expiredScope`,
 `foreignGraph`, `duplicateIdentity`, `corruptIdentity`, `missingNode`, `missingGraph`,
 `unresolvedReference`, `legacyStoreRequiresAdoption`, `unsupportedLayout`,
+`dataFormatAdmissionRequired`,
 `reservedName`, and `persistence(underlying: Error)`. Model errors and caller body
 errors retain their own types. Cancellation retains the A2 pre/post-save contract.
 
@@ -1134,7 +1162,10 @@ enum GraphStoreBackup {
 `byteCount: Int`, `sha256: String` and `revision: UUID`.
 `GraphAttachmentContent: Sendable, Equatable` exposes `metadata` and `data: Data`.
 Codable metadata is transport data, not authority or proof that bytes are locally
-available. Reads verify complete content, version, identities, owner and checksum.
+available. Complete reads verify content, version, identities, owner and checksum.
+On the C03a experimental branch, `attachments(ownedBy:)` validates descriptive
+metadata without decoding/verifying split content; listing does not certify body availability
+or integrity. Existing A6 single-envelope files retain full validation on listing.
 Nil denotes an absent local node; incomplete/invalid content or an unavailable
 owner throws. This does not establish permanent cloud absence or corruption.
 
@@ -1144,7 +1175,7 @@ owner and creation date and rejects a locally changed revision. Owner deletion
 cleans owned files, including those on implicitly deleted relationship edges;
 transaction rollback preserves the previous content. Raw patches cannot transfer
 ownership or replace valid content with malformed metadata. `GraphEvo.Attachment.v1`
-and its `content` representation are reserved for this alpha feature. Current
+and its `content` / experimental `attachmentMetadata` properties are reserved for this alpha feature. Current
 native model hashes remain unchanged; v1 binary fields are not automatically
 converted into attachments.
 
@@ -1158,7 +1189,7 @@ rather than an import replay. A locally committed result is distinct from export
 or independent replica recovery.
 
 The alpha buffers complete content and accepts empty files through 10 MiB.
-Listing metadata currently also decodes/checks content. Streaming, per-file
+Listing split metadata does not decode/verify the body; old envelopes retain full validation. Streaming, per-file
 progress, eviction, selective download, a persistent offline-retention guarantee
 and distributed replacement conflict resolution are unsupported.
 
@@ -1209,6 +1240,12 @@ includes native node rows across the resource group; only selected-graph
 application records are evaluated. Every query currently uses explicit bounded
 inventory plus memory evaluation. No SQL/native-count optimization or silent
 fallback is claimed. Opening/catalog costs are outside a query allowance.
+On the M03 experiment branch, complete model results materialize all properties
+of the requested type/kind. Other types and count/projection/aggregate/traversal
+operations materialize descriptor-referenced keys, including nested related
+predicates and sort/aggregate/projection dependencies. Skipped payloads are not
+validated by unrelated queries. Explicit body references remain charged before
+decoding; full file reads and sharing integrity still verify complete content.
 
 `GraphQueryPredicate: Sendable, Equatable` is indirect and supports:
 
@@ -1355,8 +1392,14 @@ extension GraphStore {
 }
 ```
 
-Each observation initially reads current local state and serially rereads after
-resource-group invalidation, including related-node/action/file dependencies.
+Each observation initially reads current local state. Exact query definitions,
+concrete model types, row limits and all budget dimensions share a serial native
+read worker within the same GraphStore handle. Each subscriber independently
+decodes application models and receives newest states; another handle never
+joins that group. Resource invalidation retains related-node/action/file dependencies.
+A shared execution has one real scopeID and diagnostics for all recipients.
+New subscriptions request a fresh read, never a cached result or a read begun
+before registration; joining or refreshing a group can refresh its other members.
 Output is newest-one, may coalesce intermediate states/errors, and may repeat
 an unchanged result after unrelated changes. Cursor-based descriptors are
 rejected; sort/limit describe the current first page. Recoverable errors produce
@@ -1379,5 +1422,119 @@ neither ordered transaction identities nor durable history cursors. Rescan on
 startup/reconnect and reconcile the application's prior inventory. No per-node
 deletions, durable replay, acknowledgements, exactly-once effects or cloud-import
 completion are supplied. O04 remains a consolidation choice, not a completed
-replay feature. Each observer reruns its own bounded A7 query; total observation
-memory/time/scan costs still require end-of-alpha assessment.
+replay feature. Different query shapes still execute independently. Sequential
+subscription startup and heavy/slow application decoders remain consolidation
+work; sharing is not a total memory/time bound. See the
+[consolidation adoption](../design/graphevo-2-observation.md#c04-consolidation-adoption)
+for the accepted scope and remaining native-device acceptance.
+
+
+### Identity-guarded query materialization (v2 consolidation)
+
+Leading finite ID guards can avoid loading property bodies on excluded nodes of
+the same model type. Selected complete models retain every field; candidate,
+identity/membership/endpoint/format inventory stays complete and bounded. A
+property condition before the ID guard, an unbounded Boolean alternative, related
+predicates or traversal keeps conservative materialization. Skipped bodies are
+not certified. Query signatures, cursor semantics and the reported bounded
+inventory strategy are unchanged. See the
+[query contract](../design/graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
+
+## Explicit native-identity schema (alpha)
+
+```swift
+public enum GraphDatabaseSchema: Sendable {
+    case current
+    case nativeIdentity
+}
+
+extension GraphDatabase {
+    public static func open(at url: URL, schema: GraphDatabaseSchema) async throws -> GraphDatabase
+    public static func inMemory(schema: GraphDatabaseSchema) async throws -> GraphDatabase
+    public static func openMirrored(at url: URL, containerIdentifier: String,
+                                    schema: GraphDatabaseSchema) async throws -> GraphDatabase
+    public static func openMirrored(privateStoreAt privateURL: URL, sharedStoreAt sharedURL: URL,
+                                    containerIdentifier: String, schema: GraphDatabaseSchema) async throws -> GraphDatabase
+    public func validateIntegrity(of graphID: GraphID) async throws -> Int
+}
+```
+
+`nativeIdentity` selects the explicit native layout for local, private-only mirrored
+or private/shared mirrored resources. It uses optional native graph/node String projections and a configured
+compound fetch index; no uniqueness constraint or specific SQL-plan guarantee is
+implied. It does not convert an existing current/prototype store or erase an
+incompatible path. Graph creation activates only newly allocated empty controls.
+Incompatible alpha layouts start from empty stores under M13.
+
+Existing no-schema overloads and `current` retain the previous model, including
+mirrored opens. Native mirroring requires an explicit `schema: .nativeIdentity`.
+The explicit native schema now uses [S01](../design/graphevo-2-persistent-schema.md)
+with model version identifier `GraphEvo.v2.schema.1`. It retains indexed graph/node
+UUID projections and adds optional Integer64 `ge2DataVersion` on all three node
+kinds, with no default. Ordinary unversioned writes leave it absent; it is not
+exposed as an implemented consumer compatibility/migration gate yet.
+The runtime validates this public Core Data
+metadata before loading any existing resource, as well as native entity hashes.
+Historical alpha.2 and unversioned prototype files are refused, including a
+same-shape file carrying the wrong model identifier;
+there is no automatic stamp, conversion or wipe. New local and mirrored native
+files use the same versioned factory. Root protocol `nativeIdentityLayout =
+alpha.1` is retained. No-schema/current defaults retain the original native
+model. The local model-version gate prevents incompatible data from starting
+export before catalog validation; it does not control native remote writers or
+certify that a record's values have all arrived.
+
+Mirrored opening reserves the whole topology before loading: exactly one private
+resource or an explicit private/shared pair, using the same schema for both.
+There is no fallback on explicit mirrored failure. Fresh local paths do not
+establish empty/compatible cloud state; the caller must choose a controlled
+compatible cloud environment or a separately supported migration/cutover.
+Single-graph v1 adoption APIs retain their existing separate scope.
+
+Native point hits validate targets/references; misses audit the same-view native
+routing/identity inventory before returning nil. Mutations use common typed
+writers. Queries remain bounded inventory/memory evaluation with full documented
+candidate allowances and identity-guarded property loading; selecting this schema
+does not select an indexed SQL query strategy. Scoped snapshots validate native
+projections of consulted nodes, and descriptor/codec errors remain visible.
+
+`validateIntegrity(of:)` supports both public database schemas and returns the
+selected graph's current local application-row count, including attachments and excluding hidden
+controls. It explicitly scans identities, structure and stored payloads/file
+integrity. It does not invoke application model initializers, follow query byte
+budgets or certify domain validity, another replica or CloudKit import completion.
+It supports local and mirrored native owners through the same topology-checked resolver.
+The operation can load complete large file bodies; metadata-only listing has a
+different scope. A graph absent from the current catalog reports `missingGraph`.
+
+See the [fresh native store contract](../design/graphevo-2-native-identity-integration.md#fresh-local-native-schema-api).
+
+
+## V2 containing-app synchronization and extension readers
+
+The v2 runtime rejects mirrored openings from app extensions with
+`GraphStoreError.synchronizationUnavailableInExtension` before native loading.
+The selected alpha policy gives the containing app CloudKit synchronization;
+it also refuses isolated extension mirroring. This is a conservative library
+policy, not an Apple-wide prohibition on CloudKit in extensions. A local reader
+can use:
+
+```swift
+public static func openReadOnly(at url: URL,
+    schema: GraphDatabaseSchema = .current) async throws -> GraphDatabase
+public static func openReadOnly(privateStoreAt privateURL: URL,
+    sharedStoreAt sharedURL: URL,
+    schema: GraphDatabaseSchema = .current) async throws -> GraphDatabase
+```
+
+These methods open existing compatible SQLite resources through an ordinary
+read-only Core Data container, preserving pair routing and explicit schema
+selection. They never create missing stores/graphs or start CloudKit. Missing
+resources produce `GraphStoreError.missingStore`; graph mutations produce
+`GraphStoreError.readOnly`. Cloud operations are unsupported: their public
+setup preflight may instead report a local database. Incompatible resources are not converted.
+The existing same-process ownership/access compatibility remains enforced.
+Query observations retain their conservative invalidation contract; callers
+should query freshly after extension resume. This is not a global cross-process
+lock, account/permission certificate, or completed iOS App Group/widget support.
+See [the extension access contract](../design/graphevo-2-app-extension-access.md).

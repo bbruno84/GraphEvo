@@ -47,6 +47,6 @@ public struct GraphRecordPatch: Sendable, Equatable {
         return try GraphRecord(id: id, type: record.type, endpoints: endpoints ?? record.endpoints,
                                properties: values, tags: record.tags.subtracting(removingTags).union(addingTags),
                                groups: record.groups.subtracting(removingGroups).union(addingGroups),
-                               createdDate: record.createdDate)
+                               createdDate: record.createdDate, dataVersion: record.dataVersion)
     }
 }

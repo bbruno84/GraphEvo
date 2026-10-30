@@ -17,8 +17,9 @@ context on completion; failures roll back unsaved changes.
 A FIFO writer gate belongs to the physical `StoreResources` owner, shared by
 all its handles. It covers the complete body, save and context cleanup. A second
 writer cannot read its starting state until the previous writer has finished.
-Different stores can write independently; readers do not acquire the writer
-gate and cannot see another operation's pending edits. Actor isolation alone
+Different stores can write independently. SQLite readers retain concurrent
+access to committed state; in-memory reads also use the gate as described below.
+Neither sees another operation's pending edits. Actor isolation alone
 would not provide this guarantee across native asynchronous execution.
 
 A transaction saves once after its body returns. The body cannot suspend and
@@ -46,8 +47,12 @@ native view resolves on the first fetch and stays pinned for the operation;
 a regression performs two fetches around a concurrently committed insert and
 sees the same rows, while the next read sees the new row. This does not specify
 cloud import completeness or an ordering relative to an unrelated writer that
-has not committed yet. In-memory reads use native context behavior without a
-query-generation snapshot guarantee across multiple fetches.
+has not committed yet. In-memory stores cannot pin that generation; their
+complete read scopes now join the local writer gate so a multi-fetch inventory
+cannot straddle a participating commit. A read arriving during an active
+in-memory writer waits and sees the committed state, while independent stores
+remain usable. SQLite reads retain concurrent pinned views. A cancelled queued
+in-memory reader does not execute its body or block subsequent operations.
 
 Transactions use fresh contexts and the explicit native error merge policy.
 Serialization covers participating local writers in this owner only, not

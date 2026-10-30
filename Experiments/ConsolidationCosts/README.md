@@ -83,3 +83,11 @@ A candidate improvement must rerun the same matrix without changing visible
 query/value/identity/ownership semantics, then validate on supported devices,
 realistic data and native mirroring. It must preserve mandatory v1 migration,
 backup completeness and graph/share boundaries. No schema is frozen by C01.
+
+
+For the isolated M03 selective-property candidate, explicitly pass
+`--expect-unrelated-large-files-success`. This changes only the expected outcome
+for unrelated four-large-file query/count/projection at the same default budget;
+without the flag, B/C03a/M02 still require their documented refusal. The flag is
+recorded in environment.json. It never suppresses an unexpected error, changes
+fixture sizes or increases the allowance.

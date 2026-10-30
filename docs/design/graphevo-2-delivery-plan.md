@@ -4,6 +4,16 @@ Status: initial plan, 2026-10-26. Read with the
 [specification](graphevo-2-specification.md) and
 [decision register](graphevo-2-decisions.md).
 
+2026-10-30 schema milestone: [S01](graphevo-2-persistent-schema.md) fixes the
+native 2.0 target following the query/attachment/sharing/migration review.
+The runtime adoption increment now supplies the optional record-version field
+and stable physical-model ID `GraphEvo.v2.schema.1` for explicit native openings.
+The [selected-model device result](results/s01-native-sharing-recovery-2026-10-30.md)
+now passes the bounded public sharing/file/fresh-recovery fixture. Next complete
+consumer-format admission and mandatory v1 conversion. Default/current openers
+retain their original model. Native adoption is not beta entry or completion of
+migration work.
+
 ## Release policy
 
 Develop directly toward 2.0 through alpha and beta releases. Keep v1 fixes on
@@ -41,8 +51,8 @@ not a promise of one prerelease tag per stage. Remain alpha through stage 8.
 |---|---|
 | A1–A7 | Reviewed and merged into `codex/graphevo-2` through PRs #70–#76: runtime, async scopes, models/typed CRUD, graph boundaries, user sharing, files and queries |
 | A8 | Reviewed and merged through PR #77, including both concurrency corrections; async current state, Combine and live rescan hints have retained local and cross-account dependency/deletion evidence |
-| Consolidation | Started with [C01 cost baseline](graphevo-2-consolidation.md): selective access, metadata/content separation and shared observer work are proposed next; schema/API, stable processing and other supported envelopes remain open |
-| Migration | Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
+| Consolidation | Started with [C01 and the C02a metadata experiment](graphevo-2-consolidation.md); the B candidate remains on the experiment branch. Content separation, shared observer work, schema/API, stable processing and other supported envelopes remain open |
+| Migration | [SM01–SM03](results/schema-migration-2026-10-30.md) adds bounded additive local/cloud schema migration evidence, including final staged-handler data recovered before normal post-open saves. Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
 | Beta | Not declared. Eight implementation candidates do not alone satisfy the entry gate below |
 
 ## Alpha sequence
@@ -155,10 +165,14 @@ A8:
 - A8: review end-to-end migration feasibility and interruption/recovery protocol.
   Final implementation and broad real-store validation continue during beta.
 
-Alpha release notes explicitly state whether a prior alpha store is reusable,
-migratable or disposable. Experimental alpha files do not silently replace v1
-production data. Full automatic migration from every alpha is not an agreed
-requirement; settle the supported alpha-to-beta path before external adoption.
+Maintainer decision (2026-10-29): incompatible alpha layouts start from empty
+stores. Prior alpha data is disposable; alpha-to-alpha conversion, downgrade
+compatibility and interrupted alpha-conversion recovery are not requirements.
+Release notes state this fresh-store policy. Existing incompatible paths are
+still rejected without automatic erasure; fresh-store creation is an explicit
+caller/test setup action. Experimental alpha files do not replace v1 production
+data. Mandatory v1 migration and adopted beta-data compatibility remain distinct
+requirements. Start beta from the agreed defined schema under its migration rules.
 
 ## Beta entry gate
 
@@ -184,6 +198,19 @@ Enter beta only when:
 6. Supported OS/toolchain, process topology, query capabilities, attachment
    envelope and recovery limitations are published.
 
+## App/widget requirement before beta
+
+Maintainer requirement, 2026-10-29: concurrent app/widget access to the same
+App Group graph must be designed, implemented and validated before beta.
+Settle O03 with explicit read/write roles, synchronization ownership, native
+change visibility, lifecycle and migration/first-launch behavior. A process-local
+runtime registry does not coordinate independent app/extension owners. The
+read-only local-widget approach is a candidate, not yet a final scope decision.
+Interactive writes require an explicit supported contract and conflict/recovery
+checks. Retain iOS multiprocess evidence separately from same-process runtime
+and different-device CloudKit tests. Track acceptance under PA02 in the
+[post-alpha checklist](graphevo-2-post-alpha-checklist.md).
+
 ## Beta and final release
 
 During beta, complete migration tooling and validate copies of representative
@@ -201,3 +228,33 @@ library acceptance matrix pass, with documented recovery/downgrade boundaries.
 Review any optional v1 API adapter separately; it cannot block or weaken the
 core design. Documentation and examples move to the actual v2 contracts while
 v1 guidance remains accessible.
+
+## Migration manager renewal
+
+The [M1–M6 plan](graphevo-2-migration-manager.md) renews the manager alongside
+mandatory v1 conversion. Consumers define application-data migrations; native schema evolution remains
+internal GraphEvo work. GraphEvo manages
+execution and compatibility of later imported records as well as whole migrations.
+Evaluate the optional v1 adapter on independent consumers, using MyHomeBills
+RecoveryV2 as one production example rather than an architectural template.
+The first package-only journal increment is not a public executor or a migration
+readiness certificate. Local/cloud conversion feasibility remains a beta gate.
+
+### Internal native schema evidence (2026-10-30)
+
+The [M2a local manager slice](graphevo-2-data-migration-local.md) now exercises
+consumer-defined data conversion on an isolated S01-shaped laboratory store,
+including atomic version/effect publication and checkpoint recovery. Public
+format admission, resource readiness/backup policy and M3–M6 remain open.
+
+[M2b.1](graphevo-2-data-formats.md) adds detached public format declarations,
+checked serialization/decoding and conservative native refusal. Complete public
+version-aware store admission and migration activation remain open.
+
+The [completed internal SM01–SM03 experiment](results/schema-migration-2026-10-30.md)
+and S01 public device fixture supply bounded native evidence. They do not provide
+a consumer native-schema registration API or complete logical v1 conversion.
+
+Keep native schema evolution uncommon by using Graph's data-driven logical
+formats for ordinary application changes. This does not eliminate record-level
+format migration or the need for a supported future native-schema route.

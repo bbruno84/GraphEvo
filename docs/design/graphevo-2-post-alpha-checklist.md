@@ -34,8 +34,31 @@ these measurements do not yet select final representation or supported envelopes
 so PA01/PA05/PA06/PA07 beta gates remain open. Physical/production validation and
 mandatory migration feasibility still require their own evidence.
 
+[C02a](results/c02a-metadata-costs-2026-10-27.md) adds the first measured
+schema-preserving candidate: B improves metadata access while retaining full
+validation, but observer memory, full inventory and new native-write coverage
+remain open. This is progress evidence, not closure of PA05/PA06/PA07.
+
 ## PA01 — schema, identities and application models
 
+- [x] Select the native 2.0 target after reviewing query, attachment, sharing and
+  migration requirements: [S01](graphevo-2-persistent-schema.md), 2026-10-30.
+  Retain twelve entities; select graph/node projections, optional node data
+  version and compound identity indexes. This closes the shape decision only.
+- [x] Adopt S01 in the explicit native factory/shape checks and opening matrix:
+  stable model ID, exact shape, local CRUD/files/reopen, offline paired routing,
+  read-only paths and refusal preserving older/wrong-marker source data. These local
+  controls do not close selected-model physical sharing/recovery acceptance;
+  [530-test adoption result](results/s01-runtime-adoption-2026-10-30.md) records
+  exact source-file checks and the volatile SHM limitation.
+- [x] Validate selected S01 native sharing/recovery, including attachments,
+  through the public factory: [16-stage iPad/XR result](results/s01-native-sharing-recovery-2026-10-30.md),
+  two independently empty participant pairs, byte-exact 10-MiB exports and actual
+  S01 metadata on eight native resources. Scope is the A6 entity/file fixture;
+  broader PA03/PA05/PA08 and application-format admission remain open. Retain
+  SM01–SM03's same-shape laboratory evidence separately from runtime activation.
+- [ ] **B** Implement optional consumer format declarations/admission, including atomic
+  local version/value writes and unknown/mixed/partial remote format cases.
 - [ ] **B** Complete A8 and review A1–A8 together; reconcile the actual supported
   API/schema with the specification before freezing them for beta.
 - [ ] **B** Settle durable graph/node identity, reference and membership rules,
@@ -56,6 +79,15 @@ Sources: [model contracts](graphevo-2-application-models.md),
 - [ ] **B** Select minimum OS/toolchain and supported process topology (O02/O03).
   Decide app/extension concurrent App Group access explicitly; a process-local
   registry does not establish cross-process safety.
+- [ ] **B** Design, implement and validate concurrent app/widget access to the same
+  App Group graph before beta (maintainer requirement, 2026-10-29). Define the
+  supported read/write roles and which process owns CloudKit synchronization,
+  cross-process change visibility/refresh, writer/intent coordination, and
+  migration/first-launch behavior when the widget starts before the app.
+  A local read-only widget is a candidate baseline, not an agreed restriction;
+  interactive widget writes still require an explicit scope decision. Validate
+  on iOS with independent processes; same-process leases and two-device cloud
+  tests do not establish this contract.
 - [ ] **B** Audit the complete distributed Swift 6 boundary, including legacy
   targets still in Swift 5 mode, Sendable/isolation, context escape, public
   imports and independent UI/non-UI consumers; document retained limitations.
@@ -82,6 +114,11 @@ Sources: [A1](graphevo-2-store-runtime.md),
 - [ ] **B** Settle native sharing presentation/adapters and invitation transport,
   recipient/container binding, errors and host responsibilities. Protect
   invitation/account capabilities and keep diagnostics payload-free.
+- [ ] **B** Settle invitation readiness and resumable error behavior after native
+  persistence, including unknownItem metadata lookup and a server share response
+  lacking the intended recipient. Retain the first failures and explicit
+  same-capability continuation in the [public adoption result](results/native-public-mirrored-schema-2026-10-29.md);
+  never recreate zones or replay structural assignment as an availability fix.
 - [ ] **R** Repeat supported mutations, fresh recovery and relaunch/offline/
   background scenarios on same-account and different-account replicas using
   the selected model; verify the control graph remains unchanged.
@@ -112,10 +149,21 @@ The existing physical assignment interruption is evidence for one window only.
 
 ## PA05 — native files: agreed cost review and acceptance
 
+The [executed matrix](results/cost-matrix-2026-10-27.md) adds local binary/query
+comparisons and serial cross-account native file lifecycle evidence. Keep the
+remaining gates below: disk growth for four 1-MiB files, metadata-list/full-read
+memory, real media, offline/conflicts/account recovery, conversion and migration
+are not resolved by that result.
+
+
 - [ ] **B** Perform M12's representation/cost review while retaining the accepted
   identity and ownership model as its starting point. Measure envelope decoding,
   full-content listing, copies, peak memory, latency and storage with representative
   content/sizes/graph counts; select representation and supported size envelope.
+- [ ] **B** Complete C03a split-file acceptance: native participant insertion and
+  two-value replacement/recovery, partial import/conflicting values, mixed old/new
+  stores and coordinated legacy conversion. Metadata listing is not a body
+  availability certificate. See the [experiment](graphevo-2-attachment-metadata-experiment.md).
 - [ ] **B** Decide whether query/list costs require metadata separation or schema
   changes. Document actual availability and unsupported streaming/progress/
   eviction/selective-download behavior rather than promising these capabilities.
@@ -181,6 +229,26 @@ close O04 or mark the wider beta/stable items above complete.
 
 ## PA08 — mandatory v1 local and cloud migration
 
+- [x] Align PR #95's migration-manager contract with M14/S01: consumer-defined
+  application-data plans only; native schema routes are internal. M1 remains a
+  package-only journal, with no production execution/admission or cloud fence.
+  See [the renewed contract](graphevo-2-migration-manager.md).
+- [x] Exercise [M2a local data/version publication](graphevo-2-data-migration-local.md):
+  pure consumer transformation, atomic values/version/effect marker, native
+  close/reopen and recovery without callback replay, stale/future input refusal,
+  cancellation and protected-source recovery. This is a package-only laboratory,
+  not public-store activation or complete M2 admission. The
+  [553-test result](results/m2a-local-data-migration-2026-10-30.md) records the exact
+  accepted scope and retained fixture/type-inference corrections.
+- [x] Introduce [M2b.1 detached format contracts](graphevo-2-data-formats.md):
+  explicit read compatibility, current-format serialization, version-preserving
+  patches and conservative normal-store refusal before application payload reads.
+  This does not enable normal versioned persistence or complete M2b admission.
+- [ ] **B** Complete public format declarations/admission across read/write/query/
+  traversal/file/observation paths before exposing versioned records, with actual
+  resource/process readiness, backup/retention and later-import policy. M2a's
+  isolated model identifier must not be removed as an admission shortcut.
+
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,
   topology, optional forms, values, binary content and old-to-new identity mapping.
@@ -233,3 +301,259 @@ Sources: A6 backup contract, specification S11, V05/V08.
 - [ ] **R** Review release notes, incompatible-beta migration paths and downgrade
   boundaries; verify mandatory migration and all selected acceptance gates before
   the release PRs/tags described in the delivery plan.
+
+
+## C02b native identity prototype gates
+
+- [ ] Integrate a selected native identity model only after reviewing the
+  [prototype](graphevo-2-native-identity-experiment.md): default schema/openers
+  remain unchanged during the experiment.
+- [ ] Define production point-read absence/global-validation semantics, including
+  missing columns, raw/column disagreement, duplicates, import progress and old
+  writers. An activated local fixture is not a cloud completeness certificate.
+- [ ] Complete protected-source/auxiliary/ledger and mandatory v1 mapping
+  acceptance before release adoption. Alpha conversion is removed by M13; fresh
+  native paired sharing/recovery now has bounded device evidence below.
+- [ ] Check high-degree Relationship/Action reference costs and indexing/storage
+  trade-offs; Entity-only latency is insufficient for graph-wide acceptance.
+
+- [x] Measure the local C02b native-column candidates, including 500-reference
+  actions and a second independent campaign. The [retained result](results/c02b-native-identities-2026-10-27.md)
+  includes both regressing intermediate resolvers; integrated C02 gates above
+  remain open.
+- [ ] Carry the changed-owner facade fallback and staged/raw-mismatched endpoint
+  regressions into integrated metadata/import tests on supported SDKs. A batched
+  property fetch must never hide newly inserted metadata from the local view.
+
+
+## C04a shared observation adoption gates
+
+- [x] Review the [C04a experiment](graphevo-2-shared-observation-experiment.md),
+  including single-observer/mixed-query overhead, update CPU and process memory.
+  PR #83 reviewed and merged into the experiment parent at `9232993`; exact-head
+  macOS/iOS CI run `40575201851` passed. This is not integration-line promotion.
+- [x] Settle shared execution view/cursor semantics, per-consumer model decoding
+  and failure/demand/cancellation behavior: see the [adoption contract](graphevo-2-observation.md#c04-consolidation-adoption).
+  The first consolidation PR wires the public path; native acceptance below stays open.
+- [ ] Validate supported native notification/account/import/handle lifecycles and
+  representative physical-device workloads. Injected feeds are not CloudKit proof.
+- [ ] Retain broad relationship/action/file invalidation until narrower dependency
+  tracking independently demonstrates correctness. No replay cache or silent
+  budget/view widening is accepted by local performance alone.
+
+- [x] Retain C04a local matrix and independent confirmation: [results](results/c04a-shared-observation-2026-10-27.md).
+  Exact-query gains do not settle single/mixed workload overhead or public adoption.
+- [ ] Assess startup fan-out/model-decoder churn and heavy/slow application models
+  before consolidation promotion. New subscribers deliberately request fresh reads and
+  can refresh existing equal-query subscribers; shared view semantics remain explicit.
+
+
+## Identity-guarded materialization follow-up
+
+- [ ] Review the public-path identity-guarded implementation and retained matched
+  Release comparison. It retains complete bounded structural inventory; it does
+  not close native indexed query adoption.
+- [ ] Verify the native same-model transformer exclusion/requested-failure probe
+  on supported macOS/iOS SDKs, including eager transformation behavior.
+- [ ] Keep body-validation scope explicit for IDs rejected before property access;
+  complete selected records, candidates, related dependencies, ordered Boolean
+  errors, pending edits and moving-page semantics must remain covered.
+- [ ] Reassess startup and different-query costs after this increment. Native
+  columns, import/old-writer absence semantics and v1 data migration remain open.
+
+Source: [query materialization contract](graphevo-2-queries.md#c02-consolidation-identity-guarded-materialization).
+
+Local implementation evidence: [501 tests, 44 targeted sanitizer tests and 72
+matched Release rows](results/identity-guarded-queries-2026-10-29.md). This evidence
+does not close the review/native-SDK or indexed identity/query gates above.
+
+
+## Native identity integration readiness
+
+- [ ] Review the [integration contract](graphevo-2-native-identity-integration.md)
+  and stronger same-view negative lookup: absent columns and staged rows must not
+  become successful absence. Preserve separate metadata/full-payload validation.
+- [ ] Carry complete native projection maintenance through every integrated
+  writer, attachment and assignment/recovery path before any public selection.
+- [x] Validate controlled fresh native local/private/shared initialization and
+  actual import/assignment/recovery, including separate files. See the local
+  opening result and [device evidence](results/native-identity-paired-devices-2026-10-29.md).
+  Alpha conversion tooling is removed by M13; mandatory protected-source v1
+  migration remains a separate open gate.
+- [ ] Retain changed negative-lookup/audit costs and high-degree action coverage.
+  Default native schema and query row-coverage gates remain open.
+
+First native readiness evidence: [504 tests, 16 selected sanitizer tests and 120
+focused Release rows](results/native-identity-readiness-2026-10-29.md), retaining
+stronger negative-lookup costs and unrouted/staged/native-body regressions. This
+does not close public schema, paired-store conversion or v1 migration gates.
+
+
+## Common native projection writer follow-up
+
+- [ ] Review common projection maintenance for optional-column models. New rows
+  and controls must be stamped in the common writer, with no prototype-only
+  post-insertion rescan or repair of persisted missing projections.
+- [ ] Keep local full-adapter coverage for all kinds, files, rollback, cascade,
+  independent graphs, reopen and malformed/partial model rejection.
+- [x] Validate controlled native-column staged assignment/finalization/import
+  and explicit recovery on the private/shared pair, with independent peers and
+  a separate file run. Preserve the first merge conflict and later recovery.
+  See the [device result](results/native-identity-paired-devices-2026-10-29.md).
+- [x] Validate explicit public local model selection using fresh stores under
+  M13 (reviewed/merged #89). Public mirrored selection is a separate pending
+  increment; no prior alpha conversion is required and v1 migration is mandatory.
+
+#84/#85/#86 review and exact-head macOS/iOS checks passed and their consolidation
+merges are `e2f6323` / `33225aa` / `0b933dd`. Native/schema/beta gates stay open.
+
+Local writer evidence: 507 full tests and 31 selected sanitizer tests pass,
+including common local file lifecycle, projection corruption refusal and guarded
+point/mutation behavior during injected incomplete import. The later physical native-column
+assignment/import result below supersedes that initial laboratory-only scope;
+protected mandatory v1 conversion remains open.
+
+
+## Alpha compatibility scope — resolved by M13
+
+The maintainer selected empty stores for incompatible alpha layouts on 2026-10-29.
+Earlier checklist references to alpha conversion, paired alpha-store conversion
+or protected alpha-conversion recovery are superseded: they are not adoption
+or beta gates. Historical migration experiments remain evidence only. Fresh
+local/mirrored initialization and native behavior still require acceptance.
+Mandatory v1 migration and beta compatibility/backup requirements remain.
+
+
+## Fresh native store acceptance
+
+- [x] Review explicit local native schema selection, create-only activation,
+  incompatible model/prototype refusal and compatible reopen. PR #89 reviewed
+  at 0529caa with successful macOS/iOS CI (40856799055, retry after queued job
+  cancellation) and merged through its PR.
+- [ ] Preserve fresh SQLite/memory, independent graph/lease, file, public-product
+  consumer and query/observation corruption-recovery regressions.
+- [x] Validate controlled fresh native private/shared initialization and actual
+  cross-user assignment/import/recovery, including separate attachment bytes/
+  replacement/cascade. See the [device result](results/native-identity-paired-devices-2026-10-29.md); public mirrored adoption remains separate.
+- [ ] Retain v1 migration feasibility and beta data compatibility gates; alpha
+  conversion is not required by M13.
+
+The local API and [validation scopes](graphevo-2-native-identity-integration.md#fresh-local-native-schema-api)
+do not turn bounded queries into indexed SQL or certify cloud completion.
+
+
+### Native paired laboratory readiness (2026-10-29)
+
+The internal native paired opener/host now exercises the selected layout without
+changing public mirrored defaults. Offline adapter checks and generic iOS host
+compilation do not close the native private/shared gate. Development reset was
+confirmed, but physical installation lost connectivity before any cloud stage.
+Retain independent A5/A8 recovery, native-column assignment/recovery, permissions
+and lifecycle, plus a separate attachment byte/ownership/cascade run as open.
+See the [acceptance matrix](../../Experiments/NativeIdentityPairedProbe/README.md).
+V1 migration and beta compatibility remain separate requirements.
+
+[Readiness evidence](results/native-identity-paired-lab-2026-10-29.md): 512 local
+tests and 13 sanitizer tests passed; generic iOS host compiled. Device connectivity
+prevented the physical run; no native acceptance item is closed by these checks.
+
+
+### Native paired device acceptance (later on 2026-10-29)
+
+The [physical result](results/native-identity-paired-devices-2026-10-29.md) supersedes
+the initial device connectivity block above. Controlled A5 native identities,
+shared insert/details, permissions, explicit interrupted recovery and full
+revoke/reinvite/leave passed on the iPad/XR pair. A separate native A6 run passed
+512-byte/10-MiB exact bytes, participant import/replacement/deletion, owner cascade,
+independent absence and preserved B. Public mirrored defaults remain unchanged.
+
+PA04 remains open for the broad crash/conflict matrix and guidance: the first
+recovery save failed with Cocoa merge error 133020; its original intent survived
+and later explicit recovery succeeded without reassignment. Cover this case in
+supported recovery/error guidance, retain both outcomes and add deterministic
+conflict/interruption coverage before claiming a general guarantee. Neither
+automatic retry nor a change of merge policy was introduced. PA03 account/scale/
+concurrency and mandatory v1 migration gates remain open.
+
+
+### Public mirrored schema adoption
+
+The explicit public native overloads cover private-only and paired resources;
+no-schema/current defaults remain unchanged. The native factory requires standard
+Core Data model version GraphEvo.nativeIdentity.alpha.2 before existing-file load
+in that increment (now superseded by S01 / GraphEvo.v2.schema.1),
+so an old same-hash prototype cannot start export before catalog refusal. The
+[adoption result](results/native-public-mirrored-schema-2026-10-29.md) separates
+513 local tests, 14 sanitizer tests, Swift 6 Release consumption, successful
+private-only device consumption, and paired invitation failures/continuation.
+Do not replace the retained controlled #90 laboratory result with a claim that
+every public paired attempt was clean. PA03 invitation readiness remains open;
+app/widget support from merged #91 still gates beta.
+
+
+The public paired consumer subsequently completed exact initial/replacement
+10-MiB export, participant import/deletion, owner cascade to A=0 and preserved B.
+It required one explicit same-recipient persistence with byte-identical invitation
+after unknownItem, plus distinct read-only host continuations/controlled debugger
+launches after reportless starts. The adoption result retains those failures;
+PA03 invitation readiness is not closed by eventual success. Public native
+private/paired selection is implemented; review/CI of its increment remains
+separate from integration/tag/beta promotion.
+
+### Public adoption causal gate (2026-10-29)
+
+The maintainer requested causes before app/widget work. [Causal triage](results/native-public-causal-triage-2026-10-29.md)
+reproduced a launcher false positive and added UUID/PID/scene receipts. The
+historical black screen did not recur in bounded normal-launch checks, and two
+traced first invitations succeeded with matching local/native/server recipients.
+Neither historical cause is established. Keep PA03 invitation readiness open and
+PR #92 draft; successful continuations/repetitions are not incident closure.
+
+
+### Containing-app/extension first safeguard
+
+The maintainer authorized continuing after fixing the launcher while retaining
+non-reproduced historical incidents until recurrence. Their cause is not claimed
+resolved. #92 passed exact-head macOS/iOS CI and was reviewed/merged into the
+consolidation parent at 7a21bf6ae82022d1f362c6ae39f6dfa9a1ea8175.
+
+The [extension access contract](graphevo-2-app-extension-access.md) adds v2
+extension mirroring refusal and explicit single/paired local read-only openers.
+Unit checks and an independent-process macOS public consumer cover local refresh,
+observation and mutation refusal. **PA02/O03 remain open** for an actual iOS
+App Group/widget, containing-app cloud owner, suspension/protected data and the
+selected interactive-write scope. An extension-role preflight is not a universal
+cross-process ownership lock or a claim that two application processes may mirror
+one store. Native account/revocation policy remains open in PA03.
+
+Evidence: [520 tests, 7 selected sanitizer tests, external Swift 6 Release
+process/bundle consumers and generic iOS build](results/extension-readonly-access-2026-10-29.md).
+This closes the first protective increment only; the iOS gate above stays open.
+
+
+### Actual app/widget App Group baseline (2026-10-29)
+
+[Physical WidgetKit evidence](results/widget-app-group-2026-10-29.md) now covers
+signed App Groups with app-owned private/shared mirroring and local read-only
+widgets on iPadOS 27.0 and iOS 27.2. Native mirroring/mutation refusals, independent
+PIDs, 0→1→2, iPad owner close/reopen and visible small/medium rendering are retained.
+This closes the **first physical read-only baseline experiment**, not PA02/O03
+as a whole. Preserve the iOS 18 actual-widget gap and the remaining suspension,
+protected-data, concurrent migration/reset, account/cache/revocation, performance
+and interactive-write decisions. No beta/tag promotion follows from this result.
+
+
+### Native schema migration experiment (2026-10-30)
+
+[SM01–SM03 result](results/schema-migration-2026-10-30.md) validates additive
+v1-shape→native-plus-optional-node-version migration locally and on iPad/XR
+Development sharing. Final staged-handler values and native version 1 were
+recovered by an existing peer and a fresh pair before ordinary post-open writes.
+A failed pre-handler can leave saved changes; a protected copy retains baseline.
+Six controls and the full 526-test suite pass. This does not close PA08: historical
+v1 store/codec coverage, process-kill/activation recovery, concurrent cloud edits,
+Production deployment and full graph/data conversion remain open. The optional
+version field was experimental in this result; S01 now selects its target shape.
+Explicit native runtime openings now adopt S01; default/current openers retain
+their original model. Neither shape adoption nor the laboratory result closes
+the remaining PA08 data-conversion gates.

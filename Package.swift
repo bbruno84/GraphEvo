@@ -13,6 +13,18 @@ let package = Package(
         // .library(name: "GraphEvoMigration", targets: ["GraphEvoMigration"]) // se lo separi
     ],
     targets: [
+        .executableTarget(
+            name: "ObservationCostProbe",
+            dependencies: ["GraphEvo"],
+            path: "Experiments/SharedObservation/Sources",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .executableTarget(
+            name: "IdentityLookupProbe",
+            dependencies: ["GraphEvo"],
+            path: "Experiments/IdentityLookup/Sources",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         .target(
             name: "GraphEvo",
             dependencies: ["GraphEvoRuntime", "GraphEvoModel", "GraphEvoStore"],

@@ -42,11 +42,18 @@ extension GraphStore {
     /// Preserves identity/owner. Local concurrent replacements must still match the captured revision.
     public func replaceAttachment(_ id: GraphNodeID, from source: URL,
                                   fileName: String? = nil, contentType: String? = nil) async throws -> GraphAttachmentMetadata {
-        guard let old = try await attachment(id) else { throw GraphStoreError.missingNode }
+        let (old, legacy) = try await read { scope in
+            guard let record = try scope.record(for: id) else { throw GraphStoreError.missingNode }
+            let payload = try GraphAttachmentPayload(graphRecord: record)
+            guard let owner = try scope.record(for: payload.ownerID), owner.type != GraphAttachmentPayload.graphType else {
+                throw GraphAttachmentError.missingOwner
+            }
+            return (payload.content, record.properties[GraphAttachmentPayload.metadataKey] == nil)
+        }
         let bytes = try await GraphAttachmentIO.read(source)
         let replacement = try GraphAttachmentPayload(id: id, ownerID: old.metadata.ownerID,
             fileName: fileName ?? old.metadata.fileName, contentType: contentType ?? old.metadata.contentType, data: bytes)
-        let record = try replacement.graphRecord()
+        let record = try replacement.graphRecord(legacy: legacy)
         let patch = try GraphRecordPatch(id: id, properties: record.properties.mapValues { .set($0) })
         return try await transaction { scope in
             guard let current = try scope.attachment(id) else { throw GraphStoreError.missingNode }

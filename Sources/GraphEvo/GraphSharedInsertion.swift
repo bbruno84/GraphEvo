@@ -24,6 +24,7 @@ struct GraphSharedInsertionPlan: Codable, Sendable {
         let createdDate: Date?
 
         init(_ record: GraphRecord) throws {
+            guard record.dataVersion == nil else { throw GraphStoreError.dataFormatAdmissionRequired }
             id = record.id; type = record.type
             switch record.endpoints {
             case .entity: kind = "entity"; subjects = []; objects = []
@@ -173,6 +174,7 @@ enum GraphSharedInsertionJournal {
 
 extension GraphTypedStoreAdapter {
     static func stageInsertion(_ plan: GraphSharedInsertionPlan, context: NSManagedObjectContext) throws -> [Node] {
+        try GraphNativeIdentityColumns.validateModel(in: context)
         let session = try Session(context, plan.graphID, database: true)
         let records = try plan.records()
         try session.requireWriteAccess()
@@ -212,7 +214,7 @@ extension GraphTypedStoreAdapter {
             case .relationship: node = Relationship(record.type, graph: session.graph)
             case .action: node = Action(record.type, graph: session.graph)
             }
-            stamp(node, id: record.id)
+            try stamp(node, id: record.id)
             node[dynamicMember: stageKey] = plan.operationID.uuidString
             node[dynamicMember: formatsKey] = row.properties.keys.sorted()
             for (key, value) in row.properties { node[dynamicMember: key] = value }
@@ -246,6 +248,8 @@ extension GraphTypedStoreAdapter {
               share.currentUserParticipant?.role == .privateUser,
               share.currentUserParticipant?.acceptanceStatus == .accepted,
               share.currentUserParticipant?.permission == .readWrite else { throw GraphStoreError.permissionDenied }
+        try GraphNativeIdentityColumns.validate(root, graphID: plan.graphID, nodeID: nil)
+        try GraphNativeIdentityColumns.validate(membership, graphID: plan.graphID, nodeID: nil)
         let staged = try allNodes(session.graph).filter {
             $0[dynamicMember: graphKey] as? String == plan.graphID.rawValue.uuidString &&
             $0[dynamicMember: stageKey] as? String == plan.operationID.uuidString
@@ -262,6 +266,7 @@ extension GraphTypedStoreAdapter {
             // Local finalization committed before journal cleanup or process interruption.
             for record in records {
                 guard let node = session.nodes[record.id] else { throw GraphStoreError.corruptIdentity }
+                try GraphNativeIdentityColumns.validate(node, graphID: plan.graphID, nodeID: record.id.rawValue)
                 let value = try session.snapshot(node, id: record.id)
                 guard value.type == record.type, value.endpoints == record.endpoints,
                       value.properties == record.properties, value.tags == record.tags, value.groups == record.groups else {
@@ -276,6 +281,7 @@ extension GraphTypedStoreAdapter {
         for node in staged {
             guard let text = node[dynamicMember: idKey] as? String, let uuid = UUID(uuidString: text) else { throw GraphStoreError.corruptIdentity }
             let id = GraphNodeID(graphID: plan.graphID, rawValue: uuid)
+            try GraphNativeIdentityColumns.validate(node, graphID: plan.graphID, nodeID: id.rawValue)
             guard found.updateValue(node, forKey: id) == nil, records.contains(where: { $0.id == id && $0.type == node.type }) else {
                 throw GraphStoreError.corruptIdentity
             }

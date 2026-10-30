@@ -23,3 +23,22 @@ struct GraphValueCodecTests {
         #expect(throws: GraphModelError.self) { try GraphValueCodec.decode(data) }
     }
 }
+
+extension GraphValueCodecTests {
+    @Test func binaryDataIsLengthCheckedAndLegacyJSONRemainsReadable() throws {
+        let old = Data(#"{"value":{"data":{"_0":"AP8="}},"version":1}"#.utf8)
+        #expect(try GraphValueCodec.decode(old) == .data(Data([0, 255])))
+        for bytes in [Data(), Data([0, 255]), Data(repeating: 173, count: 1024 * 1024)] {
+            let encoded = try GraphValueCodec.encode(.data(bytes))
+            #expect(encoded.count == bytes.count + 18)
+            #expect(try GraphValueCodec.decode(encoded) == .data(bytes))
+            #expect(throws: (any Error).self) { try GraphValueCodec.decode(Data(encoded.dropLast())) }
+            var extended = encoded; extended.append(0)
+            #expect(throws: GraphModelError.self) { try GraphValueCodec.decode(extended) }
+            var future = encoded; future[9] = 255
+            #expect(throws: GraphModelError.self) { try GraphValueCodec.decode(future) }
+        }
+        let nested: GraphValue = .array([.data(Data([0, 255])), .object(["bytes": .data(Data())])])
+        #expect(try GraphValueCodec.decode(GraphValueCodec.encode(nested)) == nested)
+    }
+}

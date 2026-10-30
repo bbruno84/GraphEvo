@@ -11,6 +11,10 @@ extension GraphReadScope {
         let output = try executeQuery(traversal.request)
         return GraphTraversalResult(visits: output.visits, view: queryView, diagnostics: output.diagnostics)
     }
+    /// Detached immutable records for shared observation reads.
+    package func observationOutput<Model: GraphModel>(_ query: GraphQuery<Model>) throws -> (GraphQueryOutput, GraphQueryLocalView) {
+        (try executeQuery(query.request), queryView)
+    }
     public func query<Model: GraphModel>(_ query: GraphQuery<Model>) throws -> GraphQueryResult<Model> {
         let output = try executeQuery(query.request)
         return try GraphQueryResult(items: output.records.map { try $0.decoded(as: Model.self) }, nextCursor: output.cursor, view: queryView, diagnostics: output.diagnostics)
@@ -37,6 +41,9 @@ extension GraphReadScope {
 }
 
 extension GraphStore {
+    package func sharedObservationOutput<Model: GraphModel>(_ query: GraphQuery<Model>) async throws -> (GraphQueryOutput, GraphQueryLocalView) {
+        try await read { try $0.observationOutput(query) }
+    }
     public func traverse(_ traversal: GraphTraversal) async throws -> GraphTraversalResult { try await read { try $0.traverse(traversal) } }
 
     public func query<Model: GraphModel>(_ query: GraphQuery<Model>) async throws -> GraphQueryResult<Model> { try await read { try $0.query(query) } }
