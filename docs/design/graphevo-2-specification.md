@@ -16,8 +16,13 @@ types and storage representations may change throughout alpha.
 
 ## 1. Product and release boundary
 
-GraphEvo remains an independent Swift graph library built on Core Data and
-`NSPersistentCloudKitContainer`. It supports local persistence without an
+GraphEvo remains an independent Swift graph library built on Core Data. M17
+selects explicit CloudKit synchronization through CKSyncEngine, replacing the
+initial NSPersistentCloudKitContainer direction. See the
+[transition contract](graphevo-2-custom-sync-transition.md) for ContextManager engine
+ownership and per-graph GraphCoordinators. Earlier native-mirroring sections
+remain historical working contracts pending their replacement.
+It supports local persistence without an
 iCloud account and synchronization/sharing when explicitly configured. The
 application supplies its domain models and owns its UI and business workflows.
 GraphEvo owns persistence, graph integrity and its documented synchronization

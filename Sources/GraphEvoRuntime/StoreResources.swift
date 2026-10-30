@@ -1,5 +1,4 @@
 import CoreData
-import CloudKit
 import Foundation
 import os
 
@@ -22,10 +21,9 @@ actor StoreResources {
     private let container: NSPersistentContainer
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
-    private var eventObserver: NSObjectProtocol?
+    private var legacyMirroring: LegacyStoreMirroring?
     private var changeObservers: [NSObjectProtocol] = []
     nonisolated let invalidations = StoreInvalidationHub()
-    private let setupTracker = StoreCloudSetupTracker()
     private var writerBusy = false
     private var writers: [(UUID, CheckedContinuation<Void, any Error>)] = []
     private var closing = false
@@ -55,23 +53,13 @@ actor StoreResources {
               schema.requiredModelVersionIdentifier.map({ model.versionIdentifiers == [AnyHashable($0)] }) ?? true else {
             throw StoreRuntimeError.invalidModel(schema.identifier)
         }
-        let descriptions = try members.enumerated().map { index, member in
-            let description = try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier)
-            if let identifier = resolved.configuration.cloudKitContainerIdentifier {
-                guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                      resolved.url != nil, resolved.configuration.access == .readWrite else {
-                    throw StoreRuntimeError.invalidConfiguration("Mirroring requires writable SQLite resources and a container identifier.")
-                }
-                let options = NSPersistentCloudKitContainerOptions(containerIdentifier: identifier)
-                options.databaseScope = index == 0 ? .private : .shared
-                description.cloudKitContainerOptions = options
-                description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-            }
-            return description
+        let descriptions = try members.map { member in
+            try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier)
         }
         let container: NSPersistentContainer
         if resolved.configuration.cloudKitContainerIdentifier != nil {
-            container = NSPersistentCloudKitContainer(name: schema.identifier, managedObjectModel: model)
+            container = try LegacyStoreMirroring.makeContainer(name: schema.identifier, model: model,
+                descriptions: descriptions, configuration: resolved.configuration)
         } else { container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model) }
         container.persistentStoreDescriptions = descriptions
         let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways)
@@ -132,28 +120,7 @@ actor StoreResources {
         })
         changeObservers.append(NotificationCenter.default.addObserver(forName: .NSPersistentStoreRemoteChange,
             object: coordinator, queue: nil) { _ in hub.publish(.storeChange) })
-        if container is NSPersistentCloudKitContainer {
-            changeObservers.append(NotificationCenter.default.addObserver(forName: .CKAccountChanged,
-                object: nil, queue: nil) { _ in hub.publish(.accountChange) })
-            changeObservers.append(NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification,
-                object: container, queue: nil) { note in
-                guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey] as? NSPersistentCloudKitContainer.Event,
-                      event.endDate != nil else { return }
-                // Share metadata can change without a persistent-history transaction.
-                hub.publish(.nativeOperation)
-            })
-        }
-        if let cloud = container as? NSPersistentCloudKitContainer {
-            let tracker = setupTracker
-            eventObserver = NotificationCenter.default.addObserver(forName: NSPersistentCloudKitContainer.eventChangedNotification,
-                object: cloud, queue: nil) { note in
-                guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey] as? NSPersistentCloudKitContainer.Event,
-                      event.type == .setup, event.endDate != nil else { return }
-                let identifier = event.storeIdentifier, success = event.succeeded
-                let failure = event.error.map { (($0 as NSError).domain, ($0 as NSError).code) }
-                tracker.record(identifier, success: success, failure: failure)
-            }
-        }
+        legacyMirroring = LegacyStoreMirroring(container: container, invalidations: hub)
         let progress = StoreLoadProgress(count: container.persistentStoreDescriptions.count)
         let hook = hooks.didLoadStore
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
@@ -168,8 +135,9 @@ actor StoreResources {
     }
 
     func cloudSetup() -> StoreCloudSetup {
-        setupTracker.snapshot(configured: resolved.configuration.cloudKitContainerIdentifier != nil,
-            identifiers: container.persistentStoreCoordinator.persistentStores.map(\.identifier))
+        let identifiers: [String] = container.persistentStoreCoordinator.persistentStores.map(\.identifier)
+        return legacyMirroring?.snapshot(identifiers: identifiers) ?? StoreCloudSetup(configured: false,
+            storeCount: identifiers.count, readyStoreCount: 0, latestFailureDomain: nil, latestFailureCode: nil)
     }
 
     /// Trusted adapter boundary: bodies return values and must never save or escape contexts.
@@ -316,8 +284,8 @@ actor StoreResources {
         for store in container.persistentStoreCoordinator.persistentStores {
             try container.persistentStoreCoordinator.remove(store)
         }
-        if let eventObserver { NotificationCenter.default.removeObserver(eventObserver) }
-        eventObserver = nil
+        legacyMirroring?.stop()
+        legacyMirroring = nil
         for observer in changeObservers { NotificationCenter.default.removeObserver(observer) }
         changeObservers.removeAll()
         invalidations.finish()

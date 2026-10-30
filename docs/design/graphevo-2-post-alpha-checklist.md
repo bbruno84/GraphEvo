@@ -111,6 +111,24 @@ Sources: [A1](graphevo-2-store-runtime.md),
 
 ## PA03 — graph separation, accounts and native sharing
 
+M17 replaces automatic native mirroring with explicit CloudKit sync. Existing
+native-sharing evidence remains historical. The
+[transition contract](graphevo-2-custom-sync-transition.md) defines replacement
+ownership and the retained CS01 result; the experiment does not close these gates.
+
+- [ ] **B** Implement exclusive per-graph stores/controllers and ContextManager
+  ownership of at most one engine per configured CloudKit private/shared database
+  in the synchronization process. Route exact zones, scope account state and keep
+  private graphs unshared until requested.
+- [ ] **B** Prove durable local change discovery/publication and incoming application
+  across interruption, including store/queue/engine-state ordering and outgoing
+  acknowledgement races. Explicit fixture queueing is not this acceptance.
+- [ ] **B** Validate graph-level pause/resume with automatic and in-flight work,
+  migrated local stores, pending changes and independent progress of other graphs.
+  Cancelling an engine is not a graph-level completion barrier.
+- [ ] **B** Retire the transitional v2 native mirror/assignment paths after their
+  callers have replacement coverage; preserve mandatory v1 conversion/readers.
+
 - [ ] **B** Publish account-unavailable/sign-out/switch/restriction and cached-data
   access rules, including revocation and offline retention. Prevent exposing or
   exporting an old account's data through a new account's session.

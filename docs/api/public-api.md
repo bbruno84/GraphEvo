@@ -979,6 +979,11 @@ retain legacy ownership; dropping a facade alone is not proof of store closure.
 
 ## V2 alpha graph catalog and personal mirroring
 
+The native mirroring/sharing APIs in this section and A5 below remain operational
+transitional alpha APIs. M17 selects their replacement with explicit CloudKit
+sync; see the [transition contract](../design/graphevo-2-custom-sync-transition.md).
+This cleanup does not add public GraphCoordinator/ContextManager/CKSyncEngine APIs.
+
 `GraphDatabase` is a public actor exposed through `import GraphEvo`. Its factories
 and operations are:
 

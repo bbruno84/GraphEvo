@@ -11,6 +11,20 @@ next increment; do not rebuild the former experiment-parent stack. Preserve
 historical reports/branches and their actual scope. Update the status page on
 integration changes and the post-alpha checklist on gate changes.
 
+## Selected v2 synchronization transition
+
+M17 selects explicit CloudKit sync. Read the
+[transition contract](docs/design/graphevo-2-custom-sync-transition.md) before
+sync/runtime/sharing changes. The ContextManager owns private/shared engines,
+at most one per configured CloudKit database in the synchronization process.
+One GraphCoordinator will own one graph and local store; it does not own an
+independent engine targeting the same database. The old native mirroring code
+is transitional under `Persistence/LegacyMirroring` and runtime `LegacyMirroring`.
+Do not extend it with replacement sync features or silently reinterpret existing
+mirrored files as custom-sync stores. Preserve local typed behavior and v1 data
+migration support. The retained CS01 branch is evidence, not code to merge.
+The new owners/transport are not implemented by the isolation cleanup alone.
+
 ## Selected v2 native schema
 
 Read [S02](docs/design/graphevo-2-identity-schema.md) before native model work.
