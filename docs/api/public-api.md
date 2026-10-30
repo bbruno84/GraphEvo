@@ -1524,3 +1524,12 @@ Query observations retain their conservative invalidation contract; callers
 should query freshly after extension resume. This is not a global cross-process
 lock, account/permission certificate, or completed iOS App Group/widget support.
 See [the extension access contract](../design/graphevo-2-app-extension-access.md).
+
+## V2 package-only graph coordinator foundation
+
+The [exclusive coordinator increment](../design/graphevo-2-graph-coordinator.md)
+adds internal GraphContextManager/GraphCoordinator ownership. It returns the
+existing GraphStore type through package-only factories for local validation;
+there is no new public opener or public coordinator API. Public GraphDatabase
+continues to represent its existing multi-graph resources. Existing public
+opening paths do not silently migrate to or activate the new owner path.

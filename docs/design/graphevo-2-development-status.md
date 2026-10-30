@@ -43,19 +43,25 @@ and expanded old-model refusal cases. S02 device/cloud acceptance is still open.
 ## Selected synchronization transition
 
 M17 selects explicit CloudKit sync after the successful bounded CS01 experiment.
-The ContextManager owns one CKSyncEngine per private/shared database; each
-GraphCoordinator will own one graph/store and its migration/pause lifecycle.
+The selected design assigns private/shared CKSyncEngine ownership to the
+ContextManager and one graph/store with migration/pause lifecycle to each
+GraphCoordinator. Engine implementation remains pending.
 See the [transition contract](graphevo-2-custom-sync-transition.md) for rationale,
 retained experiment evidence, cleanup scope and implementation order.
 
-The focused `codex/v2-sync-transition-cleanup` branch isolates native mirroring
-from local runtime code. It is not yet integrated and does not implement custom
-production sync or retire existing alpha entry points. Its local checkpoint passes
-559 tests (331 legacy, 137 store, 68 runtime, 23 model), plus manifest/diff checks.
-Existing A4/A5 native
-mirroring and their evidence below remain historical implementation status;
-they do not establish acceptance of the replacement transport. No experiment
-implementation is merged or adopted as production code.
+Native mirroring isolation [#105](https://github.com/bbruno84/GraphEvo/pull/105)
+is reviewed/merged as `32ae83f`, with exact-head iOS/macOS CI `41119977677` green.
+Its 559-test local checkpoint retains operational old alpha entry points; no
+experiment implementation was merged. Native A4/A5 results remain historical
+backend evidence, not acceptance of replacement sync.
+
+The focused `codex/v2-graph-coordinator` increment implements the
+[package-only exclusive local coordinator](graphevo-2-graph-coordinator.md):
+ContextManager registration, one graph/store, independent consumer leases and
+retained ownership on failed shutdown. It is pending review/integration; custom
+engines and a new public opening API remain unimplemented. The local checkpoint
+passes 574 tests (331 legacy, 149 store, 71 runtime, 23 model); CI remains a
+separate pre-integration requirement.
 
 ## Integrated alpha implementation
 
@@ -98,8 +104,8 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Review/integrate the focused native-mirroring isolation, then implement the
-   transition's exclusive per-graph ownership and ContextManager engine ownership.
+1. Review/integrate the exclusive local coordinator increment, then implement
+   durable changes and ContextManager engine ownership on that foundation.
 2. Establish durable changes/queue/import recovery in the actual implementation,
    then automatic sync, graph pause, conflicts/deletes/assets and sharing lifecycle.
 3. Complete protected application-data migration and mandatory v1 conversion on

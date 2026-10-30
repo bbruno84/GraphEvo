@@ -23,7 +23,13 @@ is transitional under `Persistence/LegacyMirroring` and runtime `LegacyMirroring
 Do not extend it with replacement sync features or silently reinterpret existing
 mirrored files as custom-sync stores. Preserve local typed behavior and v1 data
 migration support. The retained CS01 branch is evidence, not code to merge.
-The new owners/transport are not implemented by the isolation cleanup alone.
+The isolation cleanup alone does not implement the new owners/transport. Read
+the [local coordinator contract](docs/design/graphevo-2-graph-coordinator.md)
+before modifying the package-only owner path. Preserve exclusiveGraphID during
+resource canonicalization; generic leases must not coalesce with exclusive owners.
+Manager tokens cover pending requests and live handles. Last release retains
+registration on detach failure, including initialization/partial-load quarantine.
+New public opening and custom engine activation remain later work.
 
 ## Selected v2 native schema
 

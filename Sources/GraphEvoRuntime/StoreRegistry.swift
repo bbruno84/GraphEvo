@@ -92,6 +92,13 @@ package actor StoreHandle {
 package actor StoreRegistry {
     package static let shared = StoreRegistry()
 
+    /// Reuses runtime alias validation and canonical keys without acquiring a resource.
+    package nonisolated static func resolve(_ configuration: StoreConfiguration) throws -> (key: StoreKey, configuration: StoreConfiguration) {
+        let resolved = try ResolvedStore(configuration)
+        return (resolved.key, resolved.configuration)
+    }
+
+
     private struct Entry {
         let generation = UUID()
         let resolved: ResolvedStore
