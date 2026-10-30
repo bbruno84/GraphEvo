@@ -26,7 +26,8 @@ payload Data. The prototype handles the four known entity/relationship/action
 fixture records. Queueing is explicit in the fixture; generic history discovery,
 deletions, assets, conflict resolution and account acceptance are not implemented.
 No application format registry/version is introduced. Schema/codec/account errors
-are retained as failures; malformed bodies have a durable inbox before decoding.
+are retained as failures. GE2CS01Node payloads enter a durable inbox before decoding;
+unsupported record types are refused, without a general quarantine implementation.
 
 CKSyncEngine automatic scheduling is disabled for deterministic manual operations.
 Per-graph gates filter send/fetch scope and application of fetched data. Pausing
@@ -76,3 +77,19 @@ The result must separate selective routing, native schema/data migration, queue
 persistence and peer recovery from production reliability. A conflict or unsupported
 case must never become a silent successful partial graph. This is an experiment to
 choose a path; the implementation, cloud cutover and full v1 migration are later work.
+
+## Independent physical inspection
+
+`prepare_native_reader.py /tmp/new-CS01-reader` creates an external package.
+Its `ModelExporter <new-archive-path> <1-or-2>` constructs the exact lab model,
+replaces managed class bindings with generic NSManagedObject while checking entity
+hashes, and never opens a store. `CoreDataReader <archive> <fixture.json> <sqlite>`
+has no GraphEvo dependency. Run it only on separate disposable copies of retained
+whole case directories, after stopping the acknowledged device processes.
+It opens exactly one read-only store, disables automatic migration, checks model
+compatibility, scopes every fetch to that store, and verifies native object IDs
+belong to it. Results count the fixture's CS01 application rows for A and B;
+hidden catalog/membership rows are outside that count. This complements the
+public Graph checks of values and topology; it is not raw SQLite inspection.
+
+See the [bounded device result](../../docs/design/results/cs01-custom-sync-2026-10-30.md).
