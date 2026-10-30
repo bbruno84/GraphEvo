@@ -62,9 +62,9 @@ It provides one graph/store and independent leases; custom engines/public
 activation remain unimplemented.
 
 M18 selects Persistent History after the retained PH01 experiment, instead of a
-per-mutation intent journal. The focused `codex/v2-s03-history-identities` branch
-adopts [S03](graphevo-2-history-schema.md): six preservation flags and schema.3,
-with no new entities/columns. It is pending review/integration. History processing,
+per-mutation intent journal. [S03 runtime adoption, #107](https://github.com/bbruno84/GraphEvo/pull/107)
+supplies six preservation flags and schema.3 with no new entities/columns.
+History processing,
 durable pending/checkpoint publication and send acknowledgements remain next work;
 no experimental implementation is merged. Its local checkpoint passes 578 tests
 (331 legacy, 153 store, 71 runtime, 23 model), the Swift 6 consumer and selected
@@ -81,7 +81,7 @@ a separate pre-integration requirement.
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
-| Native identity | M16/S02 removed application versioning; M18 selects S03 deletion preservation, pending integration | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
+| Native identity | M16 removed application versioning; M18/S03 preserves graph/node IDs in deletion history through #107 | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
 | App/widget | Local read-only extension access and ownership safeguards | Broader lifecycle/account/protected-data/OS acceptance remains bounded by the reports |
 | Application data | M16 supersedes M2b.1: consumer-owned meaning/optional versions, no registry or global format block | Production migration execution remains open |
 
@@ -112,8 +112,8 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Review/integrate S03 identity preservation, then implement the per-graph PH
-   processor and durable pending/checkpoint publication on the coordinator.
+1. Implement the per-graph PH processor and durable pending/checkpoint
+   publication on the S03 coordinator; retain import authors and safe replay.
 2. Establish durable changes/queue/import recovery in the actual implementation,
    then automatic sync, graph pause, conflicts/deletes/assets and sharing lifecycle.
 3. Complete protected application-data migration and mandatory v1 conversion on
