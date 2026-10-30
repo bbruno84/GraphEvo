@@ -2,9 +2,11 @@
 
 Status: native target selected on 2026-10-30 after reviewing queries,
 attachments, sharing and migration evidence. Explicit `.nativeIdentity` runtime
-openings now adopt this shape. Application-format APIs/admission and mandatory
+openings now adopt this shape. Complete application-format admission and mandatory
 v1 conversion remain separate implementation work; model adoption is not a
-data migration or beta admission decision.
+data migration or beta admission decision. [M2b.1](graphevo-2-data-formats.md)
+introduces detached format contracts and conservative refusal; complete public
+version-aware persistence admission remains open.
 
 ## Native model
 

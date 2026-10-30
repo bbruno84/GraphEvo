@@ -24,6 +24,7 @@ struct GraphSharedInsertionPlan: Codable, Sendable {
         let createdDate: Date?
 
         init(_ record: GraphRecord) throws {
+            guard record.dataVersion == nil else { throw GraphStoreError.dataFormatAdmissionRequired }
             id = record.id; type = record.type
             switch record.endpoints {
             case .entity: kind = "entity"; subjects = []; objects = []

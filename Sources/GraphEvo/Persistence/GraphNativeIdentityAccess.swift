@@ -121,6 +121,7 @@ struct GraphNativeIdentityAccess: Sendable {
 
     private func anchors(_ context: NSManagedObjectContext, graphID: GraphID) throws -> (Entity, Action) {
         try requireModel(context)
+        try GraphDataFormatAdmission.requireUndeclared(in: context)
         let predicate = NSPredicate(format: "%K == %@ AND %K == nil", graphAttribute, graphID.rawValue.uuidString, nodeAttribute)
         let roots = NSFetchRequest<ManagedEntity>(entityName: ModelIdentifier.entityName)
         roots.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, NSPredicate(format: "type == %@", GraphTypedStoreAdapter.rootType)])
@@ -263,7 +264,7 @@ struct GraphNativeIdentityAccess: Sendable {
                 values[key] = try GraphValueCodec.decode(bytes)
             }
             return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: values,
-                tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+                tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, dataVersion: raw.dataVersion)
         }
     }
 

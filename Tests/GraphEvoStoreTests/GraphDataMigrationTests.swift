@@ -241,14 +241,17 @@ private actor MigrationReadGate {
         } catch { try? await lab.close(); throw error }
     }
 
-    @Test func structuralTransformationIsRejectedBeforeAnyEffect() async throws {
+    @Test(arguments: [false, true]) func structuralTransformationIsRejectedBeforeAnyEffect(changesVersion: Bool) async throws {
         let (root, lab, rows) = try await fixture()
         defer { try? FileManager.default.removeItem(at: root) }
         do {
             let base = try await lab.adapter()
             let invalid = try GraphDataMigrationDefinition(id: "invalid", revision: 1, type: "migration.item", kind: .entity,
                 sourceVersion: 1, targetVersion: 2, records: rows.map { $0.record.id }) { record in
-                    try GraphRecord(id: record.id, type: "another.type", properties: record.properties)
+                    try GraphRecord(id: record.id, type: changesVersion ? record.type : "another.type",
+                        endpoints: record.endpoints, properties: record.properties, tags: record.tags,
+                        groups: record.groups, createdDate: record.createdDate,
+                        dataVersion: changesVersion ? 9 : record.dataVersion)
                 }
             await #expect(throws: GraphDataMigrationError.invalidTransformation) {
                 try await GraphDataMigrationManager.shared.run(invalid, adapter: base, artifactsAt: root.appendingPathComponent("Artifacts"))

@@ -31,7 +31,8 @@ package enum GraphRecordMapper {
             var properties: [String: GraphValue] = [:]
             for (key, value) in projectedProperties ?? propertyKeys.map({ node.runtimeProperties(including: $0) }) ?? node.properties { properties[key] = try detached(value, key: key) }
             return try GraphRecord(id: id, type: node.type, endpoints: endpoints, properties: properties,
-                                   tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent)
+                                   tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent,
+                                   dataVersion: GraphDataFormatAdmission.version(of: node))
         }
     }
 

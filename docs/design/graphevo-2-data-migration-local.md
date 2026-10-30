@@ -22,7 +22,9 @@ date remain unchanged. Native schema plans, library-owned attachment evolution,
 structural edits, global migration routing and durable cloud discovery are outside
 this increment. Application-specific reconciliation policy remains consumer-owned.
 
-Normal public GraphModel/GraphRecord/read/write/query APIs remain unchanged.
+M2a left normal public GraphModel/GraphRecord/read/write/query APIs unchanged.
+The subsequent [M2b.1 contract](graphevo-2-data-formats.md) adds detached version
+metadata and conservative normal-store refusal without enabling versioned stores.
 Versioned data is opened only through `GraphDataMigrationLaboratory`, a local
 runtime owner using the exact S01 entity shape with a **laboratory model identifier**
 `GraphEvo.dataMigration.lab.1`. Public S01 opening rejects that identifier, even

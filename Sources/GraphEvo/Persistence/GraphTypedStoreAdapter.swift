@@ -62,6 +62,12 @@ package enum GraphTypedStoreAdapter {
                     try checkCancellation()
                     try GraphQueryValidation.request(request, graphID: graphID)
                     let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
+                    for node in session.nodes.values {
+                        try checkCancellation()
+                        guard node.type == request.definition.type, session.kind(node) == request.definition.kind else { continue }
+                        let version = GraphDataFormatAdmission.version(of: node)
+                        guard request.definition.dataFormat.canRead(version) else { throw GraphDataFormatError.unreadableVersion(version) }
+                    }
                     let propertyPlan = GraphQueryPropertyPlan(request)
                     let partial = session.nodes.compactMap { id, node -> Node? in
                         guard let keys = propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), !keys.isEmpty else { return nil }
@@ -286,6 +292,7 @@ package enum GraphTypedStoreAdapter {
 
         init(_ context: NSManagedObjectContext, _ graphID: GraphID, database: Bool = false, maximumCandidates: Int? = nil,
              allowUnprojectedRows: Bool = false) throws {
+            try GraphDataFormatAdmission.requireUndeclared(in: context)
             graph = facade(context)
             self.context = context
             self.graphID = graphID
@@ -435,7 +442,7 @@ package enum GraphTypedStoreAdapter {
                 properties[key] = try GraphValueCodec.decode(data)
             }
             return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: properties,
-                                   tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+                                   tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, dataVersion: raw.dataVersion)
         }
 
         func record(_ id: GraphNodeID) throws -> GraphRecord? {
@@ -492,6 +499,7 @@ package enum GraphTypedStoreAdapter {
         }
 
         func insert(_ record: GraphRecord) throws {
+            try GraphDataFormatAdmission.requireInsert(record, in: context)
             try requireWriteAccess()
             guard !isShared else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             try validate(record)

@@ -10,10 +10,12 @@ package enum GraphDataMigrationError: Error, Equatable {
 /// Detached format metadata. Nil is undeclared, never an inferred legacy version.
 package struct GraphDataMigrationRow: Sendable, Equatable {
     package let record: GraphRecord
-    package let dataVersion: Int64?
+    package var dataVersion: Int64? { record.dataVersion }
     package init(record: GraphRecord, dataVersion: Int64?) throws {
         guard dataVersion.map({ $0 >= 0 }) ?? true else { throw GraphDataMigrationError.sourceFormatMismatch }
-        self.record = record; self.dataVersion = dataVersion
+        self.record = try GraphRecord(id: record.id, type: record.type, endpoints: record.endpoints,
+            properties: record.properties, tags: record.tags, groups: record.groups,
+            createdDate: record.createdDate, dataVersion: dataVersion)
     }
 }
 
@@ -214,7 +216,8 @@ package actor GraphDataMigrationManager {
                 try Task.checkCancellation()
                 let record = try definition.transform(row.record)
                 guard record.id == row.record.id, record.type == row.record.type,
-                      record.endpoints == row.record.endpoints, record.createdDate == row.record.createdDate else {
+                      record.endpoints == row.record.endpoints, record.createdDate == row.record.createdDate,
+                      record.dataVersion == row.record.dataVersion else {
                     throw GraphDataMigrationError.invalidTransformation
                 }
                 target.append(try GraphDataMigrationRow(record: record, dataVersion: descriptor.targetVersion))
