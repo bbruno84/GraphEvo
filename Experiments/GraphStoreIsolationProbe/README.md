@@ -67,3 +67,23 @@ Do not infer that 1 controller : 1 Graph is impossible from a failed physical
 partition; do not infer that native per-graph import filtering exists either.
 A result must distinguish the controller abstraction from exclusive physical
 ownership, and leave the production decision to the next design discussion.
+
+## Physical-file confirmation
+
+After stopping the acknowledged owners and collecting complete case directories,
+prepare an inspector outside the repository:
+
+```sh
+python3 Experiments/GraphStoreIsolationProbe/prepare_inspector.py /tmp/new-GI01-inspector
+swift run --package-path /tmp/new-GI01-inspector Inspector /private/evidence/fixture.json /private/evidence/fresh-private-A/private.sqlite
+```
+
+Pass only owned closed evidence copies, never application/production stores. The
+inspector opens one file at a time read-only with no CloudKit container and checks
+both fixture graphs' exact values, endpoints and integrity. Inspect each original/
+fresh owner private store, participant/fresh shared store, and XR private controls.
+Use public Core Data metadata APIs to check S02 and distinct native store UUIDs;
+do not parse private SQLite or CloudKit tables.
+
+The [GI01 result](../../docs/design/results/gi01-graph-store-isolation-2026-10-30.md)
+records the counterexamples and scope. The integration branch stays unchanged.
