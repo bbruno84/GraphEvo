@@ -11,9 +11,11 @@ adds declared data versions, prepared pure consumer transformations, atomic
 data/version/marker publication and checkpoint reconciliation on isolated local
 stores. It does not activate public version-aware opening or cloud processing.
 
-[M2b.1](graphevo-2-data-formats.md) introduces detached model/record format
-contracts and conservative native admission refusal. The shared resource registry,
-protected-source lifecycle and production migration activation remain M2b work.
+Maintainer decision M16 removes native/public application versioning and the
+proposed common format registry. [Consumer data](graphevo-2-data-formats.md) and
+[S02](graphevo-2-identity-schema.md) define the replacement boundary. M2a remains
+a historical isolated laboratory, not the intended public version contract.
+Production backup, resource readiness and migration activation remain open.
 
 ## Maintainer decisions
 
@@ -78,10 +80,11 @@ these application tests were not run by M1.
 ## Consumer-defined migrations, library-managed execution
 
 Consumers register logical application-data transformations, with stable IDs,
-revision, declared source/target formats and explicit dependency/selection rules.
+revision and explicit dependency/selection/validation rules. Any source/target
+application versions are ordinary consumer data, not centrally registered formats.
 GraphEvo manages admission, scoped transactions, durable effect/checkpoint
 reconciliation, cancellation and publication of usable state. Ongoing imported
-record compatibility is a separate pipeline under the same format policy; whole
+record processing is a separate pipeline under consumer-defined policy; whole
 migration completion cannot disable later incompatible inserts/updates.
 
 Native Core Data model references, mappings and staged routes are library-internal
@@ -101,7 +104,7 @@ record format and migration operation versions distinct.
 Maintainer direction, 2026-10-30: use Graph's data-driven representation to keep
 native Core Data schema changes uncommon. Prefer consumer-defined logical type,
 property and format evolution over adding native entities/attributes for every
-application feature. Consolidate native identity/routing/version needs before
+application feature. Consolidate native identity/routing needs before
 beta, while retaining explicit logical record format evolution and migrations.
 This is a design objective, not a promise that native schema changes disappear
 or that a data-only change needs no compatibility handling. Change the native
@@ -116,23 +119,21 @@ fixture evidence; historical stores/codecs, real process interruption, concurren
 imports and Production rollout remain separate gates. It does not implement
 complete logical v1 conversion or certify arbitrary native routes.
 
-[S01](graphevo-2-persistent-schema.md) fixes the native shape and its public
-[device acceptance](results/s01-native-sharing-recovery-2026-10-30.md) verifies
-sharing/files/fresh recovery. Native schema evolution stays internal. Do not
+[S01 device acceptance](results/s01-native-sharing-recovery-2026-10-30.md) verifies
+its original sharing/files/fresh-recovery fixture. M16 now selects identity-only
+[S02](graphevo-2-identity-schema.md); its device acceptance remains open. Native
+schema evolution stays internal. Do not
 replay reserved stages, reset cloud data implicitly or treat events as a global
 synchronization certificate.
 
 ## Version domains and cloud lifecycle
 
-Keep native model/layout version, application data-format version and migration
-operation identity distinct. The application build number or one global done
-flag is insufficient. Per-record format discrimination is required where mixed
-formats may coexist. S01 selects optional native `ge2DataVersion` on each node kind, without a default.
-It is distinct from legacy property-row `appDataVersion`. A missing version is
-undeclared, never automatically zero/latest. Format APIs and admission are not
-implemented merely by adding that column.
-An old record without version metadata is accepted only through a declared legacy
-format rule, never by guessing from whichever decoder happens to succeed.
+Keep native model/layout version, optional consumer data versions and migration
+operation revision distinct. Graph does not require per-record version metadata.
+The consumer defines selection and validation, optionally using ordinary version
+properties. There is no central registry or global application compatibility
+block. Library ownership and scoped transactions protect migration execution;
+they do not interpret application meaning or suspend native cloud imports.
 
 Whole-store migration and ongoing import compatibility have distinct state:
 
@@ -141,7 +142,7 @@ Whole-store migration and ongoing import compatibility have distinct state:
   establish schema compatibility and usable data. Fresh/partial replicas cannot
   skip initialization or treat absence as a complete empty source.
 - After an import, changed records and dependency closures are checked against
-  supported logical formats. A later old-format update to an already upgraded
+  consumer-defined selection and validation rules. A later old-format update to an already upgraded
   record must be evaluated again. Deduplication binds graph/node, source format,
   validated source revision/fingerprint and transformation version, not node ID
   alone. Do not assume a public CloudKit record version is available or atomic.
@@ -169,22 +170,14 @@ resumable rescan. A coalesced observation invalidation or container event alone
 is not a durable work queue or an import-completion certificate. This manager
 requires its own processing contract; it does not silently close A8/O04.
 
-Do not publish incompatible payloads as normal typed query/observation results.
-Define an explicit pending/incompatible/update-required state with the narrowest
-safe scope: record/dependency closure, graph, or resource when routing is unknown.
-Do not omit records and return a smaller successful result. Native import itself
-may already have changed the SQLite store; this is a library read/write admission
-boundary, not a claim to hide bytes from native import or repair an unmodifiable
-store. Queries, observation, snapshots and local writers must share the policy.
-The exact snapshot/isolation mechanism is an M2/M6 experiment, not delivered M1.
-
-Supported older data may be converted by a registered consumer transformation.
-Unknown future formats are retained and reported without lossy downgrade. An
-unsupported native model or failed native import is a schema/sync error; a logical
-record converter cannot make an undecodable/unimported native row available.
-Shared read-only participants and widgets cannot persist upgrades. Hold the
-required state until an authorized owner/upgraded writer establishes compatible
-data; no bypass of A5 permissions or second synchronizer is permitted.
+Typed materialization invokes consumer decoding and propagates failures without
+silently dropping records. Generic reads and non-materializing queries remain
+available; the library does not infer application compatibility from version
+numbers. Consumers define handling of unknown/older data and semantic readiness.
+The manager may execute their explicit selections and transformations, respecting
+permissions, stale-source validation and durable recovery. Native model/codec or
+structural failures remain library errors. A read-only participant or widget
+cannot persist repairs; it must not bypass A5 permission checks.
 
 KVS completion, local completion, local export, native import and independent
 replica validation remain different evidence. For the agreed v1-to-v2 cutover,
@@ -296,8 +289,8 @@ until explicit admission is implemented.
    source, one conversion authority, duplicate prevention, late/offline old clients,
    graph/share destination policy and independent v2 replica recovery. KVS cannot
    establish this fence. Do not activate an empty cloud destination as success.
-6. **M6 — ongoing cloud format compatibility:** durable import processing,
-   per-record format policy, dependency/admission gating, authorized upgrades,
+6. **M6 — ongoing cloud data processing:** durable import discovery,
+   consumer selection/validation, permission-aware transformations,
    stale/future format handling and cross-replica convergence. Design this with
    M2/M4/M5, not after freezing their APIs. Separate full-operation completion
    from later incompatible inserts/updates; validate the general matrix above.

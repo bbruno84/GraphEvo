@@ -244,14 +244,15 @@ close O04 or mark the wider beta/stable items above complete.
   not public-store activation or complete M2 admission. The
   [553-test result](results/m2a-local-data-migration-2026-10-30.md) records the exact
   accepted scope and retained fixture/type-inference corrections.
-- [x] Introduce [M2b.1 detached format contracts](graphevo-2-data-formats.md):
-  explicit read compatibility, current-format serialization, version-preserving
-  patches and conservative normal-store refusal before application payload reads.
-  This does not enable normal versioned persistence or complete M2b admission.
-- [ ] **B** Complete public format declarations/admission across read/write/query/
-  traversal/file/observation paths before exposing versioned records, with actual
-  resource/process readiness, backup/retention and later-import policy. M2a's
-  isolated model identifier must not be removed as an admission shortcut.
+- [x] M16 supersedes M2b.1 application-version contracts and the proposed format
+  registry with [consumer-owned data](graphevo-2-data-formats.md). S02 removes the
+  native version column and global format refusal. Historical results retain scope.
+- [ ] **B** Validate [S02](graphevo-2-identity-schema.md) sharing and independent
+  recovery on explicitly prepared physical/cloud fixtures. S01's previous device
+  result does not close this revised-schema gate.
+- [ ] **B** Complete consumer-defined migration execution with resource/process
+  readiness, protected-source backups, retention, recovery and activation. Keep
+  the exact M2a fixture isolated; no public format registry is required.
 
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,

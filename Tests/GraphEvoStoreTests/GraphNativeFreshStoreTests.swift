@@ -34,7 +34,7 @@ private struct FreshNativeItem: GraphModel {
         let url = folder.appendingPathComponent("Native.sqlite")
         let db = try await GraphDatabase.open(at: url, schema: .nativeIdentity)
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
-        #expect(metadata[NSStoreModelVersionIdentifiersKey] as? [String] == ["GraphEvo.v2.schema.1"])
+        #expect(metadata[NSStoreModelVersionIdentifiersKey] as? [String] == ["GraphEvo.v2.schema.2"])
         #expect(try await db.graphIDs().isEmpty)
         let graph = try await db.createGraph(), second = try await db.createGraph()
         let a = graph.makeNodeID(), b = graph.makeNodeID(), edge = graph.makeNodeID(), action = graph.makeNodeID()
@@ -47,12 +47,10 @@ private struct FreshNativeItem: GraphModel {
         let source = folder.appendingPathComponent("input.bin"); try Data([1,2,3]).write(to: source)
         let file = try await graph.importAttachment(from: source, ownedBy: edge)
         try await db.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            await native.performBackgroundTask { context in
                 for kind in [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName] {
-                    let request = NSFetchRequest<NSFetchRequestResult>(entityName: kind)
-                    request.predicate = NSPredicate(format: "ge2DataVersion != nil")
-                    let count = try context.count(for: request)
-                    #expect(count == 0)
+                    #expect(context.persistentStoreCoordinator?.managedObjectModel
+                        .entitiesByName[kind]?.attributesByName["ge2DataVersion"] == nil)
                 }
             }
         }
@@ -163,9 +161,9 @@ private struct FreshNativeItem: GraphModel {
         observation.cancel(); try await graph.close(); try await db.close()
     }
 
-    private static func historicalModel(includingVersion: Bool) -> NSManagedObjectModel {
-        let model = GraphNativeIdentityColumns.makeModel(indexed: true, includingDataVersion: includingVersion)
-        model.versionIdentifiers = ["GraphEvo.nativeIdentity.alpha.2"]
+    private static func historicalModel(includingVersion: Bool, identifier: String) -> NSManagedObjectModel {
+        let model = includingVersion ? GraphHistoricalVersionedModel.makeModel() : GraphNativeIdentityColumns.makeModel(indexed: true)
+        model.versionIdentifiers = [identifier]
         return model
     }
 
@@ -179,14 +177,14 @@ private struct FreshNativeItem: GraphModel {
         return result
     }
 
-    @Test(arguments: [false, true])
-    func oldAlphaAndSameShapeWrongMarkerAreRefusedWithoutChangingFiles(includingVersion: Bool) async throws {
+    @Test(arguments: [false, true], ["GraphEvo.nativeIdentity.alpha.2", "GraphEvo.v2.schema.1"])
+    func oldAlphaAndSameShapeWrongMarkerAreRefusedWithoutChangingFiles(includingVersion: Bool, identifier: String) async throws {
         let folder = try root(); defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appendingPathComponent("OldAlpha.sqlite")
-        let oldSchema = StoreSchema(identifier: "GraphEvo.nativeIdentity.alpha.2",
-            entityVersionHashes: Self.historicalModel(includingVersion: includingVersion).entityVersionHashesByName,
-            requiredModelVersionIdentifier: "GraphEvo.nativeIdentity.alpha.2") {
-                Self.historicalModel(includingVersion: includingVersion)
+        let oldSchema = StoreSchema(identifier: identifier,
+            entityVersionHashes: Self.historicalModel(includingVersion: includingVersion, identifier: identifier).entityVersionHashesByName,
+            requiredModelVersionIdentifier: identifier) {
+                Self.historicalModel(includingVersion: includingVersion, identifier: identifier)
             }
         let old = try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: oldSchema,
                                                adapter: GraphNativeIdentityDatabaseAdapter.database)

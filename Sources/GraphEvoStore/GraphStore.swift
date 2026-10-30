@@ -21,7 +21,6 @@ public enum GraphStoreError: Error {
     case unresolvedReference
     case legacyStoreRequiresAdoption
     case unsupportedLayout
-    case dataFormatAdmissionRequired
     case reservedName
     case persistence(underlying: any Error)
 }
@@ -190,7 +189,6 @@ public actor GraphStore {
 extension GraphStoreError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .dataFormatAdmissionRequired: return "Declared record formats require version-aware store admission, which is not enabled for this store."
         case .missingStore: return "The local store is unavailable until the containing app initializes it."
         case .readOnly: return "The graph store is open for local reading only."
         case .synchronizationUnavailableInExtension: return "Cloud synchronization must be owned by the containing app; use local read-only access in the extension."

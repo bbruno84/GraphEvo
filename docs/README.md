@@ -26,8 +26,8 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
-- [M2b.1 record formats](design/graphevo-2-data-formats.md): detached public
-  declarations, version-preserving mapping and normal-store admission refusal.
+- [Consumer-owned data](design/graphevo-2-data-formats.md): application meaning,
+  optional version properties and typed decoding without a central format registry.
 
 - [Migration manager renewal](design/graphevo-2-migration-manager.md): M1 journal,
   consumer-defined application-data plans and remaining M2–M6 admission/conversion work.
@@ -35,7 +35,9 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
   data/version publication, prepared artifacts and interruption reconciliation.
 
 - [GraphEvo 2 selected persistent schema](design/graphevo-2-persistent-schema.md):
-  S01 native shape, four-area review, record-version semantics and adoption gates.
+  Historical S01 shape and four-area evidence; superseded by S02.
+- [S02 identity-only schema](design/graphevo-2-identity-schema.md):
+  Current graph/node identity model, consumer-owned data and validation gates.
 - [S01 public device acceptance](design/results/s01-native-sharing-recovery-2026-10-30.md):
   iPad/XR sharing, attachment lifecycle, two empty replicas and persisted-model evidence.
 - [GraphEvo 2 initial specification](design/graphevo-2-specification.md): current

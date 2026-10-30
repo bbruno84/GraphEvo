@@ -14,7 +14,7 @@ import XCTest
         let native = GraphSchemaMigrationLaboratory.model(.native)
         let versioned = GraphSchemaMigrationLaboratory.model(.versioned)
         XCTAssertEqual(v1.entityVersionHashesByName, Model.makeModel().entityVersionHashesByName)
-        XCTAssertEqual(native.entityVersionHashesByName, GraphNativeIdentityColumns.makeModel(indexed: true, includingDataVersion: false).entityVersionHashesByName)
+        XCTAssertEqual(native.entityVersionHashesByName, GraphNativeIdentityColumns.makeModel(indexed: true).entityVersionHashesByName)
         XCTAssertNotEqual(v1.entityVersionHashesByName, native.entityVersionHashesByName)
         XCTAssertNotEqual(native.entityVersionHashesByName, versioned.entityVersionHashesByName)
         for name in [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName] {

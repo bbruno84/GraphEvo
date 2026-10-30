@@ -13,18 +13,17 @@ integration changes and the post-alpha checklist on gate changes.
 
 ## Selected v2 native schema
 
-Read [S01](docs/design/graphevo-2-persistent-schema.md) before native model work.
-The selected 2.0 target retains the twelve-entity model and adds only optional
-`ge2GraphID`, `ge2NodeID`, `ge2DataVersion` on each node kind, with the existing
-compound identity indexes. Explicit `.nativeIdentity` openings now use S01 with
-physical-model identifier `GraphEvo.v2.schema.1`. Historical identity-only
-laboratories explicitly omit the version column. Do not silently
-change default opening paths, migrate/relabel old files or treat schema selection
-as beta acceptance. Record versions are optional consumer-format declarations,
-not revisions/import completion; retain the legacy property `appDataVersion`.
-Native schema migration is internal library work. Consumer migrations target
-application data. Reopen S01 only with concrete correctness/measurement evidence
-and documented migration and local/cloud validation effects.
+Read [S02](docs/design/graphevo-2-identity-schema.md) before native model work.
+M16 supersedes S01: retain twelve entities and optional `ge2GraphID`/`ge2NodeID`
+with existing compound identity indexes; remove native/public application data
+versioning and the proposed format registry. Explicit `.nativeIdentity` openings
+use `GraphEvo.v2.schema.2`. Default opening paths remain unchanged. Old S01 and
+laboratory files are refused before loading, never relabeled/migrated/erased.
+Application meaning, optional version properties and compatibility belong to the
+consumer. Native schema migration remains internal GraphEvo work. Preserve
+historical experiments and their exact models; S02 cloud/device acceptance is
+open separately from S01 evidence. Record concrete evidence and migration/local/
+cloud effects before another native revision.
 
 The [S01 device protocol](Experiments/S01NativeProbe/README.md) extends the public
 file fixture with guarded empty replicas and same-process seed/invitation. Keep
@@ -430,18 +429,14 @@ Do not replay arbitrary bodies. See
 
 ## GraphEvo 2 model contracts
 
-Read [M2b.1](docs/design/graphevo-2-data-formats.md) before format work.
-GraphRecord.dataVersion is optional/nonnegative; GraphModel.graphDataFormat
-defaults to undeclared. Check readability before consumer decoding, require the
-current format on serialization/typed patch, and preserve versions in copies.
-Normal stores reject versioned inserts and conservatively refuse application
-data access across the resource group when native versions are present. Keep
-this metadata preflight before property-row reads, including pending changes;
-do not bypass it in point/query/file/observation paths. Control-only status and
-access reduction remain available. The exact M2a laboratory model is the sole
-package exception; its files remain refused by normal public openers. A shared
-format registry, production activation, backup/readiness and cloud policy remain
-open; detached contracts do not authorize versioned production persistence.
+Read [consumer data](docs/design/graphevo-2-data-formats.md) before model work.
+GraphRecord has no application version field; GraphModel has no format policy
+or registration requirement. Versions may be ordinary consumer properties.
+Typed mapping validates kind/type/identity and propagates consumer decoder
+failures. Generic access and count/projection/aggregate do not classify app
+compatibility. Preserve structural, codec, permission, ownership and budget
+checks. Migration lifecycle, source protection and cloud processing remain open;
+removing format admission does not enable the package-only migration manager.
 
 GraphEvoModel compiles detached GraphModel/GraphRecord/value/patch contracts in
 Swift 6; GraphEvo exposes explicit aliases through its existing product. The
@@ -770,16 +765,14 @@ broader crash/conflict/account/scale coverage and v1 migration remain separate.
 
 Both openMirrored overload shapes accept explicit GraphDatabaseSchema selection.
 The native factory requires standard model version identifier
-GraphEvo.v2.schema.1 in every existing resource before native loading;
+GraphEvo.v2.schema.2 in every existing resource before native loading;
 matching entity hashes alone must not activate unversioned prototype data.
 New local/mirrored native files get the identifier from their fresh model factory.
 Do not manually stamp old files, use another native coordinator, convert or erase
 as an opening side effect. No-schema/current opens retain their prior model.
-The root alpha.1 logical protocol is retained. S01 adds nullable ge2DataVersion;
-the physical-model gate is not application-format admission or import completion.
-Ordinary unversioned writes leave ge2DataVersion nil. Do not derive it from the
-legacy per-property appDataVersion or advertise a working migration gate before
-the consumer data manager implements it. Reject mixed/malformed node shapes.
+The root alpha.1 logical protocol is retained. S02 contains graph/node identity
+only. Consumer versions are ordinary data, never interpreted by Graph. Reject
+mixed/malformed identity shapes; retain codec/structure validation.
 validateIntegrity(of:) supports both legitimate mirrored topologies but remains
 a current-local full payload check. Use the public consumer host to distinguish
 published API evidence from historical @testable laboratory coverage.
@@ -859,7 +852,7 @@ Preserve source/backup ownership, pending intents and separate validation/activa
 
 Read [M2a](docs/design/graphevo-2-data-migration-local.md) before changing the
 package-only manager or adapter. Keep the laboratory model identifier separate
-from public S01; no normal read/write/query path has public format admission yet.
+from public S02. It retains historical version metadata only inside the fixture.
 Consumer transformations are pure detached-value callbacks. Publish values,
 native version and effect marker atomically under the runtime writer boundary;
 recheck the full selected preimage and verify actual target state on recovery.

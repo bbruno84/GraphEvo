@@ -58,7 +58,7 @@ final class GraphSchemaMigrationLaboratory {
     private(set) var lastNativeOperation = "none"
 
     static func model(_ layout: Layout) -> NSManagedObjectModel {
-        let model = layout == .v1 ? Model.makeModel() : GraphNativeIdentityColumns.makeModel(indexed: true, includingDataVersion: false)
+        let model = layout == .v1 ? Model.makeModel() : GraphNativeIdentityColumns.makeModel(indexed: true)
         if layout == .versioned {
             for name in [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName] {
                 let attribute = NSAttributeDescription()

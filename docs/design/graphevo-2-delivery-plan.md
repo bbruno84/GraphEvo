@@ -1,5 +1,12 @@
 # GraphEvo 2 — delivery plan
 
+Current amendment M16: [S02](graphevo-2-identity-schema.md) supersedes S01's
+application-version column. Application meaning/optional versions are consumer
+properties; the proposed format registry and global refusal are withdrawn.
+Historical milestone evidence below retains its original scope. Next migration
+work is protected-source lifecycle and consumer-plan execution, not registry
+activation. Revised S02 sharing/recovery still needs its own device evidence.
+
 Status: delivery roadmap. For current implementation/integration status, use
 [development status](graphevo-2-development-status.md). Read with the
 [specification](graphevo-2-specification.md) and

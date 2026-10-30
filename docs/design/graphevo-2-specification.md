@@ -448,9 +448,11 @@ An unchanged-schema alpha must not be represented as proof of final migration.
 GraphEvo manages native Core Data schema transitions internally. The renewed
 consumer migration manager handles application-data formats and transformations,
 not consumer registration of native schema plans. External native interventions
-are not automatically supported. S01's optional `ge2DataVersion` is a format
-discriminator, not a cloud pause or complete-import marker; its data-admission
-implementation must handle partial and later old-format imports explicitly.
+are not automatically supported. Application versions and compatibility are
+consumer-owned ordinary data, not native schema fields or a Graph registry.
+[S02](graphevo-2-identity-schema.md) retains graph/node identity only. Migration
+execution must still account for partial and later imports; no journal marker
+or application version is a cloud pause or complete-import certificate.
 
 Migration preserves logical graphs, node kinds/types, values and their encoding
 meaning, tags, groups, valid optional/absent values and timestamps, directed

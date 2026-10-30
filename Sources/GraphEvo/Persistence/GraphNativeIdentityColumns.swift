@@ -3,15 +3,13 @@ import Foundation
 import GraphEvoModel
 
 /// Projection maintenance for explicitly selected native-column models only.
-/// Historical laboratories select identity-only models explicitly. S01 also stores
-/// an optional application version; its presence does not implement data admission.
+/// S02 projects graph/node identity without interpreting application properties.
 enum GraphNativeIdentityColumns {
     static let graphAttribute = "ge2GraphID"
     static let nodeAttribute = "ge2NodeID"
-    static let dataVersionAttribute = "ge2DataVersion"
-    private enum Layout: Hashable { case current, identityOnly, s01 }
+    private enum Layout: Hashable { case current, identityOnly }
 
-    static func makeModel(indexed: Bool, includingDataVersion: Bool) -> NSManagedObjectModel {
+    static func makeModel(indexed: Bool) -> NSManagedObjectModel {
         let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
         let model = Model.makeModel()
         for name in kinds {
@@ -19,13 +17,6 @@ enum GraphNativeIdentityColumns {
             for key in [graphAttribute, nodeAttribute] {
                 let attribute = NSAttributeDescription()
                 attribute.name = key; attribute.attributeType = .stringAttributeType; attribute.isOptional = true
-                entity.properties.append(attribute)
-            }
-            if includingDataVersion {
-                let attribute = NSAttributeDescription()
-                attribute.name = dataVersionAttribute
-                attribute.attributeType = .integer64AttributeType
-                attribute.isOptional = true
                 entity.properties.append(attribute)
             }
             if indexed {
@@ -39,9 +30,7 @@ enum GraphNativeIdentityColumns {
 
     private static func layout(_ entity: NSEntityDescription) throws -> Layout {
         let graph = entity.attributesByName[graphAttribute], node = entity.attributesByName[nodeAttribute]
-        let version = entity.attributesByName[dataVersionAttribute]
         if graph == nil && node == nil {
-            guard version == nil else { throw GraphStoreError.unsupportedLayout }
             return .current
         }
         guard let graph, let node, graph.attributeType == .stringAttributeType,
@@ -49,15 +38,7 @@ enum GraphNativeIdentityColumns {
               graph.defaultValue == nil, node.defaultValue == nil, !graph.isTransient, !node.isTransient else {
             throw GraphStoreError.unsupportedLayout
         }
-        guard let version else { return .identityOnly }
-        guard version.attributeType == .integer64AttributeType, version.isOptional,
-              version.defaultValue == nil, !version.isTransient,
-              entity.indexes.contains(where: { index in
-                  index.name == entity.name! + "_ge2_identity" &&
-                  index.elements.compactMap(\.propertyName) == [graphAttribute, nodeAttribute] &&
-                  index.elements.allSatisfy { $0.collationType == .binary }
-              }) else { throw GraphStoreError.unsupportedLayout }
-        return .s01
+        return .identityOnly
     }
 
     /// Preflight before reserving any external shared intent.
