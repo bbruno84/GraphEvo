@@ -1,0 +1,88 @@
+import CoreData
+import Foundation
+import GraphEvoModel
+import GraphEvoRuntime
+
+/// Facade-owned initialization; the runtime transaction owns the single save.
+package struct GraphCoordinatorAdapter: Sendable {
+    package let graph: GraphStoreAdapter
+    package let initialize: @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void
+
+    package init(graph: GraphStoreAdapter,
+                 initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
+        self.graph = graph; self.initialize = initialize
+    }
+}
+
+/// Owns exactly one local graph. Consumer handles carry independent runtime leases.
+package actor GraphCoordinator {
+    package nonisolated let id: GraphID
+    private let handle: StoreHandle
+    private let adapter: GraphStoreAdapter
+
+    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) {
+        self.id = id; self.handle = handle; self.adapter = adapter
+    }
+
+    static func open(id: GraphID, configuration: StoreConfiguration, creating: Bool,
+                     registry: StoreRegistry, schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
+        guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        if creating && exists { throw GraphStoreError.duplicateIdentity }
+        if !creating && !exists { throw GraphStoreError.missingStore }
+        let handle = try await registry.open(configuration, schema: schema)
+        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph)
+        do {
+            if creating {
+                try await handle.transaction { try adapter.initialize($0, id, true) }
+            } else {
+                try await handle.read { try adapter.initialize($0, id, false) }
+            }
+            return owner
+        } catch {
+            let original = error
+            do { try await owner.close() }
+            catch { throw GraphCoordinatorQuarantine(owner: owner, failure: error) }
+            throw original
+        }
+    }
+
+    func lease(onClose: @escaping @Sendable () async throws -> Void) async throws -> GraphStore {
+        let lease = try await handle.newLease()
+        return GraphStore.attached(id: id, handle: lease, adapter: adapter,
+                                   ownerLease: GraphCoordinatorLease(handle: lease, onClose: onClose))
+    }
+
+    func close() async throws { try await handle.close() }
+}
+
+/// Keep failed initialization cleanup and its native claims alive in the manager entry.
+struct GraphCoordinatorQuarantine: Error {
+    let owner: GraphCoordinator
+    let failure: any Error
+}
+
+/// One consumer release; cancellation never abandons native cleanup or manager release.
+actor GraphCoordinatorLease {
+    private let handle: StoreHandle
+    private let onClose: @Sendable () async throws -> Void
+    private var closing: Task<Void, any Error>?
+
+    init(handle: StoreHandle, onClose: @escaping @Sendable () async throws -> Void) {
+        self.handle = handle; self.onClose = onClose
+    }
+
+    func close() async throws {
+        if let closing { return try await closing.value }
+        let handle = handle, onClose = onClose
+        let task = Task { try await handle.close(); try await onClose() }
+        closing = task
+        try await task.value
+    }
+
+    deinit {
+        guard closing == nil else { return }
+        let handle = handle, onClose = onClose
+        Task { try? await handle.close(); try? await onClose() }
+    }
+}

@@ -66,10 +66,15 @@ public actor GraphStore {
     public nonisolated let id: GraphID
     private let handle: StoreHandle
     private let adapter: GraphStoreAdapter
+    private let ownerLease: GraphCoordinatorLease?
     private var observationCoordinator: GraphObservationCoordinator?
 
-    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) {
-        self.id = id; self.handle = handle; self.adapter = adapter
+    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, ownerLease: GraphCoordinatorLease? = nil) {
+        self.id = id; self.handle = handle; self.adapter = adapter; self.ownerLease = ownerLease
+    }
+
+    static func attached(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, ownerLease: GraphCoordinatorLease) -> GraphStore {
+        GraphStore(id: id, handle: handle, adapter: adapter, ownerLease: ownerLease)
     }
 
     package static func attached(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) -> GraphStore {
@@ -126,7 +131,10 @@ public actor GraphStore {
     public nonisolated func makeNodeID() -> GraphNodeID { GraphNodeID(graphID: id) }
 
     public func close() async throws {
-        do { try await handle.close() } catch { throw Self.translate(error) }
+        do {
+            if let ownerLease { try await ownerLease.close() }
+            else { try await handle.close() }
+        } catch { throw Self.translate(error) }
     }
 
     public func read<Value: Sendable>(

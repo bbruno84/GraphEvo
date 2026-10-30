@@ -61,13 +61,15 @@ process ownership and cross-process migration coordination retain their gates.
 
 ## Cleanup and implementation order
 
-1. **This cleanup:** isolate the old native mirroring implementation from local
+1. **Merged #105:** isolate the old native mirroring implementation from local
    runtime ownership/transactions. Keep its existing explicit alpha entry points
    operational during replacement. Move native share/open/assignment code under
    `Persistence/LegacyMirroring`; move runtime native setup/notifications into
    `GraphEvoRuntime/LegacyMirroring`. These paths are transitional and receive
    correctness fixes only. This is isolation, not retirement or new cloud sync.
 2. Implement exclusive per-graph local ownership and ContextManager registration.
+   The [first package-only increment](graphevo-2-graph-coordinator.md) supplies
+   this local foundation; public activation remains later work.
    Reuse typed CRUD, values/codecs, attachments, queries, observation and registry
    safeguards. Avoid rewriting them solely because transport changes.
 3. Implement durable local change discovery and outgoing publication, incoming

@@ -116,6 +116,10 @@ native-sharing evidence remains historical. The
 [transition contract](graphevo-2-custom-sync-transition.md) defines replacement
 ownership and the retained CS01 result; the experiment does not close these gates.
 
+The [package-only coordinator increment](graphevo-2-graph-coordinator.md) adds
+local exclusive ownership/lifecycle tests, without closing public activation,
+engine or cross-process acceptance. Retain this scope when integrating it.
+
 - [ ] **B** Implement exclusive per-graph stores/controllers and ContextManager
   ownership of at most one engine per configured CloudKit private/shared database
   in the synchronization process. Route exact zones, scope account state and keep
