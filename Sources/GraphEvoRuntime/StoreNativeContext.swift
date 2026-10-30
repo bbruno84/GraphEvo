@@ -11,6 +11,8 @@ package enum StoreNativeContext {
         (context.userInfo[cancellationKey] as? CancellationCheck) ?? {}
     }
     package static let containerKey = "GraphEvo.v2.container"
+    /// Persistent store purpose, not an application format or a synchronization certificate.
+    package static let historySyncGraphKey = "GraphEvo.v2.historySyncGraphID"
 
     package static func privateStore(in context: NSManagedObjectContext) -> NSPersistentStore? {
         guard let url = context.userInfo[privateURLKey] as? URL else {

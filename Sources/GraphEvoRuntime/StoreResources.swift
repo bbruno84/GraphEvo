@@ -54,7 +54,8 @@ actor StoreResources {
             throw StoreRuntimeError.invalidModel(schema.identifier)
         }
         let descriptions = try members.map { member in
-            try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier)
+            try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier,
+                                 nativeMirroring: resolved.configuration.cloudKitContainerIdentifier != nil)
         }
         let container: NSPersistentContainer
         if resolved.configuration.cloudKitContainerIdentifier != nil {
@@ -77,7 +78,7 @@ actor StoreResources {
     }
 
     private static func storeDescription(_ resolved: ResolvedStore, model: NSManagedObjectModel,
-                                         requiredModelVersionIdentifier: String?) throws -> NSPersistentStoreDescription {
+                                         requiredModelVersionIdentifier: String?, nativeMirroring: Bool) throws -> NSPersistentStoreDescription {
         let description: NSPersistentStoreDescription
         switch resolved.configuration.location {
         case .sqlite(let url):
@@ -85,6 +86,9 @@ actor StoreResources {
                 let metadata: [String: Any]
                 do { metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url) }
                 catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
+                if nativeMirroring && metadata[StoreNativeContext.historySyncGraphKey] != nil {
+                    throw StoreRuntimeError.invalidConfiguration("A history-sync store cannot be opened by native CloudKit mirroring.")
+                }
                 guard model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata),
                       requiredModelVersionIdentifier.map({ metadata[NSStoreModelVersionIdentifiersKey] as? [String] == [$0] }) ?? true else {
                     throw StoreRuntimeError.incompatibleStore(url)

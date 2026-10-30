@@ -6,11 +6,12 @@ import GraphEvoRuntime
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
     package let graph: GraphStoreAdapter
+    package let sync: GraphSyncAdapter?
     package let initialize: @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void
 
-    package init(graph: GraphStoreAdapter,
+    package init(graph: GraphStoreAdapter, sync: GraphSyncAdapter? = nil,
                  initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
-        self.graph = graph; self.initialize = initialize
+        self.graph = graph; self.sync = sync; self.initialize = initialize
     }
 }
 
@@ -19,9 +20,11 @@ package actor GraphCoordinator {
     package nonisolated let id: GraphID
     private let handle: StoreHandle
     private let adapter: GraphStoreAdapter
+    private let syncSession: GraphSyncSession?
 
-    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter) {
+    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?) {
         self.id = id; self.handle = handle; self.adapter = adapter
+        self.syncSession = sync.map { GraphSyncSession(graphID: id, handle: handle, adapter: $0) }
     }
 
     static func open(id: GraphID, configuration: StoreConfiguration, creating: Bool,
@@ -31,7 +34,7 @@ package actor GraphCoordinator {
         if creating && exists { throw GraphStoreError.duplicateIdentity }
         if !creating && !exists { throw GraphStoreError.missingStore }
         let handle = try await registry.open(configuration, schema: schema)
-        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph)
+        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync)
         do {
             if creating {
                 try await handle.transaction { try adapter.initialize($0, id, true) }
@@ -50,10 +53,13 @@ package actor GraphCoordinator {
     func lease(onClose: @escaping @Sendable () async throws -> Void) async throws -> GraphStore {
         let lease = try await handle.newLease()
         return GraphStore.attached(id: id, handle: lease, adapter: adapter,
-                                   ownerLease: GraphCoordinatorLease(handle: lease, onClose: onClose))
+                                   ownerLease: GraphCoordinatorLease(handle: lease, sync: syncSession, onClose: onClose))
     }
 
-    func close() async throws { try await handle.close() }
+    func close() async throws {
+        await syncSession?.retire()
+        try await handle.close()
+    }
 }
 
 /// Keep failed initialization cleanup and its native claims alive in the manager entry.
@@ -67,9 +73,18 @@ actor GraphCoordinatorLease {
     private let handle: StoreHandle
     private let onClose: @Sendable () async throws -> Void
     private var closing: Task<Void, any Error>?
+    private let sync: GraphSyncSession?
 
-    init(handle: StoreHandle, onClose: @escaping @Sendable () async throws -> Void) {
-        self.handle = handle; self.onClose = onClose
+    init(handle: StoreHandle, sync: GraphSyncSession?, onClose: @escaping @Sendable () async throws -> Void) {
+        self.handle = handle; self.sync = sync; self.onClose = onClose
+    }
+
+    func session() async throws -> GraphSyncSession {
+        guard closing == nil else { throw GraphStoreError.closed }
+        _ = try await handle.snapshot()
+        guard closing == nil else { throw GraphStoreError.closed }
+        guard let sync else { throw GraphSyncError.unavailable }
+        return sync
     }
 
     func close() async throws {

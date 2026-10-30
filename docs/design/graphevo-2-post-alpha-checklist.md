@@ -136,6 +136,10 @@ engine or cross-process acceptance. Retain this scope when integrating it.
   correlation, token/store binding, pruning/expiry policy and durable pending
   publication before checkpoint advancement. S03 retains deletion IDs; it does
   not reconstruct pre-preservation tombstones or certify processor recovery.
+  The [PH pending increment](graphevo-2-history-processing.md) covers local/Simulator
+  discovery, atomic-save rollback, replay and acknowledgement races. Real
+  process-kill/power-loss, retained-history rebaseline, full incoming operations
+  and queue/engine ordering remain open; count refusals are not resource bounds.
 - [ ] **B** Prove durable local change discovery/publication and incoming application
   across interruption, including store/queue/engine-state ordering and outgoing
   acknowledgement races. Explicit fixture queueing is not this acceptance.

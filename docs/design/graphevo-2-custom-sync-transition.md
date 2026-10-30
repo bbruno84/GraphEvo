@@ -76,7 +76,9 @@ process ownership and cross-process migration coordination retain their gates.
    deleted-identity preservation, rather than a consumer mutation journal.
    Implement durable local change discovery and outgoing publication, incoming
    persistence/application and recovery. Verify interruption boundaries before
-   building the rest of sync on top of them; this is the first alpha acceptance
+   building the rest of sync on top of them. The [PH pending increment](graphevo-2-history-processing.md)
+   supplies discovery/checkpoint/attempts and a controlled patch seam, not full
+   incoming or crash acceptance; this is the first alpha acceptance
    increment, not another general-purpose experiment branch.
 4. Implement shared private/shared engine ownership, zone routing, automatic sync
    and graph-level pause/resume. Exercise in-flight operations and restart.

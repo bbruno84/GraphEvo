@@ -882,3 +882,21 @@ Missing markers alone do not prove no effect. Never replay the consumer closure
 for a retained prepared artifact or mistake journal completion for public-store
 activation. Cloud/native imports, ordinary app/widget admission and production
 backup/retention are outside this laboratory's accepted scope.
+
+
+## V2 Persistent History pending publication
+
+Read [the PH processing contract](docs/design/graphevo-2-history-processing.md)
+before sync/checkpoint work. S03 remains unchanged. New coordinated stores reserve
+`GraphEvo.v2.historySyncGraphID`; unmarked alpha stores are not silently adopted.
+Refuse marked resources before any old mirrored single/pair native load, including
+shared secondaries. Generic readers must not create a second graph there.
+
+Pending operations and secure-token Data share one runtime-owned save on the
+hidden root. Stable local/import/metadata authors separate upload discovery from
+observed imports; exclude metadata at history fetch to avoid feedback loops.
+Never reset corrupt/expired state, advance past unresolved details, prune history,
+or clear a newer generation using an older receipt. Complete or abandon every
+prepared batch, including empty batches. Count limits are not total resource bounds.
+The package patch seam is not full incoming/conflict/inbox support. Retain actual
+process-kill, engine ordering, history retention and physical-cloud gates.

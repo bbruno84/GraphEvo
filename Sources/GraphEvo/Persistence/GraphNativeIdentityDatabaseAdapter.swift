@@ -1,6 +1,7 @@
 import CoreData
 import Foundation
 import GraphEvoModel
+import GraphEvoRuntime
 import GraphEvoStore
 
 /// Fresh native alpha protocol with explicit local/mirrored admission. Historical prototype markers are deliberately not accepted.
@@ -41,6 +42,10 @@ enum GraphNativeIdentityDatabaseAdapter {
                 return try query(context, graphID, request)
             })
         return GraphDatabaseAdapter(graph: graph, catalog: { try access.catalog($0) }, create: { context, id in
+            if let coordinator = context.persistentStoreCoordinator,
+               coordinator.persistentStores.contains(where: { coordinator.metadata(for: $0)[StoreNativeContext.historySyncGraphKey] != nil }) {
+                throw GraphStoreError.ownershipConflict
+            }
             try base.create(context, id)
             try access.activateFreshGraph(context, graphID: id)
         }, upgrade: { _, _ in throw GraphStoreError.unsupportedLayout })

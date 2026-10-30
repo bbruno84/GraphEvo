@@ -1534,3 +1534,12 @@ existing GraphStore type through package-only factories for local validation;
 there is no new public opener or public coordinator API. Public GraphDatabase
 continues to represent its existing multi-graph resources. Existing public
 opening paths do not silently migrate to or activate the new owner path.
+
+
+The [PH pending continuation](../design/graphevo-2-history-processing.md) adds
+package-only collection, immutable batch preparation, subset acknowledgement,
+abandonment and controlled imported patches on coordinated handles. These are
+not public GraphStore APIs or activated CloudKit transport. Newly coordinated
+stores retain a native purpose marker: old mirrored single/pair openings refuse
+them before cloud loading; compatible local/read-only readers remain supported.
+Unmarked older-alpha S03 stores are not silently adopted by the coordinator.

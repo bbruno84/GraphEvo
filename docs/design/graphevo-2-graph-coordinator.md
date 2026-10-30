@@ -37,10 +37,11 @@ registries and legacy stacks retain the existing gateway exclusion.
 This increment supports one writable local SQLite resource per coordinator.
 Mirrored/private-shared pairs, read-only coordinator opens and memory stores are
 refused. Existing public read-only/widget and multi-graph APIs are unchanged.
-An older API may open a compatible file after the coordinator fully closes;
-exclusivity is an active-ownership contract, not a new persisted layout marker.
-A later coordinator opening audits the actual contents again and refuses a file
-that has acquired another graph or foreign rows.
+The [PH increment](graphevo-2-history-processing.md) adds a persistent coordinated
+role on fresh creation. Reopening requires it; older unmarked S03 files are not
+silently activated. Compatible local/read-only reading remains possible after
+close, while native mirroring and creation of another graph are refused. Active
+ownership still uses the runtime gateway; the role marker is not a process lock.
 
 ## Validation and persistence
 
@@ -58,7 +59,8 @@ It neither repairs IDs nor derives them from URLs/Core Data URIs. Core Data
 contexts and managed objects remain inside trusted facade adapters. Queries,
 attachments, observation and typed operations use their existing scoped APIs.
 
-No migration is needed for this increment. Populated multi-graph or v1 source
+The initial ownership increment required no migration. The PH continuation
+requires newly created coordinated alpha resources; it adds no native column. Populated multi-graph or v1 source
 conversion remains explicit future migration work. Refusal does not certify
 byte-identical volatile SQLite sidecars after a native open/close; it does not
 rewrite application records or source identities.

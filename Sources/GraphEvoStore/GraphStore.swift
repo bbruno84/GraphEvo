@@ -130,6 +130,29 @@ public actor GraphStore {
 
     public nonisolated func makeNodeID() -> GraphNodeID { GraphNodeID(graphID: id) }
 
+    private func syncSession() async throws -> GraphSyncSession {
+        guard let ownerLease else { throw GraphSyncError.unavailable }
+        return try await ownerLease.session()
+    }
+
+    package func collectSyncChanges(limits: GraphSyncLimits = .init()) async throws -> Int {
+        try await syncSession().collect(limits: limits)
+    }
+
+    package func prepareSyncBatch(maximumRecords: Int, limits: GraphSyncLimits = .init()) async throws -> GraphSyncBatch {
+        try await syncSession().prepare(maximumRecords: maximumRecords, limits: limits)
+    }
+
+    package func acknowledgeSyncBatch(_ id: UUID, succeeded: Set<GraphNodeID>, limits: GraphSyncLimits = .init()) async throws -> Int {
+        try await syncSession().acknowledge(id, succeeded: succeeded, limits: limits)
+    }
+
+    package func abandonSyncBatch(_ id: UUID) async throws { try await syncSession().abandon(id) }
+
+    package func applyImportedPatches(_ patches: [GraphRecordPatch], limits: GraphSyncLimits = .init()) async throws {
+        try await syncSession().importPatches(patches, limits: limits)
+    }
+
     public func close() async throws {
         do {
             if let ownerLease { try await ownerLease.close() }
