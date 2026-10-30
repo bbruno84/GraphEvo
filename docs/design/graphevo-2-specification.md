@@ -74,12 +74,14 @@ Preserve the domain concepts of Entity, directed Relationship and Action with
 subjects and objects. Tags, groups, node properties and graph structure from v1
 must have a migration destination even if their representation changes.
 
-Use the current persistent schema as the **first candidate**, building the new
-stack and application API against it to discover its limits. Do not design and
-freeze a replacement schema before those uses exist. Alpha may add, change or
-replace structures when a measured requirement justifies it. The single-entity
-V09 laboratory model is evidence about framework behavior, not the selected
-library schema.
+The current persistent schema was the first candidate exercised by A1–A8 and
+consolidation. The [S01 native schema decision](graphevo-2-persistent-schema.md)
+now fixes the 2.0 target: retain that structure, add graph/node UUID projections
+and an optional application record-format version, with the existing compound
+identity indexes. Query, attachment, sharing and migration review justifies no
+other native structure. S01 records exact fields, semantics, adoption work and
+the evidence required to reopen the decision. The single-entity V09 laboratory
+model remains framework evidence, not the selected library schema.
 
 The [A2 implementation contract](graphevo-2-async-transactions.md) records the
 local runtime behavior, trusted adapter restrictions and cancellation boundaries.
@@ -116,8 +118,8 @@ signal lock; iOS remains 16. These provisional floors follow M11.
   provisional; migration must preserve valid existing empty/optional structures.
   Detail and attachment cleanup must avoid orphaned owned content.
 
-Before beta, publish a schema decision with evidence for each retained or
-changed structure, versioned model identifiers and a complete v1 mapping.
+Before beta, implement and validate S01, publish supported model identifiers and
+complete the v1 mapping. Selection of the target does not close those gates.
 
 ## 4. Resource ownership, lifecycle and isolation
 
@@ -442,6 +444,13 @@ Every supported v1 data format has a documented path into the final v2 model.
 Start with the current supported v1 release/develop baseline, freeze named source
 model fixtures early, and identify any older supported variants before beta.
 An unchanged-schema alpha must not be represented as proof of final migration.
+
+GraphEvo manages native Core Data schema transitions internally. The renewed
+consumer migration manager handles application-data formats and transformations,
+not consumer registration of native schema plans. External native interventions
+are not automatically supported. S01's optional `ge2DataVersion` is a format
+discriminator, not a cloud pause or complete-import marker; its data-admission
+implementation must handle partial and later old-format imports explicitly.
 
 Migration preserves logical graphs, node kinds/types, values and their encoding
 meaning, tags, groups, valid optional/absent values and timestamps, directed

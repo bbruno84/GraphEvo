@@ -7,6 +7,13 @@ the [probe procedure](../../Experiments/A6NativeProbe/README.md) and the
 
 ## Representation and ownership
 
+The subsequent [S01 schema review](graphevo-2-persistent-schema.md) selects the
+existing logical attachment identity/ownership and split metadata/content
+representation for the target, retaining legacy-envelope reads/replacements.
+No native attachment entity or blob/path/hash columns are added. The original
+A6 baseline and C03a evidence below retain their historical scope; supported
+size, backup, offline and conflict acceptance remains PA05 work.
+
 An attachment has a stable graph-scoped `GraphNodeID`, exactly one application
 node owner, a filename, opaque content-type identifier, byte count, SHA-256 and
 revision UUID. Owners may be Entity, Relationship or Action objects in the same

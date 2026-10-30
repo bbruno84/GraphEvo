@@ -4,6 +4,13 @@ Status: initial plan, 2026-10-26. Read with the
 [specification](graphevo-2-specification.md) and
 [decision register](graphevo-2-decisions.md).
 
+2026-10-30 schema milestone: [S01](graphevo-2-persistent-schema.md) fixes the
+native 2.0 target following the query/attachment/sharing/migration review.
+Next adopt the optional record-version field and stable physical-model ID in
+one focused increment, then complete data admission and mandatory v1 conversion.
+The current native alpha.2 factory/default openers remain unchanged by this
+decision. Shape selection is not beta entry or completion of migration work.
+
 ## Release policy
 
 Develop directly toward 2.0 through alpha and beta releases. Keep v1 fixes on

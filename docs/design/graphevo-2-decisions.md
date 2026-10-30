@@ -22,8 +22,13 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 | M11 | V2 minimum OS versions may be raised as technically appropriate without inheriting v1 deployment constraints | Choose floors from API/architecture needs and validate their runtime matrix; A1's current iOS 16/macOS 12 declarations are provisional |
 | M12 | Keep A6's attachment identity/ownership approach and assess representation costs at alpha completion | The maintainer accepted the model; defer file-cost redesign while completing queries/observation, then consolidate schema/API before beta |
 | M13 | Incompatible alpha layouts start from empty stores; no alpha-to-alpha conversion, downgrade or interrupted alpha-conversion recovery | Remove alpha conversion tooling from adoption gates; reject existing incompatible paths without automatic erasure. Mandatory v1 migration and beta compatibility remain separate |
+| M14 | GraphEvo owns native schema evolution; the consumer migration manager handles application data | Supersedes consumer-native-schema registration in the earlier manager proposal; external native interventions are not automatically certified |
+| M15 | Fix the 2.0 native target to S01 after the four-area review | Preserve the twelve-entity model; select only graph/node UUID projections, optional node data version and compound identity indexes. Adoption and beta gates remain open |
 
 M13 records the 2026-10-29 fresh-store decision.
+M14/M15 record the 2026-10-30 migration boundary and
+[selected native schema](graphevo-2-persistent-schema.md). This is a target
+decision; the runtime native factory still uses the two-column alpha.2 shape.
 
 M01–M04 and M09–M11 reflect the discussion following the 2026-10-26 laboratory results.
 M05–M08 carry forward the initial agreed requirements. M12 records the
@@ -48,7 +53,7 @@ M05–M08 carry forward the initial agreed requirements. M12 records the
 | D09 — availability/recovery | Proposed: explicit local/cloud/access states, no silent substitute for a configured cloud graph | Account switching, permission loss and cached shared-data access policy need dedicated scenarios | A4/A5, consolidated A8 |
 | D10 — cloud separation | Direction agreed; owner-only share-zone route is the working candidate | Separate stores did not isolate cloud data; V01 independent recovery and V09 support zones. Selective download/zone scale are not established | A4 |
 | D11 — model protocol | First candidate implemented: GraphModel/GraphPropertyValue, detached records, explicit keys and partial patches | [A3 contracts](graphevo-2-application-models.md) have public Swift 6 consumer and package SQLite tests; typed public CRUD and persisted local IDs are implemented in the [continuation](graphevo-2-typed-store.md); remaining legacy codecs and remote identity still need validation | A3, reviewed A7/A8 |
-| D12 — attachments | A6 alpha candidate: dedicated owned lifecycle over one native transformable content value | A6 selects exclusive same-graph ownership, unchanged native model, a 10-MiB buffered limit and closed whole-directory copies. V09 remains separate surrogate evidence; account/cache, larger-file and conflict envelopes remain release work | A6 |
+| D12 — attachments | S01 retains A6 logical identity/exclusive same-graph ownership and selects split metadata/content over existing native property storage | [S01](graphevo-2-persistent-schema.md) records the cost/native-sharing evidence and legacy-envelope retention. No native attachment entity is needed. Size, account/cache, backup and conflict envelopes remain PA05 work | Target selected; acceptance before beta/stable |
 | D13 — queries | A7 alpha typed descriptors with explicit bounded inventory/memory strategy, Boolean composition and deterministic order | [A7 candidate](graphevo-2-queries.md) supplies an explicit bounded strategy, scalar capability matrix, related predicates/BFS, projections/aggregations and moving cursors; indexing/production envelopes remain consolidation work | A7 |
 | D14 — identity/integrity/conflicts | Proposed graph-scoped durable logical IDs, explicit incomplete structures and no blind transaction replay | A3 stores graph/node UUIDs in reserved detail rows and maps old facade IDs during backed-up local adoption. Replica recovery is unverified. V09 disjoint edits converged; same-property conflicts and imported deletion races remain open | Initial A3/A4; consolidated A8 |
 
@@ -108,4 +113,6 @@ cannot be prevented, but are not automatically supported/certified by the manage
 Keep the data-driven native shape stable where practical. The
 [SM01–SM03 result](results/schema-migration-2026-10-30.md) confirms bounded additive
 local/cloud migration and final staged-handler replication. Experimental node
-version storage is not a production model decision or complete v1 data conversion.
+version storage was experimental in that result. The subsequent S01 review
+selects it for the target; production adoption and complete v1 data conversion
+remain separate work.
