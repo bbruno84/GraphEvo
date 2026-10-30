@@ -135,9 +135,11 @@ Adoption status and remaining work:
    including atomic local version/value writes, undeclared/future formats,
    compatible partial edits and mixed/out-of-order remote imports. Do not expose
    a field as a working compatibility gate before these behaviors exist.
-4. **Open:** repeat the selected-model native sharing/recovery controls, including files,
-   and preserve source protection. The current physical migration result is
-   bounded evidence, not acceptance of all final model/data behavior.
+4. **Implemented bounded native acceptance:** [S01 public iPad/XR result](results/s01-native-sharing-recovery-2026-10-30.md)
+   passes the entity/attachment lifecycle and two fresh participant recoveries,
+   with actual S01 metadata on all eight resources. Source protection and broader
+   native account/conflict/node-kind and data migration gates remain separate;
+   this does not accept every final model/data behavior.
 5. **Open:** complete the mandatory v1 mapping: identities, catalog/membership, property
    codecs, topology, tags/groups/dates and binary content. Preserve unknown or
    corrupt source material with explicit findings. Adding columns alone does

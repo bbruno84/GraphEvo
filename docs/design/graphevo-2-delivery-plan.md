@@ -8,8 +8,9 @@ Status: initial plan, 2026-10-26. Read with the
 native 2.0 target following the query/attachment/sharing/migration review.
 The runtime adoption increment now supplies the optional record-version field
 and stable physical-model ID `GraphEvo.v2.schema.1` for explicit native openings.
-Next complete consumer-format admission and mandatory v1 conversion; retained
-selected-model device checks remain a separate gate. Default/current openers
+The [selected-model device result](results/s01-native-sharing-recovery-2026-10-30.md)
+now passes the bounded public sharing/file/fresh-recovery fixture. Next complete
+consumer-format admission and mandatory v1 conversion. Default/current openers
 retain their original model. Native adoption is not beta entry or completion of
 migration work.
 

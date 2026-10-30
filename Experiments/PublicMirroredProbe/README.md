@@ -19,7 +19,7 @@ xcodebuild build -project /tmp/GraphEvoPublicMirrored/GraphEvoDemo.xcodeproj \
 
 Use the authorized Development container and controlled compatible cloud state.
 No cloud reset or alpha conversion is part of these consumers. The native public
-factory now requires Core Data model version `GraphEvo.nativeIdentity.alpha.2`;
+factory now requires Core Data model version `GraphEvo.v2.schema.1` (S01);
 existing unversioned alpha/prototype paths are refused before native loading even
 when entity hashes match. Start incompatible alpha fixtures on new paths, keeping
 previous reports/intent; do not stamp old metadata to bypass refusal.
