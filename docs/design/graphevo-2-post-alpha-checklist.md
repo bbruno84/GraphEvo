@@ -233,6 +233,17 @@ close O04 or mark the wider beta/stable items above complete.
   application-data plans only; native schema routes are internal. M1 remains a
   package-only journal, with no production execution/admission or cloud fence.
   See [the renewed contract](graphevo-2-migration-manager.md).
+- [x] Exercise [M2a local data/version publication](graphevo-2-data-migration-local.md):
+  pure consumer transformation, atomic values/version/effect marker, native
+  close/reopen and recovery without callback replay, stale/future input refusal,
+  cancellation and protected-source recovery. This is a package-only laboratory,
+  not public-store activation or complete M2 admission. The
+  [553-test result](results/m2a-local-data-migration-2026-10-30.md) records the exact
+  accepted scope and retained fixture/type-inference corrections.
+- [ ] **B** Complete public format declarations/admission across read/write/query/
+  traversal/file/observation paths before exposing versioned records, with actual
+  resource/process readiness, backup/retention and later-import policy. M2a's
+  isolated model identifier must not be removed as an admission shortcut.
 
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,
