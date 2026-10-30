@@ -44,6 +44,9 @@ iOS Simulator 26.5 passes the selected schema/fresh-store/coordinator checks:
 legacy assertions still expecting S02; they now assert S03 and independently
 retain the historical native/versioned model checks. These are local/Simulator
 results, not physical CloudKit or crash/power-loss acceptance.
+Review CI with Xcode 16.4 additionally caught a test token crossing a Sendable
+boundary; its secure deserialization now stays on the native context queue and
+only Data crosses that boundary.
 
 ## Compatibility and migration policy
 

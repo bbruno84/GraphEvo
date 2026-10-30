@@ -63,9 +63,9 @@ import GraphEvoRuntime
     }
     private struct History: Sendable { let token: Data?; let deleted: [Deleted] }
     private func history(_ db: GraphDatabase, after data: Data? = nil) async throws -> History {
-        let token = try data.flatMap { try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: $0) }
         return try await db.nativeOperation { container in
             try await container.performBackgroundTask { context in
+                let token = try data.flatMap { try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: $0) }
                 let request = NSPersistentHistoryChangeRequest.fetchHistory(after: token)
                 request.affectedStores = container.persistentStoreCoordinator.persistentStores
                 let result = try #require(try context.execute(request) as? NSPersistentHistoryResult)
