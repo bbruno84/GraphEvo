@@ -30,8 +30,9 @@ file fixture with guarded empty replicas and same-process seed/invitation. Keep
 writers alive through independent peer observation; never replay a consumed
 mutation or copy native stores into a supposedly fresh replica. Its
 [16-stage result](docs/design/results/s01-native-sharing-recovery-2026-10-30.md)
-closes only the bounded selected-model sharing/recovery item. Consumer-format
-admission, v1 conversion and broader native/account/conflict gates remain open.
+closes only the bounded historical S01 sharing/recovery item. S02 device
+acceptance, migration execution, v1 conversion and broader native/account/
+conflict gates remain open. Application-format admission is withdrawn by M16.
 
 This file is the operational entry point for agents working in the repository.
 Before changing code, read `README.md` for the project overview and consult the
