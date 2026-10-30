@@ -18,8 +18,21 @@ private struct Profile: GraphModel {
     }
 }
 
+private struct VersionedProfile: GraphModel {
+    static let graphType = "example.versioned.profile"
+    static let graphKind: GraphNodeKind = .entity
+    static let graphDataFormat = try! GraphDataFormat(currentVersion: 2, readableVersions: [1, 2])
+    let record: GraphRecord
+    var id: GraphNodeID { record.id }
+    init(graphRecord: GraphRecord) throws { record = graphRecord }
+    func graphRecord() throws -> GraphRecord { record }
+}
+
 @main struct ModelConsumer {
     static func main() async throws {
+        let detached = try GraphRecord(id: GraphNodeID(graphID: GraphID()), type: VersionedProfile.graphType, dataVersion: 2)
+        guard try GraphRecord(detached.decoded(as: VersionedProfile.self)) == detached,
+              !GraphDataFormat.undeclared.canRead(0) else { throw GraphModelError.invalidValue }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvo-TypedConsumer-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("Graph.sqlite")

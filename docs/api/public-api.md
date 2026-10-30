@@ -862,7 +862,7 @@ available for v1 stores. See the
   `init(graphValue: GraphValue) throws`. Conformances: GraphValue,
   GraphEncodedValue, String, Bool, Int, Int64, UInt64, Double, Decimal, Data,
   Date, URL, UUID, and conditional Optional, Array and string-keyed Dictionary.
-- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:) throws`:
+- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:dataVersion:) throws`:
   read-only fields; endpoints defaults to `.entity`, properties/tags/groups to
   empty and creation date to nil. Type/property keys must be nonempty and
   references must have the same graph ID.
@@ -871,9 +871,25 @@ available for v1 stores. See the
 - `GraphModel: Sendable`: read-only `id: GraphNodeID`; static `graphType: String`
   and `graphKind: GraphNodeKind`; `init(graphRecord: GraphRecord) throws` and
   `graphRecord() throws -> GraphRecord`.
+  Static `graphDataFormat: GraphDataFormat` defaults to `.undeclared`.
 - `GraphRecord.init<Model: GraphModel>(_ model: Model) throws` and
   `decoded<Model: GraphModel>(as: Model.Type = Model.self) throws -> Model`:
-  checked mapping validates type, kind and identity.
+  checked mapping validates type, kind, identity and application data format.
+  Reading checks declared compatibility before invoking the consumer decoder;
+  serialization requires the current version without silently stamping it.
+- `GraphRecord.dataVersion: Int64?` is immutable, defaults to nil and rejects
+  negatives. Nil is undeclared, distinct from zero; patches preserve this field.
+- `GraphDataFormat: Sendable, Equatable, Hashable` exposes `currentVersion: Int64?`,
+  `readableVersions: Set<Int64>` and `acceptsUndeclared: Bool`. `.undeclared` reads
+  and writes only nil. `init(currentVersion:readableVersions:acceptsUndeclared:) throws`
+  requires a nonnegative current version and readable versions containing it;
+  readable versions default to only current, acceptsUndeclared to false.
+  `canRead(_ version: Int64?)` checks explicit readability; `canWrite(_:)` accepts
+  only the current version. Read compatibility does not imply write permission.
+  Query descriptors capture this policy; non-record queries check it as well.
+- `GraphDataFormatError: Error, Sendable, Equatable, LocalizedError` distinguishes
+  `invalidDeclaration`, `invalidVersion`, `unreadableVersion(Int64?)` and
+  `unwritableVersion(Int64?)`.
 - `GraphPropertyChange`: `.set(GraphValue)` and `.remove`; setting null is
   distinct from removing a property in the detached contract.
 - `GraphRecordPatch(id:properties:addingTags:removingTags:addingGroups:
@@ -887,7 +903,14 @@ available for v1 stores. See the
 
 These detached values alone do not establish persistent membership, resolve
 endpoint existence or commit edits. The typed persistence scopes below supply
-identity, reference checks and value envelopes. On the matrix experiment branch,
+identity, reference checks and value envelopes. M2b.1 provides detached format
+contracts; normal stores still reject declared-version insertion and refuse
+application data access when S01 native version metadata is present, using
+`GraphStoreError.dataFormatAdmissionRequired`. Refusal is conservative across
+the resource group; no public version-aware opener or migration activation is
+enabled. Catalog/control-only access reduction remains available. See the
+[format/admission contract](../design/graphevo-2-data-formats.md).
+On the matrix experiment branch,
 top-level Data uses a length-checked versioned binary envelope with legacy JSON
 reads; nested and opaque values keep their existing representation. Older alpha
 readers cannot consume the new format; no automatic conversion/downgrade is implied.
@@ -963,6 +986,7 @@ incompatible native model.
 `GraphStoreError: Error, LocalizedError` distinguishes `closed`, `ownershipConflict`, `expiredScope`,
 `foreignGraph`, `duplicateIdentity`, `corruptIdentity`, `missingNode`, `missingGraph`,
 `unresolvedReference`, `legacyStoreRequiresAdoption`, `unsupportedLayout`,
+`dataFormatAdmissionRequired`,
 `reservedName`, and `persistence(underlying: Error)`. Model errors and caller body
 errors retain their own types. Cancellation retains the A2 pre/post-save contract.
 

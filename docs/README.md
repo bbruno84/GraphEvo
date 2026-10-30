@@ -25,6 +25,9 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
+- [M2b.1 record formats](design/graphevo-2-data-formats.md): detached public
+  declarations, version-preserving mapping and normal-store admission refusal.
+
 - [Migration manager renewal](design/graphevo-2-migration-manager.md): M1 journal,
   consumer-defined application-data plans and remaining M2–M6 admission/conversion work.
 - [M2a local data migration](design/graphevo-2-data-migration-local.md): isolated

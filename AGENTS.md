@@ -419,6 +419,19 @@ Do not replay arbitrary bodies. See
 
 ## GraphEvo 2 model contracts
 
+Read [M2b.1](docs/design/graphevo-2-data-formats.md) before format work.
+GraphRecord.dataVersion is optional/nonnegative; GraphModel.graphDataFormat
+defaults to undeclared. Check readability before consumer decoding, require the
+current format on serialization/typed patch, and preserve versions in copies.
+Normal stores reject versioned inserts and conservatively refuse application
+data access across the resource group when native versions are present. Keep
+this metadata preflight before property-row reads, including pending changes;
+do not bypass it in point/query/file/observation paths. Control-only status and
+access reduction remain available. The exact M2a laboratory model is the sole
+package exception; its files remain refused by normal public openers. A shared
+format registry, production activation, backup/readiness and cloud policy remain
+open; detached contracts do not authorize versioned production persistence.
+
 GraphEvoModel compiles detached GraphModel/GraphRecord/value/patch contracts in
 Swift 6; GraphEvo exposes explicit aliases through its existing product. The
 package-only GraphRecordMapper uses Node facades on the current scoped context.

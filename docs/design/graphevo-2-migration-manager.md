@@ -11,6 +11,10 @@ adds declared data versions, prepared pure consumer transformations, atomic
 data/version/marker publication and checkpoint reconciliation on isolated local
 stores. It does not activate public version-aware opening or cloud processing.
 
+[M2b.1](graphevo-2-data-formats.md) introduces detached model/record format
+contracts and conservative native admission refusal. The shared resource registry,
+protected-source lifecycle and production migration activation remain M2b work.
+
 ## Maintainer decisions
 
 Renew the migration manager as part of mandatory v1 data migration. Source API

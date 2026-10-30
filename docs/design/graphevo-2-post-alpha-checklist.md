@@ -240,6 +240,10 @@ close O04 or mark the wider beta/stable items above complete.
   not public-store activation or complete M2 admission. The
   [553-test result](results/m2a-local-data-migration-2026-10-30.md) records the exact
   accepted scope and retained fixture/type-inference corrections.
+- [x] Introduce [M2b.1 detached format contracts](graphevo-2-data-formats.md):
+  explicit read compatibility, current-format serialization, version-preserving
+  patches and conservative normal-store refusal before application payload reads.
+  This does not enable normal versioned persistence or complete M2b admission.
 - [ ] **B** Complete public format declarations/admission across read/write/query/
   traversal/file/observation paths before exposing versioned records, with actual
   resource/process readiness, backup/retention and later-import policy. M2a's
