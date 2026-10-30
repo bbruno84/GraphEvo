@@ -248,9 +248,18 @@ close O04 or mark the wider beta/stable items above complete.
 - [x] M16 supersedes M2b.1 application-version contracts and the proposed format
   registry with [consumer-owned data](graphevo-2-data-formats.md). S02 removes the
   native version column and global format refusal. Historical results retain scope.
-- [ ] **B** Validate [S02](graphevo-2-identity-schema.md) sharing and independent
-  recovery on explicitly prepared physical/cloud fixtures. S01's previous device
-  result does not close this revised-schema gate.
+- [x] Validate bounded [S02](graphevo-2-identity-schema.md) owner sharing/files
+  and independent fresh recovery: [MC01 iPad/XR result](results/mc01-store-copy-history-2026-10-30.md).
+  This is separate from S01 evidence; participant writes/account/conflict/scale
+  and broader PA03/PA05 acceptance remain open.
+- [x] MC01 demonstrates closed whole-store copy/return with retained native history,
+  no application save after mirrored reopen, and independent migrated recovery.
+  The stale-original counterexample rules out unguarded concurrent publication.
+- [ ] **B** Define/validate whole-resource exclusion, source-change refusal,
+  durable publication/recovery, auxiliary-ledger backups and widget/read-only-first
+  activation before exposing the working-graph migration API. MC01's initial
+  read-only activation failure is retained in the result; pair atomicity and
+  participant-side copied writers remain unverified.
 - [ ] **B** Complete consumer-defined migration execution with resource/process
   readiness, protected-source backups, retention, recovery and activation. Keep
   the exact M2a fixture isolated; no public format registry is required.

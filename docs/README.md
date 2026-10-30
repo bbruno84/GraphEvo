@@ -29,6 +29,10 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 - [Consumer-owned data](design/graphevo-2-data-formats.md): application meaning,
   optional version properties and typed decoding without a central format registry.
 
+- [MC01 store-copy experiment](design/results/mc01-store-copy-history-2026-10-30.md):
+  Closed working-store edits, retained native history and independent cloud recovery,
+  with whole-resource ownership and activation limits.
+
 - [Migration manager renewal](design/graphevo-2-migration-manager.md): M1 journal,
   consumer-defined application-data plans and remaining M2–M6 admission/conversion work.
 - [M2a local data migration](design/graphevo-2-data-migration-local.md): isolated

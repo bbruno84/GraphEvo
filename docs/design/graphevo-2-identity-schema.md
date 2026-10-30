@@ -46,6 +46,9 @@ Removing a local column does not remove an already deployed CloudKit field or
 establish compatibility with old cloud data. No cloud reset or device mutation
 is authorized by this change. A fresh, explicitly prepared Development fixture
 must validate S02 sharing and independent recovery before closing that gate.
+The subsequent [MC01 result](results/mc01-store-copy-history-2026-10-30.md) now
+closes bounded owner sharing/file/fresh-recovery feasibility; participant writes
+and broader account/conflict/scale gates remain open.
 The previous S01 16-stage result remains evidence only for its original shape.
 
 ## Verification

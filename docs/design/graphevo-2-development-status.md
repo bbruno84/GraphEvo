@@ -38,7 +38,8 @@ removes native/public application versioning and the proposed format registry.
 Its local checkpoint passes 557 tests (331 legacy, 137 store, 66 runtime, 23 model)
 and the public Swift 6 consumer. The earlier 567-test checkpoint above remains
 historical; removed format-policy tests are replaced by consumer-data behavior
-and expanded old-model refusal cases. S02 device/cloud acceptance is still open.
+and expanded old-model refusal cases. MC01 now supplies bounded S02 owner
+sharing/file/fresh-recovery evidence; broader acceptance remains open.
 
 ## Integrated alpha implementation
 
@@ -50,7 +51,7 @@ and expanded old-model refusal cases. S02 device/cloud acceptance is still open.
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
-| Native identity | M16/S02 removes application versioning and retains two identity columns; explicit native openings use schema.2 | Defaults unchanged; S02 device/cloud acceptance remains open |
+| Native identity | M16/S02 retains two identity columns; MC01 verifies owner sharing/files and independent fresh recovery | Defaults unchanged; participant-write/account/conflict/scale acceptance remains open |
 | App/widget | Local read-only extension access and ownership safeguards | Broader lifecycle/account/protected-data/OS acceptance remains bounded by the reports |
 | Application data | M16 supersedes M2b.1: consumer-owned meaning/optional versions, no registry or global format block | Production migration execution remains open |
 
@@ -68,6 +69,7 @@ proves its original S01 sharing/file/recovery fixture, not revised S02 or broade
 | Native schema SM01–SM03 | Bounded lightweight/staged local/cloud experiment, not full v1 conversion |
 | M1 journal | Package-only checkpoint/intent foundation, no production consumer executor |
 | M2a conversion | Isolated package-only model; atomic data/version/marker publication and native reopen/recovery tested; no public activation or CloudKit admission |
+| MC01 copy/return | [Closed-store copy/history publication](results/mc01-store-copy-history-2026-10-30.md) works locally and across accounts/fresh replica; no public manager activation |
 | Historical identity/observation alternatives | Retained probes and reports, not selected by default public opening paths |
 | Complete M2 | **Not implemented**: protected-source lifecycle, process readiness, consumer-plan scheduling and public activation. The proposed application format registry is withdrawn |
 | M3–M5 | **Not implemented** end to end: v1 source/codec matrix, full data/topology/file conversion, recovery and evaluated optional API adapter |
@@ -78,11 +80,15 @@ See the [manager sequence](graphevo-2-migration-manager.md) and
 native schema transitions are library-internal. Source API compatibility is
 optional; v1 data migration is mandatory, with coordinated v1 writers stopped
 before conversion. M16 removes public format DTOs rather than enabling a production manager.
+MC01 selects a whole-store copy/return direction; it does not add a Graph diff
+or a custom mutation log. Store replacement requires exclusive whole-resource
+ownership, source-change protection and explicit recovery before production.
 
 ## Next steps and operating rule
 
-1. Validate S02 on explicitly prepared cloud/device fixtures without replaying
-   old stages. Current local acceptance: 557 tests and public Swift 6 consumer.
+1. MC01 closes the bounded owner/device feasibility question with 560 local tests
+   and independent shared/fresh recovery. Retain broader sharing/account/conflict
+   and participant-copy cases as open; do not create another experiment stack.
 2. Complete M2's protected-source backup/readiness/recovery/activation with
    consumer-defined data transformations, then mandatory v1 conversion and durable
    later-import processing. Do not reintroduce a central format registry.
