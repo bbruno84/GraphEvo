@@ -110,3 +110,37 @@ stage on the already exported fixture, using a new `single-private-A` directory:
 A complete B in that file is a positive counterexample with B's store closed;
 absence after this finite window would remain inconclusive. Preserve the process
 inventories, sole-owner count, source/executable hashes and offline result.
+
+## Independent Core Data proof and never-cloud local control
+
+The Graph-based offline inspector still uses Graph's adapter. To independently
+verify physical rows, prepare three separate executables outside the repository:
+
+```sh
+python3 Experiments/GraphStoreIsolationProbe/prepare_native_reader.py /tmp/new-GI01-native-reader
+swift build --package-path /tmp/new-GI01-native-reader
+swift run --skip-build --package-path /tmp/new-GI01-native-reader ModelExporter /private/evidence/S02-model.archive
+swift run --skip-build --package-path /tmp/new-GI01-native-reader LocalControl /private/evidence/new-local-control
+swift run --skip-build --package-path /tmp/new-GI01-native-reader CoreDataReader /private/evidence/S02-model.archive /private/evidence/fixture.json /private/evidence/single-A-closed-case/private.sqlite
+```
+
+Run CoreDataReader again in a new process for each local-control file using the
+local-control fixture transport. Pass only owned closed evidence, never production.
+
+ModelExporter uses Graph only to obtain the base structural model, adds the exact
+S02 identity columns/indexes, switches managed classes to generic NSManagedObject
+and verifies unchanged entity hashes. It never opens a store. CoreDataReader has
+**no GraphEvo dependency or import**. It reads the exported model, verifies store
+compatibility, opens exactly one file with a plain NSPersistentStoreCoordinator
+and read-only/no-migration options, and binds every request with affectedStores.
+Dictionary requests select only native ge2GraphID/ge2NodeID/type attributes; a
+second object-ID request confirms every result belongs to that exact opened
+store. No managed subclasses, Graph adapter, application decoder, cloud container
+or private SQL/tables are used.
+
+LocalControl creates two new stores with public local-only opening, writes A only
+in its store and B only in its store, verifies separate catalogs and closes every
+lease. No CloudKit identifier is configured. Inspect both files through the
+independent CoreDataReader and compare with the previously cloud-synced single A
+file. Record native row counts/identity checks, not a semantic payload claim for
+this dictionary-only reader.

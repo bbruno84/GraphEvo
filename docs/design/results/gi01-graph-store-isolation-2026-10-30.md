@@ -139,6 +139,53 @@ It does not assert that other clients worldwide were offline, control server
 scheduling, or prove a per-graph import filter exists. Already exported B records
 remain on the server independently of its original local store being open.
 
+## Follow-up: direct Core Data rows, independent of Graph's reader
+
+The earlier offline inspections used Graph's adapter. To remove that dependency,
+run a separate `CoreDataReader` executable whose target has no GraphEvo dependency
+and whose source imports only CoreData/Foundation. Symbol inspection also finds
+no GraphEvo/GraphDatabase symbols in that executable.
+
+A separate ModelExporter process constructs the S02 model from Graph's public
+base model, adds the exact identity columns/indexes, substitutes generic
+NSManagedObject classes and verifies the entity hashes are unchanged. It opens
+no store. The reader decodes that structural archive and checks compatibility
+before opening data. No Graph code or managed subclasses are involved in reads.
+
+Each reader process opens exactly one closed evidence file through a plain
+NSPersistentStoreCoordinator, read-only with automatic/inferred migration disabled.
+It asserts one attached store and the exact canonical URL, sets affectedStores on
+every request, excludes pending changes, and fetches dictionaries containing only
+native ge2GraphID/ge2NodeID/type attributes. A second object-ID request asserts
+that all fetched IDs belong to that same NSPersistentStore. Four matching native
+identities/types means the expected root, child, relationship and action rows are
+physically present; this reader does not decode application property payloads.
+
+Add a never-cloud local control: create two new S02 stores through ordinary local
+GraphDatabase opening, with no CloudKit identifier. Seed four A records only in A,
+four B records only in B, verify separate catalogs, then close all leases. Read
+these files through the same independent reader in separate processes.
+
+| Closed file inspected directly | Native A rows | Native B rows | Exact native identities |
+|---|---|---|---|
+| Single A file recovered from cloud, B never opened | 4 | 4 | Both sets match the cloud fixture |
+| New local-only A file, never cloud-enabled | 4 | 0 | A matches; B absent |
+| New local-only B file, never cloud-enabled | 0 | 4 | B matches; A absent |
+
+All readers confirm one store, exact file binding, compatible model and persistent
+object IDs bound to that store. There is no private SQL/table inspection and no
+CloudKit container in this reader. Thus the never-cloud local control does not
+mix the graphs; the cloud-recovered single file really contains both native sets,
+independently of Graph's query adapter.
+
+The initial reader build warned about capturing NSPersistentStore across the
+context closure. The final reader obtains the bound store inside the context
+queue instead; it builds without new reader warnings. The local controls/model
+exporter also build/run. No production code, default schema or integration branch
+was changed. Prepared sources, model archive, fresh local fixtures and reader
+outputs remain protected external evidence; only the reproducible source and
+sanitized counts are committed on the experiment branch.
+
 ## Interpretation and limits
 
 Reject the inference **one native controller/file seeded with one graph ⇒ only
