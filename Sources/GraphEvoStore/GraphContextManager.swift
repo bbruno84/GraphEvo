@@ -7,6 +7,7 @@ package actor GraphContextManager {
     private struct Entry {
         let generation = UUID()
         let key: StoreKey
+        let url: URL
         let creating: Bool
         let opening: Task<GraphCoordinator, any Error>
         var ready = false
@@ -17,12 +18,16 @@ package actor GraphContextManager {
     private let schema: StoreSchema
     private let adapter: GraphCoordinatorAdapter
     private var entries: [GraphID: Entry] = [:]
+    private struct GraphLocation { let key: StoreKey; let url: URL }
+    // Runtime-only registrations. App bootstrap supplies current sandbox/App Group URLs after relaunch.
+    private var locations: [GraphID: GraphLocation] = [:]
     private struct CloudOpening {
         let id = UUID()
         let configuration: GraphCloudConfiguration
         let task: Task<GraphCloudSession, any Error>
     }
     private var cloudSessions: [String: CloudOpening] = [:]
+    private var transportGraphs = Set<GraphID>()
 
     @available(iOS 17, macOS 14, *)
     package func startCloudSession(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudStatus {
@@ -59,10 +64,7 @@ package actor GraphContextManager {
         guard let entry = entries[graphID], entry.closing == nil else { throw GraphStoreError.missingGraph }
         let owner = try await entry.opening.value
         try await owner.validateCloudBinding(adapter.initialize)
-        guard case .sqlite(let path) = entry.key else { throw GraphStoreError.unsupportedLayout }
-        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(URL(fileURLWithPath: path)), exclusiveGraphID: graphID.rawValue))
-        guard case .sqlite(let url) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
-        try await cloud(configuration).bind(GraphCloudBinding(zone: zone, graphID: graphID, storeURL: url))
+        try await cloud(configuration).bind(GraphCloudBinding(zone: zone, graphID: graphID))
     }
 
     package func fetchCloudChanges(_ scope: GraphCloudScope, configuration: GraphCloudConfiguration) async throws {
@@ -84,6 +86,75 @@ package actor GraphContextManager {
         catch let quarantine as GraphCloudQuarantine { session = quarantine.session }
         try await session.stop()
         if cloudSessions[configuration.namespace]?.id == opening.id { cloudSessions.removeValue(forKey: configuration.namespace) }
+    }
+
+    private func withTransport<Value: Sendable>(_ graphID: GraphID, configuration: GraphCloudConfiguration,
+        body: @Sendable (GraphCloudSession, GraphStore, GraphCloudTransportBinding) async throws -> Value) async throws -> Value {
+        guard transportGraphs.insert(graphID).inserted else { throw GraphCloudError.busy }
+        defer { transportGraphs.remove(graphID) }
+        let session = try await cloud(configuration), route = try await session.route(for: graphID)
+        let binding = GraphCloudTransportBinding(identity: try await session.identity(), route: route)
+        guard let location = locations[graphID] else { throw GraphStoreError.missingGraph }
+        let graph = try await openGraph(id: graphID, at: location.url)
+        do {
+            try await graph.pruneTransport(binding, retained: session.retainedReceiptIDs(for: graphID))
+            let result = try await body(session, graph, binding)
+            try await graph.close(); return result
+        } catch {
+            let original = error; try? await graph.close(); throw original
+        }
+    }
+    private static func drainSent(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding) async throws -> GraphCloudSendReport {
+        let receipts = try await session.sentReceipts(for: graph.id)
+        var succeeded = 0, failures: [GraphCloudRecordFailure] = [], cleanup = false
+        for receipt in receipts {
+            _ = try await session.identity()
+            try await graph.commitTransport(binding, receipt: receipt)
+            try await session.consume([receipt.id])
+            do { try await graph.trimTransport(binding, receipts: [receipt.id]) } catch { cleanup = true }
+            succeeded += receipt.saved.count + receipt.deletedNames.count; failures += receipt.failures
+        }
+        return GraphCloudSendReport(succeeded: succeeded, failures: failures, cleanupPending: cleanup, transportError: nil)
+    }
+    package func sendCloudChanges(for graphID: GraphID, configuration: GraphCloudConfiguration,
+                                  maximumRecords: Int = 100) async throws -> GraphCloudSendReport {
+        try await withTransport(graphID, configuration: configuration) { session, graph, binding in
+            let previous = try await Self.drainSent(session, graph: graph, binding: binding)
+            let incoming = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: 4096)
+            let batch = try await graph.prepareTransport(binding, maximum: maximumRecords)
+            if batch.items.isEmpty {
+                return GraphCloudSendReport(succeeded: previous.succeeded, failures: previous.failures,
+                    cleanupPending: previous.cleanupPending || incoming.cleanupPending, transportError: nil)
+            }
+            var error: (any Error)?
+            do { try await session.send(batch) } catch let caught { error = caught }
+            let current = try await Self.drainSent(session, graph: graph, binding: binding)
+            return GraphCloudSendReport(succeeded: previous.succeeded + current.succeeded,
+                failures: previous.failures + current.failures, cleanupPending: previous.cleanupPending || current.cleanupPending || incoming.cleanupPending, transportError: error)
+        }
+    }
+    private static func drainIncoming(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding,
+                                      maximumEvents: Int) async throws -> GraphCloudApplyReport {
+        var entries = try await session.incoming(for: binding.route.zone, limit: maximumEvents)
+        // Access reduction must not wait for unrelated application payload decoding.
+        if entries.contains(where: { $0.change.kind == .zoneDeleted }) { entries = entries.filter { $0.change.kind == .zoneDeleted } }
+        if entries.isEmpty { return GraphCloudApplyReport(applied: 0, cleanupPending: false) }
+        let effects = try entries.map { try GraphCloudEffect($0, binding: binding.route) }
+        _ = try await session.identity()
+        try await graph.applyTransport(binding, effects: effects)
+        let ids = Set(entries.map(\.id))
+        try await session.consume(ids)
+        var cleanup = false
+        do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
+        return GraphCloudApplyReport(applied: entries.count, cleanupPending: cleanup)
+    }
+    package func applyCloudInbox(for graphID: GraphID, configuration: GraphCloudConfiguration,
+                                 maximumEvents: Int = 4096) async throws -> GraphCloudApplyReport {
+        try await withTransport(graphID, configuration: configuration) { session, graph, binding in
+            let sent = try await Self.drainSent(session, graph: graph, binding: binding)
+            let incoming = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: maximumEvents)
+            return GraphCloudApplyReport(applied: incoming.applied, cleanupPending: sent.cleanupPending || incoming.cleanupPending)
+        }
     }
 
     deinit {
@@ -116,6 +187,7 @@ package actor GraphContextManager {
         do {
             try Task.checkCancellation()
             let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
+            if let existing = locations[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
             while true {
                 try Task.checkCancellation()
                 if let entry = entries[id] {
@@ -133,7 +205,8 @@ package actor GraphContextManager {
                         try await GraphCoordinator.open(id: id, configuration: configuration, creating: creating,
                                                         registry: registry, schema: schema, adapter: adapter)
                     }
-                    entries[id] = Entry(key: resolved.key, creating: creating, opening: opening)
+                    guard case .sqlite(let canonicalURL) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
+                    entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, opening: opening)
                 }
                 let token = UUID()
                 entries[id]!.tokens.insert(token)
@@ -158,7 +231,9 @@ package actor GraphContextManager {
                 do {
                     // A successful shared creation commit must return its result even if cancelled.
                     if !creating { try Task.checkCancellation() }
-                    return try await owner.lease { try await self.release(id, generation: generation, token: token) }
+                    let graph = try await owner.lease { try await self.release(id, generation: generation, token: token) }
+                    locations[id] = GraphLocation(key: entry.key, url: entry.url)
+                    return graph
                 } catch {
                     try await release(id, generation: entry.generation, token: token)
                     throw error

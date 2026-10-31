@@ -3,12 +3,18 @@ import GraphEvoModel
 
 /// Native delegates convert to detached events before calling the session.
 enum GraphCloudEvent: Sendable {
-    case state(Data), incoming([GraphCloudIncoming]), failure(GraphCloudError), account(String?)
+    case state(Data), incoming([GraphCloudIncoming]), sent(GraphCloudSentReceipt), failure(GraphCloudError), account(String?)
 }
 
 struct GraphCloudDriver: Sendable {
     let fetch: @Sendable ([GraphCloudZone]) async throws -> Void
     let cancel: @Sendable () async throws -> Void
+    let send: (@Sendable (GraphCloudOutgoingBatch) async throws -> Void)?
+    init(fetch: @escaping @Sendable ([GraphCloudZone]) async throws -> Void,
+         cancel: @escaping @Sendable () async throws -> Void,
+         send: (@Sendable (GraphCloudOutgoingBatch) async throws -> Void)? = nil) {
+        self.fetch = fetch; self.cancel = cancel; self.send = send
+    }
 }
 
 struct GraphCloudAdapter: Sendable {
@@ -37,6 +43,7 @@ actor GraphCloudSession {
     private var stopped = false
     private var activeFetches = Set<GraphCloudScope>()
     private var fetches = 0
+    private var outbound: [GraphCloudScope: GraphCloudOutgoingBatch] = [:]
     private var drains: [CheckedContinuation<Void, Never>] = []
 
     private init(configuration: GraphCloudConfiguration, owner: UUID, adapter: GraphCloudAdapter,
@@ -61,15 +68,19 @@ actor GraphCloudSession {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 1, doc.container == config.containerIdentifier, doc.environment == config.environment,
+                guard doc.format == 2, doc.container == config.containerIdentifier, doc.environment == config.environment,
                       doc.account == account else { throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
-                      doc.inbox.count <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
+                      doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
                       Set(doc.inbox.map(\.id)).count == doc.inbox.count,
                       Set(doc.bindings.map(\.zone)).count == doc.bindings.count,
                       Set(doc.bindings.map(\.graphID)).count == doc.bindings.count,
-                      Set(doc.bindings.map(\.storeURL)).count == doc.bindings.count,
-                      doc.bindings.allSatisfy({ $0.storeURL.isFileURL && !$0.zone.name.isEmpty && !$0.zone.owner.isEmpty }) else { throw GraphCloudError.invalidState }
+                      doc.bindings.allSatisfy({ !$0.zone.name.isEmpty && !$0.zone.owner.isEmpty }) else { throw GraphCloudError.invalidState }
+                guard Set(doc.sent.map(\.id)).count == doc.sent.count else { throw GraphCloudError.invalidState }
+                for receipt in doc.sent {
+                    guard doc.bindings.contains(where: { $0.graphID == receipt.graphID && $0.zone == receipt.zone }) else { throw GraphCloudError.invalidState }
+                    for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
+                }
                 for entry in doc.inbox { try GraphCloudRecordCodec.validate(entry.change) }
             } else {
                 doc = GraphCloudDocument(container: config.containerIdentifier, environment: config.environment, account: account)
@@ -113,7 +124,7 @@ actor GraphCloudSession {
     }
 
     private func publish(_ candidate: GraphCloudDocument) throws {
-        guard candidate.inbox.count <= configuration.maximumEvents else { throw GraphCloudError.inboxLimit }
+        guard candidate.eventCount <= configuration.maximumEvents else { throw GraphCloudError.inboxLimit }
         let data = try JSONEncoder().encode(candidate)
         guard data.count <= configuration.maximumBytes else { throw GraphCloudError.inboxLimit }
         do { try disk.write(url, data) } catch { throw GraphCloudError.persistence }
@@ -122,9 +133,9 @@ actor GraphCloudSession {
 
     func bind(_ binding: GraphCloudBinding) throws {
         try check()
-        guard binding.storeURL.isFileURL, !binding.zone.owner.isEmpty, !binding.zone.name.isEmpty else { throw GraphCloudError.invalidConfiguration }
+        guard !binding.zone.owner.isEmpty, !binding.zone.name.isEmpty else { throw GraphCloudError.invalidConfiguration }
         if document.bindings.contains(binding) { return }
-        guard !document.bindings.contains(where: { $0.zone == binding.zone || $0.graphID == binding.graphID || $0.storeURL == binding.storeURL }) else {
+        guard !document.bindings.contains(where: { $0.zone == binding.zone || $0.graphID == binding.graphID }) else {
             throw GraphCloudError.ownershipConflict
         }
         var next = document; next.bindings.append(binding)
@@ -144,10 +155,22 @@ actor GraphCloudSession {
             case .incoming(let changes):
                 guard changes.allSatisfy({ $0.valid && $0.zone.scope == scope }) else { throw GraphCloudError.invalidState }
                 for change in changes { try GraphCloudRecordCodec.validate(change) }
-                guard changes.count <= configuration.maximumEvents - document.inbox.count else { throw GraphCloudError.inboxLimit }
+                guard changes.count <= configuration.maximumEvents - document.eventCount else { throw GraphCloudError.inboxLimit }
                 var next = document
                 next.inbox += changes.map { GraphCloudInboxEntry(id: UUID(), change: $0) }
                 if !changes.isEmpty { try publish(next) }
+            case .sent(let receipt):
+                guard let batch = outbound[scope], receipt.batchID == batch.id, receipt.graphID == batch.graphID,
+                      receipt.zone == batch.zone, receipt.zone.scope == scope else { throw GraphCloudError.invalidState }
+                let items = Dictionary(uniqueKeysWithValues: batch.items.map { ($0.recordName, $0.change.operation) })
+                let names = receipt.saved.compactMap(\.recordName) + receipt.deletedNames + receipt.failures.map(\.recordName)
+                if names.isEmpty { return }
+                guard Set(names).count == names.count,
+                      receipt.saved.allSatisfy({ $0.kind == .recordChanged && $0.zone == batch.zone && $0.recordName.flatMap { items[$0] } == .save }),
+                      receipt.deletedNames.allSatisfy({ items[$0] == .delete }),
+                      receipt.failures.allSatisfy({ items[$0.recordName] != nil }) else { throw GraphCloudError.invalidState }
+                for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
+                var next = document; next.sent.append(receipt); try publish(next)
             case .failure(let error): throw error
             case .account(let account):
                 guard account == document.account else { throw GraphCloudError.accountChanged }
@@ -187,10 +210,56 @@ actor GraphCloudSession {
         if let failure { throw failure }
     }
 
+    func identity() throws -> GraphCloudSessionIdentity {
+        try check()
+        return GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
+    }
+    func send(_ batch: GraphCloudOutgoingBatch) async throws {
+        try check()
+        let scope = batch.zone.scope
+        guard let send = drivers[scope]?.send else { throw GraphCloudError.transportUnavailable }
+        guard document.bindings.contains(where: { $0.zone == batch.zone && $0.graphID == batch.graphID }) else { throw GraphCloudError.invalidState }
+        guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }
+        fetches += 1; outbound[scope] = batch
+        defer {
+            outbound.removeValue(forKey: scope); activeFetches.remove(scope); fetches -= 1
+            if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
+        }
+        try await send(batch)
+        if let failure { throw failure }
+    }
+    func sentReceipts(for graph: GraphID) throws -> [GraphCloudSentReceipt] {
+        try check(); return document.sent.filter { $0.graphID == graph }
+    }
+    func incoming(for zone: GraphCloudZone, limit: Int) throws -> [GraphCloudInboxEntry] {
+        try check()
+        guard limit > 0 else { throw GraphCloudError.invalidConfiguration }
+        let deletion = document.inbox.filter { $0.change.zone == zone && $0.change.kind == .zoneDeleted }
+        if !deletion.isEmpty { return Array(deletion.prefix(limit)) }
+        return Array(document.inbox.lazy.filter { $0.change.zone == zone }.prefix(limit))
+    }
+    func retainedReceiptIDs(for graph: GraphID) throws -> Set<UUID> {
+        try check()
+        let zones = Set(document.bindings.filter { $0.graphID == graph }.map(\.zone))
+        return Set(document.inbox.filter { zones.contains($0.change.zone) }.map(\.id))
+            .union(document.sent.filter { $0.graphID == graph }.map(\.id))
+    }
+    func consume(_ ids: Set<UUID>) throws {
+        try check()
+        var next = document
+        next.inbox.removeAll { ids.contains($0.id) }; next.sent.removeAll { ids.contains($0.id) }
+        do { try publish(next) } catch { block(error as? GraphCloudError ?? .persistence); throw error }
+    }
+    func route(for graph: GraphID) throws -> GraphCloudBinding {
+        try check()
+        guard let route = document.bindings.first(where: { $0.graphID == graph }) else { throw GraphCloudError.invalidConfiguration }
+        return route
+    }
+
     func startStatus() throws -> GraphCloudStatus { try check(); return status() }
 
     func status() -> GraphCloudStatus {
-        GraphCloudStatus(scopes: Set(drivers.keys), inboxCount: document.inbox.count, failure: failure, stopped: stopped)
+        GraphCloudStatus(scopes: Set(drivers.keys), inboxCount: document.inbox.count, failure: failure, stopped: stopped, outgoingReceiptCount: document.sent.count)
     }
     func inbox(limit: Int) throws -> [GraphCloudInboxEntry] {
         guard limit > 0 else { throw GraphCloudError.invalidConfiguration }

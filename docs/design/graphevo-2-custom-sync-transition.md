@@ -87,8 +87,9 @@ process ownership and cross-process migration coordination retain their gates.
    and graph-level pause/resume. Exercise in-flight operations and restart.
 5. [CF01](graphevo-2-cloud-record-format.md) supplies the package-only logical
    record codec and PH/inbox conversion boundaries. Persist server metadata and
-   implement actual upload/import effects/receipts before acknowledging sends or
-   consuming incoming events. Complete conflicts, deletes, assets and sharing lifecycle through reviewed
+   [T01](graphevo-2-record-transport.md) implements the package-only manual
+   upload/import effect/receipt protocol and path-free routing. Physical native
+   delivery, real server conflicts and broader recovery acceptance remain open. Complete conflicts, deletes, assets and sharing lifecycle through reviewed
    alpha increments; retain production hardening gates for beta.
 6. Remove transitional v2 native mirroring APIs, assignment ledgers/adapters and
    paired-store assumptions once replacement callers/tests exist. Preserve v1

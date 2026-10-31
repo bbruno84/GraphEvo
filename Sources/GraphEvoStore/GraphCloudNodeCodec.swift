@@ -112,6 +112,21 @@ package enum GraphCloudNodeCodec {
         catch { throw GraphCloudNodeError.invalidSystemFields }
     }
 
+    package static func changeTag(_ systemFields: Data, for id: GraphNodeID, binding: GraphCloudBinding) throws -> String? {
+        let record = try native(systemFields, limits: .init())
+        guard record.recordID == (try recordID(for: id, binding: binding)), record.recordType == recordType else { throw GraphCloudNodeError.invalidSystemFields }
+        return record.recordChangeTag
+    }
+    package static func matchesFrozenServer(_ server: CKRecord, item: GraphCloudOutgoingNode, binding: GraphCloudBinding) -> Bool {
+        guard let bytes = item.recordArchive,
+              let original = try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: bytes),
+              let wanted = try? decode(original, binding: binding), let actual = try? decode(server, binding: binding) else { return false }
+        return wanted.record == actual.record
+    }
+    package static func sameServerVersion(_ left: String?, _ right: String?) -> Bool {
+        guard let left, let right else { return false }; return left == right
+    }
+
     package static func encode(_ record: GraphRecord, binding: GraphCloudBinding, systemFields: Data? = nil,
                                limits: GraphCloudNodeLimits = .init()) throws -> CKRecord {
         try limits.validate(); try validate(record, limits: limits)
@@ -199,16 +214,22 @@ package enum GraphCloudNodeCodec {
 }
 
 /// Detached upload candidates. Preparation is not network admission or acknowledgement.
-package struct GraphCloudOutgoingNode: Sendable {
+package struct GraphCloudOutgoingNode: Codable, Equatable, Sendable {
     package let change: GraphSyncChange
     package let recordName: String
     package let recordArchive: Data?
+    package init(change: GraphSyncChange, recordName: String, recordArchive: Data?) {
+        self.change = change; self.recordName = recordName; self.recordArchive = recordArchive
+    }
 }
-package struct GraphCloudOutgoingBatch: Sendable {
+package struct GraphCloudOutgoingBatch: Codable, Equatable, Sendable {
     package let id: UUID
     package let graphID: GraphID
     package let zone: GraphCloudZone
     package let items: [GraphCloudOutgoingNode]
+    package init(id: UUID, graphID: GraphID, zone: GraphCloudZone, items: [GraphCloudOutgoingNode]) {
+        self.id = id; self.graphID = graphID; self.zone = zone; self.items = items
+    }
 }
 
 extension GraphCloudNodeCodec {

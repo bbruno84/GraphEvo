@@ -4,7 +4,8 @@ Status: package-only codec on `codex/v2-cloud-record-format`, based directly on
 reviewed/merged #109 (`e26a0cd`, exact-head CI `41143330378`). Maintainer decision
 M19 selects one CloudKit record per logical Graph primitive with serialized
 properties. Native S03 and its twelve entities remain unchanged. This increment
-provides conversion boundaries, not an activated upload/import worker.
+provides conversion boundaries. The separate [T01 continuation](graphevo-2-record-transport.md)
+connects manual upload/import workers and receipts; CF01 alone does not activate them.
 
 ## Record shape and identity
 

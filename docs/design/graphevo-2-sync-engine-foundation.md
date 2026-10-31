@@ -1,8 +1,10 @@
 # GraphEvo 2 — shared engine sessions and durable incoming events
 
 Status: package-only implementation on `codex/v2-sync-engine-foundation`, based
-on reviewed/merged #108 (`0ddd613`). The native model remains S03. There is no
-new public opener, wire format, record upload or application import. The retained
+on reviewed/merged #108 (`0ddd613`). The native model remains S03. The [T01 continuation](graphevo-2-record-transport.md)
+now supplies manual transport/effect receipts and a path-free format-2 session
+document; the initial #109 checkpoint below retains its historical scope. That
+checkpoint introduced no public opener, wire format, record upload or application import. The retained
 CS01/PH01 experiments are evidence; their implementations are not merged.
 
 ## Session ownership and API
@@ -34,22 +36,22 @@ at a time; a duplicate reports busy without blocking the other scope's callbacks
 
 ## Zone routing
 
-Bindings use the full database scope, zone owner and zone name, not graph ID or
-zone name alone. Each zone, graph and canonical store URL occurs in at most one
-binding within a session. Binding requires an open exclusive coordinator in the
-manager, validates its current graph/store identity and persistent purpose, then
-persists the binding. No zone/share is created in CloudKit.
+Bindings use the full database scope, zone owner and zone name. Each zone and
+graph occurs in at most one binding within a session. T01 persists no file URLs:
+after restart the app registers the current store URL by opening the graph.
+Runtime comparison keys must never be reused as filesystem paths. Binding requires
+an open exclusive coordinator and validates its graph/store identity and purpose. No zone/share is created in CloudKit.
 
 Manual fetches request the bound zone IDs. Database discovery events and any
 unknown-zone events delivered by the engine are retained without creating graphs
-or applying records. Bindings remain after graph leases close; their stored URL
-is routing information, not a guarantee that an externally moved/replaced source
-is safe. Future import must reacquire and validate the target coordinator.
+or applying records. Bindings remain after graph leases close; runtime locations remain in the same
+manager only. T01 import reacquires and validates the registered coordinator;
+a restored route does not supply a local file location.
 Closing a consumer does not stop shared transport or erase pending local work.
 
 ## One local state document
 
-The state directory contains `session.json` and its persistent lock file. The
+The state directory contains `session.json` and its persistent lock file. The initial #109
 format-1 document stores container/environment/account identity, private/shared
 engine serializations, bindings and an ordered incoming inbox. It is separate
 from every graph's hidden-root Persistent History checkpoint and never uploaded.

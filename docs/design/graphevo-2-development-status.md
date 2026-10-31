@@ -106,6 +106,23 @@ Its local checkpoint passes 630 tests (331 legacy, 205 store, 71 runtime,
 93 expanded cases). The initial Xcode/CoreSimulator setup mismatch was resolved
 before the successful simulator rerun. Physical cloud acceptance remains open.
 
+CF01 #110 is reviewed/merged as `900d51a`, with exact-head macOS/iOS CI
+`41184685226` green; its merge tree matches reviewed head `3d4150d`.
+
+The reviewed implementation in [#111](https://github.com/bbruno84/GraphEvo/pull/111)
+returns directly from `codex/v2-record-transport` and supplies [T01 manual record
+send/import and durable effect receipts](graphevo-2-record-transport.md).
+The PR records exact-head automated checks and its merge disposition.
+Native driver hooks are connected to CKSyncEngine; deterministic local tests use
+an injected bus, not physical CloudKit. Persisted graph routes contain only graph
+and zone IDs; current store URLs are runtime registrations supplied on app bootstrap.
+The engine document moves to format 2, refusing old alpha files unchanged; S03
+and CF01 remain unchanged. Assets, automatic sync and public activation remain open.
+Its local checkpoint passes 648 tests (331 legacy, 223 store, 71 runtime, 23 model)
+and selected iOS Simulator checks (87 functions / 111 expanded cases). The first
+iOS transport run failed on persisted/case-folded path use; the final path-free
+container-relocation protocol passes. Native physical CloudKit validation remains open.
+
 ## Integrated alpha implementation
 
 | Area | Implemented | Remaining acceptance limits |
@@ -116,8 +133,8 @@ before the successful simulator rerun. Physical cloud acceptance remains open.
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
-| CF01 wire format | Logical node CKRecords, lossless typed-value payload, secure native metadata reuse and PH/inbox conversion (#110) | No network upload/import activation or server metadata/effect receipts; S03 unchanged |
-| Engine foundation | ContextManager-owned private/shared sessions, exact zone routes and persisted incoming inbox (#109) | Package-only manual fetch; no upload, graph import, assets or automatic sync acceptance |
+| CF01 / T01 transport | Logical node CKRecords, manual engine send/import, durable frozen attempts, server metadata and atomic effect receipts (#110/#111) | Injected transport acceptance only; real server delivery/CAS, assets and public activation remain open; S03 unchanged |
+| Engine foundation | ContextManager-owned private/shared sessions, path-free zone routes, persisted inbox/results (#109/#111) | Package-only manual scheduling; real device/account/sharing and automatic sync acceptance remain open |
 | PH pending | Per-graph discovery, durable pending/checkpoint, immutable attempts and generation-safe acknowledgements (#108) | Package-only; controlled patches only, full engine/incoming/crash gates remain open |
 | Native identity | M16 removed application versioning; M18/S03 preserves graph/node IDs in deletion history through #107 | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
 | App/widget | Local read-only extension access and ownership safeguards | Broader lifecycle/account/protected-data/OS acceptance remains bounded by the reports |
@@ -150,9 +167,9 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Persist native server metadata and connect upload/import effects and receipts
-   over PH/inbox;
-   complete assets, automatic sync, pause, conflicts and sharing.
+1. Complete #111 review/check/integration before the next increment. Validate native
+   private transport on devices/server schema, then complete assets, automatic sync,
+   pause, conflict policy and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).

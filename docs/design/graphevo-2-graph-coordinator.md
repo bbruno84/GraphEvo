@@ -118,3 +118,10 @@ ContextManager-owned sessions separate from consumer/store leases. Zone binding
 validates the live coordinator; the durable route outlives an individual lease.
 Native stores remain plain local S03 stores. There is no engine per coordinator,
 public opener, graph import or implicit cloud activation.
+
+
+The [T01 continuation](graphevo-2-record-transport.md) persists GraphID/zone
+bindings only. Current canonical resource URLs remain runtime registrations,
+retained after consumer closure but supplied again by app bootstrap after restart.
+A transport job acquires its own graph lease; its receipt work uses the existing
+writer admission/save boundary. No old sandbox URL is restored from cloud state.

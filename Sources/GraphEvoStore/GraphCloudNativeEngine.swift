@@ -26,6 +26,23 @@ extension GraphCloudAdapter {
             await engine.cancelOperations()
             // Retain the delegate independently of the framework's delegate reference semantics.
             _ = delegate
+        }, send: { batch in
+            try await delegate.outbox.begin(batch)
+            do {
+                let zoneID = CKRecordZone.ID(zoneName: batch.zone.name, ownerName: batch.zone.owner)
+                if scope == .private { engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zoneID))]) }
+                let route = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)
+                let changes = try batch.items.map { item -> CKSyncEngine.PendingRecordZoneChange in
+                    let id = try GraphCloudNodeCodec.recordID(for: item.change.id, binding: route)
+                    return item.change.operation == .save ? .saveRecord(id) : .deleteRecord(id)
+                }
+                engine.state.add(pendingRecordZoneChanges: changes)
+                try await engine.sendChanges(.init(scope: .zoneIDs([zoneID])))
+                try await delegate.outbox.finish()
+            } catch {
+                try? await delegate.outbox.finish()
+                throw error
+            }
         })
     })
 }
@@ -33,6 +50,7 @@ extension GraphCloudAdapter {
 /// Only detached bytes/IDs cross into the session. No graph writes happen in this delegate.
 @available(iOS 17, macOS 14, *)
 final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
+    let outbox = GraphCloudNativeOutbox()
     private let scope: GraphCloudScope
     private let receive: @Sendable (GraphCloudEvent) async -> Void
     init(scope: GraphCloudScope, receive: @escaping @Sendable (GraphCloudEvent) async -> Void) {
@@ -72,12 +90,44 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
                     GraphCloudIncoming(kind: .recordDeleted, zone: zone($0.recordID.zoneID), recordName: $0.recordID.recordName, recordType: $0.recordType)
                 }
                 await receive(.incoming(changes))
-            case .sentDatabaseChanges, .sentRecordZoneChanges: await receive(.failure(.unexpectedUpload))
+            case .sentDatabaseChanges(let event):
+                let batch = try await outbox.current()
+                let expected = CKRecordZone.ID(zoneName: batch.zone.name, ownerName: batch.zone.owner)
+                guard event.deletedZoneIDs.isEmpty, event.failedZoneDeletes.isEmpty,
+                      event.savedZones.allSatisfy({ $0.zoneID == expected }),
+                      event.failedZoneSaves.allSatisfy({ $0.zone.zoneID == expected }) else { throw GraphCloudError.unexpectedUpload }
+                if let failure = event.failedZoneSaves.first { await outbox.zoneFailed(failure.error.code.rawValue) }
+            case .sentRecordZoneChanges(let event):
+                let batch = try await outbox.current()
+                let route = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)
+                let candidates = Dictionary(uniqueKeysWithValues: batch.items.map { ($0.recordName, $0) })
+                var saved = try event.savedRecords.map { try GraphCloudRecordCodec.archive($0, scope: scope) }
+                var deleted = event.deletedRecordIDs.map(\.recordName)
+                var failures: [GraphCloudRecordFailure] = []
+                for failure in event.failedRecordSaves {
+                    let name = failure.record.recordID.recordName
+                    // An ambiguous previous success is recoverable only when the complete server body equals the frozen intent.
+                    if failure.error.code == .serverRecordChanged, let server = failure.error.serverRecord,
+                       let item = candidates[name], GraphCloudNodeCodec.matchesFrozenServer(server, item: item, binding: route) {
+                        saved.append(try GraphCloudRecordCodec.archive(server, scope: scope))
+                        syncEngine.state.remove(pendingRecordZoneChanges: [.saveRecord(server.recordID)])
+                    } else { failures.append(.init(recordName: name, code: failure.error.code.rawValue)) }
+                }
+                for (id, error) in event.failedRecordDeletes {
+                    if error.code == .unknownItem {
+                        deleted.append(id.recordName); syncEngine.state.remove(pendingRecordZoneChanges: [.deleteRecord(id)])
+                    } else { failures.append(.init(recordName: id.recordName, code: error.code.rawValue)) }
+                }
+                await receive(.sent(GraphCloudSentReceipt(batchID: batch.id, graphID: batch.graphID, zone: batch.zone,
+                                                        saved: saved, deletedNames: deleted, failures: failures)))
             default: break
             }
         } catch { await receive(.failure(error as? GraphCloudError ?? .invalidState)) }
     }
-    func nextRecordZoneChangeBatch(_ context: CKSyncEngine.SendChangesContext, syncEngine: CKSyncEngine) async -> CKSyncEngine.RecordZoneChangeBatch? { nil }
+    func nextRecordZoneChangeBatch(_ context: CKSyncEngine.SendChangesContext, syncEngine: CKSyncEngine) async -> CKSyncEngine.RecordZoneChangeBatch? {
+        do { return try await outbox.next(context.options) }
+        catch { await receive(.failure(.invalidState)); return nil }
+    }
 }
 
 /// Local secure archive codec, independent of engine availability and consumer formats.

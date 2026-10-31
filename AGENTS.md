@@ -29,7 +29,8 @@ before modifying the package-only owner path. Preserve exclusiveGraphID during
 resource canonicalization; generic leases must not coalesce with exclusive owners.
 Manager tokens cover pending requests and live handles. Last release retains
 registration on detach failure, including initialization/partial-load quarantine.
-New public opening and custom engine activation remain later work.
+Public opening and automatic synchronization remain later work; package-only
+manual transport follows [T01](docs/design/graphevo-2-record-transport.md).
 
 ## Selected v2 native schema
 
@@ -915,8 +916,8 @@ session document. Never confuse that inbox with a graph's PH pending checkpoint,
 consume events before an import/effect protocol exists, or silently reset corrupt
 state. Delegate failure blocks later checkpoints and schedules cancellation outside
 the callback. Stop drains admitted work; late callbacks cannot recreate state.
-Native scheduling is manual/package-only, with no outgoing changes or GraphRecord
-imports. CKAsset values (including encrypted/array fields) are refused without
+Native scheduling remains manual/package-only. T01 adds outgoing changes and
+receipted GraphRecord application; the #109 foundation alone does not. CKAsset values (including encrypted/array fields) are refused without
 advancing the cursor until durable asset staging exists. Keep physical-engine,
 actual crash/power-loss, rewrite-cost, account, asset and end-to-end gates open.
 
@@ -938,3 +939,30 @@ pending work. Decode does not apply events, resolve endpoints or consume inbox
 entries. Persist server metadata/effects and implement recovery before upload
 acknowledgement or inbox consumption. Keep schema deployment, real server tags,
 private cross-device sync, conflicts, assets and migration gates open.
+
+
+## V2 T01 manual record transport
+
+Read [T01](docs/design/graphevo-2-record-transport.md) before native send/import or
+receipt changes. Persist graph/zone identity only, never sandbox/store URLs.
+Runtime registration keeps the canonical URL; StoreKey may be case-folded and is
+not a path. App bootstrap must register graphs at current URLs after restart.
+Do not auto-open a resource from restored cloud state. Preserve portable moves.
+
+Frozen attempts, server metadata and effect/receipt markers use one native save
+with the related PH changes. Native send-result envelopes must be retained before
+engine state advances. Recover those receipts and pending incoming effects before
+new sends; do not overwrite genuine pending-local conflicts or infer version
+equality from missing change tags. Consume session envelopes only after durable
+effects. Receipt cleanup may remain pending after a successful effect; prune only
+markers absent from the validated same-session retained work. A marker is bound
+to event ID/content, account/zone, native store UUID and PH epoch.
+
+The engine document is format 2; refuse older files unchanged. Native S03/CF01 do
+not change. Import uses Node facades, dependency ordering and final validation;
+missing endpoints/conflicts retain the inbox. Zone deletion blocks transport and
+preserves local data, before unrelated app-body decoding. Never recreate it as a
+retry fallback. Raw PH-only acknowledgement/patch import is prohibited once a graph
+has transport state. Keep real server tags/CAS/device delivery, power-loss, backup
+consistency, resource envelopes, assets, automatic scheduling and account/cache
+policy gates open. Injected bus tests are not physical CloudKit acceptance.

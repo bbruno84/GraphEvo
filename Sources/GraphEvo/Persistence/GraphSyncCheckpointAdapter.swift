@@ -12,7 +12,7 @@ enum GraphSyncCheckpointAdapter {
     static let metadataAuthor = "GraphEvo.v2.syncMetadata"
     private static let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
 
-    private struct Checkpoint: Codable, Equatable {
+    struct Checkpoint: Codable, Equatable {
         var format = 1
         let graphID: GraphID
         let storeID: String
@@ -21,7 +21,7 @@ enum GraphSyncCheckpointAdapter {
         var transaction: Int64 = 0
         var pending: [GraphSyncChange] = []
     }
-    private struct Loaded {
+    struct Loaded {
         let root: Entity
         let original: Checkpoint?
         var state: Checkpoint
@@ -49,7 +49,7 @@ enum GraphSyncCheckpointAdapter {
         coordinator.setMetadata(metadata, for: store)
     }
 
-    static let adapter = GraphSyncAdapter(collect: { context, id, limits in
+    static let adapter = GraphSyncAdapter(cloud: cloudAdapter, collect: { context, id, limits in
         try GraphValueDecodingDiagnostics.checking {
             var value = try load(context, id: id, limits: limits)
             try reconcile(context, value: &value, limits: limits)
@@ -76,6 +76,7 @@ enum GraphSyncCheckpointAdapter {
     }, acknowledge: { context, id, limits, epoch, sent in
         try GraphValueDecodingDiagnostics.checking {
             var value = try load(context, id: id, limits: limits)
+            guard value.root[dynamicMember: transportKey] == nil else { throw GraphSyncError.unavailable }
             guard value.state.epoch == epoch else { throw GraphSyncError.staleBatch }
             try reconcile(context, value: &value, limits: limits)
             let receipts = Dictionary(uniqueKeysWithValues: sent.map { ($0.id, $0) })
@@ -87,6 +88,7 @@ enum GraphSyncCheckpointAdapter {
     }, importPatches: { context, id, limits, patches in
         try GraphValueDecodingDiagnostics.checking {
             var value = try load(context, id: id, limits: limits)
+            guard value.root[dynamicMember: transportKey] == nil else { throw GraphSyncError.unavailable }
             try reconcile(context, value: &value, limits: limits)
             let pending = Set(value.state.pending.map(\.id))
             var affected = Set<GraphNodeID>()
@@ -114,12 +116,12 @@ enum GraphSyncCheckpointAdapter {
         switch kind { case .entity: return ModelIdentifier.entityName; case .relationship: return ModelIdentifier.relationshipName; case .action: return ModelIdentifier.actionName }
     }
 
-    private static func ordered(_ a: GraphSyncChange, _ b: GraphSyncChange) -> Bool {
+    static func ordered(_ a: GraphSyncChange, _ b: GraphSyncChange) -> Bool {
         if a.generation != b.generation { return a.generation < b.generation }
         return a.id.rawValue.uuidString < b.id.rawValue.uuidString
     }
 
-    private static func load(_ context: NSManagedObjectContext, id: GraphID, limits: GraphSyncLimits) throws -> Loaded {
+    static func load(_ context: NSManagedObjectContext, id: GraphID, limits: GraphSyncLimits) throws -> Loaded {
         guard limits.maximumTransactions > 0, limits.maximumChanges > 0, limits.maximumPending > 0 else { throw GraphSyncError.invalidLimit }
         guard !(context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer),
               let coordinator = context.persistentStoreCoordinator, coordinator.persistentStores.count == 1,
@@ -151,14 +153,14 @@ enum GraphSyncCheckpointAdapter {
         return Loaded(root: root, original: original, state: state)
     }
 
-    private static func persist(_ context: NSManagedObjectContext, _ value: Loaded) throws {
+    static func persist(_ context: NSManagedObjectContext, _ value: Loaded) throws {
         guard value.original != value.state else { return }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         value.root[dynamicMember: stateKey] = try encoder.encode(value.state)
         context.transactionAuthor = metadataAuthor
     }
 
-    private static func identity(_ row: NSManagedObject, graphID: GraphID) throws -> GraphNodeID? {
+    static func identity(_ row: NSManagedObject, graphID: GraphID) throws -> GraphNodeID? {
         guard let text = row.value(forKey: "ge2GraphID") as? String, text == graphID.rawValue.uuidString else { throw GraphStoreError.foreignGraph }
         guard let node = row.value(forKey: "ge2NodeID") else {
             guard let type = row.value(forKey: "type") as? String,
@@ -178,7 +180,7 @@ enum GraphSyncCheckpointAdapter {
         throw GraphSyncError.unresolvedChange
     }
 
-    private static func reconcile(_ context: NSManagedObjectContext, value: inout Loaded, limits: GraphSyncLimits) throws {
+    static func reconcile(_ context: NSManagedObjectContext, value: inout Loaded, limits: GraphSyncLimits) throws {
         let check = StoreNativeContext.cancellationCheck(in: context)
         // Tokens remain context-confined; only their secure Data representation is persisted/transferred.
         let token: NSPersistentHistoryToken?
