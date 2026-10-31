@@ -65,6 +65,7 @@ private actor AutomaticBus {
     var fetchFailure: NSError?
     var sticky: GraphCloudError?
     var gate: AutomaticGate?
+    var failureGate: AutomaticGate?
     init(_ count: Int = 2) {
         inventory = (0..<count).map { _ in .init(id: GraphID(), generation: UUID(), scope: .private, paused: false) }
         hubs = Dictionary(uniqueKeysWithValues: inventory.map { ($0.id, StoreInvalidationHub()) })
@@ -86,12 +87,15 @@ private actor AutomaticBus {
     nonisolated var driver: GraphAutomaticDriver {
         .init(inventory: { await self.inventory }, subscribe: { graph in
             self.hubs[graph.id]!.subscribe(owner: graph.generation, localCommitsOnly: true)
-        }, fetch: { try await self.fetch($0, $1) }, turn: { await self.turn($0) }, sessionFailure: { await self.sticky })
+        }, fetch: { try await self.fetch($0, $1) }, turn: { await self.turn($0) }, sessionFailure: { await self.sessionFailure() })
     }
     func fail(_ id: GraphID, reports: [GraphCloudSendReport]) { failures[id] = reports }
     func backlog(_ id: GraphID, _ count: Int) { remaining[id] = count }
     func block(_ gate: AutomaticGate?) { self.gate = gate }
     func setFetchFailure(_ error: NSError?) { fetchFailure = error }
+    func blockFailureCheck(_ gate: AutomaticGate?) { failureGate = gate }
+    func removeGraph() { inventory.removeAll() }
+    func sessionFailure() async -> GraphCloudError? { if let failureGate { await failureGate.enter() }; return sticky }
     func setSticky(_ error: GraphCloudError?) { sticky = error }
     func pause(_ index: Int, _ value: Bool) {
         let old = inventory[index]
@@ -301,4 +305,30 @@ private actor AutomaticBus {
         try await wait { reference == nil }
         #expect(bus.hubs.values.allSatisfy { $0.subscriberCount == 0 })
     }
+    @Test func finalCloseDuringSessionCheckCannotApplyOldTurnToRemovedOwner() async throws {
+        let bus = AutomaticBus(1), clock = AutomaticTestClock(), gate = AutomaticGate()
+        await bus.blockFailureCheck(gate)
+        let scheduler = GraphAutomaticSynchronizer(driver: bus.driver, clock: clock.value)
+        await scheduler.setActive(true); await gate.wait()
+        await bus.removeGraph(); await scheduler.changedInventory()
+        await gate.release(); try await settle(scheduler)
+        #expect(await bus.turns.count == 1)
+        await scheduler.shutdown()
+    }
+
+    @Test func generationReplacementEndsPreviousStatusStream() async throws {
+        let bus = AutomaticBus(1), clock = AutomaticTestClock()
+        let scheduler = GraphAutomaticSynchronizer(driver: bus.driver, clock: clock.value)
+        await scheduler.setActive(true); try await settle(scheduler)
+        let id = await bus.inventory[0].id
+        let stream = try await scheduler.observe(id)
+        var iterator = stream.makeAsyncIterator()
+        #expect(await iterator.next()?.phase == .idle)
+        await bus.replace(0); await scheduler.changedInventory()
+        #expect(await iterator.next() == nil)
+        try await settle(scheduler)
+        #expect(try await scheduler.status(id).phase == .idle)
+        await scheduler.shutdown()
+    }
+
 }

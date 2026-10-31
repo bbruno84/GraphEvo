@@ -114,9 +114,7 @@ actor GraphAutomaticSynchronizer {
                 let current = Dictionary(uniqueKeysWithValues: inventory.map { ($0.id, $0) })
                 for (id, old) in graphs where current[id]?.generation != old.graph.generation {
                     old.listener?.cancel(); old.feed.cancel(); graphs.removeValue(forKey: id)
-                    if current[id] == nil {
-                        for observer in observers.removeValue(forKey: id)?.values ?? [:].values { observer.finish() }
-                    }
+                    for observer in observers.removeValue(forKey: id)?.values ?? [:].values { observer.finish() }
                 }
                 for graph in inventory {
                     if var existing = graphs[graph.id] {
@@ -263,8 +261,9 @@ actor GraphAutomaticSynchronizer {
         publish(graph.id)
         do {
             let (report, pending) = try await driver.turn(graph)
+            let sessionFailure = await driver.sessionFailure()
             guard graphs[graph.id]?.graph.generation == graph.generation else { return }
-            if let failure = await driver.sessionFailure() { blockSession(failure) }
+            if let failure = sessionFailure { blockSession(failure) }
             else if !report.failures.isEmpty {
                 let errors = report.failures.map { NSError(domain: "CKErrorDomain", code: $0.code) }
                 let error = errors.first(where: { !transient($0) }) ?? errors[0]
@@ -278,8 +277,9 @@ actor GraphAutomaticSynchronizer {
                 if pending > 0 { graphs[graph.id]!.dirty = true; graphs[graph.id]!.due = clock.now() }
             }
         } catch {
+            let sessionFailure = await driver.sessionFailure()
             guard graphs[graph.id]?.graph.generation == graph.generation else { return }
-            if let failure = await driver.sessionFailure() { blockSession(failure) }
+            if let failure = sessionFailure { blockSession(failure) }
             else { graphFailed(graph, error) }
         }
         if graphs[graph.id]?.graph.generation == graph.generation { graphs[graph.id]!.running = false }
