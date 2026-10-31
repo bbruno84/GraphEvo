@@ -1,9 +1,11 @@
 # GraphEvo 2 — T07 explicit zone sharing
 
-Status: implementation candidate on `codex/v2-zone-sharing`. Package-only;
-review and integration are tracked separately. The [nine-stage physical result](results/zone-sharing-2026-10-31.md)
-records the actual runtime pins. This replaces
-neither the public opening API nor the historical A5 native mirroring backend.
+Status: package-only implementation integrated through
+[PR #119](https://github.com/bbruno84/GraphEvo/pull/119), after review,
+corrective re-review, full CI and the authorized merge. The
+[physical result](results/zone-sharing-2026-10-31.md) retains the actual runtime
+pins and each checkpoint's scope. This replaces neither the public opening API
+nor the historical A5 native mirroring backend.
 
 ## Boundary and Apple contract
 
@@ -99,11 +101,14 @@ legacy, 300 store, 71 runtime, 23 model), Swift 6 ModelConsumer, manifest and di
 checks. Selected iOS 18.5 suites passed 66 reported tests; the final T07-only
 checkpoint passed 12 reported tests after the last correction. These are local
 checks, not remote CI or a completed review. Physical evidence retains its own
-pins above. CI remains deferred until review and corrections finish.
+pins above. Remote CI was deferred at that local checkpoint until review and corrections finished.
 
 
 The [post-review result](results/zone-sharing-2026-10-31.md#post-review-p2-correction-check)
 records corrected source `b171cde`, the two reproduced P2 closures, six committed
 regressions and a three-stage real creation/import recheck. That source passes
 731 macOS functions and 83 selected iOS tests, with no remaining blocking issue
-found in the corrective re-review. Remote CI has not been requested.
+found in the corrective re-review. The subsequent full macOS/iOS checkpoint
+[41228512926](https://github.com/bbruno84/GraphEvo/actions/runs/41228512926) passes
+on reviewed head `61b066a`. Final integration-status edits are documentation-only;
+source, tests and workflow retain that exact validated content.

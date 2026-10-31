@@ -699,7 +699,7 @@ when closing any gate; do not infer success from an unrun or skipped workflow.
 
 ## T07 sharing follow-ups
 
-Candidate [T07](graphevo-2-zone-sharing.md) has a
+Integrated [T07](graphevo-2-zone-sharing.md), [#119](https://github.com/bbruno84/GraphEvo/pull/119), has a
 [nine-stage two-account result](results/zone-sharing-2026-10-31.md), covering
 read-write/read-only and bidirectional entity/file recovery with a private control.
 It retains release gates for invitation
