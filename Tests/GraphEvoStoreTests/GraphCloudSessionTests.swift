@@ -409,4 +409,36 @@ private actor CloudSignal {
         record["file"] = CKAsset(fileURL: URL(fileURLWithPath: "/tmp/not-a-real-fixture"))
         #expect(throws: GraphCloudError.unsupportedAsset) { try GraphCloudRecordCodec.archive(record, scope: .private) }
     }
+    @Test(arguments: [false, true]) func sendAdviceIsCapturedBeforeAnotherOperationReusesTheScope(_ fails: Bool) async throws {
+        let config = config(), graph = GraphID(), route = GraphCloudBinding(zone: zone(), graphID: graph)
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let adapter = GraphCloudAdapter(account: { _ in "advice-test" }, make: { _, _, _, receive in
+            GraphCloudDriver(fetch: { _ in await receive(.retryAdvice(1)) }, cancel: {}, send: { _ in
+                await receive(.retryAdvice(600))
+                if fails { throw NSError(domain: CKErrorDomain, code: CKError.Code.requestRateLimited.rawValue) }
+            })
+        })
+        let session = try await GraphCloudSession.open(config, adapter: adapter)
+        try await session.bind(route)
+        let batch = GraphCloudOutgoingBatch(id: UUID(), graphID: graph, zone: route.zone, items: [])
+        let outcome = try await session.sendWithAdvice(batch)
+        // Another fetch replaces the scope's transient advice; it cannot change the completed send's snapshot.
+        try await session.fetch(.private)
+        #expect(outcome.retryAfter == 600)
+        #expect((outcome.transportError != nil) == fails)
+        if let error = outcome.transportError {
+            #expect((error as NSError).domain == CKErrorDomain)
+            #expect((error as NSError).code == CKError.Code.requestRateLimited.rawValue)
+        }
+        if fails {
+            do { try await session.send(batch); Issue.record("The compatibility send did not propagate the native error") }
+            catch { #expect((error as NSError).code == CKError.Code.requestRateLimited.rawValue) }
+        }
+        let data = try Data(contentsOf: config.directory.appendingPathComponent("session.json"))
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["retryAdvice"] == nil)
+        #expect(object["retryAfter"] == nil)
+        try await session.stop()
+    }
+
 }

@@ -217,7 +217,12 @@ actor GraphAutomaticSynchronizer {
             let work = graphs.values.filter { $0.graph.scope == scope && eligible($0) }
             guard !work.isEmpty else { continue }
             let candidates = work.map { max($0.retryAt, $0.dirty ? $0.due : .infinity) }
-            let fetchDue = lanes[scope]!.needsFetch ? (work.map(\.retryAt).min() ?? .infinity) : .infinity
+            // An eligible initial turn must finish before fetching its new private zone.
+            // Its debounce deadline must also gate the fetch wake, otherwise run() cannot do either job.
+            let initial = work.filter { $0.needsInitialTurn && $0.retryAt <= now }
+            let nextFetch = initial.isEmpty ? (work.map(\.retryAt).min() ?? .infinity) :
+                (initial.map { max($0.retryAt, $0.due) }.min() ?? .infinity)
+            let fetchDue = lanes[scope]!.needsFetch ? nextFetch : .infinity
             let due = max(lanes[scope]!.retryAt, min(fetchDue, candidates.min() ?? .infinity))
             if due <= now {
                 lanes[scope]!.task = Task { [weak self] in await self?.run(scope) }

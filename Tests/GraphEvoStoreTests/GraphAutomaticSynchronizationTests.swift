@@ -11,6 +11,7 @@ final class AutomaticTestClock: @unchecked Sendable {
     private var time: Double = 0
     private var sleepers: [UUID: (Double, CheckedContinuation<Void, any Error>)] = [:]
     var now: Double { lock.withLock { time } }
+    var earliestDeadline: Double? { lock.withLock { sleepers.values.map(\.0).min() } }
     var value: GraphAutomaticClock {
         .init(now: { self.now }, sleep: { try await self.sleep($0) }, jitter: { 1 })
     }
@@ -368,6 +369,33 @@ private actor AutomaticBus {
         _ = try await manager.startCloudSession(config, adapter: good)
         try await manager.setAutomaticCloudSynchronizationActive(true, configuration: config)
         try await manager.stopCloudSession(config)
+    }
+
+    @Test func debouncedInitialTurnSleepsInsteadOfSpinningBeforeItsDeadline() async throws {
+        let bus = AutomaticBus(), clock = AutomaticTestClock(), gate = AutomaticGate()
+        let first = await bus.inventory[0], second = await bus.inventory[1], base = bus.driver
+        let driver = GraphAutomaticDriver(inventory: base.inventory, subscribe: { graph in
+            let feed = try await base.subscribe(graph)
+            if graph.id == first.id { bus.hubs[first.id]!.publish(.contextSave, transactionAuthor: "GraphEvo.v2.local") }
+            if graph.id == second.id { await gate.enter() }
+            return feed
+        }, fetch: base.fetch, turn: base.turn, sessionFailure: base.sessionFailure)
+        let scheduler = GraphAutomaticSynchronizer(driver: driver, clock: clock.value)
+        let activation = Task { await scheduler.setActive(true) }
+        await gate.wait()
+        try await wait { await scheduler.diagnosticDeadline(first.id) == 0.25 }
+        let deadline = ContinuousClock.now + .seconds(1)
+        while clock.earliestDeadline != 0.25 && ContinuousClock.now < deadline { await Task.yield() }
+        let sleepsUntilDebounce = clock.earliestDeadline == 0.25
+        let noEarlyTurn = await bus.turns.isEmpty
+        if sleepsUntilDebounce {
+            clock.advance(0.25)
+            try await wait { await bus.turns.contains(first.id) }
+        }
+        await scheduler.setActive(false); await gate.release(); await activation.value
+        await scheduler.shutdown()
+        #expect(sleepsUntilDebounce)
+        #expect(noEarlyTurn)
     }
 
 }

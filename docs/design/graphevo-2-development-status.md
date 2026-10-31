@@ -349,6 +349,22 @@ manifest, script and diff checks pass. Final delivery details are recorded on th
 hardening covers generation checks after awaited session reads, old status stream
 termination, ordered activity requests, stop/reactivation and failed-start cleanup.
 [PR #118](https://github.com/bbruno84/GraphEvo/pull/118) targets
-`codex/graphevo-2` and awaits review; no remote checkpoint or merge is requested.
+`codex/graphevo-2`; review corrections and verification are recorded below.
+No remote checkpoint or merge is requested during review.
 The order remains review → CI → merge. Background/APNs delivery, broader sharing,
 resource/crash/backup and protected migrations remain acceptance gates.
+
+PR118 review identifies two P2 issues on `7c5d773`: a fetch wake could spin while
+an eligible initial turn was still debounced, and a separate scope-advice lookup
+could lose the completed send's retryAfter to a later operation. The scheduler
+now gates that fetch wake on the initial deadline; sends snapshot error/advice
+under their scope admission. The original manual error contract is preserved.
+The initial-debounce regression failed before correction; corrected wake/progress
+and success/failure advice-isolation tests pass. Post-review validation passes
+713 full macOS functions (331 legacy,288 store,71 runtime,23 model) and
+114 iOS18.5 functions/131 expanded executions. Earlier physical reports retain
+their actual runtime pins and do not certify these later corrections on devices.
+
+Both corrected review regressions pass10 repeated local runs. ModelConsumer,
+manifest and diff checks pass. Focused re-review finds no remaining blocking
+findings; PR118 stays open without the checkpoint label or merge.

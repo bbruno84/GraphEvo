@@ -18,6 +18,12 @@ struct GraphCloudDriver: Sendable {
     }
 }
 
+/// Captured while the scope is still owned, including failure advice. Never persisted.
+struct GraphCloudSendOutcome: Sendable {
+    let transportError: (any Error)?
+    let retryAfter: TimeInterval?
+}
+
 struct GraphCloudAdapter: Sendable {
     let account: @Sendable (String) async throws -> String
     let make: @Sendable (GraphCloudConfiguration, GraphCloudScope, Data?, @escaping @Sendable (GraphCloudEvent) async -> Void) throws -> GraphCloudDriver
@@ -231,13 +237,16 @@ actor GraphCloudSession {
         if let failure { throw failure }
     }
 
-    func retryDelay(_ scope: GraphCloudScope) -> TimeInterval? { retryAdvice[scope] }
-
     func identity() throws -> GraphCloudSessionIdentity {
         try check()
         return GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
     }
     func send(_ batch: GraphCloudOutgoingBatch) async throws {
+        let result = try await sendWithAdvice(batch)
+        if let error = result.transportError { throw error }
+    }
+
+    func sendWithAdvice(_ batch: GraphCloudOutgoingBatch) async throws -> GraphCloudSendOutcome {
         try check()
         let scope = batch.zone.scope
         guard let send = drivers[scope]?.send else { throw GraphCloudError.transportUnavailable }
@@ -249,8 +258,13 @@ actor GraphCloudSession {
             outbound.removeValue(forKey: scope); activeFetches.remove(scope); fetches -= 1
             if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
         }
-        try await send(batch)
-        if let failure { throw failure }
+        do {
+            try await send(batch)
+            if let failure { throw failure }
+            return GraphCloudSendOutcome(transportError: nil, retryAfter: retryAdvice[scope])
+        } catch {
+            return GraphCloudSendOutcome(transportError: error, retryAfter: retryAdvice[scope])
+        }
     }
     func sentReceipts(for graph: GraphID) throws -> [GraphCloudSentReceipt] {
         try check(); return document.sent.filter { $0.graphID == graph }

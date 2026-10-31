@@ -178,8 +178,11 @@ package actor GraphContextManager {
             for pass in 0..<2 {
                 let batch = try await graph.prepareTransport(binding, maximum: maximumRecords, onlyIDs: pass == 0 ? nil : retry)
                 if batch.items.isEmpty { retry.removeAll(); break }
-                do { try await session.send(batch) } catch let caught { error = caught }
-                if let delay = await session.retryDelay(binding.route.zone.scope) { retryAfter = max(retryAfter ?? 0, delay) }
+                do {
+                    let outcome = try await session.sendWithAdvice(batch)
+                    error = outcome.transportError
+                    if let delay = outcome.retryAfter { retryAfter = max(retryAfter ?? 0, delay) }
+                } catch let caught { error = caught }
                 let result = try await Self.drainSent(session, graph: graph, binding: binding)
                 succeeded += result.succeeded; failures += result.failures; resolved += result.resolvedConflicts
                 cleanup = cleanup || result.cleanupPending

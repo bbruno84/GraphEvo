@@ -40,7 +40,9 @@ graphs and uses the same admission, server metadata, effect/receipt transactions
 100-record batch and single T03 targeted retry as explicit operations. New private
 zones are bootstrapped by an initial graph turn before the scope fetch: existing
 send logic creates their zones when pending records exist. The scheduler does not
-introduce an independent zone writer or infer sharing from a zone name.
+introduce an independent zone writer or infer sharing from a zone name. Fetch
+wakes also honor an eligible initial turn's debounce deadline; they cannot spin
+while that turn is not yet runnable.
 
 Subscribe before the first PH scan. The coordinator's base runtime handle owns the
 subscription; the scheduler acquires no permanent graph/store lease. Subscription
@@ -85,7 +87,10 @@ weak scheduler references while idle; explicit shutdown drains admitted workers.
 Transient network/service/rate-limit/zone-busy failures retry after 5,15,30,60,120,
 then 300 seconds, with jitter 0.8...1.2 and a final client cap of 300s. Respect any larger native
 retryAfter advice. Advice travels transiently through delegate/session/report
-values; no receipt or document format changes. New hints and timer ticks do not
+values; no receipt or document format changes. The send captures its error and
+retry advice before releasing its scope, so another send/fetch cannot replace
+that operation's advice before the manager reads it. The throwing manual-send
+contract retains the original error. New hints and timer ticks do not
 shorten backoff. Success resets it. Remaining T03 collisions and receipt cleanup
 also wait before another cycle. Clock and jitter are injectable in tests.
 

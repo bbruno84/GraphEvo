@@ -87,3 +87,27 @@ supported performance/resource envelopes. Polling and full-document costs remain
 post-alpha work. No schema/wire/document change, public opener or release tag.
 Remote CI is intentionally deferred until review and the authorized pre-merge
 checkpoint, following review → CI → merge.
+
+## PR118 review corrections
+
+Review of `7c5d773392611f4fe7c0aa74dbf512bd5084911d` finds two P2 issues:
+
+- A pending fetch could immediately reschedule a worker while its required initial
+  turn was still debounced. The virtual-clock regression failed before correction.
+  Fetch wake calculation now waits for that initial deadline; the test verifies
+  sleep, no early turn and subsequent progress.
+- Send completion released scope admission before a separate retryAfter lookup.
+  Another operation could replace that advice. Error and retry advice now return
+  in one immutable, nonpersisted outcome captured before releasing the scope.
+  Success/failure tests replace the scope's advice with a later fetch and verify
+  that the completed send retains600s; manual send still throws its original error.
+
+Post-review local validation passes **713 macOS functions** (331 legacy,288 store,
+71 runtime,23 model) and **114 iOS18.5 functions/131 expanded executions**. The
+physical reports above keep their original pins; no device test is relabeled as
+evidence for these corrections. Review-only work requests neither remote CI nor
+merge. The required checkpoint remains after review, before an authorized merge.
+
+Both corrected review regressions pass10 repeated local runs. ModelConsumer,
+manifest and diff checks pass. Focused re-review finds no remaining blocking
+findings; PR118 stays open without the checkpoint label or merge.
