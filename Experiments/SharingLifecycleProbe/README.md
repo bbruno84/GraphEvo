@@ -24,6 +24,10 @@ Sequence on different-account iPad owner / iPhone XR peer:
 8. Peer `stop-all` pauses C and activates foreground orchestration; the control
    worker must detect and purge it without manual refresh/fetch/apply.
 9. Owner `audit` verifies complete A/B/C cloud/local inventories and file content.
+10. After rebuilding with a later correction, optional read-only `final-audit`
+    (owner) and `removed-state` (peer) inspect the same fixture without replaying
+    any mutation. Record their separate source pins; they do not extend the
+    original mutation matrix to the later source.
 
 The bridge uses `--sharing-lifecycle STAGE RUN owner|peer` with the acknowledged
 PublicMirroredProbe launcher. Full inventories and reports stay external. This

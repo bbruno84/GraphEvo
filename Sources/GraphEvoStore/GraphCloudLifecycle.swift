@@ -94,7 +94,7 @@ extension GraphCloudSharingOperations {
         default: if binding.zone.scope == .private { permission = .readWrite } else { return nil }
         }
         let participants = share.participants.map { participant -> GraphCloudParticipant in
-            let name = participant.userIdentity.userRecordID?.recordName ?? (participant.role == .owner ? account : nil)
+            let name = participant.userIdentity.userRecordID?.recordName ?? (participant.role == .owner && binding.zone.scope == .private ? account : nil)
             let permission: GraphCloudSharePermission? = participant.permission == .readWrite ? .readWrite : participant.permission == .readOnly ? .readOnly : nil
             return GraphCloudParticipant(identity: name, permission: permission, accepted: participant.acceptanceStatus == .accepted, owner: participant.role == .owner)
         }

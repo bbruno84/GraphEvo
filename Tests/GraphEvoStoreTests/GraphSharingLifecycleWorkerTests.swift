@@ -11,6 +11,18 @@ private actor LifecycleWorkBus {
     func setFailure(_ error: (any Error)?) { failure = error }
     func step(_ id: GraphID) -> (any Error)? { calls[id, default: 0] += 1; return id == ids[0] ? failure : nil }
 }
+private actor LifecycleStepGate {
+    private var entered = false
+    private var released = false
+    private var arrivals: [CheckedContinuation<Void, Never>] = []
+    private var waits: [CheckedContinuation<Void, Never>] = []
+    func enter() async {
+        entered = true; let values = arrivals; arrivals = []; for value in values { value.resume() }
+        if !released { await withCheckedContinuation { waits.append($0) } }
+    }
+    func wait() async { if !entered { await withCheckedContinuation { arrivals.append($0) } } }
+    func release() { released = true; let values = waits; waits = []; for value in values { value.resume() } }
+}
 @Suite(.timeLimit(.minutes(1))) struct GraphSharingLifecycleWorkerTests {
     private func wait(_ test: @escaping () async -> Bool) async throws {
         for _ in 0..<5000 { if await test() { return }; try await Task.sleep(for: .milliseconds(1)) }
@@ -52,6 +64,28 @@ private actor LifecycleWorkBus {
         clock.advance(300)
         await worker.request(ids, explicit: true)
         #expect(await bus.calls[ids[0]] == 2)
+        await worker.shutdown()
+    }
+    @Test func hintDuringInFlightFailureDoesNotBypassResultingBackoff() async throws {
+        let clock = AutomaticTestClock(), bus = LifecycleWorkBus(), gate = LifecycleStepGate(), id = GraphID()
+        await bus.setFailure(CKError(.networkUnavailable))
+        let worker = GraphSharingLifecycleWorker(clock: clock.value, inventory: { [id] }, step: { _ in
+            await gate.enter()
+            _ = await bus.step(id)
+            return CKError(.networkUnavailable)
+        })
+        await worker.setActive(true, revision: 1)
+        await gate.wait()
+        await worker.request([id], explicit: true)
+        await gate.release()
+        try await wait { await worker.diagnosticIdle }
+        #expect(await worker.retryDeadline(id) == 5)
+        clock.advance(4)
+        await worker.request([id])
+        try await wait { await worker.diagnosticIdle }
+        #expect(await bus.calls[id] == 1)
+        clock.advance(1)
+        try await wait { let idle = await worker.diagnosticIdle; let count = await bus.calls[id]; return idle && count == 2 }
         await worker.shutdown()
     }
 }

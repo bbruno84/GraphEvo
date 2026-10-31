@@ -194,6 +194,8 @@ extension GraphContextManager {
             member.phase = .active; member.permission = snapshot.permission; member.hadAccess = true
             member.shareIdentity = snapshot.identity; member.failure = nil
             try await session.updateMembership(member)
+            let key = configuration.namespace + ":" + member.binding.zone.scope.rawValue
+            await lifecycleWorkers[key]?.recordSuccess(id)
             if let entry = entries[id] {
                 let owner = try await entry.opening.value
                 _ = try await owner.participantAccess(.init(binding: member.binding, account: member.identity.account,
@@ -229,9 +231,9 @@ extension GraphContextManager {
     }
     private func runSharingPurge(_ member: GraphCloudMembership, configuration: GraphCloudConfiguration) async throws {
         let id = member.binding.graphID
-        if let task = purgeTasks[id] { return try await task.value }
+        if let purge = purgeTasks[id] { return try await purge.task.value }
         let task = Task { try await self.performSharingPurge(member, configuration: configuration) }
-        purgeTasks[id] = task
+        purgeTasks[id] = SharingPurge(namespace: configuration.namespace, task: task)
         do { try await task.value; purgeTasks.removeValue(forKey: id) }
         catch {
             purgeTasks.removeValue(forKey: id)

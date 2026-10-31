@@ -18,7 +18,7 @@ shutil.copyfile(script.with_name("GraphSharingLifecycleDeviceProbe.swift"), libr
 controller = args.destination / "GraphEvoDemo/RecordTransportProbe.swift"
 s = controller.read_text().replace('GraphCloudTransportDeviceProbe()', 'GraphSharingLifecycleDeviceProbe()')
 s = s.replace('["seed", "update", "delete", "reopen", "read-baseline", "read-update", "read-delete", "audit", "read-audit"]',
-              '["identity", "seed", "accept", "pending", "downgrade", "read-only", "revoke", "revoke-start", "recover-purge", "reinvite", "rejoin", "leave", "stop", "stop-all", "audit"]')
+              '["identity", "seed", "accept", "pending", "downgrade", "read-only", "revoke", "revoke-start", "recover-purge", "reinvite", "rejoin", "leave", "stop", "stop-all", "audit", "final-audit", "removed-state"]')
 s = s.replace('"--record-transport"', '"--sharing-lifecycle"').replace('GraphEvo T01', 'GraphEvo T08')
 s = s.replace('GraphEvoLaboratory/RecordTransport', 'GraphEvoLaboratory/SharingLifecycle')
 controller.write_text(s)

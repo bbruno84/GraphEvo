@@ -24,8 +24,8 @@ public actor GraphSharingLifecycleDeviceProbe {
     }
     public func execute(stage: String, run: UUID, replica: String, directory: URL, container: String) async throws -> [String] {
         guard container == "iCloud.com.valerioburiani.GraphCKDemo",
-              (replica == "owner" && ["seed", "downgrade", "revoke", "reinvite", "stop", "audit"].contains(stage)) ||
-              (replica == "peer" && ["identity", "accept", "pending", "read-only", "revoke-start", "recover-purge", "rejoin", "leave", "stop-all"].contains(stage)) else { throw Failure.request }
+              (replica == "owner" && ["seed", "downgrade", "revoke", "reinvite", "stop", "audit", "final-audit"].contains(stage)) ||
+              (replica == "peer" && ["identity", "accept", "pending", "read-only", "revoke-start", "recover-purge", "rejoin", "leave", "stop-all", "removed-state"].contains(stage)) else { throw Failure.request }
         self.run = run; root = directory.appendingPathComponent(run.uuidString).appendingPathComponent(replica)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent(stage + ".started"), options: .withoutOverwriting)
@@ -35,6 +35,16 @@ public actor GraphSharingLifecycleDeviceProbe {
         if stage == "identity" {
             try JSONEncoder().encode(await manager.cloudSharingIdentity(config)).write(to: root.appendingPathComponent("identity.json"), options: .withoutOverwriting)
             return ["Protected recipient identity prepared; no graph created."]
+        }
+        if stage == "removed-state" {
+            for kind in [0,2] {
+                let status = try await manager.cloudSharingStatus(for: graphID(kind), configuration: config)
+                guard status.phase == .removed, !status.remoteOperationPending else { throw Failure.verification }
+                try await absent(kind, url: oldURL(kind))
+            }
+            try await absent(0, url: rejoinedURL)
+            guard try await manager.cloudInbox(config).isEmpty else { throw Failure.verification }
+            return ["Restart retained completed removals, absent owned stores and empty transport inbox, without application opening."]
         }
         let owner = replica == "owner", create = ["seed", "accept"].contains(stage)
         let kinds = owner ? [0,1,2] : ["recover-purge", "rejoin", "stop-all"].contains(stage) ? [2] : [0,2]

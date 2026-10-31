@@ -35,7 +35,8 @@ package actor GraphContextManager {
     var rejoiningGraphs = Set<GraphID>()
     var sharingGraphs = Set<GraphID>()
     var blockedSharingGraphs = Set<GraphID>()
-    var purgeTasks: [GraphID: Task<Void, any Error>] = [:]
+    struct SharingPurge { let namespace: String; let task: Task<Void, any Error> }
+    var purgeTasks: [GraphID: SharingPurge] = [:]
     var lifecycleWorkers: [String: GraphSharingLifecycleWorker] = [:]
     private var transportGraphs = Set<GraphID>()
     private let attachmentRefresh = GraphCloudAttachmentRefresh<Void>()
@@ -74,6 +75,7 @@ package actor GraphContextManager {
     }
 
     func cloud(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudSession {
+        guard automaticClosing[configuration.namespace] == nil else { throw GraphCloudError.stopping }
         guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { throw GraphCloudError.stopped }
         return try await opening.task.value
     }
@@ -186,6 +188,8 @@ package actor GraphContextManager {
         automaticActivityRevision[configuration.namespace] = revision
         await automatic[configuration.namespace]?.setActive(false, revision: revision)
         await stopSharingLifecycle(configuration)
+        let removing = purgeTasks.values.filter { $0.namespace == configuration.namespace }.map(\.task)
+        for task in removing { _ = try? await task.value }
         try await session.stop()
         guard cloudSessions[configuration.namespace]?.id == opening.id else { return }
         if let scheduler = automatic.removeValue(forKey: configuration.namespace) { await scheduler.shutdown() }

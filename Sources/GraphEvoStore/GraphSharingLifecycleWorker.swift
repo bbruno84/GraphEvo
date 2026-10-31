@@ -12,6 +12,7 @@ actor GraphSharingLifecycleWorker {
     private var job: Task<Void, Never>?
     private var timer: Task<Void, Never>?
     private var deadlines: [GraphID: Double] = [:]
+    private var waiting = Set<GraphID>()
     private var blocked = Set<GraphID>()
     private var failures: [GraphID: Int] = [:]
     private var explicit: Set<GraphID> = []
@@ -23,14 +24,15 @@ actor GraphSharingLifecycleWorker {
         guard revision >= self.revision else { return }
         self.revision = revision
         if value && !active {
-            for id in deadlines.keys where failures[id, default: 0] == 0 && !blocked.contains(id) { deadlines[id] = clock.now() }
+            for id in deadlines.keys where !waiting.contains(id) && !blocked.contains(id) { deadlines[id] = clock.now() }
         }
         active = value
         if value { pump() } else { timer?.cancel(); timer = nil }
     }
     func request(_ ids: [GraphID] = [], explicit: Bool = false) {
-        if explicit {
-            for id in ids where blocked.remove(id) != nil || failures[id, default: 0] == 0 { self.explicit.insert(id); deadlines[id] = clock.now() }
+        for id in ids {
+            if explicit, blocked.remove(id) != nil { waiting.remove(id) }
+            if !waiting.contains(id), !blocked.contains(id) { self.explicit.insert(id); deadlines[id] = clock.now() }
         }
         pump()
     }
@@ -52,7 +54,7 @@ actor GraphSharingLifecycleWorker {
             guard (deadlines[id] ?? now) <= clock.now() || requested else { continue }
             if let error = await step(id) {
                 applyFailure(id, error: error)
-            } else { failures[id] = 0; deadlines[id] = clock.now() + 60 }
+            } else { recordSuccess(id) }
         }
         job = nil
         guard active else { return }
@@ -66,7 +68,12 @@ actor GraphSharingLifecycleWorker {
     func recordFailure(_ id: GraphID, error: any Error) {
         applyFailure(id, error: error); pump()
     }
+    func recordSuccess(_ id: GraphID) {
+        waiting.remove(id); blocked.remove(id); failures[id] = 0; deadlines[id] = clock.now() + 60
+    }
     private func applyFailure(_ id: GraphID, error: any Error) {
+        explicit.remove(id)
+        waiting.insert(id)
         if error as? GraphCloudError == .busy || error as? GraphSyncError == .busy {
             deadlines[id] = clock.now() + 1
         } else {

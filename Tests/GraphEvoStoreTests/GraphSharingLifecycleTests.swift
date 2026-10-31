@@ -296,4 +296,26 @@ private actor RemovalGate {
         try await b.close(); try await fresh.close(); try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
     }
 
+    #if DEBUG
+    @Test func stopDrainsAlreadyStartedPurgeBeforeReleasingSession() async throws {
+        let f = try await fixture(), gate = RemovalGate()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        await f.manager.setPurgeProbeBarrier { _ in await gate.enter() }
+        let leave = Task { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
+        await gate.wait()
+        let stop = Task { try await f.manager.stopCloudSession(f.config) }
+        while await f.manager.automaticClosingCount == 0 { await Task.yield() }
+        #expect(FileManager.default.fileExists(atPath: f.url.path))
+        await gate.release()
+        do { _ = try await leave.value } catch {
+            #expect(error as? GraphCloudError == .stopping || error as? GraphCloudError == .stopped)
+        }
+        try await stop.value
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        _ = try await f.manager.startCloudSession(f.config, adapter: f.cloud.adapter)
+        #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .removed)
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
+    #endif
+
 }
