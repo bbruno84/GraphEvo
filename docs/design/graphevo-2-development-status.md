@@ -94,7 +94,8 @@ and the Swift 6 consumer. Physical native-engine delivery remains a separate gat
 The engine foundation #109 is reviewed/merged as `e26a0cd`, with exact-head
 macOS/iOS CI `41143330378` green; the merge tree matches reviewed head `efc9fe9`.
 
-The focused `codex/v2-cloud-record-format` adds [CF01 logical record conversion](graphevo-2-cloud-record-format.md)
+The focused [#110](https://github.com/bbruno84/GraphEvo/pull/110),
+`codex/v2-cloud-record-format`, adds [CF01 logical record conversion](graphevo-2-cloud-record-format.md)
 over immutable PH attempts and the incoming inbox envelope. It is not integrated.
 One GraphEvoNode record represents each application primitive; properties remain
 serialized and S03 is unchanged. No outgoing worker, server metadata persistence,
