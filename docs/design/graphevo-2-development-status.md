@@ -325,3 +325,29 @@ SharedObservation, IdentityLookup and ConsolidationCosts smoke steps are removed
 from CI. They remain local experiments with separate evidence; CI retains library
 build/tests and model/process consumer integration. Broader scheduling, sharing,
 account/crash/backup and protected migration gates remain open.
+
+
+## T06 foreground automatic synchronization increment
+
+`codex/v2-automatic-cloud-sync` starts directly from integrated #117 (`f459ae2`).
+[T06](graphevo-2-automatic-sync.md) adds explicit package-only foreground scheduling,
+consumer-only commit hints, fair scope workers,60s reconciliation, transient retry
+advice/backoff and operational status. T05 admission and existing PH/transport
+paths remain authoritative. S03, wire and document formats remain unchanged.
+
+The [physical result](results/automatic-foreground-sync-2026-10-31.md) records nine
+passed stages on runtime 52fed77, including actual 60s catch-up without notifications,
+A pause/B progress, resumed A4/B3 convergence, restart and empty recovery. A tenth
+independent empty replica passes on lifecycle-hardened runtime 0c25ea6. Earlier
+reports retain their actual pins; no original mutation was replayed or container
+reset. A final retry-only client cap is tested locally, not relabeled as physical
+rate-limit evidence.
+
+Full local validation passes 711 functions (331 legacy,286 store,71 runtime,23 model).
+Selected iOS18.5 passes 112 functions/128 expanded executions; ModelConsumer,
+manifest, script and diff checks pass. Final delivery details are recorded on the PR. Local
+hardening covers generation checks after awaited session reads, old status stream
+termination, ordered activity requests, stop/reactivation and failed-start cleanup.
+This focused increment awaits review; no remote checkpoint or merge is requested.
+The order remains review → CI → merge. Background/APNs delivery, broader sharing,
+resource/crash/backup and protected migrations remain acceptance gates.
