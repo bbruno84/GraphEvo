@@ -161,7 +161,12 @@ engine or cross-process acceptance. Retain this scope when integrating it.
   The [ten-stage real private result](results/record-transport-cloudkit-2026-10-31.md)
   proves small-fixture insert/update/delete, native server metadata reuse, iPad/iPhone
   recovery, no upload feedback, restart, empty final recovery and complete final
-  local/server inventory agreement. It does not close
+  local/server inventory agreement. The [thirteen-stage real conflict result](results/record-conflicts-cloudkit-2026-10-31.md)
+  adds actual serverRecordChanged/unknownItem, partial acknowledgements, independent
+  graph progress, preserved newer local generations, import refusal, reopen and
+  fresh server-state recovery. It explicitly records deletion winning on the server
+  for both tested stale update/delete orders. Consumer resolution/rebase and
+  multi-node structural conflict acceptance remain open. This does not close
   genuine concurrent conflicts, interruption/backup, assets or broader account/sharing
   acceptance. The initial #111 CI process exit remains undiagnosed after successful
   local/final-CI reruns; retain crash/stress follow-up and iOS result diagnostics.
