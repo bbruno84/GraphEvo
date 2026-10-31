@@ -128,7 +128,8 @@ T01 #111 is reviewed/merged as `06b5ae5`, with exact-head macOS/iOS CI
 An initial CI store-test process exit (`41189893048`) did not reproduce in local
 iOS 18.5 validation (222 functions / 262 expanded cases) or the final CI run.
 The cause remains undiagnosed; explicit iOS result-bundle retention was added.
-The focused `codex/v2-record-transport-device` now prepares the
+The focused [#112](https://github.com/bbruno84/GraphEvo/pull/112),
+`codex/v2-record-transport-device`, supplies the
 [real transport laboratory](../../Experiments/RecordTransportProbe/README.md).
 Its external-only bridge does not activate a public production opener or merge
 prototype sync code. [Ten real private-device stages](results/record-transport-cloudkit-2026-10-31.md)
