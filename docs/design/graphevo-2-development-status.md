@@ -142,8 +142,8 @@ remain open. #112 is reviewed/merged as `30f7089`, with exact-head macOS/iOS CI
 
 ## Concurrent conflict validation
 
-The focused [#114](https://github.com/bbruno84/GraphEvo/pull/114),
-`codex/v2-concurrent-conflicts`, adds an external-only
+The reviewed validation in [#114](https://github.com/bbruno84/GraphEvo/pull/114)
+returns directly from `codex/v2-concurrent-conflicts` and adds an external-only
 [conflict laboratory](../../Experiments/RecordConflictProbe/README.md) and its
 [thirteen-stage real result](results/record-conflicts-cloudkit-2026-10-31.md).
 On the integrated `31eac7c` runtime, real update/update collisions, partial success,
@@ -152,8 +152,10 @@ preservation pass on iPad/iPhone. Stale deletion removes a newer server value;
 stale update after deletion returns unknownItem without resurrection. A fresh
 replica recovers only the actual final server state. Production code/schema and
 CF01 are unchanged. A consumer resolution/rebase boundary and structural conflict
-matrix remain open; this validation branch is not integrated yet. Remote full CI
-is not requested for this excluded bridge/report increment under the new policy.
+matrix remain open. The PR records reviewed-head checks and merge disposition.
+Remote full CI is intentionally skipped for this excluded bridge/report increment
+under the new checkpoint policy; local review verifies the bridge matches the
+signed device build and all thirteen original passed stage reports remain retained.
 
 ## Integrated alpha implementation
 
@@ -165,9 +167,9 @@ is not requested for this excluded bridge/report increment under the new policy.
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
-| CF01 / T01 transport | Logical node CKRecords, manual engine send/import, durable attempts, server metadata/effect receipts (#110/#111); bounded private device recovery reported separately | Genuine server conflicts/CAS recovery, assets and public activation remain open; S03 unchanged |
-| Engine foundation | ContextManager-owned private/shared sessions, path-free zone routes, persisted inbox/results (#109/#111) | Package-only manual scheduling; real device/account/sharing and automatic sync acceptance remain open |
-| PH pending | Per-graph discovery, durable pending/checkpoint, immutable attempts and generation-safe acknowledgements (#108) | Package-only; controlled patches only, full engine/incoming/crash gates remain open |
+| CF01 / T01 transport | Logical node CKRecords, manual engine send/import, durable attempts, server metadata/effect receipts (#110/#111); bounded private device recovery reported separately | Bounded real collisions verified in T02; consumer resolution/rebase, structural conflicts, assets and public activation remain open; S03 unchanged |
+| Engine foundation | ContextManager-owned private/shared sessions, path-free zone routes, persisted inbox/results (#109/#111) | Package-only manual scheduling; broad account/sharing and automatic/background acceptance remain open |
+| PH pending | Per-graph discovery, durable pending/checkpoint, immutable attempts and generation-safe acknowledgements (#108) | Package-only; T01/T02 add real transport/generation evidence, while crash/history rebaseline and broader convergence gates remain open |
 | Native identity | M16 removed application versioning; M18/S03 preserves graph/node IDs in deletion history through #107 | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
 | App/widget | Local read-only extension access and ownership safeguards | Broader lifecycle/account/protected-data/OS acceptance remains bounded by the reports |
 | Application data | M16 supersedes M2b.1: consumer-owned meaning/optional versions, no registry or global format block | Production migration execution remains open |
@@ -211,9 +213,8 @@ run `41192922760` also passed on `30f7089` before the new policy took effect.
 
 ## Next steps and operating rule
 
-1. Review/check/integrate the bounded concurrent-conflict evidence/harness, then
-   define the explicit consumer resolution/rebase boundary without implicit data
-   merging. Continue with structural conflicts, assets, automatic sync,
+1. Complete the reviewed T02 integration through #114, then discuss and agree on
+   the explicit consumer resolution/rebase boundary before implementing it. Continue with structural conflicts, assets, automatic sync,
    pause, conflict policy and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
