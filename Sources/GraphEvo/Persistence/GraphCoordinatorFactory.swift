@@ -12,7 +12,11 @@ enum GraphCoordinatorFactory {
     static func makeAdapter(clock: @escaping @Sendable () -> Date = { Date() }) -> GraphCoordinatorAdapter {
         let native = GraphNativeIdentityDatabaseAdapter.database
         var graph = native.graph
-        graph.beginMutation = { context, _ in GraphMutationMetadata.begin(context) }
+        graph.beginMutation = { context, id in
+            try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
+            GraphMutationMetadata.begin(context)
+        }
+        graph.participantAccess = GraphCloudAccessMetadata.access
         graph.finishMutation = { context, id in try GraphMutationMetadata.finish(context, graphID: id, clock: clock) }
         var sync = GraphSyncCheckpointAdapter.adapter
         sync.policy = { (context: NSManagedObjectContext, id: GraphID, policy: GraphConflictPolicy?) in

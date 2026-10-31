@@ -1627,3 +1627,15 @@ local hints debounce 250ms/max1s and foreground reconciliation runs every 60s.
 GraphAutomaticSyncStatus contains phase, retryAfter, payload-free failure family/code
 and pendingWork; none certifies global sync completion. See [T06](../design/graphevo-2-automatic-sync.md)
 for pause, lifecycle, retry, recovery and demo forwarding.
+
+
+### Package-only T07 sharing candidate
+
+The custom sync implementation adds no public opening or invitation API. The
+internal ContextManager supports `cloudSharingIdentity(_:)`,
+`inviteCloudParticipant(_:to:permission:configuration:)` and
+`acceptCloudInvitation(_:configuration:)`. Owner zones stay private; participants
+use shared zones. Read-only/pending participant mutations are refused across
+handles, while import remains separate from acceptance. See the
+[T07 contract](../design/graphevo-2-zone-sharing.md) for alpha state compatibility
+and protected capability transport requirements.

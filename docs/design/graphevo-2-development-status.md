@@ -6,6 +6,13 @@ delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
+## Current focused work
+
+T07 explicit custom zone sharing is being implemented on `codex/v2-zone-sharing`
+from integrated #118 (`9238b95`), directly targeting `codex/graphevo-2`.
+See the [T07 contract](graphevo-2-zone-sharing.md). This is candidate work,
+not integrated acceptance; review precedes CI. Native S03 is unchanged.
+
 ## Active branch and completed reorganization
 
 Develop on **`codex/graphevo-2`**. C01 #78 is integrated as `f47776f`; cumulative

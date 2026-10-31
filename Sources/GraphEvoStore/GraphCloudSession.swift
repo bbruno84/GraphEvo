@@ -25,6 +25,7 @@ struct GraphCloudSendOutcome: Sendable {
 }
 
 struct GraphCloudAdapter: Sendable {
+    var sharing: GraphCloudSharingService? = nil
     let account: @Sendable (String) async throws -> String
     let make: @Sendable (GraphCloudConfiguration, GraphCloudScope, Data?, @escaping @Sendable (GraphCloudEvent) async -> Void) throws -> GraphCloudDriver
 }
@@ -76,14 +77,16 @@ actor GraphCloudSession {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 3, doc.container == config.containerIdentifier, doc.environment == config.environment,
+                guard doc.format == 4, doc.container == config.containerIdentifier, doc.environment == config.environment,
                       doc.account == account else { throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
                       Set(doc.inbox.map(\.id)).count == doc.inbox.count,
                       Set(doc.bindings.map(\.zone)).count == doc.bindings.count,
                       Set(doc.bindings.map(\.graphID)).count == doc.bindings.count,
-                      doc.bindings.allSatisfy({ !$0.zone.name.isEmpty && !$0.zone.owner.isEmpty }) else { throw GraphCloudError.invalidState }
+                      doc.bindings.allSatisfy({ !$0.zone.name.isEmpty && !$0.zone.owner.isEmpty }),
+                      Set(doc.shareAttempts).count == doc.shareAttempts.count,
+                      doc.shareAttempts.allSatisfy({ zone in zone.scope == .private && doc.bindings.contains { $0.zone == zone } }) else { throw GraphCloudError.invalidState }
                 guard Set(doc.sent.map(\.id)).count == doc.sent.count else { throw GraphCloudError.invalidState }
                 for receipt in doc.sent {
                     guard doc.bindings.contains(where: { $0.graphID == receipt.graphID && $0.zone == receipt.zone }) else { throw GraphCloudError.invalidState }
@@ -235,6 +238,51 @@ actor GraphCloudSession {
         if let selected { guard selected.isSubset(of: Set(zones)) else { throw GraphCloudError.invalidConfiguration } }
         try await driver.fetch(zones.filter { selected?.contains($0) ?? true })
         if let failure { throw failure }
+    }
+
+    /// Control operations share the engine scope gate and participate in session stop draining.
+    private func control<Value: Sendable>(_ scope: GraphCloudScope,
+        body: @Sendable (GraphCloudSharingService, String) async throws -> Value) async throws -> Value {
+        try check()
+        guard let sharing = adapter.sharing else { throw GraphCloudSharingError.unavailable }
+        guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }
+        fetches += 1
+        defer {
+            activeFetches.remove(scope); fetches -= 1
+            if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
+        }
+        let result = try await body(sharing, document.account)
+        if let failure { throw failure }
+        return result
+    }
+
+    func invite(_ binding: GraphCloudBinding, recipient: String, permission: GraphCloudSharePermission) async throws -> GraphCloudInvitation {
+        try check()
+        guard document.bindings.contains(binding), binding.zone.scope == .private else { throw GraphCloudSharingError.ownerRequired }
+        guard !recipient.isEmpty, recipient != document.account else { throw GraphCloudSharingError.invalidParticipant }
+        guard adapter.sharing != nil else { throw GraphCloudSharingError.unavailable }
+        guard !activeFetches.contains(.private) else { throw GraphCloudError.busy }
+        let mayCreate = !document.shareAttempts.contains(binding.zone)
+        // Persist before the external effect. An ambiguous creation is recovered by fetching the fixed share ID.
+        if mayCreate {
+            var next = document; next.shareAttempts.append(binding.zone); try publish(next)
+        }
+        let config = configuration
+        return try await control(.private) { service, account in
+            try await service.invite(config, binding, account, recipient, permission, mayCreate)
+        }
+    }
+
+    func accept(_ invitation: GraphCloudInvitation) async throws -> GraphCloudParticipantAccess {
+        try invitation.validate()
+        guard invitation.container == configuration.containerIdentifier, invitation.environment == configuration.environment,
+              invitation.recipient == document.account else { throw GraphCloudSharingError.invalidInvitation }
+        let binding = GraphCloudBinding(zone: invitation.zone, graphID: invitation.graphID)
+        guard !document.bindings.contains(where: { ($0.graphID == binding.graphID || $0.zone == binding.zone) && $0 != binding }) else { throw GraphCloudError.ownershipConflict }
+        let config = configuration
+        let permission = try await control(.shared) { service, account in try await service.accept(config, invitation, account) }
+        try bind(binding)
+        return GraphCloudParticipantAccess(binding: binding, account: document.account, permission: permission, accepted: true)
     }
 
     func identity() throws -> GraphCloudSessionIdentity {

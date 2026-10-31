@@ -37,6 +37,7 @@ public struct GraphV1AdoptionReport: Sendable {
 
 /// Privileged callbacks implemented by the current Graph facade adapter.
 package struct GraphStoreAdapter: Sendable {
+    package var participantAccess: (@Sendable (NSManagedObjectContext, GraphID, GraphCloudParticipantAccess?) throws -> GraphCloudParticipantAccess?)?
     package var beginMutation: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package var finishMutation: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package let initialize: @Sendable (NSManagedObjectContext, URL?) throws -> GraphV1AdoptionReport
@@ -108,6 +109,12 @@ public actor GraphStore {
     package func observationFeed() async throws -> StoreInvalidationFeed {
         do { return try await handle.invalidationFeed() }
         catch { throw Self.translate(error) }
+    }
+
+    package func participantAccess(_ value: GraphCloudParticipantAccess? = nil) async throws -> GraphCloudParticipantAccess? {
+        guard let access = adapter.participantAccess else { throw GraphCloudSharingError.unavailable }
+        let id = id
+        return try await handle.transaction { try access($0, id, value) }
     }
 
     // Created on this actor before suspension; concurrent first subscribers share one coordinator.

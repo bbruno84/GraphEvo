@@ -163,6 +163,9 @@ extension GraphSyncCheckpointAdapter {
             try reconcile(context, value: &value, limits: limits)
             var state = try loadTransport(value, binding: binding)
             guard !state.zoneDeleted else { throw GraphCloudError.zoneUnavailable }
+            if !value.state.pending.isEmpty || state.attempt != nil {
+                try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
+            }
             if let attempt = state.attempt { return attempt }
             var items: [GraphSyncItem] = [], dates: [GraphNodeID: Date] = [:]
             let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
