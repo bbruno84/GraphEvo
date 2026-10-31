@@ -1,6 +1,6 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-10-31. This is the single entry point for **integrated work,
+Updated: 2026-11-01. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
@@ -33,14 +33,20 @@ closes all three findings without additional blockers in the reviewed paths.
 The maintainer subsequently deferred CI to a combined checkpoint with the next
 increment while billing resets; T08 remains reviewed and unmerged.
 
-## Planned migration foundations
+## Migration foundations candidate
 
-Next planning work: [migration foundations](graphevo-2-migration-foundations.md)
+Current work: [MF01 local admission and backups](graphevo-2-local-maintenance.md),
+following the [migration foundations roadmap](graphevo-2-migration-foundations.md),
 on `codex/v2-migration-foundations`, based on reviewed #120 at `8dda893` by the
-maintainer's explicit instruction. No migration/runtime implementation or merge
-is implied. Cloud/local admission, central verified backups and independent graph
-control metadata precede consumer execution/publication. Remote CI is explicitly
-deferred to one combined checkpoint after local checks/review while billing resets.
+maintainer's explicit instruction. The candidate adds owned local reservations
+and a central native-copy/verified-backup service, reasons, durable retention and
+empty-destination restoration. It extends #120 for one combined review/CI
+checkpoint; no dependent PR, integration merge or CI is implied. Shared control
+metadata, working-copy execution/publication and v1 conversion remain subsequent
+work. In-place/cloud restoration and cross-process writer fencing remain open.
+The [local results](results/local-maintenance-2026-11-01.md) record 774 macOS and
+419 selected iOS Simulator functions, with native attachment/PH recovery and no
+new physical CloudKit claim. MF01 still requires review before the combined CI.
 
 ## Latest integrated increment
 

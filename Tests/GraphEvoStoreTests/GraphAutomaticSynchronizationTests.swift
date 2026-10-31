@@ -398,4 +398,17 @@ private actor AutomaticBus {
         #expect(noEarlyTurn)
     }
 
+
+    @Test(arguments: [false, true]) func localReservationsRetryInsteadOfPermanentlyBlocking(_ native: Bool) async throws {
+        let bus = AutomaticBus(), clock = AutomaticTestClock(), id = await bus.inventory[0].id
+        let error: any Error = native ? StoreRuntimeError.resourceReserved : GraphStoreError.writesSuspended
+        await bus.fail(id, reports: [.init(succeeded: 0, failures: [], cleanupPending: false, transportError: error)])
+        let scheduler = GraphAutomaticSynchronizer(driver: bus.driver, clock: clock.value)
+        await scheduler.setActive(true); try await settle(scheduler)
+        #expect(try await scheduler.status(id).phase == .waitingRetry)
+        clock.advance(1)
+        try await wait { try await scheduler.status(id).phase == .idle }
+        await scheduler.shutdown()
+    }
+
 }

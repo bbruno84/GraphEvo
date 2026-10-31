@@ -1,7 +1,8 @@
 # GraphEvo 2 — migration foundations roadmap
 
-Status: agreed direction and ordered prerequisites, not an implemented API or a
-completed specification. Work starts from reviewed T08 PR #120 (`8dda893`) on
+Status: [MF01](graphevo-2-local-maintenance.md) is the package-only implementation
+candidate for prerequisites 1–2; later steps remain roadmap decisions. Work starts
+from reviewed T08 PR #120 (`8dda893`) on
 `codex/v2-migration-foundations`, as explicitly requested by the maintainer.
 T08 remains unmerged. Billing availability defers remote CI to one combined
 checkpoint after local validation and review; no merge or release is implied.

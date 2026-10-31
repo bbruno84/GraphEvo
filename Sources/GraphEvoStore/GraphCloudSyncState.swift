@@ -12,6 +12,8 @@ struct GraphCloudSyncPermit: Sendable {
 }
 
 struct GraphCloudSyncControl: Sendable {
+    var manualPause = false
+    var pauseHolds = Set<UUID>()
     var state: GraphCloudSyncState = .active
     var operations = Set<UUID>()
     var waiters: [UUID: CheckedContinuation<Void, any Error>] = [:]

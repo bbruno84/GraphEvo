@@ -6,14 +6,16 @@ import GraphEvoRuntime
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
     package let initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)?
+    package let validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package let graph: GraphStoreAdapter
     package let sync: GraphSyncAdapter?
     package let initialize: @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void
 
     package init(graph: GraphStoreAdapter, sync: GraphSyncAdapter? = nil,
                  initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)? = nil,
+                 validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
-        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy
+        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup
     }
 }
 
@@ -49,8 +51,8 @@ package actor GraphCoordinator {
             }
             if initiallyBlocked { try await handle.setDataAvailable(false) }
             if !creating, let access = adapter.graph.participantAccess {
-                if try await handle.controlRead({ try access($0, id, nil) }) != nil {
-                    try await handle.setDataAvailable(false)
+                if let value = try await handle.controlRead({ try access($0, id, nil) }) {
+                    try await handle.setDataAvailable(false, terminal: value.blocked)
                 }
             }
             return owner
@@ -65,7 +67,7 @@ package actor GraphCoordinator {
     static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, registry: StoreRegistry,
                                 schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
         let handle = try await registry.open(configuration, schema: schema)
-        try await handle.setDataAvailable(false)
+        try await handle.setDataAvailable(false, terminal: true)
         return GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync)
     }
     func storeIdentity() async throws -> String {
@@ -80,10 +82,15 @@ package actor GraphCoordinator {
         }
     }
     func setSharingDataAvailable(_ value: Bool) async throws { try await handle.setDataAvailable(value) }
+    func blockSharingData() async throws { try await handle.setDataAvailable(false, terminal: true) }
+    func suspendLocalWrites() async throws -> StoreReservation { try await handle.suspendWrites() }
+    func reserveMaintenance() async throws -> StoreReservation { try await handle.reserveMaintenance() }
+    func copyStore(to url: URL, reservation: StoreReservation) async throws { try await handle.copyStore(to: url, reservation: reservation) }
     func participantAccess(_ value: GraphCloudParticipantAccess? = nil) async throws -> GraphCloudParticipantAccess? {
         guard let access = adapter.participantAccess else { throw GraphCloudSharingError.unavailable }
         let id = id
-        return try await handle.controlTransaction { try access($0, id, value) }
+        if let value { return try await handle.controlTransaction { try access($0, id, value) } }
+        return try await handle.controlRead { try access($0, id, nil) }
     }
     func destroy(storeID: String) async throws {
         await syncSession?.retire()

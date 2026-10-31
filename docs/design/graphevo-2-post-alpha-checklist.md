@@ -346,7 +346,13 @@ API compatibility remains optional; data migration is a stable-release gate.
 
 The [current roadmap](graphevo-2-migration-foundations.md) adds a central
 BackupManager with a caller-supplied manifest reason and a reversible graph-local
-write reservation. Both remain unimplemented. Validate nested reservations,
+write reservation. [MF01](graphevo-2-local-maintenance.md) supplies their package-only
+candidate with complete local snapshot/empty-destination restoration, caller
+reasons, native content checks and durable retention. The
+[local result](results/local-maintenance-2026-11-01.md) verifies the candidate
+on macOS/iOS Simulator, without closing physical/cross-process acceptance.
+In-place/cloud restore, legacy-source integration and actual migration activation
+remain open. Validate nested reservations,
 all-handle drainage and explicit app/widget exclusion before claiming migration
 isolation. Current one-graph/store backups must preserve other graphs' shared
 engine/session state and must not roll back the cloud control ledger. Historical

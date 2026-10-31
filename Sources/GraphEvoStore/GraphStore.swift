@@ -6,6 +6,8 @@ import GraphEvoRuntime
 public enum GraphStoreError: Error {
     case closed
     case readOnly
+    case writesSuspended
+    case resourceReserved
     case synchronizationUnavailableInExtension
     case ownershipConflict
     case expiredScope
@@ -114,7 +116,8 @@ public actor GraphStore {
     package func participantAccess(_ value: GraphCloudParticipantAccess? = nil) async throws -> GraphCloudParticipantAccess? {
         guard let access = adapter.participantAccess else { throw GraphCloudSharingError.unavailable }
         let id = id
-        return try await handle.controlTransaction { try access($0, id, value) }
+        if let value { return try await handle.controlTransaction { try access($0, id, value) } }
+        return try await handle.controlRead { try access($0, id, nil) }
     }
 
     package func setSharingDataAvailable(_ value: Bool) async throws { try await handle.setDataAvailable(value) }
@@ -265,6 +268,8 @@ public actor GraphStore {
         switch runtime {
         case .missingStore: return GraphStoreError.missingStore
         case .readOnlyStore: return GraphStoreError.readOnly
+        case .writesSuspended: return GraphStoreError.writesSuspended
+        case .resourceReserved: return GraphStoreError.resourceReserved
         case .synchronizationUnavailableInExtension: return GraphStoreError.synchronizationUnavailableInExtension
         case .dataUnavailable: return GraphStoreError.permissionDenied
         case .closedHandle: return GraphStoreError.closed
@@ -279,6 +284,8 @@ extension GraphStoreError: LocalizedError {
         switch self {
         case .missingStore: return "The local store is unavailable until the containing app initializes it."
         case .readOnly: return "The graph store is open for local reading only."
+        case .writesSuspended: return "Local writes are suspended for this graph."
+        case .resourceReserved: return "The graph is reserved for maintenance."
         case .synchronizationUnavailableInExtension: return "Cloud synchronization must be owned by the containing app; use local read-only access in the extension."
         case .ownershipConflict: return "The store has an incompatible persistence owner."
         case .closed: return "The graph store handle is closed."

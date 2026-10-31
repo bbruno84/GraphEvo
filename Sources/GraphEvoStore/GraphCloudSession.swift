@@ -489,6 +489,16 @@ extension GraphCloudSession {
     }
     func supportsSharingOperations() -> Bool { adapter.sharing?.operations != nil }
 
+    func backupSnapshot(for id: GraphID) throws -> Data? {
+        let binding = document.bindings.first { $0.graphID == id }
+        let membership = document.memberships.first { $0.binding.graphID == id }
+        guard let zone = binding?.zone ?? membership?.binding.zone else { return nil }
+        try check(control: true)
+        let value = GraphCloudBackupSnapshot(format: 1, capturedAt: Date(), identity: try identity(control: true), binding: binding,
+            membership: membership, inbox: document.inbox.filter { $0.change.zone == zone }, receipts: document.sent.filter { $0.graphID == id })
+        return try JSONEncoder().encode(value)
+    }
+
     func executeSharing(_ member: GraphCloudMembership) async throws {
         guard let intent = member.pending else { return }
         let config = configuration

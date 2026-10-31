@@ -12,6 +12,8 @@ package enum StoreRuntimeError: Error {
     case loadFailed(URL?, underlying: any Error)
     case shutdownFailed(URL?, underlying: any Error)
     case dataUnavailable
+    case writesSuspended
+    case resourceReserved
     case closedHandle
     case synchronizationUnavailableInExtension
     case readOnlyStore
@@ -31,6 +33,8 @@ extension StoreRuntimeError: LocalizedError {
         case .loadFailed: return "The persistent store could not be loaded."
         case .shutdownFailed: return "The store could not be detached; its runtime ownership is retained."
         case .dataUnavailable: return "Application data is unavailable until sharing recovery completes."
+        case .writesSuspended: return "Local writes are suspended by a resource reservation."
+        case .resourceReserved: return "The resource is reserved for maintenance."
         case .closedHandle: return "The store handle is closed."
         case .synchronizationUnavailableInExtension: return "Cloud synchronization must be owned by the containing app."
         case .readOnlyStore: return "The store does not permit transactions."

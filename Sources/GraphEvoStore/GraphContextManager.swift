@@ -1,4 +1,5 @@
 import Foundation
+import CoreData
 import GraphEvoModel
 import GraphEvoRuntime
 
@@ -18,6 +19,7 @@ package actor GraphContextManager {
     let registry: StoreRegistry
     let schema: StoreSchema
     let adapter: GraphCoordinatorAdapter
+    package let backups: GraphBackupManager
     var entries: [GraphID: Entry] = [:]
     struct GraphLocation { let key: StoreKey; let url: URL }
     // Runtime-only registrations. App bootstrap supplies current sandbox/App Group URLs after relaunch.
@@ -400,9 +402,14 @@ package actor GraphContextManager {
     }
 
     package func pauseCloudSynchronization(for id: GraphID) async throws {
+        try await pauseCloudSynchronization(for: id, manual: true)
+    }
+    private func pauseCloudSynchronization(for id: GraphID, manual: Bool) async throws {
         try Task.checkCancellation()
         try requireOpenGraph(id)
         var control = synchronization[id] ?? GraphCloudSyncControl()
+        if manual { control.manualPause = true }
+        synchronization[id] = control
         if control.state == .active {
             control.state = .pauseRequested
             synchronization[id] = control
@@ -429,13 +436,34 @@ package actor GraphContextManager {
     package func resumeCloudSynchronization(for id: GraphID) throws {
         try requireOpenGraph(id)
         var control = synchronization[id] ?? GraphCloudSyncControl()
-        guard control.state != .pauseRequested else { throw GraphCloudError.busy }
+        guard control.state != .pauseRequested, control.pauseHolds.isEmpty else { throw GraphCloudError.busy }
+        control.manualPause = false
+        synchronization[id] = control
         if control.state == .paused {
             control.state = .active
             synchronization[id] = control
             for observer in control.observers.values { observer.yield(.active) }
             automaticChanged()
         }
+    }
+
+    func reserveCloudPause(for id: GraphID) async throws -> StoreReservation {
+        try requireOpenGraph(id)
+        let token = UUID()
+        if synchronization[id] == nil { synchronization[id] = GraphCloudSyncControl() }
+        synchronization[id]!.pauseHolds.insert(token)
+        do { try await pauseCloudSynchronization(for: id, manual: false) }
+        catch { releaseCloudPause(id, token: token); throw error }
+        return StoreReservation(id: token) { [weak self] in await self?.releaseCloudPause(id, token: token) }
+    }
+    private func releaseCloudPause(_ id: GraphID, token: UUID) {
+        guard var control = synchronization[id], control.pauseHolds.remove(token) != nil else { return }
+        if control.pauseHolds.isEmpty, !control.manualPause, control.state == .paused {
+            control.state = .active
+            for observer in control.observers.values { observer.yield(.active) }
+            automaticChanged()
+        }
+        synchronization[id] = control
     }
 
     private func canSynchronize(_ id: GraphID, inheriting permit: GraphCloudSyncPermit? = nil) -> Bool {
@@ -457,9 +485,9 @@ package actor GraphContextManager {
         guard var control = synchronization[permit.graphID], control.operations.remove(permit.id) != nil else { return }
         var completed: [CheckedContinuation<Void, any Error>] = []
         if control.operations.isEmpty && control.state == .pauseRequested {
-            control.state = .paused
+            control.state = !control.manualPause && control.pauseHolds.isEmpty ? .active : .paused
             completed = Array(control.waiters.values); control.waiters.removeAll()
-            for observer in control.observers.values { observer.yield(.paused) }
+            for observer in control.observers.values { observer.yield(control.state) }
         }
         synchronization[permit.graphID] = control
         for waiter in completed { waiter.resume() }
@@ -606,6 +634,24 @@ package actor GraphContextManager {
 
     package init(registry: StoreRegistry = .shared, schema: StoreSchema, adapter: GraphCoordinatorAdapter) {
         self.registry = registry; self.schema = schema; self.adapter = adapter
+        backups = GraphBackupManager(schemaIdentifier: schema.identifier) { url, id in
+            let validationRegistry = StoreRegistry.shared
+            let handle = try await validationRegistry.open(.init(location: .sqlite(url), access: .readOnly), schema: schema)
+            do {
+                let identity = try await handle.read { context in
+                    try adapter.initialize(context, id, false)
+                    try adapter.validateBackup?(context, id)
+                    guard let coordinator = context.persistentStoreCoordinator, let store = coordinator.persistentStores.first,
+                          let value = coordinator.metadata(for: store)[NSStoreUUIDKey] as? String else { throw GraphBackupError.invalidBackup }
+                    return value
+                }
+                try await handle.close(); return identity
+            } catch {
+                let original = error
+                do { try await handle.close() } catch { throw error }
+                throw original
+            }
+        }
     }
 
     package func createGraph(id: GraphID, at url: URL, conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphStore {

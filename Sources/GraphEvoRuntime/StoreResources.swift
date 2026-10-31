@@ -9,6 +9,7 @@ struct StoreLifecycleHooks: Sendable {
     var didReserveHandle: (@Sendable () async -> Void)?
     var afterCommit: (@Sendable () -> Void)?
     var didQueueWriter: (@Sendable () async -> Void)?
+    var didRestrictWrites: (@Sendable () -> Void)?
     var didBeginClose: (@Sendable () async -> Void)?
     var beforeDetach: (@Sendable () async throws -> Void)?
     var beforeDestroy: (@Sendable () async throws -> Void)?
@@ -31,6 +32,7 @@ actor StoreResources {
     private var writers: [(UUID, CheckedContinuation<Void, any Error>)] = []
     private var closing = false
     private var dataAvailable = true
+    private var terminalDataBlock = false
     private var destructionIssued = false
     private struct DestructionArtifact: Equatable {
         let identity: FileIdentity
@@ -39,6 +41,9 @@ actor StoreResources {
     }
     private var destructionArtifacts: [URL: DestructionArtifact]?
     private var admitted = 0
+    private var admittedWriters = 0
+    private var reservations: [UUID: StoreReservationMode] = [:]
+    private var reservationWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private var drain: CheckedContinuation<Void, Never>?
 
     private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease]) {
@@ -196,8 +201,8 @@ actor StoreResources {
     ) async throws -> Value {
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
         guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
-        try admit()
-        defer { finish() }
+        try admit(write: true)
+        defer { finish(write: true) }
         let cancellation = OperationCancellation()
         let request = UUID()
         return try await withTaskCancellationHandler {
@@ -228,8 +233,8 @@ actor StoreResources {
         _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
     ) async throws -> Value {
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
-        try admit()
-        defer { finish() }
+        try admit(write: true)
+        defer { finish(write: true) }
         let request = UUID(), cancellation = OperationCancellation()
         return try await withTaskCancellationHandler {
             try await acquireWriter(request, cancellation: cancellation)
@@ -254,15 +259,74 @@ actor StoreResources {
         context.transactionAuthor = "GraphEvo.v2.local"
     }
 
-    private func admit() throws {
+    private func admit(write: Bool = false, reservation: UUID? = nil) throws {
         guard !closing else { throw StoreRuntimeError.closedHandle }
         try Task.checkCancellation()
+        if let reservation {
+            guard reservations[reservation] == .all else { throw StoreRuntimeError.resourceReserved }
+        } else {
+            guard !reservations.values.contains(.all) else { throw StoreRuntimeError.resourceReserved }
+            if write, !reservations.isEmpty { throw StoreRuntimeError.writesSuspended }
+        }
         admitted += 1
+        if write { admittedWriters += 1 }
     }
 
-    private func finish() {
+    private func finish(write: Bool = false) {
         admitted -= 1
+        if write { admittedWriters -= 1 }
         if admitted == 0 { drain?.resume(); drain = nil }
+        for id in Array(reservationWaiters.keys) where reservationDrained(id) {
+            reservationWaiters.removeValue(forKey: id)?.resume()
+        }
+    }
+
+    func reserve(_ id: UUID, mode: StoreReservationMode) async throws {
+        try Task.checkCancellation()
+        guard !closing else { throw StoreRuntimeError.closedHandle }
+        if mode == .all, reservations.values.contains(.all) { throw StoreRuntimeError.resourceReserved }
+        reservations[id] = mode
+        hooks.didRestrictWrites?()
+        do {
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, any Error>) in
+                    if Task.isCancelled { c.resume(throwing: CancellationError()) }
+                    else if reservationDrained(id) { c.resume() }
+                    else { reservationWaiters[id] = c }
+                }
+                try Task.checkCancellation()
+                guard !closing else { throw StoreRuntimeError.closedHandle }
+            } onCancel: { Task { await self.cancelReservation(id) } }
+        } catch { releaseReservation(id); throw error }
+    }
+    private func reservationDrained(_ id: UUID) -> Bool {
+        reservations[id] == .all ? admitted == 0 : admittedWriters == 0
+    }
+    private func cancelReservation(_ id: UUID) {
+        reservationWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
+        reservations.removeValue(forKey: id)
+    }
+    func releaseReservation(_ id: UUID) {
+        let mode = reservations.removeValue(forKey: id)
+        reservationWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
+        if mode == .all { invalidations.publish(.storeChange) }
+    }
+
+    func copyStore(to destination: URL, reservation: UUID) async throws {
+        guard dataAvailable else { throw StoreRuntimeError.dataUnavailable }
+        guard let source = resolved.url, resolved.configuration.exclusiveGraphID != nil,
+              resolved.configuration.cloudKitContainerIdentifier == nil, resolved.configuration.sharedStoreURL == nil,
+              !FileManager.default.fileExists(atPath: destination.path) else {
+            throw StoreRuntimeError.invalidConfiguration("A backup requires an exclusive local graph and an empty destination.")
+        }
+        try admit(reservation: reservation)
+        defer { finish() }
+        let container = container
+        try await container.performBackgroundTask { _ in
+            let copier = NSPersistentStoreCoordinator(managedObjectModel: container.managedObjectModel)
+            try copier.replacePersistentStore(at: destination, destinationOptions: nil,
+                withPersistentStoreFrom: source, sourceOptions: nil, ofType: NSSQLiteStoreType)
+        }
     }
 
     private func acquireWriter(_ request: UUID, cancellation: OperationCancellation) async throws {
@@ -296,8 +360,10 @@ actor StoreResources {
         catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
     }
 
-    func setDataAvailable(_ value: Bool) throws {
+    func setDataAvailable(_ value: Bool, terminal: Bool = false) throws {
         guard !closing else { throw StoreRuntimeError.closedHandle }
+        if terminal { terminalDataBlock = true; dataAvailable = false }
+        guard !value || !terminalDataBlock else { throw StoreRuntimeError.dataUnavailable }
         dataAvailable = value
     }
 

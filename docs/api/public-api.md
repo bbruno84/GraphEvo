@@ -971,6 +971,8 @@ incompatible native model.
 `unresolvedReference`, `legacyStoreRequiresAdoption`, `unsupportedLayout`,
 `reservedName`, and `persistence(underlying: Error)`. Model errors and caller body
 errors retain their own types. Cancellation retains the A2 pre/post-save contract.
+MF01 adds `writesSuspended` and `resourceReserved` for reversible local admission
+restrictions. These errors do not indicate a failed consumer commit.
 
 The legacy `GraphStoreOpeningError` also adds `runtimeOwnershipConflict(URL)`
 and `requiresV2Runtime(URL)`: legacy readiness fails when a typed owner is active
@@ -1655,3 +1657,21 @@ replica, without granting application access. Inbox saturation blocks data
 transport while membership verification and removal remain available; account
 and other fatal session failures continue to block both paths.
 See [T08](../design/graphevo-2-sharing-lifecycle.md) for state format 5 and recovery.
+
+### Package-only MF01 local reservations and backups
+
+`GraphContextManager.suspendLocalWrites(for:)` returns an owned, independently
+released reservation shared by all graph aliases. It refuses new writers and
+drains admitted/queued writers while preserving reads; it is separate from cloud
+pause and the internal all-access maintenance reservation. Dropping a reservation
+schedules cleanup. These controls are process-local and expose no raw contexts.
+
+`createBackup(for:in:reason:artifacts:)` captures a complete native graph snapshot,
+caller-supplied immutable journal artifacts and graph-only recovery evidence from
+registered sessions. The optional reason is persisted in the relative-path,
+checksummed manifest. `backups` supplies list/verify/retain/release/remove,
+incomplete-stage cleanup and restoration into a new empty local directory.
+Restoration never activates CloudKit or overwrites a live destination. Full
+native reopen and attachment checks run on a disposable copy. No v1 backup helper,
+native model or cloud record/session format is silently changed. See
+[MF01](../design/graphevo-2-local-maintenance.md) for limits and remaining gates.

@@ -170,7 +170,7 @@ extension GraphContextManager {
             if member.terminal {
                 blockedSharingGraphs.insert(member.binding.graphID)
                 if let entry = entries[member.binding.graphID] {
-                    try await entry.opening.value.setSharingDataAvailable(false)
+                    try await entry.opening.value.blockSharingData()
                 }
                 if member.phase != .removed, locations[member.binding.graphID] != nil { scheduleSharingPurge(member, configuration: configuration) }
             } else if let entry = entries[member.binding.graphID] {
@@ -255,7 +255,7 @@ extension GraphContextManager {
         blockedSharingGraphs.insert(id); automaticChanged()
         if let entry = entries[id] {
             let owner = try await entry.opening.value
-            try await owner.setSharingDataAvailable(false)
+            try await owner.blockSharingData()
             if let access = try? await owner.participantAccess() {
                 _ = try await owner.participantAccess(.init(binding: access.binding, account: access.account,
                     permission: nil, accepted: access.accepted, identity: access.identity, generation: access.generation, blocked: true))

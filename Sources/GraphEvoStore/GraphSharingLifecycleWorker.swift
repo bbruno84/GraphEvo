@@ -1,6 +1,7 @@
 import CloudKit
 import Foundation
 import GraphEvoModel
+import GraphEvoRuntime
 
 /// One finite control worker per database scope. Durable intents remain in the session document.
 actor GraphSharingLifecycleWorker {
@@ -74,7 +75,7 @@ actor GraphSharingLifecycleWorker {
     private func applyFailure(_ id: GraphID, error: any Error) {
         explicit.remove(id)
         waiting.insert(id)
-        if error as? GraphCloudError == .busy || error as? GraphSyncError == .busy {
+        if error as? GraphCloudError == .busy || error as? GraphSyncError == .busy || GraphLocalAdmission.isReserved(error) {
             deadlines[id] = clock.now() + 1
         } else {
             let native = error as NSError

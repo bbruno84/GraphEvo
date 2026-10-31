@@ -87,8 +87,30 @@ package actor StoreHandle {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         return try await registry.transaction(key, generation: generation, token: token, control: true, body)
     }
-    package func setDataAvailable(_ value: Bool) async throws {
-        try await registry.setDataAvailable(key, generation: generation, token: token, value: value)
+    package func setDataAvailable(_ value: Bool, terminal: Bool = false) async throws {
+        try await registry.setDataAvailable(key, generation: generation, token: token, value: value, terminal: terminal)
+    }
+    package func suspendWrites() async throws -> StoreReservation { try await reserve(.writes) }
+    package func reserveMaintenance() async throws -> StoreReservation { try await reserve(.all) }
+    private func reserve(_ mode: StoreReservationMode) async throws -> StoreReservation {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        let lease = try await newLease(), id = UUID()
+        do {
+            try await lease.acquireReservation(id, mode: mode)
+            return StoreReservation(id: id) { await lease.releaseReservation(id); try? await lease.close() }
+        } catch {
+            await lease.releaseReservation(id); try? await lease.close(); throw error
+        }
+    }
+    private func acquireReservation(_ id: UUID, mode: StoreReservationMode) async throws {
+        try await registry.reserve(key, generation: generation, token: token, id: id, mode: mode)
+    }
+    private func releaseReservation(_ id: UUID) async {
+        await registry.releaseReservation(key, generation: generation, id: id)
+    }
+    package func copyStore(to url: URL, reservation: StoreReservation) async throws {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        try await registry.copyStore(key, generation: generation, token: token, to: url, reservation: reservation.id)
     }
     package func destroy(graphID: UUID, storeID: String) async throws {
         try await registry.destroy(key, generation: generation, token: token, graphID: graphID, storeID: storeID)
@@ -252,9 +274,21 @@ package actor StoreRegistry {
         return try await resources.transaction(control: control, body)
     }
 
-    fileprivate func setDataAvailable(_ key: StoreKey, generation: UUID, token: UUID, value: Bool) async throws {
+    fileprivate func setDataAvailable(_ key: StoreKey, generation: UUID, token: UUID, value: Bool, terminal: Bool) async throws {
         let entry = try entry(for: key, generation: generation, token: token)
-        try await entry.opening.value.setDataAvailable(value)
+        try await entry.opening.value.setDataAvailable(value, terminal: terminal)
+    }
+    fileprivate func reserve(_ key: StoreKey, generation: UUID, token: UUID, id: UUID, mode: StoreReservationMode) async throws {
+        let value = try entry(for: key, generation: generation, token: token)
+        try await value.opening.value.reserve(id, mode: mode)
+    }
+    fileprivate func releaseReservation(_ key: StoreKey, generation: UUID, id: UUID) async {
+        guard let value = entries[key], value.generation == generation else { return }
+        if let resources = try? await value.opening.value { await resources.releaseReservation(id) }
+    }
+    fileprivate func copyStore(_ key: StoreKey, generation: UUID, token: UUID, to url: URL, reservation: UUID) async throws {
+        let value = try entry(for: key, generation: generation, token: token)
+        try await value.opening.value.copyStore(to: url, reservation: reservation)
     }
 
     fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String) async throws {
