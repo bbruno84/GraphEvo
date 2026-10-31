@@ -992,3 +992,22 @@ for same-cut old saves. Refuse unsupported pending structural effects atomically
 Retain explicit trace/receipt bounds and cost gates; no automatic trace pruning,
 cloud reset, path persistence or consumer-body replay. T01/T02 physical reports
 remain pinned historical evidence, not assertions about the new policy runtime.
+
+
+## V2 T04 CKAsset transport
+
+Read [T04](docs/design/graphevo-2-cloud-assets.md) before changing assets or async
+file delivery. Attachments use wire3 with one CKAsset and complete metadata; normal
+records retain wire2. S03 and local legacy/split attachment representation remain
+unchanged. Automatic complete transfer is selected, without metadata-first or
+on-demand network promises. Publish content/metadata atomically and import files
+after owners, including edge/action owners.
+
+Portable durable archives retain bounded bytes, never SDK/file URLs. Materialize
+native send files only outside native scopes and retain them until send completion.
+Reject restored CKAssets; never follow a persisted staging path. The 10MiB/file
+and existing encoded transport/session/receipt bounds still apply. Extra durable
+byte copies are a measured-cost follow-up, not a streaming/SQL-placement guarantee.
+Keep independent wait cancellation/deadlines, shared refresh and exclusive caller-
+owned export destinations. No network awaits or file-system I/O inside native
+transactions. Preserve real-device evidence separately from injected transport.

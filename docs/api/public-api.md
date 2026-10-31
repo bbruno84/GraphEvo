@@ -1588,3 +1588,15 @@ and its application properties are unchanged. Graph stamps hidden edit dates;
 consumers do not set them. Delete-wins overrides both policies and deleted node IDs
 cannot be reused. See the [T03 contract](../design/graphevo-2-conflict-policies.md)
 for bounded retry/report meanings, compatibility and structural refusal scope.
+
+
+### Package-only CKAsset attachment transport (T04)
+
+The custom-cloud ContextManager offers `exportCloudAttachment(_:to:configuration:timeout:)`
+async throws, returning GraphAttachmentMetadata. It exports verified local bytes
+or shares a fetch/import when absent; cancellation/deadline affect one caller,
+without cancelling common sync work. The default deadline is five minutes and
+existing destinations are refused. Existing public GraphStore attachment/export
+methods retain local snapshot semantics. No native/temporary URL is returned.
+See [T04](../design/graphevo-2-cloud-assets.md); no public custom-cloud opening is
+introduced. Automatic CKAsset fetching does not provide metadata-first delivery.

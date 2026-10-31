@@ -260,3 +260,19 @@ corrected code head `85efea1986f51c1f7318df5dae8f7071106f9d78` passed full
 macOS/iOS checkpoint `41201271653`. Final integration-status edits are
 documentation-only and do not repeat the full checkpoint. S03 and the bounded
 physical evidence remain unchanged. No asset implementation is included.
+
+
+## T04 asset increment
+
+`codex/v2-cloud-assets` starts directly from integrated #115 (`8d88532`).
+[T04](graphevo-2-cloud-assets.md) adds automatic CKAsset content transfer, portable
+byte snapshots and independent cancellable/deadlined async exports in the existing
+package-only path. Wire3 attachments retain S03 and local legacy/split formats;
+normal primitives remain wire2. No new public opener or on-demand network promise.
+
+The [physical result](results/cloud-assets-2026-10-31.md) retains the initial fixture
+error and the real missing-conflict-asset failure, plus guarded continuations.
+Corrected runtime834e674 passes both policies, reopen/cascade and fresh recovery;
+full local validation passes679 functions and selected iOS18.5 passes63/90.
+Review/CI and integration disposition remain to be recorded in the PR. Extra
+durable content copies and broad account/sharing/crash/backup costs remain gates.

@@ -5,6 +5,9 @@ Status: alpha implementation candidate. Read with section 8 of the
 the [probe procedure](../../Experiments/A6NativeProbe/README.md) and the
 [retained results](results/a6-native-attachments-2026-10-27.md).
 
+The replacement custom backend adds [T04 CKAsset transport](graphevo-2-cloud-assets.md).
+The native-mirroring evidence below retains its original scope.
+
 ## Representation and ownership
 
 The subsequent [S01 schema review](graphevo-2-persistent-schema.md) selects the
