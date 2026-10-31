@@ -142,7 +142,8 @@ remain open. #112 is reviewed/merged as `30f7089`, with exact-head macOS/iOS CI
 
 ## Concurrent conflict validation
 
-The focused `codex/v2-concurrent-conflicts` adds an external-only
+The focused [#114](https://github.com/bbruno84/GraphEvo/pull/114),
+`codex/v2-concurrent-conflicts`, adds an external-only
 [conflict laboratory](../../Experiments/RecordConflictProbe/README.md) and its
 [thirteen-stage real result](results/record-conflicts-cloudkit-2026-10-31.md).
 On the integrated `31eac7c` runtime, real update/update collisions, partial success,
