@@ -37,12 +37,12 @@ package struct GraphCloudParticipantAccess: Codable, Equatable, Sendable {
 }
 
 struct GraphCloudSharingService: Sendable {
-    let invite: @Sendable (GraphCloudConfiguration, GraphCloudBinding, String, String, GraphCloudSharePermission, Bool) async throws -> GraphCloudInvitation
+    let invite: @Sendable (GraphCloudConfiguration, GraphCloudBinding, String, String, GraphCloudSharePermission, Bool, @escaping @Sendable () async throws -> Void) async throws -> GraphCloudInvitation
     let accept: @Sendable (GraphCloudConfiguration, GraphCloudInvitation, String) async throws -> GraphCloudSharePermission
 }
 
 extension GraphCloudSharingService {
-    static let live = GraphCloudSharingService(invite: { config, binding, account, recipient, permission, mayCreate in
+    static let live = GraphCloudSharingService(invite: { config, binding, account, recipient, permission, mayCreate, beforeCreate in
         guard binding.zone.scope == .private,
               binding.zone.owner == CKCurrentUserDefaultName || binding.zone.owner == account else { throw GraphCloudSharingError.ownerRequired }
         guard !recipient.isEmpty, recipient != account else { throw GraphCloudSharingError.invalidParticipant }
@@ -50,6 +50,7 @@ extension GraphCloudSharingService {
         let zoneID = CKRecordZone.ID(zoneName: binding.zone.name, ownerName: binding.zone.owner)
         let shareID = CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: zoneID)
         let share: CKShare
+        var creating = false
         do {
             guard let found = try await database.record(for: shareID) as? CKShare else { throw GraphCloudSharingError.invalidInvitation }
             share = found
@@ -58,6 +59,7 @@ extension GraphCloudSharingService {
             // The zone must already exist. Sharing does not publish pending graph data.
             _ = try await database.recordZone(for: zoneID)
             share = CKShare(recordZoneID: zoneID)
+            creating = true
         }
         guard share.currentUserParticipant?.role == .owner else { throw GraphCloudSharingError.ownerRequired }
         let recipientID = CKRecord.ID(recordName: recipient)
@@ -72,6 +74,8 @@ extension GraphCloudSharingService {
             participant.role = .privateUser; participant.permission = nativePermission; share.addParticipant(participant)
         }
         share.publicPermission = .none
+        // Preflight has completed. Persist intent immediately before the first possible server write.
+        if creating { try await beforeCreate() }
         guard let saved = try await database.save(share) as? CKShare, let url = saved.url else { throw GraphCloudSharingError.metadataPending }
         let invitation = GraphCloudInvitation(container: config.containerIdentifier, environment: config.environment,
             graphID: binding.graphID, owner: account, zoneName: binding.zone.name, recipient: recipient, url: url)

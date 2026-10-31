@@ -39,7 +39,12 @@ session formats are refused without rewriting. S03, cloud node/asset formats and
 transport format 2 are unchanged. Fixtures use fresh session/store locations and
 zones without resetting the container. Mandatory v1 data migration is separate.
 
-Before an external create attempt, persist its deterministic zone share identity.
+Complete the share lookup, zone check and participant preflight before reserving
+creation. Immediately before the first possible create/save, the service invokes
+an awaited session callback that durably records the deterministic zone share
+identity. Preflight failures leave creation available, including after restart.
+The callback is scoped to its admitted operation; late/duplicate reservations are
+refused, and a persistence failure prevents the native write.
 A retry fetches `CKRecordNameZoneWideShare`; if it is absent after an ambiguous
 attempt, report `metadataPending` instead of creating another share. The marker
 also counts against session event/byte limits. An operator recovery API is outside
@@ -59,6 +64,10 @@ deletion also refuses subsequent consumer writes.
 CKShare records are control metadata, not GraphEvoNode payloads. Apply their
 permission reductions in one idempotent metadata transaction per received cut before decoding
 unrelated application data; retain inbox entries until that local commit succeeds.
+Select CKShare controls before taking the bounded application prefix, preserving
+application-event order and the requested total limit. Zone deletion retains
+highest priority. A malformed earlier application record cannot hide a retained
+permission reduction behind `maximumEvents`.
 Private owner share deletion does not delete the graph. Participant share deletion
 removes write permission; leave/revocation/purge, cached-read policy, stale control
 hardening and reinvitation are subsequent gates. No offline cache is represented

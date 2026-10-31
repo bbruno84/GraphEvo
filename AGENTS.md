@@ -1058,8 +1058,11 @@ background/APNs acceptance. Experiments/devices remain local; review precedes CI
 Read [T07](docs/design/graphevo-2-zone-sharing.md) before custom sharing changes.
 Owners remain in private zones; participants bind the owner's zone in shared.
 Use private account-targeted capabilities without persisted local paths. Keep
-CKShare control records out of primitive decoding. Persist create intent before
-external effects, inspect already accepted invitations on recovery, and protect
+CKShare control records out of primitive decoding and prioritize them before
+bounded application inbox selection. Complete read-only preflight before reserving
+creation; persist intent in an awaited operation-scoped callback immediately
+before the native create/save. Never clear ambiguous-save intent on a generic
+network error. Inspect already accepted invitations on recovery, and protect
 an empty participant replica before acceptance. Consumer permissions must cover
 all handles, reopenings and attachments; imports bypass consumer write checks.
 Sharing uses T05 admission and the session scope gate/drain. S03 is unchanged;

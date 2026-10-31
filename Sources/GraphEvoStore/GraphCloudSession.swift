@@ -51,6 +51,7 @@ actor GraphCloudSession {
     private var stopped = false
     private var retryAdvice: [GraphCloudScope: TimeInterval] = [:]
     private var activeFetches = Set<GraphCloudScope>()
+    private var shareCreation: UUID?
     private var fetches = 0
     private var outbound: [GraphCloudScope: GraphCloudOutgoingBatch] = [:]
     private var drains: [CheckedContinuation<Void, Never>] = []
@@ -263,14 +264,25 @@ actor GraphCloudSession {
         guard adapter.sharing != nil else { throw GraphCloudSharingError.unavailable }
         guard !activeFetches.contains(.private) else { throw GraphCloudError.busy }
         let mayCreate = !document.shareAttempts.contains(binding.zone)
-        // Persist before the external effect. An ambiguous creation is recovered by fetching the fixed share ID.
-        if mayCreate {
-            var next = document; next.shareAttempts.append(binding.zone); try publish(next)
-        }
+        let operation = UUID()
+        shareCreation = operation
+        defer { if shareCreation == operation { shareCreation = nil } }
         let config = configuration
         return try await control(.private) { service, account in
-            try await service.invite(config, binding, account, recipient, permission, mayCreate)
+            try await service.invite(config, binding, account, recipient, permission, mayCreate) { [weak self] in
+                guard let self else { throw GraphCloudError.stopped }
+                try await self.recordShareCreation(binding, operation: operation)
+            }
         }
+    }
+
+    private func recordShareCreation(_ binding: GraphCloudBinding, operation: UUID) throws {
+        try check()
+        guard shareCreation == operation, activeFetches.contains(.private),
+              document.bindings.contains(binding) else { throw GraphCloudError.invalidState }
+        guard !document.shareAttempts.contains(binding.zone) else { throw GraphCloudSharingError.metadataPending }
+        var next = document; next.shareAttempts.append(binding.zone)
+        try publish(next)
     }
 
     func accept(_ invitation: GraphCloudInvitation) async throws -> GraphCloudParticipantAccess {
@@ -322,7 +334,11 @@ actor GraphCloudSession {
         guard limit > 0 else { throw GraphCloudError.invalidConfiguration }
         let deletion = document.inbox.filter { $0.change.zone == zone && $0.change.kind == .zoneDeleted }
         if !deletion.isEmpty { return Array(deletion.prefix(limit)) }
-        return Array(document.inbox.lazy.filter { $0.change.zone == zone }.prefix(limit))
+        // Access controls must not be hidden by a bounded, potentially undecodable application prefix.
+        let controls = document.inbox.filter { $0.change.zone == zone && GraphCloudShareControl.isControl($0.change) }
+        let selected = Array(controls.prefix(limit))
+        let application = document.inbox.lazy.filter { $0.change.zone == zone && !GraphCloudShareControl.isControl($0.change) }
+        return selected + application.prefix(limit - selected.count)
     }
     func retainedReceiptIDs(for graph: GraphID) throws -> Set<UUID> {
         try check()

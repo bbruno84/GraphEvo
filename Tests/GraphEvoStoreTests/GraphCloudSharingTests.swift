@@ -31,7 +31,8 @@ private actor SharingCalls {
     private func fake(_ account: String, permission: GraphCloudSharePermission = .readWrite,
                       accept: (@Sendable () async throws -> Void)? = nil,
                       calls: SharingCalls = SharingCalls(), events: [GraphCloudIncoming] = []) -> GraphCloudAdapter {
-        GraphCloudAdapter(sharing: GraphCloudSharingService(invite: { config, binding, owner, recipient, _, create in
+        GraphCloudAdapter(sharing: GraphCloudSharingService(invite: { config, binding, owner, recipient, _, create, beforeCreate in
+            if create { try await beforeCreate() }
             await calls.append(create)
             return GraphCloudInvitation(container: config.containerIdentifier, environment: config.environment,
                 graphID: binding.graphID, owner: owner, zoneName: binding.zone.name, recipient: recipient,
