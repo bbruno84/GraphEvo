@@ -78,3 +78,13 @@ sharing/account/offline/interruption and mandatory v1 conversion remain open.
 
 Reference: [Apple CKAsset.fileURL](https://developer.apple.com/documentation/cloudkit/ckasset/fileurl?language=objc)
 explicitly describes the missing download in conflict records.
+
+
+Final review also centralizes frozen/inbox archive restoration and refuses any
+SDK CKAsset/path before decoding, including an outgoing provider request. This
+regression is covered deterministically; the physical run remains explicitly
+pinned to834e674 and is not relabeled as later-code device evidence.
+
+Final restoration-hardening validation passes **680 functions** (331 legacy,
+255 store, 71 runtime, 23 model), selected iOS18.5 passes64 functions/91 expanded
+cases, and ModelConsumer/manifest/diff checks pass. Final CI is recorded in PR116.

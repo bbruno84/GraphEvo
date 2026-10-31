@@ -268,4 +268,25 @@ private actor AssetBus {
         }
     }
 
+    @available(iOS 17, macOS 14, *)
+    @Test func frozenAssetArchivesNeverFollowPersistedSDKPaths() async throws {
+        let id = GraphID(), route = GraphCloudBinding(zone: .init(scope: .private, owner: "owner", name: "zone"), graphID: id)
+        let payload = try GraphAttachmentPayload(id: .init(graphID: id), ownerID: .init(graphID: id), fileName: "photo", contentType: "public.data", data: Data([1]))
+        let native = try GraphCloudNodeCodec.encode(payload.graphRecord(), binding: route)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("PersistedAssetPath-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try GraphCloudAsset.materialize(native, directory: directory)
+        let bytes = try NSKeyedArchiver.archivedData(withRootObject: native, requiringSecureCoding: true)
+        #expect(throws: GraphCloudError.unsupportedAsset) { try GraphCloudRecordCodec.restore(bytes) }
+        let change = GraphSyncChange(id: payload.id, nativeKind: "ManagedEntity", operation: .save, generation: 1)
+        let item = GraphCloudOutgoingNode(change: change, recordName: native.recordID.recordName, recordArchive: bytes)
+        let outbox = GraphCloudNativeOutbox()
+        try await outbox.begin(.init(id: UUID(), graphID: id, zone: route.zone, items: [item]))
+        await #expect(throws: GraphCloudError.unsupportedAsset) {
+            _ = try await outbox.next(.init(scope: .zoneIDs([native.recordID.zoneID])))
+        }
+        try await outbox.finish()
+    }
+
 }

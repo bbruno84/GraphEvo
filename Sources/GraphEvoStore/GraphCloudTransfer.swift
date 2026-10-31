@@ -128,7 +128,7 @@ actor GraphCloudNativeOutbox {
             guard options.scope.contains(id) else { continue }
             guard item.recordName == id.recordName, (item.change.operation == .save) == (item.recordArchive != nil) else { throw GraphCloudError.invalidState }
             if let bytes = item.recordArchive {
-                guard let record = try NSKeyedUnarchiver.unarchivedObject(ofClass: CloudKit.CKRecord.self, from: bytes) else { throw GraphCloudError.invalidState }
+                let record = try GraphCloudRecordCodec.restore(bytes)
                 guard record.recordID == id else { throw GraphCloudError.invalidState }
                 _ = try GraphCloudNodeCodec.decode(record, binding: route)
                 if record["asset"] != nil {

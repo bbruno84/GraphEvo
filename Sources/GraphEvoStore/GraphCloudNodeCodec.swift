@@ -129,7 +129,7 @@ package enum GraphCloudNodeCodec {
     }
     package static func matchesFrozenServer(_ server: CKRecord, item: GraphCloudOutgoingNode, binding: GraphCloudBinding) -> Bool {
         guard let bytes = item.recordArchive,
-              let original = try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: bytes),
+              let original = try? GraphCloudRecordCodec.restore(bytes),
               let wanted = try? decode(original, binding: binding), let actual = try? decode(server, binding: binding) else { return false }
         return wanted.record == actual.record && wanted.modifiedAt == actual.modifiedAt
     }
@@ -246,7 +246,7 @@ package enum GraphCloudNodeCodec {
         case .recordChanged:
             try GraphCloudRecordCodec.validate(incoming)
             guard let data = incoming.recordArchive,
-                  let record = try NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: data) else { throw GraphCloudNodeError.invalidRecord }
+                  let record = try? GraphCloudRecordCodec.restore(data) else { throw GraphCloudNodeError.invalidRecord }
             return .save(try decode(record, binding: binding, limits: limits))
         }
     }

@@ -63,7 +63,7 @@ extension GraphSyncCheckpointAdapter {
         context.transactionAuthor = metadataAuthor
     }
     private static func original(_ item: GraphCloudOutgoingNode, route: GraphCloudBinding) throws -> GraphRecord {
-        guard let bytes = item.recordArchive, let native = try NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: bytes) else { throw GraphCloudError.invalidState }
+        guard let bytes = item.recordArchive, let native = try? GraphCloudRecordCodec.restore(bytes) else { throw GraphCloudError.invalidState }
         return try GraphCloudNodeCodec.decode(native, binding: route).record
     }
     private static func affected(_ context: NSManagedObjectContext, id: GraphID) throws -> Set<GraphNodeID> {
@@ -77,7 +77,7 @@ extension GraphSyncCheckpointAdapter {
         return result
     }
     private static func originalNode(_ item: GraphCloudOutgoingNode, route: GraphCloudBinding) throws -> GraphCloudDecodedNode {
-        guard let bytes = item.recordArchive, let native = try NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: bytes) else { throw GraphCloudError.invalidState }
+        guard let bytes = item.recordArchive, let native = try? GraphCloudRecordCodec.restore(bytes) else { throw GraphCloudError.invalidState }
         return try GraphCloudNodeCodec.decode(native, binding: route)
     }
 

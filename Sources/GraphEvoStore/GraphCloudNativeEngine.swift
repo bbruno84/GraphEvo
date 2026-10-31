@@ -142,7 +142,7 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
 }
 
 /// Local secure archive codec, independent of engine availability and consumer formats.
-enum GraphCloudRecordCodec {
+package enum GraphCloudRecordCodec {
     static func archive(_ record: CKRecord, scope: GraphCloudScope, portableAsset: Bool = false) throws -> GraphCloudIncoming {
         let record = try GraphCloudAsset.portable(record, allowBytes: portableAsset)
         return GraphCloudIncoming(kind: .recordChanged,
@@ -151,16 +151,19 @@ enum GraphCloudRecordCodec {
             recordArchive: try NSKeyedArchiver.archivedData(withRootObject: record, requiringSecureCoding: true))
     }
 
+    package static func restore(_ bytes: Data) throws -> CKRecord {
+        guard let record = try NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: bytes) else { throw GraphCloudError.invalidState }
+        // A frozen/restored archive is never authority to follow an SDK staging path.
+        for key in record.allKeys() where record[key] is CKAsset { throw GraphCloudError.unsupportedAsset }
+        _ = try GraphCloudAsset.portable(record, allowBytes: true)
+        return record
+    }
+
     static func validate(_ incoming: GraphCloudIncoming) throws {
         guard incoming.kind == .recordChanged else { return }
         guard let bytes = incoming.recordArchive else { throw GraphCloudError.invalidState }
         let record: CKRecord
-        do {
-            guard let decoded = try NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: bytes) else { throw GraphCloudError.invalidState }
-            record = decoded
-        } catch { throw GraphCloudError.invalidState }
-        // Persisted envelopes must already be portable; never follow a URL restored from an archive.
-        for key in record.allKeys() where record[key] is CKAsset { throw GraphCloudError.unsupportedAsset }
+        do { record = try restore(bytes) } catch { throw GraphCloudError.invalidState }
         let checked = try archive(record, scope: incoming.zone.scope, portableAsset: true)
         guard checked.zone == incoming.zone, checked.recordName == incoming.recordName, checked.recordType == incoming.recordType else {
             throw GraphCloudError.invalidState

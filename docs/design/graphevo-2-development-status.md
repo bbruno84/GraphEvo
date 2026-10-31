@@ -275,6 +275,7 @@ error and the real missing-conflict-asset failure, plus guarded continuations.
 Corrected runtime834e674 passes both policies, reopen/cascade and fresh recovery;
 full local validation passes679 functions and selected iOS18.5 passes63/90.
 [PR #116](https://github.com/bbruno84/GraphEvo/pull/116) targets `codex/graphevo-2`;
-final local/device review is complete and one full CI checkpoint is requested
+final restoration hardening also passes680 local functions and iOS18.5 64/91;
+local/device review is complete and one full CI checkpoint is requested
 on the final documentation head. Integration remains pending. Extra
 durable content copies and broad account/sharing/crash/backup costs remain gates.
