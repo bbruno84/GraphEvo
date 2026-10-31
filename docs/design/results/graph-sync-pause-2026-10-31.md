@@ -76,3 +76,9 @@ failure is retained and is not counted as a successful checkpoint.
 Corrected full local iOS18.5 validation passes: 689 discovered functions,
 688 passed and one existing platform skip; 743 expanded executions passed.
 The corrected asset/pause subset also passes 19 local macOS functions.
+
+Corrected source head `438be968a84efa740010dd329e54b5ade5881caa` passes full
+macOS/iOS CI `41216918331`. A subsequent workflow/documentation-only change
+removes the three historical experimental smoke steps at the maintainer's
+request. Its YAML/remaining-step checks pass locally; the unchanged library
+suite is not rerun merely for that removal.

@@ -606,8 +606,9 @@ point it at application/device/cloud stores, retry failed seeds or commit its
 stores/raw logs. Retain expected budget refusals and semantic assertions; do
 not silently increase budgets or remove ownership/integrity checks to improve
 measurements. Distinguish whole-process sampled peaks, operation latency, open
-costs and synthetic desktop results from supported production envelopes. CI
-runs a functional smoke only, with no timing pass threshold. Candidate metadata/
+costs and synthetic desktop results from supported production envelopes. Experimental
+harnesses, including functional smoke modes, run locally and are excluded from CI.
+CI validates library behavior and consumer integration. Candidate metadata/
 binary changes retain accepted file identity/ownership and require migration,
 whole-content backup and actual native sharing validation before selection.
 

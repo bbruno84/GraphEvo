@@ -42,6 +42,22 @@ not restart an already labeled checkpoint. Removing the checkpoint label stops
 future automatic checkpoint runs on source updates; it does not cancel work
 already running. Existing concurrency still cancels superseded PR runs.
 
+## Validation scope
+
+CI validates the library: package manifest/build, unit/regression tests on macOS
+and iOS, diff formatting, the Swift 6 model consumer and independent-process
+consumer integration. Experimental harnesses under `Experiments/` are not CI
+steps, including their functional smoke modes. ObservationCostProbe,
+IdentityLookupProbe and ConsolidationCosts run locally when an experiment needs
+them, with separate reports. Physical CloudKit/device protocols also remain
+local, explicitly documented verification. No experimental timing or smoke run
+is a release-library gate merely because its harness exists.
+
+The previously installed three experimental smoke steps were removed at the
+maintainer's request. Keep historical CI evidence unchanged. Regression tests
+for adopted library behavior remain in the library suites; removing experimental
+harness execution does not authorize bypassing a failing regression test.
+
 ## Storage and evidence
 
 The full result summary stays in the workflow log. An iOS xcresult bundle is

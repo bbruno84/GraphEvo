@@ -312,3 +312,15 @@ unchanged. Corrected verification and final remote disposition are recorded on #
 Corrected full local iOS18.5 validation passes: 689 discovered functions,
 688 passed and one existing platform skip; 743 expanded executions passed.
 The corrected asset/pause subset also passes 19 local macOS functions.
+
+The maintainer additionally removes the three historical experimental harness
+smoke steps from CI: SharedObservation, IdentityLookup and ConsolidationCosts.
+They remain locally runnable experiments with separate evidence. CI retains the
+library tests/build and model/process consumer integration. This workflow-only
+removal does not require another full unchanged-library run; retain the actual
+tested source head and verify the workflow edit locally.
+
+Corrected T05 source head `438be968a84efa740010dd329e54b5ade5881caa` passes full
+macOS/iOS checkpoint `41216918331`. The following workflow/documentation-only
+cleanup removes experimental smoke execution, with YAML/step/diff validation
+and no repeated unchanged-library checkpoint. PR #117 remains unmerged for review.
