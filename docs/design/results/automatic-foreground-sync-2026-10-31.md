@@ -110,4 +110,13 @@ merge. The required checkpoint remains after review, before an authorized merge.
 
 Both corrected review regressions pass10 repeated local runs. ModelConsumer,
 manifest and diff checks pass. Focused re-review finds no remaining blocking
-findings; PR118 stays open without the checkpoint label or merge.
+findings at the end of the review-only phase. The subsequent checkpoint follows below.
+
+## Post-review pre-merge checkpoint
+
+At the maintainer's explicit request, reviewed source head
+`2c61d40b6433ed344f946ed63509a711c000fd49` passes full macOS/iOS CI
+`41224009459`, including model/process consumer integration. PR118 integrates
+after this checkpoint and the authorized merge. Final integration-status edits
+are documentation-only: code, tests and workflow remain identical to the reviewed,
+CI-tested head. No repeated unchanged-library run, release tag or beta acceptance.

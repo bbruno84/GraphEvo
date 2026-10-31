@@ -1,7 +1,7 @@
 # GraphEvo 2 — T06 foreground automatic orchestration
 
-Status: package-only increment on `codex/v2-automatic-cloud-sync`, directly from
-reviewed/merged #117 (`f459ae2`). Read with [T01](graphevo-2-record-transport.md),
+Status: package-only increment integrated through reviewed #118 into
+`codex/graphevo-2`, directly from reviewed/merged #117 (`f459ae2`). Read with [T01](graphevo-2-record-transport.md),
 [T03](graphevo-2-conflict-policies.md), [T04](graphevo-2-cloud-assets.md) and
 [T05](graphevo-2-sync-pause.md). S03, wire and persisted document formats do not
 change. The scheduler stores hints and retry timing only; PH, inbox, frozen

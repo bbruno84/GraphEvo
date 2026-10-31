@@ -205,8 +205,8 @@ The maintainer selects [explicit CI checkpoints](graphevo-2-ci-checkpoints.md)
 instead of a full macOS/iOS run on every alpha PR and every integration push.
 Review and appropriate local verification still apply to each increment. Record
 whether remote checks ran or were skipped; only an actual successful run is a
-full checkpoint. Latest reviewed code checkpoint: #117, `3f5fd31`, CI `41218175454`
-(macOS/iOS green, after review). #116/#115 remain the prior asset/conflict
+full checkpoint. Latest reviewed code checkpoint: #118, `2c61d40`, CI `41224009459`
+(macOS/iOS green, after review). #117/#116/#115 remain the prior pause/asset/conflict
 checkpoints. The following #112 runs remain historical checkpoints.
 The policy is reviewed/merged through #113 as `31eac7c`; ordinary-alpha run
 `41193277258` skipped all expensive jobs, validating policy rather than executing
@@ -215,10 +215,11 @@ run `41192922760` also passed on `30f7089` before the new policy took effect.
 
 ## Next steps and operating rule
 
-1. T03 conflict policies, T04 CKAsset transport and T05 per-graph pause are
-   integrated through #115/#116/#117 after review and full CI checkpoints.
-   Structural conflicts, automatic sync and sharing remain subsequent work on
-   the custom backend; protected application-data migration remains separate.
+1. T03 conflict policies, T04 CKAsset transport, T05 per-graph pause and T06
+   foreground automatic orchestration are integrated through #115/#116/#117/#118
+   after review and full CI checkpoints. Structural conflicts, sharing and
+   background scheduling remain subsequent work on the custom backend;
+   protected application-data migration remains separate.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
@@ -329,42 +330,38 @@ account/crash/backup and protected migration gates remain open.
 
 ## T06 foreground automatic synchronization increment
 
-`codex/v2-automatic-cloud-sync` starts directly from integrated #117 (`f459ae2`).
+[PR #118](https://github.com/bbruno84/GraphEvo/pull/118) integrates
+`codex/v2-automatic-cloud-sync` directly into `codex/graphevo-2`, following review,
+full CI and the maintainer-authorized merge. Its base is integrated #117 (`f459ae2`).
 [T06](graphevo-2-automatic-sync.md) adds explicit package-only foreground scheduling,
-consumer-only commit hints, fair scope workers,60s reconciliation, transient retry
+consumer-only commit hints, fair scope workers, 60s reconciliation, transient retry
 advice/backoff and operational status. T05 admission and existing PH/transport
 paths remain authoritative. S03, wire and document formats remain unchanged.
 
 The [physical result](results/automatic-foreground-sync-2026-10-31.md) records nine
-passed stages on runtime 52fed77, including actual 60s catch-up without notifications,
-A pause/B progress, resumed A4/B3 convergence, restart and empty recovery. A tenth
-independent empty replica passes on lifecycle-hardened runtime 0c25ea6. Earlier
-reports retain their actual pins; no original mutation was replayed or container
-reset. A final retry-only client cap is tested locally, not relabeled as physical
-rate-limit evidence.
+passed stages on runtime 52fed77, including actual 60s catch-up without forwarded
+notifications, A pause/B progress, resumed A4/B3 convergence, restart and empty
+recovery. A tenth independent empty replica passes on lifecycle-hardened
+runtime 0c25ea6. All reports retain their actual pins; no original mutation was
+replayed or container reset. Retry/backoff is verified locally, not relabeled as
+physical rate-limit evidence.
 
-Full local validation passes 711 functions (331 legacy,286 store,71 runtime,23 model).
-Selected iOS18.5 passes 112 functions/128 expanded executions; ModelConsumer,
-manifest, script and diff checks pass. Final delivery details are recorded on the PR. Local
-hardening covers generation checks after awaited session reads, old status stream
-termination, ordered activity requests, stop/reactivation and failed-start cleanup.
-[PR #118](https://github.com/bbruno84/GraphEvo/pull/118) targets
-`codex/graphevo-2`; review corrections and verification are recorded below.
-No remote checkpoint or merge is requested during review.
-The order remains review → CI → merge. Background/APNs delivery, broader sharing,
-resource/crash/backup and protected migrations remain acceptance gates.
+Review identified two P2 issues on 7c5d773: a fetch wake could spin while an eligible
+initial turn was still debounced, and a separate scope-advice lookup could lose
+the completed send's retryAfter to a later operation. The scheduler now gates
+that fetch wake on the initial deadline; sends snapshot error/advice before
+releasing scope admission. The original manual error contract is preserved.
+The initial-debounce regression failed before correction. Both corrected
+regressions pass 10 repeated runs; focused re-review finds no remaining blockers.
 
-PR118 review identifies two P2 issues on `7c5d773`: a fetch wake could spin while
-an eligible initial turn was still debounced, and a separate scope-advice lookup
-could lose the completed send's retryAfter to a later operation. The scheduler
-now gates that fetch wake on the initial deadline; sends snapshot error/advice
-under their scope admission. The original manual error contract is preserved.
-The initial-debounce regression failed before correction; corrected wake/progress
-and success/failure advice-isolation tests pass. Post-review validation passes
-713 full macOS functions (331 legacy,288 store,71 runtime,23 model) and
-114 iOS18.5 functions/131 expanded executions. Earlier physical reports retain
-their actual runtime pins and do not certify these later corrections on devices.
+Reviewed source head `2c61d40b6433ed344f946ed63509a711c000fd49` passes full
+macOS/iOS checkpoint `41224009459`, requested after review immediately before
+merge. Local validation passes 713 macOS functions (331 legacy,288 store,
+71 runtime,23 model) and 114 iOS18.5 functions/131 expanded executions.
+ModelConsumer, manifest, script and diff checks pass. The final integration-status
+edits are documentation-only; code, tests and workflow match the reviewed,
+CI-tested head. No repeated unchanged-library checkpoint is requested.
 
-Both corrected review regressions pass10 repeated local runs. ModelConsumer,
-manifest and diff checks pass. Focused re-review finds no remaining blocking
-findings; PR118 stays open without the checkpoint label or merge.
+The order remains **review → CI → merge**. Background/APNs delivery, broader
+sharing/account/offline, resource/crash/backup and protected migrations remain
+acceptance gates. This is neither public activation nor beta/release acceptance.
