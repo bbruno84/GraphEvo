@@ -299,5 +299,6 @@ stages on runtime `3a3e47b450a68166bb135648dee7d76802f366cc`: paused A/local edi
 active B, resumed convergence, process reopen and empty recovery on same-account
 iPad/iPhone. Full local validation passes 690 functions (331 legacy, 265 store,
 71 runtime, 23 model); selected iOS18.5 passes 79 functions/94 expanded cases.
-ModelConsumer, manifest and diff checks pass. PR and final full CI checkpoint
-are recorded at delivery; this section does not claim integration or beta acceptance.
+ModelConsumer, manifest and diff checks pass. [PR #117](https://github.com/bbruno84/GraphEvo/pull/117)
+targets `codex/graphevo-2`; its final full CI checkpoint is recorded on the PR.
+This section does not claim integration or beta acceptance.
