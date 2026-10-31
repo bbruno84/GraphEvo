@@ -1614,3 +1614,16 @@ Resume during draining reports busy; resume never launches automatic work.
 State is process-local, shared by manager handles and reset on full runtime
 close/reopen. These package-only operations are not migration exclusivity,
 engine stop or a new public opening. See [T05](../design/graphevo-2-sync-pause.md).
+
+
+### T06 package-only foreground synchronization
+
+GraphContextManager adds setAutomaticCloudSynchronizationActive(_:configuration:),
+requestCloudSynchronization(configuration:), notifyRemoteCloudChanges(in:configuration:),
+automaticCloudSynchronizationStatus(for:configuration:) and
+observeAutomaticCloudSynchronization(for:configuration:). These are package-only,
+require an existing session, and expose no new public opener. Activation is explicit;
+local hints debounce 250ms/max1s and foreground reconciliation runs every 60s.
+GraphAutomaticSyncStatus contains phase, retryAfter, payload-free failure family/code
+and pendingWork; none certifies global sync completion. See [T06](../design/graphevo-2-automatic-sync.md)
+for pause, lifecycle, retry, recovery and demo forwarding.

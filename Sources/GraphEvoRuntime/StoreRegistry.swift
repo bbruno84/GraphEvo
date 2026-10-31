@@ -62,12 +62,12 @@ package actor StoreHandle {
         return try await registry.nativeOperation(key, generation: generation, token: token, body)
     }
 
-    package func invalidationFeed() async throws -> StoreInvalidationFeed {
+    package func invalidationFeed(localCommitsOnly: Bool = false) async throws -> StoreInvalidationFeed {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         let hub = try await registry.invalidationHub(key, generation: generation, token: token)
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         changeHub = hub
-        return hub.subscribe(owner: token)
+        return hub.subscribe(owner: token, localCommitsOnly: localCommitsOnly)
     }
 
     package func close() async throws {

@@ -673,11 +673,25 @@ when closing any gate; do not infer success from an unrun or skipped workflow.
 
 ## T05 pause follow-ups
 
-- [ ] **B** Route future automatic/background synchronization through T05 admission;
-  its manual-path evidence does not certify new SDK scheduling paths. Preserve
-  per-graph zone filtering and admission across native callbacks/receipts.
+- [ ] **B** Extend T05 admission to future background/native scheduling paths.
+  [T06 foreground evidence](results/automatic-foreground-sync-2026-10-31.md)
+  covers explicit manager scheduling only. Preserve per-graph zone filtering and
+  admission across native callbacks/receipts; broader framework paths remain open.
 - [ ] **R** Exercise long paused backlogs, shared-account revocation/account change,
   stop/interruption and supported-scale control/observer resource costs without
   raising PH/pending/inbox limits or claiming distributed writer exclusion.
 - [ ] **B** Protected migration must add its separate exclusive local access,
   durable readiness/intent and backup contract. Process-local pause is not enough.
+
+
+## T06 foreground automatic synchronization follow-ups
+
+- [ ] **B** Extend foreground-only T06 admission/lifecycle evidence to future
+  background/APNs/silent-launch scheduling, with expiration and account/permission
+  coverage. A notification hint is not proof of notification delivery.
+- [ ] **R** Measure foreground 60s polling, PH scanning, full-document rewriting,
+  scheduler/observer costs and long offline/backoff workloads at supported scale.
+  No larger limits or timing guarantees are inferred from virtual-clock tests.
+- [ ] **B** Retain shared participant, interruption/backup and protected migration
+  gates; automatic foreground operation neither excludes local writers nor
+  certifies migration readiness. See [T06](graphevo-2-automatic-sync.md).

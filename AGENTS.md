@@ -29,8 +29,8 @@ before modifying the package-only owner path. Preserve exclusiveGraphID during
 resource canonicalization; generic leases must not coalesce with exclusive owners.
 Manager tokens cover pending requests and live handles. Last release retains
 registration on detach failure, including initialization/partial-load quarantine.
-Public opening and automatic synchronization remain later work; package-only
-manual transport follows [T01](docs/design/graphevo-2-record-transport.md).
+Public opening remains later work; package-only foreground orchestration follows
+[T06](docs/design/graphevo-2-automatic-sync.md), and manual transport follows [T01](docs/design/graphevo-2-record-transport.md).
 
 ## Selected v2 native schema
 
@@ -1038,3 +1038,16 @@ to borrow an old permit. Resume during draining is busy; state observation is
 newest-only, not durable replay. Full close/reopen resets process-local state;
 stop does not resume it. No automatic scheduling, distributed/migration exclusion,
 new persisted format or schema change is part of this increment.
+
+
+## V2 T06 foreground synchronization
+
+Read [T06](docs/design/graphevo-2-automatic-sync.md) before changing scheduling.
+Explicit package-only activation, aggregate scene activity and a 60s foreground
+reconciliation drive the existing manual engine path. Keep SDK automatic sync
+disabled and retain one worker per scope, fair graph turns, T05 admission, durable
+PH/inbox/receipt ownership and generation checks. Filter consumer commit hints
+before coalescing; imports/bookkeeping must not feed uploads. No permanent graph
+lease or idle timer/feed retain cycle. New hints cannot bypass retryAfter/backoff,
+permanent graph failures or sticky session failures. Foreground polling is not
+background/APNs acceptance. Experiments/devices remain local; review precedes CI.

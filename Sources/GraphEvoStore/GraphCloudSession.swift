@@ -3,6 +3,7 @@ import GraphEvoModel
 
 /// Native delegates convert to detached events before calling the session.
 enum GraphCloudEvent: Sendable {
+    case retryAdvice(TimeInterval)
     case state(Data), incoming([GraphCloudIncoming]), sent(GraphCloudSentReceipt), failure(GraphCloudError), account(String?)
 }
 
@@ -15,6 +16,12 @@ struct GraphCloudDriver: Sendable {
          send: (@Sendable (GraphCloudOutgoingBatch) async throws -> Void)? = nil) {
         self.fetch = fetch; self.cancel = cancel; self.send = send
     }
+}
+
+/// Captured while the scope is still owned, including failure advice. Never persisted.
+struct GraphCloudSendOutcome: Sendable {
+    let transportError: (any Error)?
+    let retryAfter: TimeInterval?
 }
 
 struct GraphCloudAdapter: Sendable {
@@ -41,6 +48,7 @@ actor GraphCloudSession {
     private var stopping: Task<Void, any Error>?
     private var cancellation: Task<Void, any Error>?
     private var stopped = false
+    private var retryAdvice: [GraphCloudScope: TimeInterval] = [:]
     private var activeFetches = Set<GraphCloudScope>()
     private var fetches = 0
     private var outbound: [GraphCloudScope: GraphCloudOutgoingBatch] = [:]
@@ -159,6 +167,8 @@ actor GraphCloudSession {
         // During cancellation, admitted fetch callbacks must still be persisted.
         do {
             switch event {
+            case .retryAdvice(let seconds):
+                if seconds.isFinite && seconds >= 0 { retryAdvice[scope] = max(retryAdvice[scope] ?? 0, seconds) }
             case .state(let state):
                 var next = document; next.states[scope.rawValue] = state; try publish(next)
             case .incoming(let changes):
@@ -214,6 +224,7 @@ actor GraphCloudSession {
         try check()
         guard let driver = drivers[scope] else { throw GraphCloudError.invalidConfiguration }
         guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }
+        retryAdvice[scope] = nil
         fetches += 1
         defer {
             activeFetches.remove(scope)
@@ -231,18 +242,29 @@ actor GraphCloudSession {
         return GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
     }
     func send(_ batch: GraphCloudOutgoingBatch) async throws {
+        let result = try await sendWithAdvice(batch)
+        if let error = result.transportError { throw error }
+    }
+
+    func sendWithAdvice(_ batch: GraphCloudOutgoingBatch) async throws -> GraphCloudSendOutcome {
         try check()
         let scope = batch.zone.scope
         guard let send = drivers[scope]?.send else { throw GraphCloudError.transportUnavailable }
         guard document.bindings.contains(where: { $0.zone == batch.zone && $0.graphID == batch.graphID }) else { throw GraphCloudError.invalidState }
         guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }
+        retryAdvice[scope] = nil
         fetches += 1; outbound[scope] = batch
         defer {
             outbound.removeValue(forKey: scope); activeFetches.remove(scope); fetches -= 1
             if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
         }
-        try await send(batch)
-        if let failure { throw failure }
+        do {
+            try await send(batch)
+            if let failure { throw failure }
+            return GraphCloudSendOutcome(transportError: nil, retryAfter: retryAdvice[scope])
+        } catch {
+            return GraphCloudSendOutcome(transportError: error, retryAfter: retryAdvice[scope])
+        }
     }
     func sentReceipts(for graph: GraphID) throws -> [GraphCloudSentReceipt] {
         try check(); return document.sent.filter { $0.graphID == graph }
