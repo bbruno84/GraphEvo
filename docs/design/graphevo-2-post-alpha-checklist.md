@@ -699,7 +699,10 @@ when closing any gate; do not infer success from an unrun or skipped workflow.
 
 ## T07 sharing follow-ups
 
-Candidate [T07](graphevo-2-zone-sharing.md) retains release gates for invitation
+Candidate [T07](graphevo-2-zone-sharing.md) has a
+[nine-stage two-account result](results/zone-sharing-2026-10-31.md), covering
+read-write/read-only and bidirectional entity/file recovery with a private control.
+It retains release gates for invitation
 UI/URL routing, leave/revoke/purge/reinvite, account and cached-read policy,
 permission changes/offline/stale controls, concurrent invitations and actual
 interruption fault injection. Measure additional root access metadata and bounded

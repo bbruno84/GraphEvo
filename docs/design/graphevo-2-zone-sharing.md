@@ -1,7 +1,8 @@
 # GraphEvo 2 — T07 explicit zone sharing
 
 Status: implementation candidate on `codex/v2-zone-sharing`. Package-only;
-review, physical results and integration are tracked separately. This replaces
+review and integration are tracked separately. The [nine-stage physical result](results/zone-sharing-2026-10-31.md)
+records the actual runtime pins. This replaces
 neither the public opening API nor the historical A5 native mirroring backend.
 
 ## Boundary and Apple contract
@@ -48,7 +49,7 @@ to inspect server acceptance and finish the exact route. Never substitute anothe
 graph, native file or recipient.
 
 Reserved local root metadata records participant binding/account, accepted state
-and permission. All consumer transactions (including attachment mutations) check
+and permission, bounded to 64 KiB. All consumer transactions (including attachment mutations) check
 this metadata before invoking their body; all handles and reopenings share it.
 Pending/read-only participants cannot write. Incoming imports use the privileged
 existing path and do not require consumer write permission. Pending outgoing work
@@ -56,7 +57,7 @@ is preserved and refused when write permission has been reduced. Confirmed zone
 deletion also refuses subsequent consumer writes.
 
 CKShare records are control metadata, not GraphEvoNode payloads. Apply their
-permission reductions in an idempotent metadata transaction before decoding
+permission reductions in one idempotent metadata transaction per received cut before decoding
 unrelated application data; retain inbox entries until that local commit succeeds.
 Private owner share deletion does not delete the graph. Participant share deletion
 removes write permission; leave/revocation/purge, cached-read policy, stale control
@@ -82,3 +83,11 @@ access reduction, concurrent invitation edits, offline permissions, actual crash
 faults and production CloudKit schema rollout remain alpha/beta gates. No global
 synchronization or distributed lock is promised. Workflow: local validation and
 physical probes, review/corrections, CI checkpoint, authorized PR merge.
+
+
+Local validation on library source `d5e4693`: 725 passing macOS functions (331
+legacy, 300 store, 71 runtime, 23 model), Swift 6 ModelConsumer, manifest and diff
+checks. Selected iOS 18.5 suites passed 66 reported tests; the final T07-only
+checkpoint passed 12 reported tests after the last correction. These are local
+checks, not remote CI or a completed review. Physical evidence retains its own
+pins above. CI remains deferred until review and corrections finish.

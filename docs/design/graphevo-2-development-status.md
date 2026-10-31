@@ -8,10 +8,18 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-T07 explicit custom zone sharing is being implemented on `codex/v2-zone-sharing`
+T07 explicit custom zone sharing is implemented as a candidate on `codex/v2-zone-sharing`
 from integrated #118 (`9238b95`), directly targeting `codex/graphevo-2`.
 See the [T07 contract](graphevo-2-zone-sharing.md). This is candidate work,
-not integrated acceptance; review precedes CI. Native S03 is unchanged.
+not integrated acceptance; review precedes CI. Native S03 is unchanged. The
+[nine-stage two-account result](results/zone-sharing-2026-10-31.md) covers private
+owner/shared participant routing, read-write/read-only invitations, a private
+control graph, attachment replication, bidirectional changes and empty recovery.
+It preserves the initial `02b294e` and final recovery `d5e4693` runtime pins;
+leave/revocation/account/offline and public activation remain separate gates.
+Local validation passes 725 macOS functions (331 legacy,300 store,71 runtime,
+23 model), selected iOS 18.5 checks, the Swift 6 consumer and manifest/diff checks.
+No remote CI checkpoint or merge has been requested for this candidate.
 
 ## Active branch and completed reorganization
 
