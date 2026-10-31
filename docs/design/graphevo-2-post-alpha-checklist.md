@@ -158,6 +158,13 @@ engine or cross-process acceptance. Retain this scope when integrating it.
   actual local container relocation. Physical CloudKit delivery/change tags/CAS,
   real process-kill/power-loss and consistent session/native backup restore are
   still required; automatic scheduling and conflict resolution remain open.
+  The [ten-stage real private result](results/record-transport-cloudkit-2026-10-31.md)
+  proves small-fixture insert/update/delete, native server metadata reuse, iPad/iPhone
+  recovery, no upload feedback, restart, empty final recovery and complete final
+  local/server inventory agreement. It does not close
+  genuine concurrent conflicts, interruption/backup, assets or broader account/sharing
+  acceptance. The initial #111 CI process exit remains undiagnosed after successful
+  local/final-CI reruns; retain crash/stress follow-up and iOS result diagnostics.
 - [ ] **R** Measure full-document engine-state/inbox and graph transport metadata/
   frozen-attempt rewrite costs, receipt retention and growth; count/encoded-byte limits are not total memory/I/O envelopes.
 - [ ] **B** Validate graph-level pause/resume with automatic and in-flight work,
