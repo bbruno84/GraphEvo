@@ -41,7 +41,9 @@ Observation is a current-state projection with an initial value and one newest
 buffered value. Slow consumers may coalesce transitions; it is not a durable event
 log. Streams end after the final native owner and admitted synchronization work
 have closed. State lives only in the owning manager/runtime; full close and reopen
-or process recreation starts active. Closing one alias does not reset another
+or process recreation starts active. A reopen already waiting for native detach
+uses the same generation-checked retirement/reset path as the closing caller.
+Closing one alias does not reset another
 handle's pause. Failed native detachment retains ownership and does not erase it.
 Stopping/restarting the CloudKit session while the graph remains open preserves
 its pause; stop and resume do not implicitly substitute for each other.

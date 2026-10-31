@@ -324,3 +324,21 @@ Corrected T05 source head `438be968a84efa740010dd329e54b5ade5881caa` passes full
 macOS/iOS checkpoint `41216918331`. The following workflow/documentation-only
 cleanup removes experimental smoke execution, with YAML/step/diff validation
 and no repeated unchanged-library checkpoint. PR #117 remains unmerged for review.
+
+The maintainer fixes the execution order to **review → CI → merge**. Open alpha
+PRs without the checkpoint label, finish review/corrections and local checks,
+then request required CI immediately before an authorized merge. Review alone
+does not authorize a new checkpoint or merge. Earlier T05 runs retain their
+actual chronology; they were started before review and do not set the workflow.
+
+PR117 review reproduces and fixes stale pause state when a waiting reopen retires
+the last closed owner before the closing caller resumes. Both successful paths
+now use one generation-checked cleanup helper. The extended existing regression
+fails on the earlier code and passes with the correction; selected local iOS18.5
+passes 91 functions/106 expanded executions. Earlier green CI is historical
+evidence, not validation of this correction. CI stays unrequested until the
+post-review pre-merge checkpoint; PR117 remains open.
+
+Post-review full local macOS validation passes 690 functions (331 legacy,
+265 store,71 runtime,23 model). The corrected concurrent-close/reopen regression
+also passes 25 repeated executions. Manifest and diff checks pass.

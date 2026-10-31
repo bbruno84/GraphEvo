@@ -163,6 +163,7 @@ private actor CoordinatorGate {
         let gate = CoordinatorGate(), manager = manager(StoreRegistry(hooks: StoreLifecycleHooks(beforeDetach: { await gate.enter() })))
         let id = GraphID(), url = root.appendingPathComponent("A.sqlite")
         let graph = try await manager.createGraph(id: id, at: url)
+        try await manager.pauseCloudSynchronization(for: id)
         let closing = Task { try await graph.close() }; await gate.wait()
         closing.cancel()
         let sameClose = Task { try await graph.close() }
@@ -171,6 +172,7 @@ private actor CoordinatorGate {
         #expect(await manager.registeredGraphCount == 2)
         await gate.release(); try await closing.value; try await sameClose.value
         let reopened = try await reopening.value
+        #expect(try await manager.cloudSynchronizationState(for: id) == .active)
         try await reopened.close(); try await other.close()
     }
 

@@ -11,11 +11,29 @@ full validation jobs are explicitly skipped. Pushing a merge to that alpha
 integration branch does not repeat the same full suite. Do not describe either
 case as tests having passed remotely.
 
+The required order is **review → CI → merge**:
+
+1. Complete implementation and relevant local checks; open the PR without the
+   `ci-checkpoint` label.
+2. Review the change, resolve findings and re-review the corrections. Record the
+   reviewed head and any remaining limits before starting remote validation.
+3. At a required checkpoint, request full CI on that reviewed head immediately
+   before the authorized merge. CI is the final validation step, not a prerequisite
+   for starting review. Do not label a PR while review fixes are still in progress.
+4. Merge only after required checks pass and the maintainer authorizes the merge.
+   A request for review alone does not authorize CI or merge.
+
+If source changes after review, remove the label before intermediate pushes,
+complete focused re-review and appropriate local checks, then request any required
+replacement checkpoint. Do not silently reuse an earlier-code green run. A pure
+documentation change does not by itself justify rerunning unchanged library tests.
+
 A full alpha checkpoint is explicit:
 
-- Add the `ci-checkpoint` label to a focused PR when it is ready for full remote
-  validation. Both existing macOS/iOS jobs run. Further source commits on that
-  labeled PR rerun the checkpoint, so it always refers to the actual head.
+- Add the `ci-checkpoint` label to a focused PR after review is complete and it
+  is ready for the final pre-merge validation. Both existing macOS/iOS jobs run.
+  Further source commits on that labeled PR rerun the checkpoint, so it always
+  refers to the actual head.
 - For an integration-branch checkpoint, dispatch the existing `CI` workflow with
   the desired branch/ref, for example `gh workflow run ci.yml --ref codex/graphevo-2`.
   If GitHub's default-branch dispatch registration is unavailable, use the PR-label

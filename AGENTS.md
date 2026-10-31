@@ -371,12 +371,18 @@ on shared or release branches unless explicitly requested.
 6. Publish the branch and open a PR against the intended target branch. Include
    the goal, context, behavior before/after, files or modules, tests, risks,
    limitations, follow-up work, and updated documentation.
-7. Wait for review and the checks required by the active line before merging.
+7. Follow this order: **review, CI, merge**. Complete implementation and relevant
+   local verification, open the PR without `ci-checkpoint`, then review and resolve
+   findings. Only after review is complete, immediately before an authorized merge,
+   request the required remote CI checkpoint on the reviewed head. Do not start
+   expensive alpha CI before review or while review fixes are still being prepared.
    V2 alpha PRs use the explicit [CI checkpoint policy](docs/design/graphevo-2-ci-checkpoints.md):
-   run appropriate local checks, record evidence and merge through the PR; full
-   remote CI is not required on every alpha PR. A skipped job is not a tested
+   full remote CI is not required on every alpha PR. A skipped job is not a tested
    checkpoint. Run full remote CI at agreed delivery checkpoints and before
-   alpha/beta tags. Stable/v1/release automatic checks remain required.
+   alpha/beta tags. A source change after review requires focused re-review before
+   another required checkpoint; remove the label before intermediate pushes.
+   Merge through the PR only after the required checks pass and merge is authorized.
+   Stable/v1/release automatic checks remain required.
 8. For tracked fixes, add a new commit or update the PR. Avoid rewriting shared
    branch history. Prefer a revert commit for already-merged changes.
 9. Never use destructive commands such as `git reset --hard` or `git checkout --`

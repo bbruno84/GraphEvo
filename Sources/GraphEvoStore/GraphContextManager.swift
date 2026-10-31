@@ -391,7 +391,7 @@ package actor GraphContextManager {
                     guard entry.key == resolved.key else { throw GraphStoreError.ownershipConflict }
                     if let closing = entry.closing {
                         try await closing.value
-                        if entries[id]?.generation == entry.generation { entries.removeValue(forKey: id) }
+                        removeClosedEntry(id, generation: entry.generation)
                         continue
                     }
                     if creating && entry.initialPolicy != conflictPolicy { throw GraphStoreError.ownershipConflict }
@@ -449,7 +449,13 @@ package actor GraphContextManager {
         entry.closing = closing
         entries[id] = entry
         try await closing.value
-        if entries[id]?.generation == generation { entries.removeValue(forKey: id) }
+        removeClosedEntry(id, generation: generation)
+    }
+
+    private func removeClosedEntry(_ id: GraphID, generation: UUID) {
+        guard entries[id]?.generation == generation else { return }
+        entries.removeValue(forKey: id)
+        // Either close or a waiting reopen may retire the owner first; both must reset idle pause state.
         resetClosedSynchronization(id)
     }
 }

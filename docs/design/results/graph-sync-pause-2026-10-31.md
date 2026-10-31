@@ -82,3 +82,20 @@ macOS/iOS CI `41216918331`. A subsequent workflow/documentation-only change
 removes the three historical experimental smoke steps at the maintainer's
 request. Its YAML/remaining-step checks pass locally; the unchanged library
 suite is not rerun merely for that removal.
+
+## PR117 review correction
+
+Review reproduced stale pause state when a concurrent open was waiting for the
+last native detach. That waiter could remove the closed owner before the closing
+caller resumed, leaving the old pause control attached to the reopened graph.
+Both successful-close paths now use one generation-checked retirement/reset
+helper. Failed detachment still retains ownership; a late old-generation cleanup
+cannot reset a new owner. The existing concurrent-close/reopen regression now
+pauses first and requires active on reopen; it failed before the correction.
+Selected local iOS18.5 validation passes 91 functions/106 expanded executions.
+The prior green CI run covers the earlier source, not this review correction.
+No new CI or merge is requested during this review-only task.
+
+Post-review full local macOS validation passes 690 functions (331 legacy,
+265 store,71 runtime,23 model). The corrected concurrent-close/reopen regression
+also passes 25 repeated executions. Manifest and diff checks pass.
