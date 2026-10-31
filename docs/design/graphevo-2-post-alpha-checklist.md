@@ -625,3 +625,13 @@ version field was experimental in this result; S01 now selects its target shape.
 Explicit native runtime openings now adopt S01; default/current openers retain
 their original model. Neither shape adoption nor the laboratory result closes
 the remaining PA08 data-conversion gates.
+
+## CI checkpoint evidence policy
+
+V2 alpha uses [explicit remote CI checkpoints](graphevo-2-ci-checkpoints.md),
+selected by the maintainer on 2026-10-31. Per-increment review and relevant local
+checks remain mandatory; a skipped remote job is not acceptance evidence. Full
+macOS/iOS validation is required at agreed delivery checkpoints and before
+alpha/beta tags; release/v1 automatic checks remain enabled. Existing B/R gates
+and physical-device scopes are unchanged. Record the actual tested commit/run
+when closing any gate; do not infer success from an unrun or skipped workflow.

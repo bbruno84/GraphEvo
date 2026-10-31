@@ -137,7 +137,8 @@ now pass across iPad/iPhone: exact server/peer values, updates/deletions, real s
 metadata reuse, owner reopen and genuinely empty final recovery. B remains unchanged
 and imports do not feed upload; final complete local/server inventories contain no
 unexpected records. Conflicts, assets, sharing and interruption gates
-remain open; the focused evidence/harness branch is not integrated yet.
+remain open. #112 is reviewed/merged as `30f7089`, with exact-head macOS/iOS CI
+`41192210370` green; the merge tree matches reviewed head `ee073e8`.
 
 ## Integrated alpha implementation
 
@@ -181,10 +182,21 @@ native schema transitions are library-internal. Source API compatibility is
 optional; v1 data migration is mandatory, with coordinated v1 writers stopped
 before conversion. M16 removes public format DTOs rather than enabling a production manager.
 
+## Alpha CI checkpoints
+
+The maintainer selects [explicit CI checkpoints](graphevo-2-ci-checkpoints.md)
+instead of a full macOS/iOS run on every alpha PR and every integration push.
+Review and appropriate local verification still apply to each increment. Record
+whether remote checks ran or were skipped; only an actual successful run is a
+full checkpoint. Last full reviewed checkpoint: #112, `ee073e8`, CI `41192210370`.
+The focused `codex/v2-ci-checkpoints` changes workflow policy before concurrent
+conflict validation resumes. Stable/v1/release automatic checks remain enabled.
+
 ## Next steps and operating rule
 
-1. Review/check/integrate the bounded T01 private device evidence/harness, then
-   complete genuine conflict behavior, assets, automatic sync,
+1. Finish the focused CI checkpoint policy, then validate genuine concurrent
+   conflicts, partial success and update/delete ordering on the integrated T01
+   transport. Continue with assets, automatic sync,
    pause, conflict policy and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
