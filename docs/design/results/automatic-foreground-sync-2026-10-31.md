@@ -69,7 +69,9 @@ Full local validation passes **711 functions**:331 legacy,286 store,71 runtime,
 23 model. Selected iOS18.5 passes **112 functions/128 expanded executions**, covering
 automatic scheduling, native store integration, pause, assets, sessions, transport,
 policies and coordinator lifecycle. ModelConsumer, manifest, script parsing and
-diff checks pass. The delivery source head is recorded on the PR.
+diff checks pass. Final source head is `3e2d8ce0e35feefb487545753e698b8441b8289a`; following delivery edits are
+documentation/protocol-only. [PR118](https://github.com/bbruno84/GraphEvo/pull/118)
+awaits review before any remote checkpoint or merge.
 
 Deterministic tests cover debounce/max latency,60s recovery, filtering before
 coalescing, round-robin/scopes/backlogs, retry progression and server advice,

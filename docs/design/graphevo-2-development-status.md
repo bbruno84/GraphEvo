@@ -348,6 +348,7 @@ Selected iOS18.5 passes 112 functions/128 expanded executions; ModelConsumer,
 manifest, script and diff checks pass. Final delivery details are recorded on the PR. Local
 hardening covers generation checks after awaited session reads, old status stream
 termination, ordered activity requests, stop/reactivation and failed-start cleanup.
-This focused increment awaits review; no remote checkpoint or merge is requested.
+[PR #118](https://github.com/bbruno84/GraphEvo/pull/118) targets
+`codex/graphevo-2` and awaits review; no remote checkpoint or merge is requested.
 The order remains review → CI → merge. Background/APNs delivery, broader sharing,
 resource/crash/backup and protected migrations remain acceptance gates.
