@@ -14,6 +14,7 @@ package struct GraphAutomaticSyncStatus: Sendable, Equatable {
 
 struct GraphAutomaticClock: Sendable {
     let now: @Sendable () -> TimeInterval
+    /// Absolute monotonic deadline in the same epoch as now.
     let sleep: @Sendable (TimeInterval) async throws -> Void
     let jitter: @Sendable () -> Double
     static var live: Self {
@@ -294,7 +295,7 @@ actor GraphAutomaticSynchronizer {
         let delays: [Double] = [5, 15, 30, 60, 120, 300]
         let jitter = min(1.2, max(0.8, clock.jitter()))
         let server = advice.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil } ?? 0
-        return max(delays[min(count, delays.count - 1)] * jitter, server)
+        return max(min(300, delays[min(count, delays.count - 1)] * jitter), server)
     }
     private func transient(_ error: any Error) -> Bool {
         if error as? GraphCloudError == .transportUnavailable { return true }

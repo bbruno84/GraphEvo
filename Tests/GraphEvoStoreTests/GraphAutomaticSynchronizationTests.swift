@@ -174,15 +174,15 @@ private actor AutomaticBus {
     @Test func retryAfterAndNewHintsDoNotBypassBackoff() async throws {
         let bus = AutomaticBus(), clock = AutomaticTestClock(), id = await bus.inventory[0].id
         let network = NSError(domain: "CKErrorDomain", code: 4)
-        await bus.fail(id, reports: [.init(succeeded: 0, failures: [], cleanupPending: false, transportError: network, retryAfter: 90)])
+        await bus.fail(id, reports: [.init(succeeded: 0, failures: [], cleanupPending: false, transportError: network, retryAfter: 600)])
         let scheduler = GraphAutomaticSynchronizer(driver: bus.driver, clock: clock.value)
         await scheduler.setActive(true); try await settle(scheduler)
         #expect(try await scheduler.status(id).phase == .waitingRetry)
-        #expect(try await scheduler.status(id).retryAfter == 90)
+        #expect(try await scheduler.status(id).retryAfter == 600)
         await scheduler.request(explicit: true)
         clock.advance(60); try await settle(scheduler)
         #expect(await bus.turns.filter { $0 == id }.count == 1)
-        clock.advance(30)
+        clock.advance(540)
         try await wait { await bus.turns.filter { $0 == id }.count >= 2 }; try await settle(scheduler)
         #expect(try await scheduler.status(id).phase == .idle)
         await scheduler.shutdown()
@@ -244,14 +244,16 @@ private actor AutomaticBus {
         await scheduler.shutdown()
     }
 
-    @Test func exponentialRetrySequenceCapsAndSuccessResetsIt() async throws {
+    @Test(arguments: [1.0, 1.2]) func exponentialRetrySequenceCapsAndSuccessResetsIt(_ jitter: Double) async throws {
         let bus = AutomaticBus(1), clock = AutomaticTestClock(), id = await bus.inventory[0].id
         let failure = GraphCloudSendReport(succeeded: 0, failures: [], cleanupPending: false,
                                           transportError: NSError(domain: "CKErrorDomain", code: 7))
         await bus.fail(id, reports: Array(repeating: failure, count: 7))
-        let scheduler = GraphAutomaticSynchronizer(driver: bus.driver, clock: clock.value)
+        let base = clock.value
+        let scheduler = GraphAutomaticSynchronizer(driver: bus.driver, clock: .init(now: base.now, sleep: base.sleep, jitter: { jitter }))
         await scheduler.setActive(true)
-        for (index, delay) in [5.0, 15, 30, 60, 120, 300, 300].enumerated() {
+        for (index, nominal) in [5.0, 15, 30, 60, 120, 300, 300].enumerated() {
+            let delay = min(300, nominal * jitter)
             try await wait { await bus.turns.count == index + 1 }; try await settle(scheduler)
             #expect(try await scheduler.status(id).retryAfter == delay)
             clock.advance(delay)
@@ -260,7 +262,7 @@ private actor AutomaticBus {
         #expect(try await scheduler.status(id).phase == .idle)
         await bus.fail(id, reports: [failure]); await scheduler.request()
         try await wait { try await scheduler.status(id).phase == .waitingRetry }
-        #expect(try await scheduler.status(id).retryAfter == 5)
+        #expect(try await scheduler.status(id).retryAfter == 5 * jitter)
         await scheduler.shutdown()
     }
 
