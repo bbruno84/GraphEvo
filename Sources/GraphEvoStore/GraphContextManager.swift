@@ -32,6 +32,8 @@ package actor GraphContextManager {
     private let attachmentRefresh = GraphCloudAttachmentRefresh<Void>()
     private let attachmentFetch = GraphCloudAttachmentRefresh<Set<GraphID>>()
     private var automatic: [String: GraphAutomaticSynchronizer] = [:]
+    private var automaticClosing: [String: UUID] = [:]
+    private var automaticActivityRevision: [String: UInt64] = [:]
     private var synchronization: [GraphID: GraphCloudSyncControl] = [:]
 
     @available(iOS 17, macOS 14, *)
@@ -43,6 +45,7 @@ package actor GraphContextManager {
                            disk: GraphCloudDisk = .live) async throws -> GraphCloudStatus {
         try Task.checkCancellation()
         let key = configuration.namespace
+        guard automaticClosing[key] == nil else { throw GraphCloudError.stopping }
         if let existing = cloudSessions[key] {
             guard existing.configuration == configuration else { throw GraphCloudError.ownershipConflict }
         } else {
@@ -103,13 +106,25 @@ package actor GraphContextManager {
     }
     package func stopCloudSession(_ configuration: GraphCloudConfiguration) async throws {
         guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { return }
+        automaticClosing[configuration.namespace] = opening.id
         let session: GraphCloudSession
         do { session = try await opening.task.value }
         catch let quarantine as GraphCloudQuarantine { session = quarantine.session }
-        await automatic[configuration.namespace]?.setActive(false)
+        catch {
+            if cloudSessions[configuration.namespace]?.id == opening.id { cloudSessions.removeValue(forKey: configuration.namespace) }
+            if automaticClosing[configuration.namespace] == opening.id { automaticClosing.removeValue(forKey: configuration.namespace) }
+            throw error
+        }
+        let revision = (automaticActivityRevision[configuration.namespace] ?? 0) + 1
+        automaticActivityRevision[configuration.namespace] = revision
+        await automatic[configuration.namespace]?.setActive(false, revision: revision)
         try await session.stop()
+        guard cloudSessions[configuration.namespace]?.id == opening.id else { return }
         if let scheduler = automatic.removeValue(forKey: configuration.namespace) { await scheduler.shutdown() }
-        if cloudSessions[configuration.namespace]?.id == opening.id { cloudSessions.removeValue(forKey: configuration.namespace) }
+        if cloudSessions[configuration.namespace]?.id == opening.id {
+            cloudSessions.removeValue(forKey: configuration.namespace)
+            automaticClosing.removeValue(forKey: configuration.namespace)
+        }
     }
 
     private func withTransport<Value: Sendable>(_ graphID: GraphID, configuration: GraphCloudConfiguration,
@@ -377,7 +392,11 @@ package actor GraphContextManager {
     }
 
     private func automaticScheduler(_ config: GraphCloudConfiguration, clock: GraphAutomaticClock = .live) async throws -> GraphAutomaticSynchronizer {
+        guard automaticClosing[config.namespace] == nil else { throw GraphCloudError.stopping }
+        let openingID = cloudSessions[config.namespace]?.id
         _ = try await cloud(config).identity()
+        guard automaticClosing[config.namespace] == nil else { throw GraphCloudError.stopping }
+        guard cloudSessions[config.namespace]?.id == openingID else { throw GraphCloudError.stopped }
         if let existing = automatic[config.namespace] { return existing }
         let driver = GraphAutomaticDriver(inventory: { [weak self] in
             guard let self else { throw GraphCloudError.stopped }
@@ -428,10 +447,15 @@ package actor GraphContextManager {
     }
 
     package func setAutomaticCloudSynchronizationActive(_ active: Bool, configuration: GraphCloudConfiguration) async throws {
-        try await automaticScheduler(configuration).setActive(active)
+        try await setAutomaticCloudSynchronizationActive(active, configuration: configuration, clock: .live)
     }
     func setAutomaticCloudSynchronizationActive(_ active: Bool, configuration: GraphCloudConfiguration, clock: GraphAutomaticClock) async throws {
-        try await automaticScheduler(configuration, clock: clock).setActive(active)
+        try Task.checkCancellation()
+        guard automaticClosing[configuration.namespace] == nil else { throw GraphCloudError.stopping }
+        let revision = (automaticActivityRevision[configuration.namespace] ?? 0) + 1
+        automaticActivityRevision[configuration.namespace] = revision
+        let scheduler = try await automaticScheduler(configuration, clock: clock)
+        await scheduler.setActive(active, revision: revision)
     }
     package func requestCloudSynchronization(configuration: GraphCloudConfiguration) async throws {
         let scheduler = try await automaticScheduler(configuration)
@@ -459,6 +483,7 @@ package actor GraphContextManager {
     // Internal lifecycle diagnostics for deterministic ownership tests.
     var attachmentRefreshWaiterCount: Int { get async { await attachmentRefresh.registeredWaiterCount } }
     var attachmentFetchWaiterCount: Int { get async { await attachmentFetch.registeredWaiterCount } }
+    var automaticClosingCount: Int { automaticClosing.count }
     var registeredGraphCount: Int { entries.count }
     var registeredHandleCount: Int { entries.values.reduce(0) { $0 + $1.tokens.count } }
 

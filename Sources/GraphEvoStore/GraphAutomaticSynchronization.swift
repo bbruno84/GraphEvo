@@ -69,6 +69,7 @@ actor GraphAutomaticSynchronizer {
     private let driver: GraphAutomaticDriver
     private let clock: GraphAutomaticClock
     private var active = false
+    private var activityRevision: UInt64 = 0
     private var stopped = false
     private var stickyFailure = false
     private var refreshing = false
@@ -88,8 +89,12 @@ actor GraphAutomaticSynchronizer {
         for values in observers.values { for observer in values.values { observer.finish() } }
     }
 
-    func setActive(_ value: Bool) async {
+    func setActive(_ value: Bool, revision: UInt64? = nil) async {
         guard !stopped else { return }
+        if let revision {
+            guard revision >= activityRevision else { return }
+            activityRevision = revision
+        }
         let changed = active != value
         active = value
         if changed && value {

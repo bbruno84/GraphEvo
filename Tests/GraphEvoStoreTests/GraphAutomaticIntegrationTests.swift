@@ -13,6 +13,9 @@ private actor AutomaticReplicaBus {
     var held: CheckedContinuation<Void, Never>?
     var shouldHold = false
     var fetchFault: NSError?
+    var cancelled = false
+    var holdCancellation = false
+    var cancellation: CheckedContinuation<Void, Never>?
     func fetch(_ zones: [GraphCloudZone]) throws -> [GraphCloudIncoming] {
         fetches += 1
         if let fetchFault { throw fetchFault }
@@ -37,9 +40,16 @@ private actor AutomaticReplicaBus {
     }
     func release() { shouldHold = false; let value = held; held = nil; value?.resume() }
     func hold() { shouldHold = true }
+    func blockCancellation() { holdCancellation = true }
+    func unblockCancellation() { let value = cancellation; cancellation = nil; holdCancellation = false; value?.resume() }
+    func cancel() async {
+        cancelled = true
+        if holdCancellation { await withCheckedContinuation { cancellation = $0 } }
+        release()
+    }
     nonisolated var adapter: GraphCloudAdapter {
         GraphCloudAdapter(account: { _ in "automatic-test" }, make: { [self] _, _, _, receive in
-            GraphCloudDriver(fetch: { zones in await receive(.incoming(try self.fetch(zones))) }, cancel: {},
+            GraphCloudDriver(fetch: { zones in await receive(.incoming(try self.fetch(zones))) }, cancel: { await self.cancel() },
                              send: { batch in await receive(.sent(try self.send(batch))) })
         })
     }
@@ -142,9 +152,11 @@ private actor AutomaticReplicaBus {
         try await wait { await second.manager.automaticSynchronizationIdle(second.config) }
         #expect(try await second.graph.collectSyncChanges() == 0)
         #expect(await bus.sent.count == 1)
-        try await second.manager.setAutomaticCloudSynchronizationActive(false, configuration: second.config)
         try await second.graph.close()
         try await wait { await second.manager.registeredGraphCount == 0 }
+        second.clock.advance(60)
+        #expect(await second.manager.registeredGraphCount == 0)
+        #expect(await bus.sent.count == 1)
         try await second.manager.stopCloudSession(second.config)
         try FileManager.default.removeItem(at: second.root)
     }
@@ -184,4 +196,25 @@ private actor AutomaticReplicaBus {
         #expect(try await r.graph.collectSyncChanges() == 0)
         try await close(r)
     }
+    @Test func stoppingRejectsReactivationAndRetainsAdmittedReceiptForRestart() async throws {
+        let bus = AutomaticReplicaBus(), id = GraphID(), r = try await replica(bus, id: id, container: UUID().uuidString)
+        let node = r.graph.makeNodeID()
+        _ = try await r.graph.transaction { try $0.insert(GraphRecord(id: node, type: "Item")) }
+        await bus.hold(); await bus.blockCancellation()
+        try await active(r)
+        try await wait { await bus.held != nil }
+        let stopping = Task { try await r.manager.stopCloudSession(r.config) }
+        try await wait { await bus.cancelled }
+        await #expect(throws: GraphCloudError.stopping) {
+            try await r.manager.setAutomaticCloudSynchronizationActive(true, configuration: r.config)
+        }
+        await bus.unblockCancellation(); try await stopping.value
+        _ = try await r.manager.startCloudSession(r.config, adapter: bus.adapter)
+        try await active(r)
+        try await wait { await r.manager.automaticSynchronizationIdle(r.config) }
+        #expect(try await r.graph.collectSyncChanges() == 0)
+        #expect(await bus.sent.count == 1)
+        try await close(r)
+    }
+
 }

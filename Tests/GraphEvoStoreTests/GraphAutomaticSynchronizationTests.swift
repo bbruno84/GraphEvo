@@ -331,4 +331,41 @@ private actor AutomaticBus {
         await scheduler.shutdown()
     }
 
+    @Test func lateActivityRequestCannotOverrideNewerInactivity() async throws {
+        let bus = AutomaticBus(1), clock = AutomaticTestClock(), scheduler = GraphAutomaticSynchronizer(driver: bus.driver, clock: clock.value)
+        await scheduler.setActive(true, revision: 1); try await settle(scheduler)
+        await scheduler.setActive(false, revision: 3)
+        let before = await bus.fetches.count
+        await scheduler.setActive(true, revision: 2)
+        clock.advance(120)
+        let id = await bus.inventory[0].id
+        #expect(try await scheduler.status(id).phase == .suspended)
+        #expect(await bus.fetches.count == before)
+        await scheduler.setActive(true, revision: 4); try await settle(scheduler)
+        #expect(await bus.fetches.count == before + 1)
+        await scheduler.shutdown()
+    }
+
+    @Test func failedOpeningDuringStopDoesNotPoisonNextAutomaticSession() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("AutomaticOpening-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let config = GraphCloudConfiguration(containerIdentifier: "iCloud.opening." + UUID().uuidString,
+                                             environment: .development, directory: root)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let gate = AutomaticGate()
+        let failed = GraphCloudAdapter(account: { _ in await gate.enter(); throw GraphCloudError.accountUnavailable },
+                                      make: { _, _, _, _ in GraphCloudDriver(fetch: { _ in }, cancel: {}) })
+        let starting = Task { try await manager.startCloudSession(config, adapter: failed) }
+        await gate.wait()
+        let stopping = Task { try await manager.stopCloudSession(config) }
+        try await wait { await manager.automaticClosingCount == 1 }
+        await gate.release()
+        await #expect(throws: GraphCloudError.accountUnavailable) { try await starting.value }
+        await #expect(throws: GraphCloudError.accountUnavailable) { try await stopping.value }
+        let good = GraphCloudAdapter(account: { _ in "opening-test" }, make: { _, _, _, _ in GraphCloudDriver(fetch: { _ in }, cancel: {}) })
+        _ = try await manager.startCloudSession(config, adapter: good)
+        try await manager.setAutomaticCloudSynchronizationActive(true, configuration: config)
+        try await manager.stopCloudSession(config)
+    }
+
 }
