@@ -1011,3 +1011,23 @@ byte copies are a measured-cost follow-up, not a streaming/SQL-placement guarant
 Keep independent wait cancellation/deadlines, shared refresh and exclusive caller-
 owned export destinations. No network awaits or file-system I/O inside native
 transactions. Preserve real-device evidence separately from injected transport.
+
+
+## V2 T05 graph synchronization pause
+
+Read [T05](docs/design/graphevo-2-sync-pause.md) before changing sync admission.
+The owning ContextManager tracks active/pauseRequested/paused per graph in memory.
+Reject new sync cycles after request; drain the already-admitted cycle through
+receipts, native effects and cleanup, including its bounded retry. A failed
+operation retains work and still settles its admission. Never pause by cancelling
+the common database engine. Local writes/PH remain available in the existing queue.
+
+Filter new native fetches by currently admitted zones and count existing scoped
+fetches before suspension. Global control notifications can be retained without
+applying paused graph data. T04 refresh work owns admission independently of UI
+cancellation; shared fetch coverage must include the requested graph or perform
+a targeted fetch under its existing permit. Do not allow an unrelated operation
+to borrow an old permit. Resume during draining is busy; state observation is
+newest-only, not durable replay. Full close/reopen resets process-local state;
+stop does not resume it. No automatic scheduling, distributed/migration exclusion,
+new persisted format or schema change is part of this increment.

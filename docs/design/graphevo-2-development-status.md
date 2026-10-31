@@ -216,7 +216,8 @@ run `41192922760` also passed on `30f7089` before the new policy took effect.
 
 1. T03 conflict policies and T04 CKAsset transport are integrated through #115
    and #116 after review and full CI checkpoints. Structural conflicts, automatic
-   sync, pause and sharing remain subsequent work on the custom backend.
+   sync and sharing remain subsequent work on the custom backend. T05 pause is
+   implemented on the focused branch below, pending review/integration.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
@@ -281,3 +282,22 @@ Reviewed code head `698a94bc0786e3220dfd78ef965b904be1e7067c` passed full
 macOS/iOS checkpoint `41205963479`. Final status edits are documentation-only;
 the integrated code is identical to the CI-tested code. Extra durable copies
 and broad account/sharing/crash/backup costs remain gates.
+
+
+## T05 per-graph pause increment
+
+`codex/v2-graph-sync-pause` starts directly from integrated #116 (`3b495ba`).
+[T05](graphevo-2-sync-pause.md) adds process-local active/requested/paused state,
+per-graph admission and orderly drain. Local writes retain the existing PH/pending
+path. Other graph zones remain eligible on the same manual engine. Alias lifetime,
+cancelled waits, failed operations and attachment refresh coverage are explicit;
+stop and migration exclusivity remain separate. S03 and wire/state formats do not
+change. The package-only boundary remains.
+
+The [physical result](results/graph-sync-pause-2026-10-31.md) records seven passed
+stages on runtime `3a3e47b450a68166bb135648dee7d76802f366cc`: paused A/local edits,
+active B, resumed convergence, process reopen and empty recovery on same-account
+iPad/iPhone. Full local validation passes 690 functions (331 legacy, 265 store,
+71 runtime, 23 model); selected iOS18.5 passes 79 functions/94 expanded cases.
+ModelConsumer, manifest and diff checks pass. PR and final full CI checkpoint
+are recorded at delivery; this section does not claim integration or beta acceptance.
