@@ -123,7 +123,10 @@ extension GraphSyncCheckpointAdapter {
             state.metadata.removeValue(forKey: target.rawValue.uuidString)
         }
         let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
-        func rank(_ node: GraphCloudDecodedNode) -> Int { node.record.endpoints.kind == .entity ? 0 : 1 }
+        func rank(_ node: GraphCloudDecodedNode) -> Int {
+            if node.record.type == GraphAttachmentPayload.graphType { return 2 }
+            return node.record.endpoints.kind == .entity ? 0 : 1
+        }
         for remote in saves.sorted(by: { rank($0) == rank($1) ? $0.record.id.rawValue.uuidString < $1.record.id.rawValue.uuidString : rank($0) < rank($1) }) {
             let record = remote.record
             if let old = try session.record(record.id) {

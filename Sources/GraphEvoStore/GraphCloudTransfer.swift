@@ -110,6 +110,7 @@ actor GraphCloudNativeOutbox {
     private var batch: GraphCloudOutgoingBatch?
     private var offered = false
     private var zoneError: Int?
+    private var staging: URL?
     func begin(_ value: GraphCloudOutgoingBatch) throws {
         guard batch == nil else { throw GraphCloudError.busy }
         batch = value; offered = false; zoneError = nil
@@ -130,6 +131,14 @@ actor GraphCloudNativeOutbox {
                 guard let record = try NSKeyedUnarchiver.unarchivedObject(ofClass: CloudKit.CKRecord.self, from: bytes) else { throw GraphCloudError.invalidState }
                 guard record.recordID == id else { throw GraphCloudError.invalidState }
                 _ = try GraphCloudNodeCodec.decode(record, binding: route)
+                if record["asset"] != nil {
+                    if staging == nil {
+                        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvoAssetSend-" + UUID().uuidString)
+                        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+                        staging = directory
+                    }
+                    try GraphCloudAsset.materialize(record, directory: staging!)
+                }
                 saves.append(record)
             } else { deletes.append(id) }
         }
@@ -137,7 +146,10 @@ actor GraphCloudNativeOutbox {
     }
     func zoneFailed(_ code: Int) { zoneError = code }
     func finish() throws {
-        defer { batch = nil; offered = false; zoneError = nil }
+        defer {
+            if let staging { try? FileManager.default.removeItem(at: staging) }
+            staging = nil; batch = nil; offered = false; zoneError = nil
+        }
         if let zoneError { throw GraphCloudNativeSendError.zoneFailure(zoneError) }
     }
 }
