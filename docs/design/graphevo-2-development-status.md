@@ -13,6 +13,13 @@ T08 [sharing lifecycle](graphevo-2-sharing-lifecycle.md) is a candidate on
 `codex/graphevo-2`. Confirmed loss/leave removes participant data and pending work;
 owner data survives. S03/wire formats are unchanged; session format 5 is explicit.
 Implementation and local/device checks precede review, CI and authorized merge.
+The [T08 physical report](results/sharing-lifecycle-2026-10-31.md) records read-only
+downgrade with pending edits, revocation, interrupted purge/restart, empty rejoin,
+leave, paused-graph control detection and intact owner/control inventories on
+iPad/XR. Later read-only checks retain their separate source pins. No remote CI
+or merge has been requested for this candidate.
+Local validation passes 748 macOS functions, 391 selected iOS checks plus a final
+14-test lifecycle rerun, Release build, ModelConsumer and manifest/diff checks.
 
 ## Latest integrated increment
 

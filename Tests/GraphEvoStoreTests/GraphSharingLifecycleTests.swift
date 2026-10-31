@@ -106,6 +106,8 @@ private actor RemovalGate {
         let f = try await fixture()
         defer { try? FileManager.default.removeItem(at: f.root) }
         let alias = try await f.manager.openGraph(id: f.graph.id, at: f.url), id = f.graph.makeNodeID()
+        let observation = try await alias.observe(observationQuery())
+        _ = try await waitForObservation(observation) { _ in true }
         _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: id, type: "Note", properties: ["value": .integer(1)])) }
         let file = try GraphAttachmentPayload(id: f.graph.makeNodeID(), ownerID: id, fileName: "file.bin", contentType: "public.data", data: Data(repeating: 42, count: 2 * 1024 * 1024))
         _ = try await f.graph.transaction { try $0.insert(file) }
@@ -120,6 +122,8 @@ private actor RemovalGate {
         let files = try FileManager.default.contentsOfDirectory(atPath: f.root.path)
         #expect(Set(files) == ["Engine", "consumer-export.bin"])
         await #expect(throws: (any Error).self) { try await alias.read { _ in () } }
+        var changes = observation.makeAsyncIterator()
+        while await changes.next() != nil {}
         try await alias.close(); try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
     }
     @Test func confirmedRevocationWinsOverPendingWritesEvenWhilePaused() async throws {
@@ -294,6 +298,42 @@ private actor RemovalGate {
         _ = try await f.manager.sendCloudChanges(for: bID, configuration: f.config)
         #expect(try await b.collectSyncChanges() == 0)
         try await b.close(); try await fresh.close(); try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
+
+    @Test func currentURLRegistrationAcceptsMovedStoreWithoutPersistedPaths() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let id = f.graph.makeNodeID()
+        _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: id, type: "Moved")) }
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+        let moved = f.root.appendingPathComponent("Current.sqlite")
+        for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: f.url.path + suffix) {
+            try FileManager.default.moveItem(atPath: f.url.path + suffix, toPath: moved.path + suffix)
+        }
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
+        try await restarted.registerCloudGraphLocation(f.graph.id, at: moved, configuration: f.config)
+        let graph = try await restarted.openGraph(id: f.graph.id, at: moved)
+        #expect(try await graph.read { try $0.record(for: id)?.type } == "Moved")
+        #expect(try await restarted.leaveCloudShare(for: graph.id, configuration: f.config).phase == .removed)
+        #expect(!FileManager.default.fileExists(atPath: moved.path))
+        try await graph.close(); try await restarted.stopCloudSession(f.config)
+    }
+    @Test func wrongStoreRegistrationCannotClaimOrDestroyUnrelatedGraph() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        try await f.graph.close()
+        let other = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let url = f.root.appendingPathComponent("Unrelated.sqlite"), otherID = GraphID()
+        let foreign = try await other.createGraph(id: otherID, at: url), nodeID = foreign.makeNodeID()
+        _ = try await foreign.transaction { try $0.insert(GraphRecord(id: nodeID, type: "Unrelated")) }
+        try await foreign.close()
+        await #expect(throws: GraphCloudError.ownershipConflict) {
+            try await f.manager.registerCloudGraphLocation(f.graph.id, at: url, configuration: f.config)
+        }
+        let retained = try await other.openGraph(id: otherID, at: url)
+        #expect(try await retained.read { try $0.record(for: nodeID)?.type } == "Unrelated")
+        try await retained.close(); try await f.manager.stopCloudSession(f.config)
     }
 
     #if DEBUG

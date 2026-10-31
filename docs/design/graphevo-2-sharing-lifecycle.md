@@ -77,9 +77,11 @@ One finite control worker per scope shares existing native exclusion. It runs on
 explicit foreground activation, reconciliation and hints, including paused graphs;
 no paused application records are fetched to inspect permissions. Background and
 instantaneous detection while offline are not provided. Inactivity stops new
-control admissions; stop drains admitted control work before session teardown.
+control admissions; stop drains admitted control work and already-started purges
+for that session before teardown. Other sessions' purges do not delay its stop.
 Retry delays use 5/15/30/60/120/300 seconds, capped jitter and larger retryAfter;
-busy waits one second. Permanent failures require an explicit retry. No data queue
+busy waits one second. Hints/activity never bypass a retry delay, including hints
+received while a failing operation is in flight. Permanent failures require an explicit retry. No data queue
 or application snapshots are introduced by this worker.
 
 ## Validation and gates
@@ -92,8 +94,10 @@ other-graph pending work during engine replacement, owner commands and virtual
 clock retry/lifecycle behavior. A Debug-only pre-destruction barrier supports
 physical interruption testing and is absent in Release.
 
-Update the physical report with exact tested commits; initial T07 evidence remains
-historical. Public opening/UI, actual background/APNs delivery, broad account and
+The [physical report](results/sharing-lifecycle-2026-10-31.md) retains exact source
+pins, 14 completed mutation-matrix reports, the deliberate purge interruption and
+the later read-only correction checks. Initial T07 evidence remains historical.
+Public opening/UI, actual background/APNs delivery, broad account and
 cross-process/cache policy, protected migration/backup and supported-scale costs
 remain release gates. Workflow: local/device checks, review/corrections, CI, then
 an authorized merge. Laboratories remain excluded from CI.

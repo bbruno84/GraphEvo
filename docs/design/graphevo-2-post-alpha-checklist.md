@@ -719,3 +719,8 @@ interruption and backup restoration coverage; **R** measure journal/tombstone
 retention, repeated subscription/refetch costs, external asset cleanup and long
 offline control retries. Do not infer distributed ordering or backup/secure-erasure
 certification from a bounded same-process purge or the initial hardware fixture.
+The [T08 report](results/sharing-lifecycle-2026-10-31.md) closes the bounded
+iPad/XR downgrade, revocation, deliberate pre-destruction interruption/restart,
+empty rejoin, leave and foreground paused-graph control scenario. Broader fault
+injection, offline hardware leave, account/cross-process policy and restoration
+remain open; do not expand the evidence beyond its tested source pins.
