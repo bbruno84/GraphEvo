@@ -26,6 +26,7 @@ package struct GraphCloudRecordFailure: Codable, Equatable, Sendable {
     }
 }
 package struct GraphCloudSentReceipt: Codable, Equatable, Sendable {
+    var membershipGeneration: UUID? = nil
     package let id: UUID
     package let batchID: UUID
     package let graphID: GraphID

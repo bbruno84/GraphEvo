@@ -94,7 +94,7 @@ actor GraphSyncSession {
     func collect(limits: GraphSyncLimits) async throws -> Int {
         try begin(); defer { busy = false }
         let adapter = adapter, graphID = graphID
-        return try await handle.transaction { try adapter.collect($0, graphID, limits) }
+        return try await handle.controlTransaction { try adapter.collect($0, graphID, limits) }
     }
 
     func prepare(maximumRecords: Int, limits: GraphSyncLimits) async throws -> GraphSyncBatch {
@@ -102,7 +102,7 @@ actor GraphSyncSession {
         guard active == nil else { throw GraphSyncError.busy }
         try begin(); defer { busy = false }
         let adapter = adapter, graphID = graphID
-        let prepared = try await handle.transaction { try adapter.prepare($0, graphID, limits, maximumRecords) }
+        let prepared = try await handle.controlTransaction { try adapter.prepare($0, graphID, limits, maximumRecords) }
         guard !retired else { throw GraphStoreError.closed }
         let batch = GraphSyncBatch(id: UUID(), graphID: graphID, items: prepared.items, epoch: prepared.epoch)
         active = batch
@@ -115,7 +115,7 @@ actor GraphSyncSession {
         try begin(); defer { busy = false }
         let adapter = adapter, graphID = graphID
         let changes = batch.items.map(\.change).filter { succeeded.contains($0.id) }
-        let removed = try await handle.transaction { try adapter.acknowledge($0, graphID, limits, batch.epoch, changes) }
+        let removed = try await handle.controlTransaction { try adapter.acknowledge($0, graphID, limits, batch.epoch, changes) }
         active = nil
         return removed
     }
@@ -134,7 +134,7 @@ actor GraphSyncSession {
     func importPatches(_ patches: [GraphRecordPatch], limits: GraphSyncLimits) async throws {
         try begin(); defer { busy = false }
         let adapter = adapter, graphID = graphID
-        try await handle.transaction { try adapter.importPatches($0, graphID, limits, patches) }
+        try await handle.controlTransaction { try adapter.importPatches($0, graphID, limits, patches) }
     }
 
     func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int, limits: GraphSyncLimits, onlyIDs: Set<GraphNodeID>? = nil) async throws -> GraphCloudOutgoingBatch {
@@ -142,7 +142,7 @@ actor GraphSyncSession {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        let result = try await handle.transaction { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) }
+        let result = try await handle.controlTransaction { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) }
         guard !retired else { throw GraphStoreError.closed }
         return result
     }
@@ -150,34 +150,34 @@ actor GraphSyncSession {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        return try await handle.transaction { try cloud.sent($0, id, binding, receipts, limits) }
+        return try await handle.controlTransaction { try cloud.sent($0, id, binding, receipts, limits) }
     }
     func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        return try await handle.transaction { try cloud.apply($0, id, binding, effects, limits) }
+        return try await handle.controlTransaction { try cloud.apply($0, id, binding, effects, limits) }
     }
     func trimTransport(_ binding: GraphCloudTransportBinding, receipts: Set<UUID>) async throws {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        try await handle.transaction { try cloud.trim($0, id, binding, .consumed(receipts)) }
+        try await handle.controlTransaction { try cloud.trim($0, id, binding, .consumed(receipts)) }
     }
 
     func pruneTransport(_ binding: GraphCloudTransportBinding, retained: Set<UUID>) async throws {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        try await handle.transaction { try cloud.trim($0, id, binding, .retain(retained)) }
+        try await handle.controlTransaction { try cloud.trim($0, id, binding, .retain(retained)) }
     }
 
     func conflictPolicy(_ policy: GraphConflictPolicy?) async throws -> GraphConflictPolicy {
         try begin(); defer { busy = false }
         guard let callback = adapter.policy else { throw GraphSyncError.unavailable }
         let id = graphID
-        if let policy { return try await handle.transaction { try callback($0, id, policy) } }
-        return try await handle.read { try callback($0, id, nil) }
+        if let policy { return try await handle.controlTransaction { try callback($0, id, policy) } }
+        return try await handle.controlRead { try callback($0, id, nil) }
     }
 
     func retire() { retired = true; active = nil }

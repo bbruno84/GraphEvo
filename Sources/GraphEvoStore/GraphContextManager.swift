@@ -4,7 +4,7 @@ import GraphEvoRuntime
 
 /// Process-local graph orchestration and explicit package-only CloudKit sessions.
 package actor GraphContextManager {
-    private struct Entry {
+    struct Entry {
         let generation = UUID()
         let key: StoreKey
         let url: URL
@@ -15,19 +15,28 @@ package actor GraphContextManager {
         var tokens: Set<UUID> = []
         var closing: Task<Void, any Error>?
     }
-    private let registry: StoreRegistry
-    private let schema: StoreSchema
-    private let adapter: GraphCoordinatorAdapter
-    private var entries: [GraphID: Entry] = [:]
-    private struct GraphLocation { let key: StoreKey; let url: URL }
+    let registry: StoreRegistry
+    let schema: StoreSchema
+    let adapter: GraphCoordinatorAdapter
+    var entries: [GraphID: Entry] = [:]
+    struct GraphLocation { let key: StoreKey; let url: URL }
     // Runtime-only registrations. App bootstrap supplies current sandbox/App Group URLs after relaunch.
-    private var locations: [GraphID: GraphLocation] = [:]
+    var locations: [GraphID: GraphLocation] = [:]
     private struct CloudOpening {
         let id = UUID()
         let configuration: GraphCloudConfiguration
         let task: Task<GraphCloudSession, any Error>
     }
     private var cloudSessions: [String: CloudOpening] = [:]
+    #if DEBUG
+    var purgeProbeBarrier: (@Sendable (GraphID) async throws -> Void)?
+    package func setPurgeProbeBarrier(_ barrier: (@Sendable (GraphID) async throws -> Void)?) { purgeProbeBarrier = barrier }
+    #endif
+    var rejoiningGraphs = Set<GraphID>()
+    var sharingGraphs = Set<GraphID>()
+    var blockedSharingGraphs = Set<GraphID>()
+    var purgeTasks: [GraphID: Task<Void, any Error>] = [:]
+    var lifecycleWorkers: [String: GraphSharingLifecycleWorker] = [:]
     private var transportGraphs = Set<GraphID>()
     private let attachmentRefresh = GraphCloudAttachmentRefresh<Void>()
     private let attachmentFetch = GraphCloudAttachmentRefresh<Set<GraphID>>()
@@ -59,10 +68,12 @@ package actor GraphContextManager {
             if !(error is GraphCloudQuarantine), cloudSessions[key]?.id == opening.id { cloudSessions.removeValue(forKey: key) }
             throw error
         }
-        return try await session.startStatus()
+        let status = try await session.startStatus()
+        try await restoreSharingRegistrations(configuration: configuration)
+        return status
     }
 
-    private func cloud(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudSession {
+    func cloud(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudSession {
         guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { throw GraphCloudError.stopped }
         return try await opening.task.value
     }
@@ -84,8 +95,17 @@ package actor GraphContextManager {
     package func inviteCloudParticipant(_ recipient: String, to graphID: GraphID,
         permission: GraphCloudSharePermission = .readWrite,
         configuration: GraphCloudConfiguration) async throws -> GraphCloudInvitation {
-        try await withTransport(graphID, configuration: configuration) { session, _, binding, _ in
-            try await session.invite(binding.route, recipient: recipient, permission: permission)
+        guard sharingGraphs.insert(graphID).inserted else { throw GraphCloudError.busy }
+        defer { sharingGraphs.remove(graphID) }
+        if try await cloud(configuration).membership(graphID)?.pending != nil { throw GraphCloudError.busy }
+        return try await withTransport(graphID, configuration: configuration) { session, _, binding, _ in
+            let invitation = try await session.invite(binding.route, recipient: recipient, permission: permission)
+            if try await session.membership(graphID) == nil {
+                let member = GraphCloudMembership(binding: binding.route, identity: binding.identity, generation: UUID(), role: .owner,
+                    phase: .active, permission: .readWrite, hadAccess: true, shareIdentity: GraphCloudShareIdentity.of(invitation.url))
+                try await session.updateMembership(member)
+            }
+            return invitation
         }
     }
 
@@ -106,13 +126,18 @@ package actor GraphContextManager {
         guard let location = locations[graphID], entries[graphID] != nil, entries[graphID]?.closing == nil else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: graphID, at: location.url)
         do {
+            guard let entry = entries[graphID] else { throw GraphStoreError.closed }
+            let storeID = try await entry.opening.value.storeIdentity()
+            let member = try await session.beginMembership(binding, storeID: storeID, shareIdentity: GraphCloudShareIdentity.of(invitation.url))
             let prior = try await graph.participantAccess()
             // Keep accepted access on an idempotent retry; a new replica is closed to consumer writes first.
             if prior == nil {
-                _ = try await graph.participantAccess(GraphCloudParticipantAccess(binding: binding, account: identity.account, permission: nil, accepted: false))
+                _ = try await graph.participantAccess(GraphCloudParticipantAccess(binding: binding, account: identity.account, permission: nil, accepted: false, identity: identity, generation: member.generation))
             } else if prior?.binding != binding || prior?.account != identity.account { throw GraphCloudError.ownershipConflict }
+            try await graph.setSharingDataAvailable(false)
             let access = try await session.accept(invitation)
             _ = try await graph.participantAccess(access)
+            try await refreshCloudMembership(graphID, configuration: configuration)
             automaticChanged()
             try await graph.close()
         } catch { let original = error; try? await graph.close(); throw original }
@@ -160,6 +185,7 @@ package actor GraphContextManager {
         let revision = (automaticActivityRevision[configuration.namespace] ?? 0) + 1
         automaticActivityRevision[configuration.namespace] = revision
         await automatic[configuration.namespace]?.setActive(false, revision: revision)
+        await stopSharingLifecycle(configuration)
         try await session.stop()
         guard cloudSessions[configuration.namespace]?.id == opening.id else { return }
         if let scheduler = automatic.removeValue(forKey: configuration.namespace) { await scheduler.shutdown() }
@@ -180,6 +206,9 @@ package actor GraphContextManager {
         guard let location = locations[graphID] else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: graphID, at: location.url)
         do {
+            if binding.route.zone.scope == .shared {
+                try await self.refreshCloudMembership(graphID, configuration: configuration)
+            }
             try await graph.pruneTransport(binding, retained: session.retainedReceiptIDs(for: graphID))
             let result = try await body(session, graph, binding, permit)
             try await graph.close(); return result
@@ -218,6 +247,7 @@ package actor GraphContextManager {
             var error: (any Error)?
             var retryAfter: TimeInterval?
             for pass in 0..<2 {
+                if let access = try await graph.participantAccess(), !access.writable { break }
                 let batch = try await graph.prepareTransport(binding, maximum: maximumRecords, onlyIDs: pass == 0 ? nil : retry)
                 if batch.items.isEmpty { retry.removeAll(); break }
                 do {
@@ -242,6 +272,15 @@ package actor GraphContextManager {
     private static func drainIncoming(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding,
                                       maximumEvents: Int) async throws -> GraphCloudApplyReport {
         var entries = try await session.incoming(for: binding.route.zone, limit: maximumEvents)
+        if await session.supportsSharingOperations(), let member = try await session.membership(graph.id), member.role == .participant {
+            if member.terminal { throw GraphCloudError.zoneUnavailable }
+            // A live server inspection already settled access before entering this data path.
+            let staleControls = entries.filter { GraphCloudShareControl.isControl($0.change) || $0.change.kind == .zoneDeleted }
+            if !staleControls.isEmpty {
+                try await session.consume(Set(staleControls.map(\.id)))
+                entries.removeAll { GraphCloudShareControl.isControl($0.change) || $0.change.kind == .zoneDeleted }
+            }
+        }
         // Access reduction must not wait for unrelated application payload decoding.
         if entries.contains(where: { $0.change.kind == .zoneDeleted }) { entries = entries.filter { $0.change.kind == .zoneDeleted } }
         if entries.isEmpty { return GraphCloudApplyReport(applied: 0, cleanupPending: false) }
@@ -255,7 +294,8 @@ package actor GraphContextManager {
                 let deleted = controls.contains { $0.change.kind == .recordDeleted }
                 let permission = deleted ? nil : permissions.last!
                 _ = try await graph.participantAccess(GraphCloudParticipantAccess(binding: prior.binding,
-                    account: prior.account, permission: permission, accepted: prior.accepted))
+                    account: prior.account, permission: permission, accepted: prior.accepted,
+                    identity: prior.identity, generation: prior.generation, blocked: prior.blocked))
             }
             // The local metadata transaction is idempotent if inbox cleanup fails or the process exits here.
             try await session.consume(Set(controls.map(\.id)))
@@ -395,11 +435,13 @@ package actor GraphContextManager {
     }
 
     private func canSynchronize(_ id: GraphID, inheriting permit: GraphCloudSyncPermit? = nil) -> Bool {
+        if blockedSharingGraphs.contains(id) { return false }
         let control = synchronization[id] ?? GraphCloudSyncControl()
         return control.state == .active || (permit?.graphID == id && permit.map { control.operations.contains($0.id) } == true)
     }
 
     private func admitSynchronization(_ id: GraphID, inheriting parent: GraphCloudSyncPermit? = nil) throws -> GraphCloudSyncPermit {
+        guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
         guard canSynchronize(id, inheriting: parent) else { throw GraphCloudError.graphPaused }
         let permit = GraphCloudSyncPermit(graphID: id, id: UUID())
         if synchronization[id] == nil { synchronization[id] = GraphCloudSyncControl() }
@@ -449,7 +491,7 @@ package actor GraphContextManager {
     }
 
 
-    private func automaticChanged() {
+    func automaticChanged() {
         for scheduler in automatic.values { Task { await scheduler.changedInventory() } }
     }
 
@@ -502,7 +544,9 @@ package actor GraphContextManager {
         do {
             guard entries[descriptor.id]?.generation == descriptor.generation else { throw GraphStoreError.closed }
             let report = try await sendCloudChanges(for: descriptor.id, configuration: configuration)
-            let remaining = try await graph.collectSyncChanges()
+            let remaining: Int
+            if let access = try await graph.participantAccess(), !access.writable { remaining = 0 }
+            else { remaining = try await graph.collectSyncChanges() }
             try await graph.close()
             return (report, remaining)
         } catch { let original = error; try? await graph.close(); throw original }
@@ -518,13 +562,18 @@ package actor GraphContextManager {
         automaticActivityRevision[configuration.namespace] = revision
         let scheduler = try await automaticScheduler(configuration, clock: clock)
         await scheduler.setActive(active, revision: revision)
+        await setSharingLifecycleActive(active, revision: revision, configuration: configuration, clock: clock)
     }
     package func requestCloudSynchronization(configuration: GraphCloudConfiguration) async throws {
         let scheduler = try await automaticScheduler(configuration)
         await scheduler.changedInventory(); await scheduler.request(explicit: true)
+        let ids = (try? await cloud(configuration).memberships().map { $0.binding.graphID }) ?? []
+        await requestSharingLifecycle(configuration, ids: ids, explicit: true)
     }
     package func notifyRemoteCloudChanges(in scope: GraphCloudScope, configuration: GraphCloudConfiguration) async throws {
         try await automaticScheduler(configuration).request(scope: scope)
+        let ids = (try? await cloud(configuration).memberships().filter { $0.binding.zone.scope == scope }.map { $0.binding.graphID }) ?? []
+        await requestSharingLifecycle(configuration, ids: ids, explicit: false)
     }
     package func automaticCloudSynchronizationStatus(for id: GraphID, configuration: GraphCloudConfiguration) async throws -> GraphAutomaticSyncStatus {
         let scheduler = try await automaticScheduler(configuration)
@@ -541,6 +590,8 @@ package actor GraphContextManager {
     func automaticSynchronizationIdle(_ configuration: GraphCloudConfiguration) async -> Bool {
         await automatic[configuration.namespace]?.diagnosticIdle ?? true
     }
+
+    func activeCloudConfigurations() -> [GraphCloudConfiguration] { cloudSessions.values.map(\.configuration) }
 
     // Internal lifecycle diagnostics for deterministic ownership tests.
     var attachmentRefreshWaiterCount: Int { get async { await attachmentRefresh.registeredWaiterCount } }
@@ -564,6 +615,7 @@ package actor GraphContextManager {
     private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphStore {
         do {
             try Task.checkCancellation()
+            guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
             let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
             if let existing = locations[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
             while true {
@@ -580,9 +632,10 @@ package actor GraphContextManager {
                 } else {
                     guard !entries.values.contains(where: { $0.key == resolved.key }) else { throw GraphStoreError.ownershipConflict }
                     let registry = registry, schema = schema, adapter = adapter, configuration = resolved.configuration
+                    let initiallyBlocked = rejoiningGraphs.contains(id)
                     let opening = Task.detached {
                         try await GraphCoordinator.open(id: id, configuration: configuration, creating: creating,
-                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy)
+                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked)
                     }
                     guard case .sqlite(let canonicalURL) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
                     entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, initialPolicy: conflictPolicy, opening: opening)
@@ -612,6 +665,7 @@ package actor GraphContextManager {
                     if !creating { try Task.checkCancellation() }
                     let graph = try await owner.lease { try await self.release(id, generation: generation, token: token) }
                     locations[id] = GraphLocation(key: entry.key, url: entry.url)
+                    try await restoreSharingOnOpen(id, owner: owner)
                     automaticChanged()
                     return graph
                 } catch {
@@ -634,7 +688,7 @@ package actor GraphContextManager {
         removeClosedEntry(id, generation: generation)
     }
 
-    private func removeClosedEntry(_ id: GraphID, generation: UUID) {
+    func removeClosedEntry(_ id: GraphID, generation: UUID) {
         guard entries[id]?.generation == generation else { return }
         entries.removeValue(forKey: id)
         // Either close or a waiting reopen may retire the owner first; both must reset idle pause state.

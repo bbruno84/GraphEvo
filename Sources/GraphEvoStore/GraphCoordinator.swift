@@ -31,7 +31,7 @@ package actor GraphCoordinator {
 
     static func open(id: GraphID, configuration: StoreConfiguration, creating: Bool,
                      registry: StoreRegistry, schema: StoreSchema, adapter: GraphCoordinatorAdapter,
-                     conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphCoordinator {
+                     conflictPolicy: GraphConflictPolicy = .lastEditWins, initiallyBlocked: Bool = false) async throws -> GraphCoordinator {
         guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
         let exists = FileManager.default.fileExists(atPath: url.path)
         if creating && exists { throw GraphStoreError.duplicateIdentity }
@@ -47,6 +47,12 @@ package actor GraphCoordinator {
             } else {
                 try await handle.read { try adapter.initialize($0, id, false) }
             }
+            if initiallyBlocked { try await handle.setDataAvailable(false) }
+            if !creating, let access = adapter.graph.participantAccess {
+                if try await handle.controlRead({ try access($0, id, nil) }) != nil {
+                    try await handle.setDataAvailable(false)
+                }
+            }
             return owner
         } catch {
             let original = error
@@ -54,6 +60,34 @@ package actor GraphCoordinator {
             catch { throw GraphCoordinatorQuarantine(owner: owner, failure: error) }
             throw original
         }
+    }
+
+    static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, registry: StoreRegistry,
+                                schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
+        let handle = try await registry.open(configuration, schema: schema)
+        try await handle.setDataAvailable(false)
+        return GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync)
+    }
+    func storeIdentity() async throws -> String {
+        let id = id
+        return try await handle.controlRead { context in
+            guard let coordinator = context.persistentStoreCoordinator, coordinator.persistentStores.count == 1,
+                  let store = coordinator.persistentStores.first else { throw GraphCloudError.invalidState }
+            let metadata = coordinator.metadata(for: store)
+            guard metadata[StoreNativeContext.historySyncGraphKey] as? String == id.rawValue.uuidString,
+                  let value = metadata[NSStoreUUIDKey] as? String else { throw GraphCloudError.invalidState }
+            return value
+        }
+    }
+    func setSharingDataAvailable(_ value: Bool) async throws { try await handle.setDataAvailable(value) }
+    func participantAccess(_ value: GraphCloudParticipantAccess? = nil) async throws -> GraphCloudParticipantAccess? {
+        guard let access = adapter.participantAccess else { throw GraphCloudSharingError.unavailable }
+        let id = id
+        return try await handle.controlTransaction { try access($0, id, value) }
+    }
+    func destroy(storeID: String) async throws {
+        await syncSession?.retire()
+        try await handle.destroy(graphID: id.rawValue, storeID: storeID)
     }
 
     func validateCloudBinding(_ initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) async throws {

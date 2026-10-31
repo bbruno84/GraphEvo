@@ -11,6 +11,7 @@ package enum StoreRuntimeError: Error {
     case storeReplaced(URL)
     case loadFailed(URL?, underlying: any Error)
     case shutdownFailed(URL?, underlying: any Error)
+    case dataUnavailable
     case closedHandle
     case synchronizationUnavailableInExtension
     case readOnlyStore
@@ -29,6 +30,7 @@ extension StoreRuntimeError: LocalizedError {
         case .storeReplaced: return "The SQLite file changed identity while owned by this runtime."
         case .loadFailed: return "The persistent store could not be loaded."
         case .shutdownFailed: return "The store could not be detached; its runtime ownership is retained."
+        case .dataUnavailable: return "Application data is unavailable until sharing recovery completes."
         case .closedHandle: return "The store handle is closed."
         case .synchronizationUnavailableInExtension: return "Cloud synchronization must be owned by the containing app."
         case .readOnlyStore: return "The store does not permit transactions."

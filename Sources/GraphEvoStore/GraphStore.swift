@@ -114,8 +114,10 @@ public actor GraphStore {
     package func participantAccess(_ value: GraphCloudParticipantAccess? = nil) async throws -> GraphCloudParticipantAccess? {
         guard let access = adapter.participantAccess else { throw GraphCloudSharingError.unavailable }
         let id = id
-        return try await handle.transaction { try access($0, id, value) }
+        return try await handle.controlTransaction { try access($0, id, value) }
     }
+
+    package func setSharingDataAvailable(_ value: Bool) async throws { try await handle.setDataAvailable(value) }
 
     // Created on this actor before suspension; concurrent first subscribers share one coordinator.
     func queryObservationCoordinator() -> GraphObservationCoordinator {
@@ -264,6 +266,7 @@ public actor GraphStore {
         case .missingStore: return GraphStoreError.missingStore
         case .readOnlyStore: return GraphStoreError.readOnly
         case .synchronizationUnavailableInExtension: return GraphStoreError.synchronizationUnavailableInExtension
+        case .dataUnavailable: return GraphStoreError.permissionDenied
         case .closedHandle: return GraphStoreError.closed
         case .configurationConflict: return GraphStoreError.ownershipConflict
         default: return GraphStoreError.persistence(underlying: error)
@@ -283,7 +286,7 @@ extension GraphStoreError: LocalizedError {
         case .foreignGraph: return "The node belongs to another graph."
         case .duplicateIdentity: return "The graph contains a duplicate logical node identity."
         case .corruptIdentity: return "The graph's persisted identity metadata is invalid."
-        case .permissionDenied: return "The current sharing metadata does not permit this write."
+        case .permissionDenied: return "The current sharing state does not permit this operation."
         case .sharedInsertionRequiresPreparation: return "New shared objects require an awaited native assignment operation."
         case .pendingNativeOperation: return "A previous native graph operation is still pending."
         case .missingGraph: return "The requested logical graph is not present in the local catalog."

@@ -43,6 +43,14 @@ extension GraphCloudAdapter {
                 try? await delegate.outbox.finish()
                 throw error
             }
+        }, forget: { zone in
+            let id = CKRecordZone.ID(zoneName: zone.name, ownerName: zone.owner)
+            engine.state.remove(pendingRecordZoneChanges: try engine.state.pendingRecordZoneChanges.filter { change in
+                switch change { case .saveRecord(let record), .deleteRecord(let record): return record.zoneID == id; @unknown default: throw GraphCloudError.invalidState }
+            })
+            engine.state.remove(pendingDatabaseChanges: try engine.state.pendingDatabaseChanges.filter { change in
+                switch change { case .saveZone(let zone): return zone.zoneID == id; case .deleteZone(let zone): return zone == id; @unknown default: throw GraphCloudError.invalidState }
+            })
         })
     })
 }

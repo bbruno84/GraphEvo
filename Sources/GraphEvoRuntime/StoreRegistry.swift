@@ -79,6 +79,21 @@ package actor StoreHandle {
         try await task.value
     }
 
+    package func controlRead<Value: Sendable>(_ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.read(key, generation: generation, token: token, control: true, body)
+    }
+    package func controlTransaction<Value: Sendable>(_ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.transaction(key, generation: generation, token: token, control: true, body)
+    }
+    package func setDataAvailable(_ value: Bool) async throws {
+        try await registry.setDataAvailable(key, generation: generation, token: token, value: value)
+    }
+    package func destroy(graphID: UUID, storeID: String) async throws {
+        try await registry.destroy(key, generation: generation, token: token, graphID: graphID, storeID: storeID)
+    }
+
     /// Package implementation boundary, not a public raw-context escape hatch.
     package func read<Value: Sendable>(
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
@@ -107,6 +122,8 @@ package actor StoreRegistry {
         var fileIdentities: [StoreKey: FileIdentity] = [:]
         var tokens: Set<UUID> = []
         var shutdown: Task<Void, any Error>?
+        var destroyToken: UUID?
+        var destroying = false
     }
 
     private let owner = UUID()
@@ -211,28 +228,56 @@ package actor StoreRegistry {
     fileprivate func snapshot(_ key: StoreKey, generation: UUID, token: UUID) async throws -> StoreRuntimeSnapshot {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
-        return try await resources.read { _ in
+        return try await resources.read(control: true) { _ in
             StoreRuntimeSnapshot(runtimeID: resources.id, location: entry.resolved.configuration.location,
                                  access: entry.resolved.configuration.access, schemaIdentifier: entry.schema.identifier)
         }
     }
 
     fileprivate func read<Value: Sendable>(
-        _ key: StoreKey, generation: UUID, token: UUID,
+        _ key: StoreKey, generation: UUID, token: UUID, control: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
-        return try await resources.read(body)
+        return try await resources.read(control: control, body)
     }
 
     fileprivate func transaction<Value: Sendable>(
-        _ key: StoreKey, generation: UUID, token: UUID,
+        _ key: StoreKey, generation: UUID, token: UUID, control: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
-        return try await resources.transaction(body)
+        return try await resources.transaction(control: control, body)
+    }
+
+    fileprivate func setDataAvailable(_ key: StoreKey, generation: UUID, token: UUID, value: Bool) async throws {
+        let entry = try entry(for: key, generation: generation, token: token)
+        try await entry.opening.value.setDataAvailable(value)
+    }
+
+    fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String) async throws {
+        guard var value = entries[key], value.generation == generation,
+              value.resolved.configuration.exclusiveGraphID == graphID,
+              value.destroyToken == token || (value.destroyToken == nil && value.tokens.contains(token) && value.shutdown == nil) else {
+            throw StoreRuntimeError.closedHandle
+        }
+        if value.destroying, let job = value.shutdown { return try await job.value }
+        if value.destroyToken == nil {
+            try validateIdentities(value.fileIdentities, current: value.resolved.resourceIdentities(), resolved: value.resolved)
+        }
+        let opening = value.opening
+        value.destroyToken = token; value.destroying = true; value.tokens.removeAll()
+        let job = Task { try await opening.value.destroy(graphID: graphID, storeID: storeID) }
+        value.shutdown = job; entries[key] = value
+        do {
+            try await job.value
+            if entries[key]?.generation == generation { entries.removeValue(forKey: key) }
+        } catch {
+            if entries[key]?.generation == generation { entries[key]?.destroying = false }
+            throw error
+        }
     }
 
     private func entry(for key: StoreKey, generation: UUID, token: UUID) throws -> Entry {

@@ -1068,3 +1068,20 @@ all handles, reopenings and attachments; imports bypass consumer write checks.
 Sharing uses T05 admission and the session scope gate/drain. S03 is unchanged;
 new session format 4 refuses old alpha state without modifying it. Historical
 A5 native sharing is not the replacement backend's acceptance evidence.
+
+
+## V2 T08 sharing lifecycle
+
+Read [T08](docs/design/graphevo-2-sharing-lifecycle.md) before lifecycle changes.
+Confirmed shared-access loss and explicit leave purge the participant's exclusive
+store and pending work; owner-private data remains. Inspect current membership
+before destructive interpretation of control events/errors. Joining absence,
+network/quota/authentication and read-only downgrade are not revocation evidence.
+Persist removal first, block app access, drain/invalidate every lease, and retain
+runtime claims through native destruction and exact owned-artifact cleanup.
+Restart registration supplies current URLs; check native UUID/purpose without app
+payload decoding. No persisted sandbox paths or silent old-alpha conversion.
+Old generations never regain access; rejoin is explicit, empty and resets only
+the shared engine through supported nil serialization. The control worker runs
+while foreground/paused but never fetches paused app bodies. Keep Debug purge
+barriers out of Release. Record exact physical pins separately from CI/review.

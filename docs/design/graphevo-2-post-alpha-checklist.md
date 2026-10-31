@@ -708,3 +708,14 @@ permission changes/offline/stale controls, concurrent invitations and actual
 interruption fault injection. Measure additional root access metadata and bounded
 session share-attempt markers with backup/recovery costs. Initial two-account
 sharing evidence does not close these gates or authorize native schema changes.
+
+
+## T08 sharing lifecycle follow-ups
+
+Candidate [T08](graphevo-2-sharing-lifecycle.md) introduces destructive participant
+cleanup, durable lifecycle commands/generations and whole shared-engine refetch
+on explicit rejoin. Retain **B** account/protected-data/cross-process reader,
+interruption and backup restoration coverage; **R** measure journal/tombstone
+retention, repeated subscription/refetch costs, external asset cleanup and long
+offline control retries. Do not infer distributed ordering or backup/secure-erasure
+certification from a bounded same-process purge or the initial hardware fixture.

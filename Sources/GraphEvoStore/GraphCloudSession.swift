@@ -10,11 +10,13 @@ enum GraphCloudEvent: Sendable {
 struct GraphCloudDriver: Sendable {
     let fetch: @Sendable ([GraphCloudZone]) async throws -> Void
     let cancel: @Sendable () async throws -> Void
+    let forget: (@Sendable (GraphCloudZone) async throws -> Void)?
     let send: (@Sendable (GraphCloudOutgoingBatch) async throws -> Void)?
     init(fetch: @escaping @Sendable ([GraphCloudZone]) async throws -> Void,
          cancel: @escaping @Sendable () async throws -> Void,
-         send: (@Sendable (GraphCloudOutgoingBatch) async throws -> Void)? = nil) {
-        self.fetch = fetch; self.cancel = cancel; self.send = send
+         send: (@Sendable (GraphCloudOutgoingBatch) async throws -> Void)? = nil,
+         forget: (@Sendable (GraphCloudZone) async throws -> Void)? = nil) {
+        self.fetch = fetch; self.cancel = cancel; self.send = send; self.forget = forget
     }
 }
 
@@ -44,6 +46,8 @@ actor GraphCloudSession {
     private let url: URL
     private var directoryLease: GraphCloudDirectoryLease?
     private var document: GraphCloudDocument
+    private var sharingObservers: [GraphID: [UUID: AsyncStream<GraphCloudSharingStatus>.Continuation]] = [:]
+    private var driverGenerations: [GraphCloudScope: UUID] = [:]
     private var drivers: [GraphCloudScope: GraphCloudDriver] = [:]
     private var failure: GraphCloudError?
     private var stopping: Task<Void, any Error>?
@@ -78,7 +82,7 @@ actor GraphCloudSession {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 4, doc.container == config.containerIdentifier, doc.environment == config.environment,
+                guard doc.format == 5, doc.container == config.containerIdentifier, doc.environment == config.environment,
                       doc.account == account else { throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -88,13 +92,31 @@ actor GraphCloudSession {
                       doc.bindings.allSatisfy({ !$0.zone.name.isEmpty && !$0.zone.owner.isEmpty }),
                       Set(doc.shareAttempts).count == doc.shareAttempts.count,
                       doc.shareAttempts.allSatisfy({ zone in zone.scope == .private && doc.bindings.contains { $0.zone == zone } }) else { throw GraphCloudError.invalidState }
+                guard Set(doc.memberships.map { $0.binding.graphID }).count == doc.memberships.count,
+                      Set(doc.memberships.map(\.generation)).count == doc.memberships.count,
+                      doc.memberships.allSatisfy({ $0.identity == GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account)
+                        && !$0.binding.zone.owner.isEmpty && !$0.binding.zone.name.isEmpty
+                        && (($0.role == .owner) == ($0.binding.zone.scope == .private))
+                        && ($0.role == .owner || $0.storeID?.isEmpty == false)
+                        && ($0.phase != .removed || !doc.bindings.contains($0.binding))
+                      }) else { throw GraphCloudError.invalidState }
                 guard Set(doc.sent.map(\.id)).count == doc.sent.count else { throw GraphCloudError.invalidState }
                 for receipt in doc.sent {
                     guard doc.bindings.contains(where: { $0.graphID == receipt.graphID && $0.zone == receipt.zone }) else { throw GraphCloudError.invalidState }
                     for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
                     for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
                 }
-                for entry in doc.inbox { try GraphCloudRecordCodec.validate(entry.change) }
+                for entry in doc.inbox {
+                    if let member = doc.memberships.first(where: { $0.role == .participant && $0.binding.zone == entry.change.zone }) {
+                        guard entry.membershipGeneration == member.generation else { throw GraphCloudError.invalidState }
+                    }
+                    try GraphCloudRecordCodec.validate(entry.change)
+                }
+                for receipt in doc.sent {
+                    if let member = doc.memberships.first(where: { $0.role == .participant && $0.binding.graphID == receipt.graphID }) {
+                        guard receipt.membershipGeneration == member.generation else { throw GraphCloudError.invalidState }
+                    }
+                }
             } else {
                 doc = GraphCloudDocument(container: config.containerIdentifier, environment: config.environment, account: account)
                 let bytes = try JSONEncoder().encode(doc)
@@ -125,8 +147,9 @@ actor GraphCloudSession {
     private func enable(_ scope: GraphCloudScope) throws {
         guard drivers[scope] == nil else { return }
         // A weak delegate closure prevents an engine/session retain cycle.
+        let generation = UUID(); driverGenerations[scope] = generation
         drivers[scope] = try adapter.make(configuration, scope, document.states[scope.rawValue]) { [weak self] event in
-            await self?.receive(event, scope: scope)
+            await self?.receive(event, scope: scope, driverGeneration: generation)
         }
     }
 
@@ -150,11 +173,15 @@ actor GraphCloudSession {
         guard data.count <= configuration.maximumBytes else { throw GraphCloudError.inboxLimit }
         do { try disk.write(url, data) } catch { throw GraphCloudError.persistence }
         document = candidate
+        for member in candidate.memberships {
+            for observer in sharingObservers[member.binding.graphID]?.values ?? [:].values { observer.yield(member.status) }
+        }
     }
 
     func bind(_ binding: GraphCloudBinding) throws {
         try check()
         guard !binding.zone.owner.isEmpty, !binding.zone.name.isEmpty else { throw GraphCloudError.invalidConfiguration }
+        if document.memberships.contains(where: { $0.binding.graphID == binding.graphID && $0.terminal }) { throw GraphCloudError.zoneUnavailable }
         if document.bindings.contains(binding) { return }
         guard !document.bindings.contains(where: { $0.zone == binding.zone || $0.graphID == binding.graphID }) else {
             throw GraphCloudError.ownershipConflict
@@ -166,7 +193,8 @@ actor GraphCloudSession {
         } catch { block(error as? GraphCloudError ?? .persistence); throw error }
     }
 
-    func receive(_ event: GraphCloudEvent, scope: GraphCloudScope) {
+    func receive(_ event: GraphCloudEvent, scope: GraphCloudScope, driverGeneration: UUID? = nil) {
+        if let driverGeneration, driverGenerations[scope] != driverGeneration { return }
         guard failure == nil, !stopped else { return }
         // During cancellation, admitted fetch callbacks must still be persisted.
         do {
@@ -180,9 +208,13 @@ actor GraphCloudSession {
                 for change in changes { try GraphCloudRecordCodec.validate(change) }
                 guard changes.count <= configuration.maximumEvents - document.eventCount else { throw GraphCloudError.inboxLimit }
                 var next = document
-                next.inbox += changes.map { GraphCloudInboxEntry(id: UUID(), change: $0) }
+                next.inbox += changes.compactMap { change in
+                    let member = next.memberships.first { $0.binding.zone == change.zone && $0.role == .participant }
+                    if member?.terminal == true { return nil }
+                    return GraphCloudInboxEntry(id: UUID(), change: change, membershipGeneration: member?.generation)
+                }
                 if !changes.isEmpty { try publish(next) }
-            case .sent(let receipt):
+            case .sent(var receipt):
                 guard let batch = outbound[scope], receipt.batchID == batch.id, receipt.graphID == batch.graphID,
                       receipt.zone == batch.zone, receipt.zone.scope == scope else { throw GraphCloudError.invalidState }
                 let items = Dictionary(uniqueKeysWithValues: batch.items.map { ($0.recordName, $0.change.operation) })
@@ -194,6 +226,10 @@ actor GraphCloudSession {
                       receipt.failures.allSatisfy({ items[$0.recordName] != nil }) else { throw GraphCloudError.invalidState }
                 for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
                 for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
+                if let member = document.memberships.first(where: { $0.binding.graphID == receipt.graphID && $0.role == .participant }) {
+                    if member.terminal { return }
+                    receipt.membershipGeneration = member.generation
+                }
                 var next = document; next.sent.append(receipt); try publish(next)
             case .failure(let error): throw error
             case .account(let account):
@@ -294,7 +330,10 @@ actor GraphCloudSession {
         let config = configuration
         let permission = try await control(.shared) { service, account in try await service.accept(config, invitation, account) }
         try bind(binding)
-        return GraphCloudParticipantAccess(binding: binding, account: document.account, permission: permission, accepted: true)
+        var member = document.memberships.first { $0.binding.graphID == invitation.graphID }
+        if var value = member { value.permission = permission; try updateMembership(value); member = value }
+        return GraphCloudParticipantAccess(binding: binding, account: document.account, permission: permission, accepted: true,
+            identity: try identity(), generation: member?.generation)
     }
 
     func identity() throws -> GraphCloudSessionIdentity {
@@ -385,7 +424,113 @@ actor GraphCloudSession {
     private func finishStop() async {
         if fetches > 0 { await withCheckedContinuation { drains.append($0) } }
         stopped = true
-        drivers.removeAll(); directoryLease = nil
+        drivers.removeAll(); driverGenerations.removeAll(); directoryLease = nil
+        for values in sharingObservers.values { for value in values.values { value.finish() } }; sharingObservers.removeAll()
         await GraphCloudOwnership.shared.release(configuration.containerIdentifier, owner: owner)
+    }
+}
+
+extension GraphCloudSession {
+    private func acceptsDriver(_ scope: GraphCloudScope, generation: UUID) -> Bool { driverGenerations[scope] == generation }
+
+    private func verifySharingAccount(_ expected: String) async throws {
+        let actual = try await adapter.account(configuration.containerIdentifier)
+        guard actual == expected else { block(.accountChanged); throw GraphCloudError.accountChanged }
+        try check()
+    }
+    func memberships() throws -> [GraphCloudMembership] { try check(); return document.memberships }
+    func membership(_ id: GraphID) throws -> GraphCloudMembership? { try check(); return document.memberships.first { $0.binding.graphID == id } }
+    func updateMembership(_ value: GraphCloudMembership) throws {
+        try check()
+        if let prior = document.memberships.first(where: { $0.binding.graphID == value.binding.graphID }) {
+            guard prior.generation == value.generation, prior.binding == value.binding else { throw GraphCloudError.invalidState }
+        }
+        var next = document; next.memberships.removeAll { $0.binding.graphID == value.binding.graphID }; next.memberships.append(value)
+        try publish(next)
+    }
+    func beginMembership(_ binding: GraphCloudBinding, storeID: String, shareIdentity: String) async throws -> GraphCloudMembership {
+        try check()
+        if let existing = try membership(binding.graphID) {
+            guard existing.binding == binding else { throw GraphCloudError.ownershipConflict }
+            if existing.phase != .removed {
+                guard !existing.terminal, existing.storeID == storeID else { throw GraphCloudError.zoneUnavailable }
+                return existing
+            }
+            guard existing.pending == nil, existing.storeID != storeID else { throw GraphCloudError.busy }
+            try await resetSharedDriver()
+        }
+        let member = GraphCloudMembership(binding: binding, identity: try identity(), generation: UUID(), role: .participant,
+            phase: .joining, permission: nil, storeID: storeID, shareIdentity: shareIdentity)
+        var next = document; next.memberships.removeAll { $0.binding.graphID == binding.graphID }; next.memberships.append(member)
+        next.inbox.removeAll { $0.change.zone == binding.zone }
+        next.sent.removeAll { $0.graphID == binding.graphID }
+        try publish(next); return member
+    }
+    func inspectSharing(_ binding: GraphCloudBinding) async throws -> GraphCloudShareSnapshot? {
+        let config = configuration
+        return try await control(binding.zone.scope) { service, account in
+            guard let inspect = service.operations?.inspect else { throw GraphCloudSharingError.unavailable }
+            try await self.verifySharingAccount(account)
+            return try await inspect(config, binding, account)
+        }
+    }
+    func supportsSharingOperations() -> Bool { adapter.sharing?.operations != nil }
+
+    func executeSharing(_ member: GraphCloudMembership) async throws {
+        guard let intent = member.pending else { return }
+        let config = configuration
+        try await control(member.binding.zone.scope) { service, account in
+            guard let execute = service.operations?.execute else { throw GraphCloudSharingError.unavailable }
+            try await self.verifySharingAccount(account)
+            try await execute(config, member.binding, account, intent)
+        }
+        guard var current = try membership(member.binding.graphID), current.generation == member.generation, current.pending?.id == intent.id else { throw GraphCloudError.invalidState }
+        current.pending = nil; current.failure = nil
+        if intent.command == .stop {
+            current.shareIdentity = nil
+            var next = document; next.shareAttempts.removeAll { $0 == member.binding.zone }
+            next.memberships.removeAll { $0.binding.graphID == member.binding.graphID }; next.memberships.append(current)
+            try publish(next)
+        } else { try updateMembership(current) }
+    }
+    func completePurge(_ id: GraphID, generation: UUID) async throws {
+        guard var member = try membership(id), member.generation == generation, member.role == .participant, member.terminal else { throw GraphCloudError.invalidState }
+        if let forget = drivers[member.binding.zone.scope]?.forget {
+            let zone = member.binding.zone
+            try await control(zone.scope) { _, _ in try await forget(zone) }
+        }
+        member.phase = .removed; member.permission = nil; member.failure = nil
+        var next = document
+        next.inbox.removeAll { $0.change.zone == member.binding.zone }
+        next.sent.removeAll { $0.graphID == id }
+        next.bindings.removeAll { $0.graphID == id }
+        next.memberships.removeAll { $0.binding.graphID == id }; next.memberships.append(member)
+        try publish(next)
+    }
+    func observeSharing(_ id: GraphID) throws -> AsyncStream<GraphCloudSharingStatus> {
+        guard let value = try membership(id) else { throw GraphStoreError.missingGraph }
+        let token = UUID(), pair = AsyncStream<GraphCloudSharingStatus>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        sharingObservers[id, default: [:]][token] = pair.continuation
+        pair.continuation.yield(value.status)
+        pair.continuation.onTermination = { [weak self] _ in Task { await self?.removeSharingObserver(id, token: token) } }
+        return pair.stream
+    }
+    private func removeSharingObserver(_ id: GraphID, token: UUID) { sharingObservers[id]?.removeValue(forKey: token) }
+
+    /// Never edit opaque Apple tokens. Drain/cancel one scope before replacing its sole driver.
+    private func resetSharedDriver() async throws {
+        try check()
+        guard activeFetches.insert(.shared).inserted else { throw GraphCloudError.busy }
+        fetches += 1
+        defer {
+            activeFetches.remove(.shared); fetches -= 1
+            if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
+        }
+        try await drivers[.shared]?.cancel()
+        try check()
+        driverGenerations.removeValue(forKey: .shared); drivers.removeValue(forKey: .shared)
+        var next = document; next.states.removeValue(forKey: GraphCloudScope.shared.rawValue)
+        try publish(next)
+        try enable(.shared)
     }
 }

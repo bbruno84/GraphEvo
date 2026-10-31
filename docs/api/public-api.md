@@ -1639,3 +1639,14 @@ use shared zones. Read-only/pending participant mutations are refused across
 handles, while import remains separate from acceptance. See the
 [T07 contract](../design/graphevo-2-zone-sharing.md) for alpha state compatibility
 and protected capability transport requirements.
+
+
+### Package-only T08 sharing lifecycle candidate
+
+No new public opener is exposed. Internal ContextManager operations manage
+participants/permissions, stop sharing, leave, observe/recheck participation,
+register current recovery locations and explicitly accept into a new empty store.
+Confirmed loss and leave remove the participant replica even with pending edits;
+old GraphStore handles are closed. Read-only downgrade retains data and continues
+imports. Reopened participant data requires verified session-journal attachment.
+See [T08](../design/graphevo-2-sharing-lifecycle.md) for state format 5 and recovery.

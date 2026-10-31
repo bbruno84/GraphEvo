@@ -4,7 +4,7 @@ import GraphEvoModel
 
 package enum GraphCloudSharePermission: String, Codable, Sendable { case readOnly, readWrite }
 package enum GraphCloudSharingError: Error, Equatable {
-    case invalidInvitation, invalidParticipant, ownerRequired, metadataPending, nonemptyReplica, unavailable
+    case invalidInvitation, invalidParticipant, ownerRequired, metadataPending, nonemptyReplica, unavailable, superseded
 }
 
 /// A private capability. Hosts must protect its transport; never log identities or URLs.
@@ -26,23 +26,29 @@ package struct GraphCloudInvitation: Codable, Equatable, Sendable {
 
 /// Stored only in reserved local metadata. Absence means an ordinary local/owner graph.
 package struct GraphCloudParticipantAccess: Codable, Equatable, Sendable {
+    package let format: Int
+    package let identity: GraphCloudSessionIdentity?
+    package let generation: UUID?
+    package let blocked: Bool
     package let binding: GraphCloudBinding
     package let account: String
     package let permission: GraphCloudSharePermission?
     package let accepted: Bool
-    package init(binding: GraphCloudBinding, account: String, permission: GraphCloudSharePermission?, accepted: Bool) {
+    package init(binding: GraphCloudBinding, account: String, permission: GraphCloudSharePermission?, accepted: Bool, identity: GraphCloudSessionIdentity? = nil, generation: UUID? = nil, blocked: Bool = false) {
+        self.format = 2; self.identity = identity; self.generation = generation; self.blocked = blocked
         self.binding = binding; self.account = account; self.permission = permission; self.accepted = accepted
     }
-    package var writable: Bool { accepted && permission == .readWrite }
+    package var writable: Bool { !blocked && accepted && permission == .readWrite }
 }
 
 struct GraphCloudSharingService: Sendable {
+    var operations: GraphCloudSharingOperations? = nil
     let invite: @Sendable (GraphCloudConfiguration, GraphCloudBinding, String, String, GraphCloudSharePermission, Bool, @escaping @Sendable () async throws -> Void) async throws -> GraphCloudInvitation
     let accept: @Sendable (GraphCloudConfiguration, GraphCloudInvitation, String) async throws -> GraphCloudSharePermission
 }
 
 extension GraphCloudSharingService {
-    static let live = GraphCloudSharingService(invite: { config, binding, account, recipient, permission, mayCreate, beforeCreate in
+    static let live = GraphCloudSharingService(operations: .live, invite: { config, binding, account, recipient, permission, mayCreate, beforeCreate in
         guard binding.zone.scope == .private,
               binding.zone.owner == CKCurrentUserDefaultName || binding.zone.owner == account else { throw GraphCloudSharingError.ownerRequired }
         guard !recipient.isEmpty, recipient != account else { throw GraphCloudSharingError.invalidParticipant }

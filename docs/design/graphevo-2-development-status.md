@@ -6,6 +6,14 @@ delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
+## Current focused work
+
+T08 [sharing lifecycle](graphevo-2-sharing-lifecycle.md) is a candidate on
+`codex/v2-sharing-lifecycle`, directly from #119 (`3260627`) to
+`codex/graphevo-2`. Confirmed loss/leave removes participant data and pending work;
+owner data survives. S03/wire formats are unchanged; session format 5 is explicit.
+Implementation and local/device checks precede review, CI and authorized merge.
+
 ## Latest integrated increment
 
 [T07 explicit custom zone sharing](graphevo-2-zone-sharing.md),

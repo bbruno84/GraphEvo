@@ -11,6 +11,8 @@ struct StoreLifecycleHooks: Sendable {
     var didQueueWriter: (@Sendable () async -> Void)?
     var didBeginClose: (@Sendable () async -> Void)?
     var beforeDetach: (@Sendable () async throws -> Void)?
+    var beforeDestroy: (@Sendable () async throws -> Void)?
+    var didDestroy: (@Sendable () async throws -> Void)?
     var didLoadStore: (@Sendable (URL?) throws -> Void)?
 }
 
@@ -27,6 +29,8 @@ actor StoreResources {
     private var writerBusy = false
     private var writers: [(UUID, CheckedContinuation<Void, any Error>)] = []
     private var closing = false
+    private var dataAvailable = true
+    private var destructionIssued = false
     private var admitted = 0
     private var drain: CheckedContinuation<Void, Never>?
 
@@ -145,9 +149,10 @@ actor StoreResources {
     }
 
     /// Trusted adapter boundary: bodies return values and must never save or escape contexts.
-    func read<Value: Sendable>(
+    func read<Value: Sendable>(control: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
+        guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
         try admit()
         defer { finish() }
         let cancellation = OperationCancellation()
@@ -179,10 +184,11 @@ actor StoreResources {
     }
 
     /// FIFO among admitted local writers; native save is the cancellation boundary.
-    func transaction<Value: Sendable>(
+    func transaction<Value: Sendable>(control: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
+        guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
         try admit()
         defer { finish() }
         let cancellation = OperationCancellation()
@@ -283,8 +289,53 @@ actor StoreResources {
         catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
     }
 
-    private func detach() async throws {
-        try await hooks.beforeDetach?()
+    func setDataAvailable(_ value: Bool) throws {
+        guard !closing else { throw StoreRuntimeError.closedHandle }
+        dataAvailable = value
+    }
+
+    /// Invalidate every lease, drain admitted work, and retain claims until native destruction succeeds.
+    func destroy(graphID: UUID, storeID: String) async throws {
+        guard resolved.configuration.exclusiveGraphID == graphID,
+              resolved.configuration.access == .readWrite,
+              resolved.configuration.cloudKitContainerIdentifier == nil,
+              resolved.configuration.sharedStoreURL == nil, let url = resolved.url else {
+            throw StoreRuntimeError.invalidConfiguration("Only an exclusive coordinated graph can be destroyed.")
+        }
+        closing = true; invalidations.finish()
+        if admitted > 0 { await withCheckedContinuation { drain = $0 } }
+        if !destructionIssued, FileManager.default.fileExists(atPath: url.path) {
+            // Temporary Core Data metadata readers must release their SQLite connections before destruction.
+            try autoreleasepool {
+                let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
+                guard metadata[NSStoreUUIDKey] as? String == storeID,
+                      metadata[StoreNativeContext.historySyncGraphKey] as? String == graphID.uuidString else {
+                    throw StoreRuntimeError.storeReplaced(url)
+                }
+            }
+            try await hooks.beforeDetach?()
+            try await hooks.beforeDestroy?()
+            try autoreleasepool {
+                try container.persistentStoreCoordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
+            }
+            destructionIssued = true
+            try await detach(releasing: false, runHook: false)
+        } else {
+            try await detach(releasing: false)
+        }
+        // Core Data destroys the store/content first. Remove only its explicitly owned SQLite artifacts;
+        // some SDK versions retain empty SQLite/WAL/SHM placeholders after the native destruction.
+        for artifact in [url, URL(fileURLWithPath: url.path + "-wal"), URL(fileURLWithPath: url.path + "-shm")] {
+            do {
+                if FileManager.default.fileExists(atPath: artifact.path) { try FileManager.default.removeItem(at: artifact) }
+            } catch let error as CocoaError where error.code == .fileNoSuchFile { }
+        }
+        try await hooks.didDestroy?()
+        for gateway in gateways { gateway.release() }
+    }
+
+    private func detach(releasing: Bool = true, runHook: Bool = true) async throws {
+        if runHook { try await hooks.beforeDetach?() }
         for store in container.persistentStoreCoordinator.persistentStores {
             try container.persistentStoreCoordinator.remove(store)
         }
@@ -293,7 +344,7 @@ actor StoreResources {
         for observer in changeObservers { NotificationCenter.default.removeObserver(observer) }
         changeObservers.removeAll()
         invalidations.finish()
-        for gateway in gateways { gateway.release() }
+        if releasing { for gateway in gateways { gateway.release() } }
     }
 }
 
