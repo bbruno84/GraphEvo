@@ -29,7 +29,9 @@ package actor GraphContextManager {
     }
     private var cloudSessions: [String: CloudOpening] = [:]
     private var transportGraphs = Set<GraphID>()
-    private let attachmentRefresh = GraphCloudAttachmentRefresh()
+    private let attachmentRefresh = GraphCloudAttachmentRefresh<Void>()
+    private let attachmentFetch = GraphCloudAttachmentRefresh<Set<GraphID>>()
+    private var synchronization: [GraphID: GraphCloudSyncControl] = [:]
 
     @available(iOS 17, macOS 14, *)
     package func startCloudSession(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudStatus {
@@ -70,8 +72,24 @@ package actor GraphContextManager {
     }
 
     package func fetchCloudChanges(_ scope: GraphCloudScope, configuration: GraphCloudConfiguration) async throws {
-        try await cloud(configuration).fetch(scope)
+        _ = try await fetchAdmitted(scope, configuration: configuration)
     }
+
+    private func fetchAdmitted(_ scope: GraphCloudScope, configuration: GraphCloudConfiguration,
+        inheriting parent: GraphCloudSyncPermit? = nil, only graphID: GraphID? = nil) async throws -> Set<GraphID> {
+        let session = try await cloud(configuration)
+        let routes = try await session.routes(in: scope)
+        let selected = routes.filter { route in
+            (graphID == nil || route.graphID == graphID) && canSynchronize(route.graphID, inheriting: parent)
+        }
+        // Preserve control-only fetches for an unbound scope; a fully paused bound scope does no network work.
+        if selected.isEmpty && !routes.isEmpty { return [] }
+        let permits = try selected.map { try admitSynchronization($0.graphID, inheriting: parent) }
+        defer { for permit in permits { finishSynchronization(permit) } }
+        try await session.fetch(scope, zones: Set(selected.map(\.zone)))
+        return Set(selected.map(\.graphID))
+    }
+
     package func cloudStatus(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudStatus {
         await (try cloud(configuration)).status()
     }
@@ -91,7 +109,9 @@ package actor GraphContextManager {
     }
 
     private func withTransport<Value: Sendable>(_ graphID: GraphID, configuration: GraphCloudConfiguration,
-        body: @Sendable (GraphCloudSession, GraphStore, GraphCloudTransportBinding) async throws -> Value) async throws -> Value {
+        body: @Sendable (GraphCloudSession, GraphStore, GraphCloudTransportBinding, GraphCloudSyncPermit) async throws -> Value) async throws -> Value {
+        let permit = try admitSynchronization(graphID)
+        defer { finishSynchronization(permit) }
         guard transportGraphs.insert(graphID).inserted else { throw GraphCloudError.busy }
         defer { transportGraphs.remove(graphID) }
         let session = try await cloud(configuration), route = try await session.route(for: graphID)
@@ -100,7 +120,7 @@ package actor GraphContextManager {
         let graph = try await openGraph(id: graphID, at: location.url)
         do {
             try await graph.pruneTransport(binding, retained: session.retainedReceiptIDs(for: graphID))
-            let result = try await body(session, graph, binding)
+            let result = try await body(session, graph, binding, permit)
             try await graph.close(); return result
         } catch {
             let original = error; try? await graph.close(); throw original
@@ -127,7 +147,7 @@ package actor GraphContextManager {
     }
     package func sendCloudChanges(for graphID: GraphID, configuration: GraphCloudConfiguration,
                                   maximumRecords: Int = 100) async throws -> GraphCloudSendReport {
-        try await withTransport(graphID, configuration: configuration) { session, graph, binding in
+        try await withTransport(graphID, configuration: configuration) { session, graph, binding, _ in
             let previous = try await Self.drainSent(session, graph: graph, binding: binding)
             let incoming = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: 4096)
             var succeeded = previous.succeeded, failures = previous.failures
@@ -171,7 +191,7 @@ package actor GraphContextManager {
     }
     package func applyCloudInbox(for graphID: GraphID, configuration: GraphCloudConfiguration,
                                  maximumEvents: Int = 4096) async throws -> GraphCloudApplyReport {
-        try await withTransport(graphID, configuration: configuration) { session, graph, binding in
+        try await withTransport(graphID, configuration: configuration) { session, graph, binding, _ in
             let sent = try await Self.drainSent(session, graph: graph, binding: binding)
             let incoming = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: maximumEvents)
             return GraphCloudApplyReport(applied: incoming.applied, cleanupPending: sent.cleanupPending || incoming.cleanupPending,
@@ -189,15 +209,13 @@ package actor GraphContextManager {
         do {
             var content = try await graph.read { try $0.attachment(id) }
             if content == nil {
-                let session = try await cloud(configuration), route = try await session.route(for: id.graphID)
+                guard canSynchronize(id.graphID) else { throw GraphCloudError.graphPaused }
                 let refresh = attachmentRefresh
                 let graphKey = configuration.namespace + ":graph:" + id.graphID.rawValue.uuidString
-                let scopeKey = configuration.namespace + ":scope:" + route.zone.scope.rawValue
                 try await withThrowingTaskGroup(of: Void.self) { group in
                     group.addTask {
                         try await refresh.run(graphKey) {
-                            try await refresh.run(scopeKey) { try await self.fetchCloudChanges(route.zone.scope, configuration: configuration) }
-                            _ = try await self.applyCloudInbox(for: id.graphID, configuration: configuration)
+                            try await self.refreshCloudAttachment(for: id.graphID, configuration: configuration)
                         }
                     }
                     group.addTask { try await Task.sleep(for: timeout); throw GraphCloudError.attachmentTimeout }
@@ -215,7 +233,126 @@ package actor GraphContextManager {
         }
     }
 
+    private func refreshCloudAttachment(for id: GraphID, configuration: GraphCloudConfiguration) async throws {
+        try await withTransport(id, configuration: configuration) { session, graph, binding, permit in
+            let fetch = self.attachmentFetch
+            let key = configuration.namespace + ":scope:" + binding.route.zone.scope.rawValue
+            let covered = try await fetch.run(key) {
+                try await self.fetchAdmitted(binding.route.zone.scope, configuration: configuration, inheriting: permit)
+            }
+            // A graph resumed after the shared fetch's snapshot may not be covered by it.
+            if !covered.contains(id) {
+                _ = try await self.fetchAdmitted(binding.route.zone.scope, configuration: configuration, inheriting: permit, only: id)
+            }
+            _ = try await Self.drainSent(session, graph: graph, binding: binding)
+            _ = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: 4096)
+        }
+    }
+
+    private func requireOpenGraph(_ id: GraphID) throws {
+        guard let entry = entries[id], entry.ready, entry.closing == nil else { throw GraphStoreError.missingGraph }
+    }
+
+    package func cloudSynchronizationState(for id: GraphID) throws -> GraphCloudSyncState {
+        try requireOpenGraph(id)
+        return synchronization[id]?.state ?? .active
+    }
+
+    package func observeCloudSynchronization(for id: GraphID) throws -> AsyncStream<GraphCloudSyncState> {
+        try requireOpenGraph(id)
+        let token = UUID()
+        let pair = AsyncStream<GraphCloudSyncState>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        var control = synchronization[id] ?? GraphCloudSyncControl()
+        control.observers[token] = pair.continuation
+        synchronization[id] = control
+        pair.continuation.yield(control.state)
+        pair.continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeSynchronizationObserver(id, token: token) }
+        }
+        return pair.stream
+    }
+
+    package func pauseCloudSynchronization(for id: GraphID) async throws {
+        try Task.checkCancellation()
+        try requireOpenGraph(id)
+        var control = synchronization[id] ?? GraphCloudSyncControl()
+        if control.state == .active {
+            control.state = .pauseRequested
+            synchronization[id] = control
+            for observer in control.observers.values { observer.yield(.pauseRequested) }
+        }
+        if control.operations.isEmpty {
+            if control.state != .paused {
+                control.state = .paused
+                synchronization[id] = control
+                for observer in control.observers.values { observer.yield(.paused) }
+            }
+            return
+        }
+        let token = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                if Task.isCancelled { continuation.resume(throwing: CancellationError()); return }
+                synchronization[id]!.waiters[token] = continuation
+            }
+        } onCancel: { Task { await self.cancelPauseWaiter(id, token: token) } }
+    }
+
+    package func resumeCloudSynchronization(for id: GraphID) throws {
+        try requireOpenGraph(id)
+        var control = synchronization[id] ?? GraphCloudSyncControl()
+        guard control.state != .pauseRequested else { throw GraphCloudError.busy }
+        if control.state == .paused {
+            control.state = .active
+            synchronization[id] = control
+            for observer in control.observers.values { observer.yield(.active) }
+        }
+    }
+
+    private func canSynchronize(_ id: GraphID, inheriting permit: GraphCloudSyncPermit? = nil) -> Bool {
+        let control = synchronization[id] ?? GraphCloudSyncControl()
+        return control.state == .active || (permit?.graphID == id && permit.map { control.operations.contains($0.id) } == true)
+    }
+
+    private func admitSynchronization(_ id: GraphID, inheriting parent: GraphCloudSyncPermit? = nil) throws -> GraphCloudSyncPermit {
+        guard canSynchronize(id, inheriting: parent) else { throw GraphCloudError.graphPaused }
+        let permit = GraphCloudSyncPermit(graphID: id, id: UUID())
+        if synchronization[id] == nil { synchronization[id] = GraphCloudSyncControl() }
+        synchronization[id]!.operations.insert(permit.id)
+        return permit
+    }
+
+    private func finishSynchronization(_ permit: GraphCloudSyncPermit) {
+        guard var control = synchronization[permit.graphID], control.operations.remove(permit.id) != nil else { return }
+        var completed: [CheckedContinuation<Void, any Error>] = []
+        if control.operations.isEmpty && control.state == .pauseRequested {
+            control.state = .paused
+            completed = Array(control.waiters.values); control.waiters.removeAll()
+            for observer in control.observers.values { observer.yield(.paused) }
+        }
+        synchronization[permit.graphID] = control
+        for waiter in completed { waiter.resume() }
+        resetClosedSynchronization(permit.graphID)
+    }
+
+    private func cancelPauseWaiter(_ id: GraphID, token: UUID) {
+        synchronization[id]?.waiters.removeValue(forKey: token)?.resume(throwing: CancellationError())
+    }
+    private func removeSynchronizationObserver(_ id: GraphID, token: UUID) {
+        synchronization[id]?.observers.removeValue(forKey: token)
+    }
+    private func resetClosedSynchronization(_ id: GraphID) {
+        guard entries[id] == nil, let control = synchronization[id], control.operations.isEmpty else { return }
+        synchronization.removeValue(forKey: id)
+        for waiter in control.waiters.values { waiter.resume(throwing: GraphStoreError.closed) }
+        for observer in control.observers.values { observer.finish() }
+    }
+
     deinit {
+        for control in synchronization.values {
+            for waiter in control.waiters.values { waiter.resume(throwing: GraphStoreError.closed) }
+            for observer in control.observers.values { observer.finish() }
+        }
         for opening in cloudSessions.values {
             Task {
                 do { try await opening.task.value.stop() }
@@ -226,6 +363,7 @@ package actor GraphContextManager {
     }
 
     // Internal lifecycle diagnostics for deterministic ownership tests.
+    var attachmentFetchWaiterCount: Int { get async { await attachmentFetch.registeredWaiterCount } }
     var registeredGraphCount: Int { entries.count }
     var registeredHandleCount: Int { entries.values.reduce(0) { $0 + $1.tokens.count } }
 
@@ -311,5 +449,6 @@ package actor GraphContextManager {
         entries[id] = entry
         try await closing.value
         if entries[id]?.generation == generation { entries.removeValue(forKey: id) }
+        resetClosedSynchronization(id)
     }
 }

@@ -205,7 +205,12 @@ actor GraphCloudSession {
         cancellation = Task { try await Self.cancelAll(values) }
     }
 
-    func fetch(_ scope: GraphCloudScope) async throws {
+    func routes(in scope: GraphCloudScope) throws -> [GraphCloudBinding] {
+        try check()
+        return document.bindings.filter { $0.zone.scope == scope }
+    }
+
+    func fetch(_ scope: GraphCloudScope, zones selected: Set<GraphCloudZone>? = nil) async throws {
         try check()
         guard let driver = drivers[scope] else { throw GraphCloudError.invalidConfiguration }
         guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }
@@ -216,7 +221,8 @@ actor GraphCloudSession {
             if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
         }
         let zones = document.bindings.filter { $0.zone.scope == scope }.map(\.zone)
-        try await driver.fetch(zones)
+        if let selected { guard selected.isSubset(of: Set(zones)) else { throw GraphCloudError.invalidConfiguration } }
+        try await driver.fetch(zones.filter { selected?.contains($0) ?? true })
         if let failure { throw failure }
     }
 
