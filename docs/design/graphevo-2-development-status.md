@@ -205,8 +205,8 @@ The maintainer selects [explicit CI checkpoints](graphevo-2-ci-checkpoints.md)
 instead of a full macOS/iOS run on every alpha PR and every integration push.
 Review and appropriate local verification still apply to each increment. Record
 whether remote checks ran or were skipped; only an actual successful run is a
-full checkpoint. Latest reviewed code checkpoint: #115, `85efea1`, CI `41201271653`
-(macOS/iOS green). The following #112 runs remain historical checkpoints.
+full checkpoint. Latest reviewed code checkpoint: #116, `698a94b`, CI `41205963479`
+(macOS/iOS green). #115 remains the prior conflict-policy checkpoint. The following #112 runs remain historical checkpoints.
 The policy is reviewed/merged through #113 as `31eac7c`; ordinary-alpha run
 `41193277258` skipped all expensive jobs, validating policy rather than executing
 tests. Stable/v1/release automatic checks remain enabled. The #112 integration
@@ -214,9 +214,9 @@ run `41192922760` also passed on `30f7089` before the new policy took effect.
 
 ## Next steps and operating rule
 
-1. T03 automatic conflict policies are integrated through #115 after review
-   corrections and full CI. Discuss the CKAsset attachment transport next;
-   structural conflicts, automatic sync, pause and sharing remain subsequent work.
+1. T03 conflict policies and T04 CKAsset transport are integrated through #115
+   and #116 after review and full CI checkpoints. Structural conflicts, automatic
+   sync, pause and sharing remain subsequent work on the custom backend.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
@@ -274,8 +274,10 @@ The [physical result](results/cloud-assets-2026-10-31.md) retains the initial fi
 error and the real missing-conflict-asset failure, plus guarded continuations.
 Corrected runtime834e674 passes both policies, reopen/cascade and fresh recovery;
 full local validation passes679 functions and selected iOS18.5 passes63/90.
-[PR #116](https://github.com/bbruno84/GraphEvo/pull/116) targets `codex/graphevo-2`;
-final restoration hardening also passes680 local functions and iOS18.5 64/91;
-local/device review is complete and one full CI checkpoint is requested
-on the final documentation head. Integration remains pending. Extra
-durable content copies and broad account/sharing/crash/backup costs remain gates.
+[PR #116](https://github.com/bbruno84/GraphEvo/pull/116) integrates this increment
+into `codex/graphevo-2` following final review and maintainer-authorized merge.
+Final restoration hardening passes 680 local functions and iOS18.5 64/91.
+Reviewed code head `698a94bc0786e3220dfd78ef965b904be1e7067c` passed full
+macOS/iOS checkpoint `41205963479`. Final status edits are documentation-only;
+the integrated code is identical to the CI-tested code. Extra durable copies
+and broad account/sharing/crash/backup costs remain gates.
