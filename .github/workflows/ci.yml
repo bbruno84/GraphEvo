@@ -70,7 +70,24 @@ jobs:
           xcodebuild test
           -scheme GraphEvo-Package
           -destination 'platform=iOS Simulator,id=${{ env.GRAPHEVO_SIMULATOR_ID }}'
+          -resultBundlePath '${{ runner.temp }}/graphevo-ios.xcresult'
           CODE_SIGNING_ALLOWED=NO
+
+      - name: Summarize iOS test results
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/graphevo-ios.xcresult" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/graphevo-ios.xcresult"
+          fi
+
+      - name: Retain failed iOS test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphevo-ios-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/graphevo-ios.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Check diff formatting
         run: git diff --check
