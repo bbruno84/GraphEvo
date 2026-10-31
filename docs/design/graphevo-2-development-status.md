@@ -91,6 +91,19 @@ Its local checkpoint passes 616 tests (331 legacy, 191 store, 71 runtime,
 23 model), selected iOS Simulator checks (55 functions / 65 expanded cases)
 and the Swift 6 consumer. Physical native-engine delivery remains a separate gate.
 
+The engine foundation #109 is reviewed/merged as `e26a0cd`, with exact-head
+macOS/iOS CI `41143330378` green; the merge tree matches reviewed head `efc9fe9`.
+
+The focused `codex/v2-cloud-record-format` adds [CF01 logical record conversion](graphevo-2-cloud-record-format.md)
+over immutable PH attempts and the incoming inbox envelope. It is not integrated.
+One GraphEvoNode record represents each application primitive; properties remain
+serialized and S03 is unchanged. No outgoing worker, server metadata persistence,
+incoming application/receipt, attachment transport or remote queries are activated.
+Its local checkpoint passes 630 tests (331 legacy, 205 store, 71 runtime,
+23 model), the Swift 6 consumer and selected iOS Simulator checks (69 functions /
+93 expanded cases). The initial Xcode/CoreSimulator setup mismatch was resolved
+before the successful simulator rerun. Remote CI/review remain required.
+
 ## Integrated alpha implementation
 
 | Area | Implemented | Remaining acceptance limits |
@@ -134,8 +147,9 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Add the cloud record codec and upload/import effect recovery over the PH/inbox
-   foundations; complete assets, automatic sync, pause, conflicts and sharing.
+1. Review/check/integrate CF01 before the next increment. Then persist native
+   server metadata and connect upload/import effects and receipts over PH/inbox;
+   complete assets, automatic sync, pause, conflicts and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).

@@ -1,0 +1,242 @@
+import CloudKit
+import CoreFoundation
+import Foundation
+import GraphEvoModel
+
+package enum GraphCloudNodeError: Error, Equatable {
+    case invalidRecord, unsupportedVersion, foreignGraph, foreignZone, invalidSystemFields
+    case limitExceeded, unsupportedAttachment, invalidBatch
+}
+
+/// Transport budgets, not a guarantee that CloudKit accepts a record's total server-side size.
+package struct GraphCloudNodeLimits: Sendable {
+    package let maximumPayloadBytes: Int
+    package let maximumProperties: Int
+    package let maximumCollectionItems: Int
+    package let maximumSystemFieldsBytes: Int
+    package init(maximumPayloadBytes: Int = 512 * 1024, maximumProperties: Int = 4096,
+                 maximumCollectionItems: Int = 4096, maximumSystemFieldsBytes: Int = 64 * 1024) {
+        self.maximumPayloadBytes = maximumPayloadBytes; self.maximumProperties = maximumProperties
+        self.maximumCollectionItems = maximumCollectionItems; self.maximumSystemFieldsBytes = maximumSystemFieldsBytes
+    }
+    func validate() throws {
+        guard maximumPayloadBytes > 0, maximumProperties > 0, maximumCollectionItems > 0,
+              maximumSystemFieldsBytes > 0 else { throw GraphCloudNodeError.limitExceeded }
+    }
+}
+
+package struct GraphCloudDecodedNode: Sendable {
+    package let record: GraphRecord
+    package let systemFields: Data
+}
+
+package enum GraphCloudDecodedEvent: Sendable {
+    case save(GraphCloudDecodedNode)
+    case delete(GraphNodeID)
+    case zoneChanged, zoneDeleted(reason: String?)
+}
+
+/// CF01 transport shape: one application primitive per record, independent of native Core Data rows.
+package enum GraphCloudNodeCodec {
+    package static let recordType = "GraphEvoNode"
+    private static let reservedPrefix = "__graphevo_v2."
+    private static let keys: Set<String> = ["format", "graphID", "nodeID", "kind", "type", "payload"]
+    private enum Endpoints: Codable {
+        case entity
+        case relationship(subject: UUID?, object: UUID?)
+        case action(subjects: [UUID], objects: [UUID])
+    }
+    private struct Body: Codable {
+        let properties: [String: Data]
+        let tags: [String]
+        let groups: [String]
+        let endpoints: Endpoints
+        let createdDate: Date?
+    }
+
+    package static func recordID(for id: GraphNodeID, binding: GraphCloudBinding) throws -> CKRecord.ID {
+        guard id.graphID == binding.graphID else { throw GraphCloudNodeError.foreignGraph }
+        guard !binding.zone.name.isEmpty, !binding.zone.owner.isEmpty else { throw GraphCloudNodeError.foreignZone }
+        return CKRecord.ID(recordName: "node." + id.rawValue.uuidString.lowercased(),
+                           zoneID: CKRecordZone.ID(zoneName: binding.zone.name, ownerName: binding.zone.owner))
+    }
+
+    private static func logicalID(_ recordID: CKRecord.ID, binding: GraphCloudBinding) throws -> GraphNodeID {
+        guard !binding.zone.name.isEmpty, !binding.zone.owner.isEmpty,
+              recordID.zoneID.zoneName == binding.zone.name, recordID.zoneID.ownerName == binding.zone.owner else {
+            throw GraphCloudNodeError.foreignZone
+        }
+        let name = recordID.recordName
+        guard name.hasPrefix("node."), let uuid = UUID(uuidString: String(name.dropFirst(5))),
+              name == "node." + uuid.uuidString.lowercased() else { throw GraphCloudNodeError.invalidRecord }
+        return GraphNodeID(graphID: binding.graphID, rawValue: uuid)
+    }
+
+    private static func validate(_ record: GraphRecord, limits: GraphCloudNodeLimits) throws {
+        guard record.type != GraphAttachmentPayload.graphType else { throw GraphCloudNodeError.unsupportedAttachment }
+        guard !record.type.hasPrefix(reservedPrefix), record.properties.keys.allSatisfy({ !$0.hasPrefix(reservedPrefix) }) else {
+            throw GraphCloudNodeError.invalidRecord
+        }
+        guard record.properties.count <= limits.maximumProperties, record.tags.count <= limits.maximumCollectionItems,
+              record.groups.count <= limits.maximumCollectionItems else { throw GraphCloudNodeError.limitExceeded }
+    }
+
+    private static func body(_ record: GraphRecord, limits: GraphCloudNodeLimits) throws -> Body {
+        let endpoints: Endpoints
+        switch record.endpoints {
+        case .entity: endpoints = .entity
+        case .relationship(let subject, let object): endpoints = .relationship(subject: subject?.rawValue, object: object?.rawValue)
+        case .action(let subjects, let objects):
+            guard subjects.count <= limits.maximumCollectionItems, objects.count <= limits.maximumCollectionItems else { throw GraphCloudNodeError.limitExceeded }
+            endpoints = .action(subjects: subjects.map(\.rawValue).sorted { $0.uuidString < $1.uuidString },
+                                objects: objects.map(\.rawValue).sorted { $0.uuidString < $1.uuidString })
+        }
+        return Body(properties: try record.properties.mapValues { try GraphValueCodec.encode($0) },
+                    tags: record.tags.sorted(), groups: record.groups.sorted(), endpoints: endpoints, createdDate: record.createdDate)
+    }
+
+    private static func kind(_ endpoints: GraphEndpoints) -> String {
+        switch endpoints { case .entity: return "entity"; case .relationship: return "relationship"; case .action: return "action" }
+    }
+
+    private static func native(_ systemFields: Data, limits: GraphCloudNodeLimits) throws -> CKRecord {
+        guard systemFields.count <= limits.maximumSystemFieldsBytes else { throw GraphCloudNodeError.limitExceeded }
+        do {
+            let decoder = try NSKeyedUnarchiver(forReadingFrom: systemFields)
+            decoder.requiresSecureCoding = true
+            decoder.decodingFailurePolicy = .setErrorAndReturn
+            defer { decoder.finishDecoding() }
+            guard let record = CKRecord(coder: decoder), decoder.error == nil else { throw GraphCloudNodeError.invalidSystemFields }
+            return record
+        } catch let error as GraphCloudNodeError { throw error }
+        catch { throw GraphCloudNodeError.invalidSystemFields }
+    }
+
+    package static func encode(_ record: GraphRecord, binding: GraphCloudBinding, systemFields: Data? = nil,
+                               limits: GraphCloudNodeLimits = .init()) throws -> CKRecord {
+        try limits.validate(); try validate(record, limits: limits)
+        let id = try recordID(for: record.id, binding: binding)
+        let data: Data
+        do {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            data = try encoder.encode(body(record, limits: limits))
+        } catch let error as GraphCloudNodeError { throw error }
+        catch { throw GraphCloudNodeError.invalidRecord }
+        guard data.count <= limits.maximumPayloadBytes else { throw GraphCloudNodeError.limitExceeded }
+        let native = try systemFields.map { try self.native($0, limits: limits) } ?? CKRecord(recordType: recordType, recordID: id)
+        guard native.recordType == recordType, native.recordID == id else { throw GraphCloudNodeError.invalidSystemFields }
+        native["format"] = NSNumber(value: 1)
+        native["graphID"] = binding.graphID.rawValue.uuidString.lowercased() as CKRecordValue
+        native["nodeID"] = record.id.rawValue.uuidString.lowercased() as CKRecordValue
+        native["kind"] = kind(record.endpoints) as CKRecordValue
+        native["type"] = record.type as CKRecordValue
+        native["payload"] = data as CKRecordValue
+        return native
+    }
+
+    package static func decode(_ native: CKRecord, binding: GraphCloudBinding,
+                               limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudDecodedNode {
+        try limits.validate()
+        guard native.recordType == recordType, Set(native.allKeys()) == keys, native.encryptedValues.allKeys().isEmpty else {
+            throw GraphCloudNodeError.invalidRecord
+        }
+        let id = try logicalID(native.recordID, binding: binding)
+        guard let format = native["format"] as? NSNumber, CFGetTypeID(format) != CFBooleanGetTypeID(),
+              format == NSNumber(value: 1) else { throw GraphCloudNodeError.unsupportedVersion }
+        guard native["graphID"] as? String == binding.graphID.rawValue.uuidString.lowercased() else { throw GraphCloudNodeError.foreignGraph }
+        guard native["nodeID"] as? String == id.rawValue.uuidString.lowercased(),
+              let type = native["type"] as? String, let expectedKind = native["kind"] as? String,
+              let data = native["payload"] as? Data else { throw GraphCloudNodeError.invalidRecord }
+        guard data.count <= limits.maximumPayloadBytes else { throw GraphCloudNodeError.limitExceeded }
+        let body: Body
+        do { body = try JSONDecoder().decode(Body.self, from: data) }
+        catch { throw GraphCloudNodeError.invalidRecord }
+        guard body.properties.count <= limits.maximumProperties, body.tags.count <= limits.maximumCollectionItems,
+              body.groups.count <= limits.maximumCollectionItems else { throw GraphCloudNodeError.limitExceeded }
+        guard Set(body.tags).count == body.tags.count, Set(body.groups).count == body.groups.count else { throw GraphCloudNodeError.invalidRecord }
+        func reference(_ uuid: UUID) -> GraphNodeID { GraphNodeID(graphID: binding.graphID, rawValue: uuid) }
+        let endpoints: GraphEndpoints
+        switch body.endpoints {
+        case .entity: endpoints = .entity
+        case .relationship(let subject, let object): endpoints = .relationship(subject: subject.map(reference), object: object.map(reference))
+        case .action(let subjects, let objects):
+            guard subjects.count <= limits.maximumCollectionItems, objects.count <= limits.maximumCollectionItems else { throw GraphCloudNodeError.limitExceeded }
+            guard Set(subjects).count == subjects.count, Set(objects).count == objects.count else { throw GraphCloudNodeError.invalidRecord }
+            endpoints = .action(subjects: Set(subjects.map(reference)), objects: Set(objects.map(reference)))
+        }
+        guard kind(endpoints) == expectedKind else { throw GraphCloudNodeError.invalidRecord }
+        let record: GraphRecord
+        do {
+            record = try GraphRecord(id: id, type: type, endpoints: endpoints,
+                                     properties: try body.properties.mapValues { try GraphValueCodec.decode($0) },
+                                     tags: Set(body.tags), groups: Set(body.groups), createdDate: body.createdDate)
+        } catch { throw GraphCloudNodeError.invalidRecord }
+        try validate(record, limits: limits)
+        let encoder = NSKeyedArchiver(requiringSecureCoding: true)
+        native.encodeSystemFields(with: encoder); encoder.finishEncoding()
+        guard encoder.encodedData.count <= limits.maximumSystemFieldsBytes else { throw GraphCloudNodeError.limitExceeded }
+        return GraphCloudDecodedNode(record: record, systemFields: encoder.encodedData)
+    }
+
+    /// Scope comes from the durable route, never from untrusted record fields.
+    package static func decode(_ incoming: GraphCloudIncoming, binding: GraphCloudBinding,
+                               limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudDecodedEvent {
+        try limits.validate()
+        guard incoming.valid, incoming.zone == binding.zone else { throw GraphCloudNodeError.foreignZone }
+        switch incoming.kind {
+        case .zoneChanged: return .zoneChanged
+        case .zoneDeleted: return .zoneDeleted(reason: incoming.deletionReason)
+        case .recordDeleted:
+            guard incoming.recordType == recordType, let name = incoming.recordName else { throw GraphCloudNodeError.invalidRecord }
+            return .delete(try logicalID(CKRecord.ID(recordName: name, zoneID: CKRecordZone.ID(zoneName: incoming.zone.name, ownerName: incoming.zone.owner)), binding: binding))
+        case .recordChanged:
+            try GraphCloudRecordCodec.validate(incoming)
+            guard let data = incoming.recordArchive,
+                  let record = try NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: data) else { throw GraphCloudNodeError.invalidRecord }
+            return .save(try decode(record, binding: binding, limits: limits))
+        }
+    }
+}
+
+/// Detached upload candidates. Preparation is not network admission or acknowledgement.
+package struct GraphCloudOutgoingNode: Sendable {
+    package let change: GraphSyncChange
+    package let recordName: String
+    package let recordArchive: Data?
+}
+package struct GraphCloudOutgoingBatch: Sendable {
+    package let id: UUID
+    package let graphID: GraphID
+    package let zone: GraphCloudZone
+    package let items: [GraphCloudOutgoingNode]
+}
+
+extension GraphCloudNodeCodec {
+    package static func encode(_ batch: GraphSyncBatch, binding: GraphCloudBinding,
+                               systemFields: [GraphNodeID: Data] = [:],
+                               limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudOutgoingBatch {
+        try limits.validate()
+        guard !binding.zone.name.isEmpty, !binding.zone.owner.isEmpty else { throw GraphCloudNodeError.foreignZone }
+        guard batch.graphID == binding.graphID, Set(batch.items.map { $0.change.id }).count == batch.items.count else { throw GraphCloudNodeError.invalidBatch }
+        let items = try batch.items.map { item -> GraphCloudOutgoingNode in
+            guard item.change.id.graphID == batch.graphID, item.change.generation > 0,
+                  ["ManagedEntity", "ManagedRelationship", "ManagedAction"].contains(item.change.nativeKind) else { throw GraphCloudNodeError.invalidBatch }
+            let id = try recordID(for: item.change.id, binding: binding)
+            let archive: Data?
+            switch item.change.operation {
+            case .save:
+                guard let record = item.record, record.id == item.change.id else { throw GraphCloudNodeError.invalidBatch }
+                let expected: String
+                switch record.endpoints { case .entity: expected = "ManagedEntity"; case .relationship: expected = "ManagedRelationship"; case .action: expected = "ManagedAction" }
+                guard item.change.nativeKind == expected else { throw GraphCloudNodeError.invalidBatch }
+                let native = try encode(record, binding: binding, systemFields: systemFields[record.id], limits: limits)
+                archive = try GraphCloudRecordCodec.archive(native, scope: binding.zone.scope).recordArchive
+            case .delete:
+                guard item.record == nil else { throw GraphCloudNodeError.invalidBatch }
+                archive = nil
+            }
+            return GraphCloudOutgoingNode(change: item.change, recordName: id.recordName, recordArchive: archive)
+        }
+        return GraphCloudOutgoingBatch(id: batch.id, graphID: batch.graphID, zone: binding.zone, items: items)
+    }
+}

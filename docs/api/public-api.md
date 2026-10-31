@@ -1553,3 +1553,14 @@ status, route lookup and bounded read-only inbox access. Native activation is
 availability-gated to iOS 17/macOS 14 and refused in app extensions. Package
 platform floors and public signatures are unchanged. The implementation retains
 opaque incoming events; it does not upload records or apply them to GraphStores.
+
+
+## V2 package-only cloud record format
+
+[CF01](../design/graphevo-2-cloud-record-format.md) encodes one logical primitive
+per GraphEvoNode CKRecord with scoped UUID identity and serialized properties.
+Package-only conversion accepts detached GraphRecords, PH batches and incoming
+inbox envelopes; prepareCloudBatch retains pending work on encoding failure and
+never sends/acknowledges it. No public signature or native schema changes. Native
+system fields can be reused for the exact record; metadata persistence, actual
+transport, incoming effects and asset support remain subsequent work.
