@@ -222,6 +222,28 @@ private actor SharingCalls {
         try await graph.close(); try await manager.stopCloudSession(config)
     }
 
+    @Test func controlAndNodeImportKeepExactReportCountsWithoutUploadFeedback() async throws {
+        let config = config(), manager = manager(), id = GraphID(), invitation = invitation(config, id)
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let graph = try await manager.createGraph(id: id, at: config.directory.appendingPathComponent("A.sqlite"))
+        let binding = GraphCloudBinding(zone: invitation.zone, graphID: id)
+        let value = try GraphRecord(id: graph.makeNodeID(), type: "Remote.Note", properties: ["value": .integer(1)])
+        let native = try GraphCloudNodeCodec.encode(value, binding: binding)
+        let incoming = try GraphCloudRecordCodec.archive(native, scope: .shared)
+        let control = GraphCloudIncoming(kind: .recordDeleted, zone: invitation.zone,
+            recordName: CKRecordNameZoneWideShare, recordType: CKRecord.SystemType.share)
+        _ = try await manager.startCloudSession(config, adapter: fake("participant", permission: .readOnly, events: [control, incoming]))
+        try await manager.acceptCloudInvitation(invitation, configuration: config)
+        try await manager.fetchCloudChanges(.shared, configuration: config)
+        let report = try await manager.applyCloudInbox(for: id, configuration: config)
+        #expect(report.applied == 2)
+        #expect(try await graph.read { try $0.record(for: value.id) } == value)
+        #expect(try await graph.collectSyncChanges() == 0)
+        #expect(try await manager.cloudInbox(config).isEmpty)
+        await #expect(throws: (any Error).self) { try await graph.transaction { _ in () } }
+        try await graph.close(); try await manager.stopCloudSession(config)
+    }
+
     @Test func corruptReservedAccessCannotGrantConsumerWrites() async throws {
         let config = config(), manager = manager(), id = GraphID()
         defer { try? FileManager.default.removeItem(at: config.directory) }

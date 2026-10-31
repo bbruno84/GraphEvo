@@ -248,13 +248,14 @@ package actor GraphContextManager {
         // Apply access controls independently: malformed application payloads cannot postpone a reduction.
         let controls = entries.filter { GraphCloudShareControl.isControl($0.change) }
         if !controls.isEmpty {
-            for entry in controls {
-                let permission = try GraphCloudShareControl.permission(entry.change, binding: binding.route)
-                if binding.route.zone.scope == .shared {
-                    guard let prior = try await graph.participantAccess(), prior.binding == binding.route else { throw GraphCloudError.invalidState }
-                    _ = try await graph.participantAccess(GraphCloudParticipantAccess(binding: prior.binding,
-                        account: prior.account, permission: permission, accepted: prior.accepted))
-                }
+            let permissions = try controls.map { try GraphCloudShareControl.permission($0.change, binding: binding.route) }
+            if binding.route.zone.scope == .shared {
+                guard let prior = try await graph.participantAccess(), prior.binding == binding.route else { throw GraphCloudError.invalidState }
+                // One local publication per cut; replay cannot temporarily restore an earlier permission.
+                let deleted = controls.contains { $0.change.kind == .recordDeleted }
+                let permission = deleted ? nil : permissions.last!
+                _ = try await graph.participantAccess(GraphCloudParticipantAccess(binding: prior.binding,
+                    account: prior.account, permission: permission, accepted: prior.accepted))
             }
             // The local metadata transaction is idempotent if inbox cleanup fails or the process exits here.
             try await session.consume(Set(controls.map(\.id)))
@@ -268,7 +269,7 @@ package actor GraphContextManager {
         try await session.consume(ids)
         var cleanup = false
         do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
-        return GraphCloudApplyReport(applied: entries.count, cleanupPending: cleanup, resolvedConflicts: result.resolved,
+        return GraphCloudApplyReport(applied: entries.count + controls.count, cleanupPending: cleanup, resolvedConflicts: result.resolved,
             pendingRetry: !result.rebased.isEmpty, retryIDs: result.rebased)
     }
     package func applyCloudInbox(for graphID: GraphID, configuration: GraphCloudConfiguration,
