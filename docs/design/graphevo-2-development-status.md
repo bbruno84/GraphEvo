@@ -246,4 +246,7 @@ receipts, one targeted retry and delete-wins traces. Native S03 is unchanged;
 wire/session/transport formats become 2/3/2, refusing old alpha state unchanged.
 The package-only boundary remains. The [device result](results/conflict-policies-cloudkit-2026-10-31.md)
 records bounded physical convergence separately from the broader acceptance gates.
-PR/checkpoint and integration disposition must be recorded when available.
+[PR #115](https://github.com/bbruno84/GraphEvo/pull/115) targets `codex/graphevo-2`.
+Final local validation passes667 functions and the physical protocol passes all
+eight stages; one full macOS/iOS CI checkpoint is requested on the final head.
+Integration remains pending review/checkpoint acceptance.
