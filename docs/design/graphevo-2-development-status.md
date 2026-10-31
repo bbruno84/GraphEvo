@@ -8,7 +8,8 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-T08 [sharing lifecycle](graphevo-2-sharing-lifecycle.md) is a candidate on
+T08 [sharing lifecycle](graphevo-2-sharing-lifecycle.md) is a candidate in
+[PR #120](https://github.com/bbruno84/GraphEvo/pull/120) on
 `codex/v2-sharing-lifecycle`, directly from #119 (`3260627`) to
 `codex/graphevo-2`. Confirmed loss/leave removes participant data and pending work;
 owner data survives. S03/wire formats are unchanged; session format 5 is explicit.
