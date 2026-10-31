@@ -5,13 +5,15 @@ import GraphEvoRuntime
 
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
+    package let initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)?
     package let graph: GraphStoreAdapter
     package let sync: GraphSyncAdapter?
     package let initialize: @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void
 
     package init(graph: GraphStoreAdapter, sync: GraphSyncAdapter? = nil,
+                 initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)? = nil,
                  initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
-        self.graph = graph; self.sync = sync; self.initialize = initialize
+        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy
     }
 }
 
@@ -28,7 +30,8 @@ package actor GraphCoordinator {
     }
 
     static func open(id: GraphID, configuration: StoreConfiguration, creating: Bool,
-                     registry: StoreRegistry, schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
+                     registry: StoreRegistry, schema: StoreSchema, adapter: GraphCoordinatorAdapter,
+                     conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphCoordinator {
         guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
         let exists = FileManager.default.fileExists(atPath: url.path)
         if creating && exists { throw GraphStoreError.duplicateIdentity }
@@ -37,7 +40,10 @@ package actor GraphCoordinator {
         let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync)
         do {
             if creating {
-                try await handle.transaction { try adapter.initialize($0, id, true) }
+                try await handle.transaction {
+                    try adapter.initialize($0, id, true)
+                    try adapter.initializePolicy?($0, id, conflictPolicy)
+                }
             } else {
                 try await handle.read { try adapter.initialize($0, id, false) }
             }

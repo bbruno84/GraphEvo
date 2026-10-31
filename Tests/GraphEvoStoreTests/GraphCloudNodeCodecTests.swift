@@ -84,13 +84,28 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         #expect(try GraphCloudNodeCodec.decode(a, binding: binding).record.createdDate == nil)
     }
 
-    @Test func formatOneHasAFixedMinimalPayloadAndHeader() throws {
+    @Test func formatTwoHasAFixedMinimalPayloadAndHeader() throws {
         let minimal = try GraphRecord(id: id, type: "Item")
         let native = try GraphCloudNodeCodec.encode(minimal, binding: binding)
         let payload = try #require(native["payload"] as? Data)
         #expect(String(data: payload, encoding: .utf8) == #"{"endpoints":{"entity":{}},"groups":[],"properties":{},"tags":[]}"#)
-        #expect(native["format"] as? NSNumber == NSNumber(value: 1))
+        #expect(native["format"] as? NSNumber == NSNumber(value: 2))
         #expect(native["type"] as? String == "Item")
+    }
+
+    @Test func formatTwoCarriesDateAndLegacyFormatOneHasUnknownDate() throws {
+        let record = try GraphRecord(id: id, type: "Item")
+        let date = Date(timeIntervalSince1970: 100)
+        let native = try GraphCloudNodeCodec.encode(record, binding: binding, modifiedAt: date)
+        #expect(try GraphCloudNodeCodec.decode(native, binding: binding).modifiedAt == date)
+        native["format"] = NSNumber(value: 1)
+        #expect(try GraphCloudNodeCodec.decode(native, binding: binding).modifiedAt == nil)
+        native["format"] = NSNumber(value: 2)
+        let raw = try #require(native["payload"] as? Data)
+        var json = try #require(try JSONSerialization.jsonObject(with: raw) as? [String: Any])
+        json["modifiedAt"] = "invalid"
+        native["payload"] = try JSONSerialization.data(withJSONObject: json) as CKRecordValue
+        #expect(throws: GraphCloudNodeError.invalidRecord) { try GraphCloudNodeCodec.decode(native, binding: binding) }
     }
 
     @Test func foreignSystemFieldZonesAndRecordTypesAreRejected() throws {
@@ -109,7 +124,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
     @Test(arguments: ["version", "boolean-version", "type", "graph", "node", "name", "kind", "payload", "property", "duplicate-tags", "duplicate-endpoints", "extra", "encrypted"]) func malformedRecordsFailVisibly(_ fault: String) throws {
         let native = try GraphCloudNodeCodec.encode(node(), binding: binding)
         switch fault {
-        case "version": native["format"] = NSNumber(value: 2)
+        case "version": native["format"] = NSNumber(value: 3)
         case "boolean-version": native["format"] = NSNumber(value: true)
         case "type": native["type"] = "" as CKRecordValue
         case "graph": native["graphID"] = UUID().uuidString as CKRecordValue

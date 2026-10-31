@@ -68,7 +68,7 @@ actor GraphCloudSession {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 2, doc.container == config.containerIdentifier, doc.environment == config.environment,
+                guard doc.format == 3, doc.container == config.containerIdentifier, doc.environment == config.environment,
                       doc.account == account else { throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -80,6 +80,7 @@ actor GraphCloudSession {
                 for receipt in doc.sent {
                     guard doc.bindings.contains(where: { $0.graphID == receipt.graphID && $0.zone == receipt.zone }) else { throw GraphCloudError.invalidState }
                     for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
+                for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
                 }
                 for entry in doc.inbox { try GraphCloudRecordCodec.validate(entry.change) }
             } else {
@@ -121,6 +122,14 @@ actor GraphCloudSession {
         if let failure { throw failure }
         guard !stopped else { throw GraphCloudError.stopped }
         guard stopping == nil else { throw GraphCloudError.stopping }
+    }
+
+    private static func validateFailure(_ failure: GraphCloudRecordFailure, zone: GraphCloudZone) throws {
+        if let record = failure.serverRecord {
+            guard failure.code == 14, record.kind == .recordChanged, record.zone == zone,
+                  record.recordName == failure.recordName else { throw GraphCloudError.invalidState }
+            try GraphCloudRecordCodec.validate(record)
+        }
     }
 
     private func publish(_ candidate: GraphCloudDocument) throws {
@@ -170,6 +179,7 @@ actor GraphCloudSession {
                       receipt.deletedNames.allSatisfy({ items[$0] == .delete }),
                       receipt.failures.allSatisfy({ items[$0.recordName] != nil }) else { throw GraphCloudError.invalidState }
                 for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
+                for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
                 var next = document; next.sent.append(receipt); try publish(next)
             case .failure(let error): throw error
             case .account(let account):

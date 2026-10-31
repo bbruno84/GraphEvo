@@ -28,6 +28,7 @@ package struct GraphCloudNodeLimits: Sendable {
 package struct GraphCloudDecodedNode: Sendable {
     package let record: GraphRecord
     package let systemFields: Data
+    package let modifiedAt: Date?
 }
 
 package enum GraphCloudDecodedEvent: Sendable {
@@ -52,6 +53,7 @@ package enum GraphCloudNodeCodec {
         let groups: [String]
         let endpoints: Endpoints
         let createdDate: Date?
+        var modifiedAt: Date?
     }
 
     package static func recordID(for id: GraphNodeID, binding: GraphCloudBinding) throws -> CKRecord.ID {
@@ -121,26 +123,29 @@ package enum GraphCloudNodeCodec {
         guard let bytes = item.recordArchive,
               let original = try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKRecord.self, from: bytes),
               let wanted = try? decode(original, binding: binding), let actual = try? decode(server, binding: binding) else { return false }
-        return wanted.record == actual.record
+        return wanted.record == actual.record && wanted.modifiedAt == actual.modifiedAt
     }
     package static func sameServerVersion(_ left: String?, _ right: String?) -> Bool {
         guard let left, let right else { return false }; return left == right
     }
 
-    package static func encode(_ record: GraphRecord, binding: GraphCloudBinding, systemFields: Data? = nil,
+    package static func encode(_ record: GraphRecord, binding: GraphCloudBinding, systemFields: Data? = nil, modifiedAt: Date? = nil,
                                limits: GraphCloudNodeLimits = .init()) throws -> CKRecord {
         try limits.validate(); try validate(record, limits: limits)
         let id = try recordID(for: record.id, binding: binding)
         let data: Data
         do {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-            data = try encoder.encode(body(record, limits: limits))
+            if let modifiedAt, !modifiedAt.timeIntervalSinceReferenceDate.isFinite { throw GraphCloudNodeError.invalidRecord }
+            var value = try body(record, limits: limits)
+            value.modifiedAt = modifiedAt
+            data = try encoder.encode(value)
         } catch let error as GraphCloudNodeError { throw error }
         catch { throw GraphCloudNodeError.invalidRecord }
         guard data.count <= limits.maximumPayloadBytes else { throw GraphCloudNodeError.limitExceeded }
         let native = try systemFields.map { try self.native($0, limits: limits) } ?? CKRecord(recordType: recordType, recordID: id)
         guard native.recordType == recordType, native.recordID == id else { throw GraphCloudNodeError.invalidSystemFields }
-        native["format"] = NSNumber(value: 1)
+        native["format"] = NSNumber(value: 2)
         native["graphID"] = binding.graphID.rawValue.uuidString.lowercased() as CKRecordValue
         native["nodeID"] = record.id.rawValue.uuidString.lowercased() as CKRecordValue
         native["kind"] = kind(record.endpoints) as CKRecordValue
@@ -157,7 +162,7 @@ package enum GraphCloudNodeCodec {
         }
         let id = try logicalID(native.recordID, binding: binding)
         guard let format = native["format"] as? NSNumber, CFGetTypeID(format) != CFBooleanGetTypeID(),
-              format == NSNumber(value: 1) else { throw GraphCloudNodeError.unsupportedVersion }
+              (format == NSNumber(value: 1) || format == NSNumber(value: 2)) else { throw GraphCloudNodeError.unsupportedVersion }
         guard native["graphID"] as? String == binding.graphID.rawValue.uuidString.lowercased() else { throw GraphCloudNodeError.foreignGraph }
         guard native["nodeID"] as? String == id.rawValue.uuidString.lowercased(),
               let type = native["type"] as? String, let expectedKind = native["kind"] as? String,
@@ -166,6 +171,8 @@ package enum GraphCloudNodeCodec {
         let body: Body
         do { body = try JSONDecoder().decode(Body.self, from: data) }
         catch { throw GraphCloudNodeError.invalidRecord }
+        let modifiedAt = format == NSNumber(value: 1) ? nil : body.modifiedAt
+        if let modifiedAt, !modifiedAt.timeIntervalSinceReferenceDate.isFinite { throw GraphCloudNodeError.invalidRecord }
         guard body.properties.count <= limits.maximumProperties, body.tags.count <= limits.maximumCollectionItems,
               body.groups.count <= limits.maximumCollectionItems else { throw GraphCloudNodeError.limitExceeded }
         guard Set(body.tags).count == body.tags.count, Set(body.groups).count == body.groups.count else { throw GraphCloudNodeError.invalidRecord }
@@ -190,7 +197,7 @@ package enum GraphCloudNodeCodec {
         let encoder = NSKeyedArchiver(requiringSecureCoding: true)
         native.encodeSystemFields(with: encoder); encoder.finishEncoding()
         guard encoder.encodedData.count <= limits.maximumSystemFieldsBytes else { throw GraphCloudNodeError.limitExceeded }
-        return GraphCloudDecodedNode(record: record, systemFields: encoder.encodedData)
+        return GraphCloudDecodedNode(record: record, systemFields: encoder.encodedData, modifiedAt: modifiedAt)
     }
 
     /// Scope comes from the durable route, never from untrusted record fields.
@@ -234,7 +241,7 @@ package struct GraphCloudOutgoingBatch: Codable, Equatable, Sendable {
 
 extension GraphCloudNodeCodec {
     package static func encode(_ batch: GraphSyncBatch, binding: GraphCloudBinding,
-                               systemFields: [GraphNodeID: Data] = [:],
+                               systemFields: [GraphNodeID: Data] = [:], modifiedDates: [GraphNodeID: Date] = [:],
                                limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudOutgoingBatch {
         try limits.validate()
         guard !binding.zone.name.isEmpty, !binding.zone.owner.isEmpty else { throw GraphCloudNodeError.foreignZone }
@@ -250,7 +257,7 @@ extension GraphCloudNodeCodec {
                 let expected: String
                 switch record.endpoints { case .entity: expected = "ManagedEntity"; case .relationship: expected = "ManagedRelationship"; case .action: expected = "ManagedAction" }
                 guard item.change.nativeKind == expected else { throw GraphCloudNodeError.invalidBatch }
-                let native = try encode(record, binding: binding, systemFields: systemFields[record.id], limits: limits)
+                let native = try encode(record, binding: binding, systemFields: systemFields[record.id], modifiedAt: modifiedDates[record.id], limits: limits)
                 archive = try GraphCloudRecordCodec.archive(native, scope: binding.zone.scope).recordArchive
             case .delete:
                 guard item.record == nil else { throw GraphCloudNodeError.invalidBatch }

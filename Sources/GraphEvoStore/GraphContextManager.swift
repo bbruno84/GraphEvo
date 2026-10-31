@@ -9,6 +9,7 @@ package actor GraphContextManager {
         let key: StoreKey
         let url: URL
         let creating: Bool
+        let initialPolicy: GraphConflictPolicy
         let opening: Task<GraphCoordinator, any Error>
         var ready = false
         var tokens: Set<UUID> = []
@@ -106,31 +107,44 @@ package actor GraphContextManager {
     }
     private static func drainSent(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding) async throws -> GraphCloudSendReport {
         let receipts = try await session.sentReceipts(for: graph.id)
-        var succeeded = 0, failures: [GraphCloudRecordFailure] = [], cleanup = false
-        for receipt in receipts {
+        var succeeded = 0, failures: [GraphCloudRecordFailure] = [], cleanup = false, resolved = 0
+        var retry = Set<GraphNodeID>()
+        let batches = receipts.reduce(into: [UUID]()) { if !$0.contains($1.batchID) { $0.append($1.batchID) } }
+        for batch in batches {
+            let group = receipts.filter { $0.batchID == batch }, ids = Set(group.map(\.id))
             _ = try await session.identity()
-            try await graph.commitTransport(binding, receipt: receipt)
-            try await session.consume([receipt.id])
-            do { try await graph.trimTransport(binding, receipts: [receipt.id]) } catch { cleanup = true }
-            succeeded += receipt.saved.count + receipt.deletedNames.count; failures += receipt.failures
+            let result = try await graph.commitTransport(binding, receipts: group)
+            try await session.consume(ids)
+            do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
+            succeeded += group.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count }
+            failures += result.failures; resolved += result.resolved; retry.formUnion(result.rebased)
         }
-        return GraphCloudSendReport(succeeded: succeeded, failures: failures, cleanupPending: cleanup, transportError: nil)
+        return GraphCloudSendReport(succeeded: succeeded, failures: failures, cleanupPending: cleanup, transportError: nil,
+            resolvedConflicts: resolved, pendingRetry: !retry.isEmpty, retryIDs: retry)
     }
     package func sendCloudChanges(for graphID: GraphID, configuration: GraphCloudConfiguration,
                                   maximumRecords: Int = 100) async throws -> GraphCloudSendReport {
         try await withTransport(graphID, configuration: configuration) { session, graph, binding in
             let previous = try await Self.drainSent(session, graph: graph, binding: binding)
             let incoming = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: 4096)
-            let batch = try await graph.prepareTransport(binding, maximum: maximumRecords)
-            if batch.items.isEmpty {
-                return GraphCloudSendReport(succeeded: previous.succeeded, failures: previous.failures,
-                    cleanupPending: previous.cleanupPending || incoming.cleanupPending, transportError: nil)
-            }
+            var succeeded = previous.succeeded, failures = previous.failures
+            var resolved = previous.resolvedConflicts + incoming.resolvedConflicts
+            var cleanup = previous.cleanupPending || incoming.cleanupPending
+            var retry = previous.retryIDs.union(incoming.retryIDs)
             var error: (any Error)?
-            do { try await session.send(batch) } catch let caught { error = caught }
-            let current = try await Self.drainSent(session, graph: graph, binding: binding)
-            return GraphCloudSendReport(succeeded: previous.succeeded + current.succeeded,
-                failures: previous.failures + current.failures, cleanupPending: previous.cleanupPending || current.cleanupPending || incoming.cleanupPending, transportError: error)
+            for pass in 0..<2 {
+                let batch = try await graph.prepareTransport(binding, maximum: maximumRecords, onlyIDs: pass == 0 ? nil : retry)
+                if batch.items.isEmpty { retry.removeAll(); break }
+                do { try await session.send(batch) } catch let caught { error = caught }
+                let result = try await Self.drainSent(session, graph: graph, binding: binding)
+                succeeded += result.succeeded; failures += result.failures; resolved += result.resolvedConflicts
+                cleanup = cleanup || result.cleanupPending; retry = result.retryIDs
+                // Expected record conflicts may accompany a partial-failure error; only resolved cases qualify for a retry.
+                if let native = error as? NSError, native.domain == "CKErrorDomain", [2, 11, 14].contains(native.code), result.resolvedConflicts > 0, result.failures.isEmpty { error = nil }
+                if retry.isEmpty || error != nil || !result.failures.isEmpty { break }
+            }
+            return GraphCloudSendReport(succeeded: succeeded, failures: failures, cleanupPending: cleanup, transportError: error,
+                resolvedConflicts: resolved, pendingRetry: !retry.isEmpty)
         }
     }
     private static func drainIncoming(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding,
@@ -141,19 +155,21 @@ package actor GraphContextManager {
         if entries.isEmpty { return GraphCloudApplyReport(applied: 0, cleanupPending: false) }
         let effects = try entries.map { try GraphCloudEffect($0, binding: binding.route) }
         _ = try await session.identity()
-        try await graph.applyTransport(binding, effects: effects)
+        let result = try await graph.applyTransport(binding, effects: effects)
         let ids = Set(entries.map(\.id))
         try await session.consume(ids)
         var cleanup = false
         do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
-        return GraphCloudApplyReport(applied: entries.count, cleanupPending: cleanup)
+        return GraphCloudApplyReport(applied: entries.count, cleanupPending: cleanup, resolvedConflicts: result.resolved,
+            pendingRetry: !result.rebased.isEmpty, retryIDs: result.rebased)
     }
     package func applyCloudInbox(for graphID: GraphID, configuration: GraphCloudConfiguration,
                                  maximumEvents: Int = 4096) async throws -> GraphCloudApplyReport {
         try await withTransport(graphID, configuration: configuration) { session, graph, binding in
             let sent = try await Self.drainSent(session, graph: graph, binding: binding)
             let incoming = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: maximumEvents)
-            return GraphCloudApplyReport(applied: incoming.applied, cleanupPending: sent.cleanupPending || incoming.cleanupPending)
+            return GraphCloudApplyReport(applied: incoming.applied, cleanupPending: sent.cleanupPending || incoming.cleanupPending,
+                resolvedConflicts: sent.resolvedConflicts + incoming.resolvedConflicts, pendingRetry: sent.pendingRetry || incoming.pendingRetry)
         }
     }
 
@@ -175,15 +191,15 @@ package actor GraphContextManager {
         self.registry = registry; self.schema = schema; self.adapter = adapter
     }
 
-    package func createGraph(id: GraphID, at url: URL) async throws -> GraphStore {
-        try await request(id: id, url: url, creating: true)
+    package func createGraph(id: GraphID, at url: URL, conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphStore {
+        try await request(id: id, url: url, creating: true, conflictPolicy: conflictPolicy)
     }
 
     package func openGraph(id: GraphID, at url: URL) async throws -> GraphStore {
         try await request(id: id, url: url, creating: false)
     }
 
-    private func request(id: GraphID, url: URL, creating: Bool) async throws -> GraphStore {
+    private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphStore {
         do {
             try Task.checkCancellation()
             let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
@@ -197,16 +213,17 @@ package actor GraphContextManager {
                         if entries[id]?.generation == entry.generation { entries.removeValue(forKey: id) }
                         continue
                     }
+                    if creating && entry.initialPolicy != conflictPolicy { throw GraphStoreError.ownershipConflict }
                     if creating && (entry.ready || !entry.creating) { throw GraphStoreError.duplicateIdentity }
                 } else {
                     guard !entries.values.contains(where: { $0.key == resolved.key }) else { throw GraphStoreError.ownershipConflict }
                     let registry = registry, schema = schema, adapter = adapter, configuration = resolved.configuration
                     let opening = Task.detached {
                         try await GraphCoordinator.open(id: id, configuration: configuration, creating: creating,
-                                                        registry: registry, schema: schema, adapter: adapter)
+                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy)
                     }
                     guard case .sqlite(let canonicalURL) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
-                    entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, opening: opening)
+                    entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, initialPolicy: conflictPolicy, opening: opening)
                 }
                 let token = UUID()
                 entries[id]!.tokens.insert(token)

@@ -76,7 +76,7 @@ package struct GraphCloudStatus: Sendable {
 }
 
 struct GraphCloudDocument: Codable, Sendable {
-    var format = 2
+    var format = 3
     let container: String
     let environment: GraphCloudEnvironment
     let account: String

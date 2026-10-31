@@ -151,7 +151,7 @@ private actor SyncTestSignal {
         try await f.graph.close()
     }
 
-    @Test func deletedDetailsCascadesAndRecreationRemainRecoverable() async throws {
+    @Test func deletedDetailsCascadesAndNewIdentityRecoveryRemainRecoverable() async throws {
         let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.directory) }
         let edge = f.graph.makeNodeID(), action = f.graph.makeNodeID()
         try await f.graph.transaction {
@@ -170,11 +170,15 @@ private actor SyncTestSignal {
             #expect(item.change.operation == .delete && item.record == nil)
         }
         #expect(batch.items.first { $0.change.id == action }?.record?.endpoints == .action(subjects: [], objects: [f.b]))
-        _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: f.a, type: ObservedItem.graphType, properties: ["value": .integer(3)])) }
+        await #expect(throws: GraphStoreError.self) {
+            _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: f.a, type: ObservedItem.graphType, properties: ["value": .integer(3)])) }
+        }
+        let restoredID = f.graph.makeNodeID()
+        _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: restoredID, type: ObservedItem.graphType, properties: ["value": .integer(3)])) }
         _ = try await f.graph.acknowledgeSyncBatch(batch.id, succeeded: Set(batch.items.map { $0.change.id }))
         let recreated = try await f.graph.prepareSyncBatch(maximumRecords: 100)
-        #expect(recreated.items.first { $0.change.id == f.a }?.change.operation == .save)
-        #expect(recreated.items.first { $0.change.id == f.a }?.record?.properties["value"] == .integer(3))
+        #expect(recreated.items.first { $0.change.id == restoredID }?.change.operation == .save)
+        #expect(recreated.items.first { $0.change.id == restoredID }?.record?.properties["value"] == .integer(3))
         try await f.graph.abandonSyncBatch(recreated.id); try await f.graph.close()
     }
 

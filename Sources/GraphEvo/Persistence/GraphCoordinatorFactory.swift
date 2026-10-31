@@ -7,9 +7,26 @@ import GraphEvoStore
 enum GraphCoordinatorFactory {
     static let shared = GraphContextManager(schema: GraphRuntimeSchema.nativeIdentity, adapter: adapter)
 
-    static var adapter: GraphCoordinatorAdapter {
+    static var adapter: GraphCoordinatorAdapter { makeAdapter() }
+
+    static func makeAdapter(clock: @escaping @Sendable () -> Date = { Date() }) -> GraphCoordinatorAdapter {
         let native = GraphNativeIdentityDatabaseAdapter.database
-        return GraphCoordinatorAdapter(graph: native.graph, sync: GraphSyncCheckpointAdapter.adapter) { context, id, creating in
+        var graph = native.graph
+        graph.beginMutation = { context, _ in GraphMutationMetadata.begin(context) }
+        graph.finishMutation = { context, id in try GraphMutationMetadata.finish(context, graphID: id, clock: clock) }
+        var sync = GraphSyncCheckpointAdapter.adapter
+        sync.policy = { (context: NSManagedObjectContext, id: GraphID, policy: GraphConflictPolicy?) in
+            let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+            if let policy {
+                root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
+                context.transactionAuthor = GraphSyncCheckpointAdapter.metadataAuthor
+            }
+            return try GraphMutationMetadata.policy(root)
+        }
+        return GraphCoordinatorAdapter(graph: graph, sync: sync, initializePolicy: { context, id, policy in
+            let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+            root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
+        }) { context, id, creating in
             guard !(context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer),
                   context.persistentStoreCoordinator?.persistentStores.count == 1 else {
                 throw GraphStoreError.unsupportedLayout
