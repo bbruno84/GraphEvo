@@ -274,5 +274,7 @@ The [physical result](results/cloud-assets-2026-10-31.md) retains the initial fi
 error and the real missing-conflict-asset failure, plus guarded continuations.
 Corrected runtime834e674 passes both policies, reopen/cascade and fresh recovery;
 full local validation passes679 functions and selected iOS18.5 passes63/90.
-Review/CI and integration disposition remain to be recorded in the PR. Extra
+[PR #116](https://github.com/bbruno84/GraphEvo/pull/116) targets `codex/graphevo-2`;
+final local/device review is complete and one full CI checkpoint is requested
+on the final documentation head. Integration remains pending. Extra
 durable content copies and broad account/sharing/crash/backup costs remain gates.
