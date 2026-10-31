@@ -59,3 +59,30 @@ distributed migration exclusion or current offline authorization is made.
 
 See the [contract](../graphevo-2-zone-sharing.md) and
 [protocol](../../../Experiments/ZoneSharingProbe/README.md).
+
+
+## Post-review P2 correction check
+
+Source `b171cde0dadd4a4fef1d56ce253a664c20a43087` corrects two findings from the
+review of `2463e8f`: ordinary preflight failure consumed creation intent, and a
+bounded inbox prefix could hide an access reduction behind malformed app data.
+The original two deterministic reproducers failed on that reviewed head and now
+pass as committed regressions. Additional cases cover restart after preflight
+failure, an ambiguous save retaining intent after restart, disk failure before
+the native write, late callback refusal, limits, zone isolation, application
+ordering and zone-deletion priority.
+
+A new clean signed host exported from `b171cde` passes three new physical stages:
+XR identity, iPad seed/create and XR acceptance/import. Fresh zones and native
+stores are used without reset or replay. The owner session contains exactly two
+durable creation markers for the two newly saved shares. A read-write entity/file
+graph, a read-only graph and an unshared control retain exact local/cloud
+inventories, complete file content and empty PH queues; the owner remains alive
+through independent participant observation. This is a focused creation/import
+recheck, not a repetition of the original full bidirectional matrix on this pin.
+
+Local validation: 731 macOS functions (331 legacy,306 store,71 runtime,23 model),
+83 reported selected iOS 18.5 tests, Swift 6 ModelConsumer and manifest/diff checks
+pass. Re-review of the corrections finds no remaining blocking issue in the
+reviewed paths. Public activation and the broader lifecycle gates above remain
+open. Remote CI and merge are still deferred.

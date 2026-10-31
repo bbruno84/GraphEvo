@@ -94,9 +94,16 @@ synchronization or distributed lock is promised. Workflow: local validation and
 physical probes, review/corrections, CI checkpoint, authorized PR merge.
 
 
-Local validation on library source `d5e4693`: 725 passing macOS functions (331
+Initial local validation on library source `d5e4693`: 725 passing macOS functions (331
 legacy, 300 store, 71 runtime, 23 model), Swift 6 ModelConsumer, manifest and diff
 checks. Selected iOS 18.5 suites passed 66 reported tests; the final T07-only
 checkpoint passed 12 reported tests after the last correction. These are local
 checks, not remote CI or a completed review. Physical evidence retains its own
 pins above. CI remains deferred until review and corrections finish.
+
+
+The [post-review result](results/zone-sharing-2026-10-31.md#post-review-p2-correction-check)
+records corrected source `b171cde`, the two reproduced P2 closures, six committed
+regressions and a three-stage real creation/import recheck. That source passes
+731 macOS functions and 83 selected iOS tests, with no remaining blocking issue
+found in the corrective re-review. Remote CI has not been requested.

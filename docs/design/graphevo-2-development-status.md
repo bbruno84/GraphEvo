@@ -17,8 +17,14 @@ owner/shared participant routing, read-write/read-only invitations, a private
 control graph, attachment replication, bidirectional changes and empty recovery.
 It preserves the initial `02b294e` and final recovery `d5e4693` runtime pins;
 leave/revocation/account/offline and public activation remain separate gates.
-Local validation passes 725 macOS functions (331 legacy,300 store,71 runtime,
-23 model), selected iOS 18.5 checks, the Swift 6 consumer and manifest/diff checks.
+The first review of #119 reproduced two P2 issues: premature create intent and
+permission controls hidden by a bounded application prefix. Corrected source
+`b171cde` passes both original reproducers and six committed regression tests;
+re-review of the corrections finds no remaining blocker. A new three-stage
+physical identity/create/accept check passes on that source without reset/replay;
+the result above retains each checkpoint's actual scope and pin.
+Local validation now passes 731 macOS functions (331 legacy,306 store,71 runtime,
+23 model), 83 selected iOS 18.5 tests, the Swift 6 consumer and manifest/diff checks.
 No remote CI checkpoint or merge has been requested for this candidate.
 
 ## Active branch and completed reorganization
