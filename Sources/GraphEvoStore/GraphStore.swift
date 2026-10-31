@@ -168,6 +168,23 @@ public actor GraphStore {
         }
     }
 
+    package func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int = 100, limits: GraphSyncLimits = .init()) async throws -> GraphCloudOutgoingBatch {
+        try await syncSession().prepareTransport(binding, maximum: maximum, limits: limits)
+    }
+    package func commitTransport(_ binding: GraphCloudTransportBinding, receipt: GraphCloudSentReceipt, limits: GraphSyncLimits = .init()) async throws {
+        try await syncSession().commitTransport(binding, receipt: receipt, limits: limits)
+    }
+    package func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits = .init()) async throws {
+        try await syncSession().applyTransport(binding, effects: effects, limits: limits)
+    }
+    package func trimTransport(_ binding: GraphCloudTransportBinding, receipts: Set<UUID>) async throws {
+        try await syncSession().trimTransport(binding, receipts: receipts)
+    }
+
+    package func pruneTransport(_ binding: GraphCloudTransportBinding, retained: Set<UUID>) async throws {
+        try await syncSession().pruneTransport(binding, retained: retained)
+    }
+
     public func close() async throws {
         do {
             if let ownerLease { try await ownerLease.close() }

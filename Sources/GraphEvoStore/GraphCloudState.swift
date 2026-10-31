@@ -6,7 +6,7 @@ package enum GraphCloudScope: String, Codable, Sendable { case `private`, shared
 package enum GraphCloudEnvironment: String, Codable, Sendable { case development, production }
 package enum GraphCloudError: Error, Equatable {
     case ownershipConflict, invalidConfiguration, invalidState, accountUnavailable, accountChanged
-    case persistence, inboxLimit, unsupportedAsset, unexpectedUpload, stopped, stopping, busy
+    case persistence, inboxLimit, unsupportedAsset, unexpectedUpload, stopped, stopping, busy, zoneUnavailable, transportUnavailable
 }
 
 package struct GraphCloudConfiguration: Equatable, Sendable {
@@ -36,10 +36,9 @@ package struct GraphCloudZone: Codable, Hashable, Sendable {
 package struct GraphCloudBinding: Codable, Equatable, Sendable {
     package let zone: GraphCloudZone
     package let graphID: GraphID
-    package let storeURL: URL
 }
 
-/// Secure CKRecord archives remain opaque until a later application/import increment.
+/// Secure CKRecord archives are retained before explicit CF01 conversion and graph application.
 package struct GraphCloudIncoming: Codable, Equatable, Sendable {
     package enum Kind: String, Codable, Sendable { case zoneChanged, zoneDeleted, recordChanged, recordDeleted }
     package let kind: Kind
@@ -73,16 +72,19 @@ package struct GraphCloudStatus: Sendable {
     package let inboxCount: Int
     package let failure: GraphCloudError?
     package let stopped: Bool
+    package let outgoingReceiptCount: Int
 }
 
 struct GraphCloudDocument: Codable, Sendable {
-    var format = 1
+    var format = 2
     let container: String
     let environment: GraphCloudEnvironment
     let account: String
     var states: [String: Data] = [:]
     var bindings: [GraphCloudBinding] = []
     var inbox: [GraphCloudInboxEntry] = []
+    var sent: [GraphCloudSentReceipt] = []
+    var eventCount: Int { inbox.count + sent.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count + $1.failures.count } }
 }
 
 /// A process-wide claim spans startup/account verification and failed cleanup.

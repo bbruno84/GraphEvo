@@ -29,8 +29,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
     private let graphID = GraphID(rawValue: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!)
     private let uuid = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
     private var binding: GraphCloudBinding {
-        GraphCloudBinding(zone: GraphCloudZone(scope: .private, owner: "owner", name: "graph-A"), graphID: graphID,
-                          storeURL: URL(fileURLWithPath: "/unused/codec-only.sqlite"))
+        GraphCloudBinding(zone: GraphCloudZone(scope: .private, owner: "owner", name: "graph-A"), graphID: graphID)
     }
     private var id: GraphNodeID { GraphNodeID(graphID: graphID, rawValue: uuid) }
     private func node(_ endpoints: GraphEndpoints = .entity, properties: [String: GraphValue] = [:]) throws -> GraphRecord {
@@ -134,15 +133,14 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         #expect(throws: (any Error).self) { try GraphCloudNodeCodec.decode(native, binding: binding) }
     }
 
-    @Test func zoneAndGraphBindingsAreIndependentOfFileAndScope() throws {
+    @Test func zoneAndGraphBindingsDoNotInferDatabaseScope() throws {
         let native = try GraphCloudNodeCodec.encode(node(), binding: binding)
-        let wrongGraph = GraphCloudBinding(zone: binding.zone, graphID: GraphID(), storeURL: binding.storeURL)
+        let wrongGraph = GraphCloudBinding(zone: binding.zone, graphID: GraphID())
         #expect(throws: GraphCloudNodeError.foreignGraph) { try GraphCloudNodeCodec.decode(native, binding: wrongGraph) }
         #expect(throws: GraphCloudNodeError.foreignGraph) { try GraphCloudNodeCodec.encode(node(), binding: wrongGraph) }
-        let otherZone = GraphCloudBinding(zone: GraphCloudZone(scope: .private, owner: "other", name: "graph-A"), graphID: graphID, storeURL: binding.storeURL)
+        let otherZone = GraphCloudBinding(zone: GraphCloudZone(scope: .private, owner: "other", name: "graph-A"), graphID: graphID)
         #expect(throws: GraphCloudNodeError.foreignZone) { try GraphCloudNodeCodec.decode(native, binding: otherZone) }
-        let shared = GraphCloudBinding(zone: GraphCloudZone(scope: .shared, owner: "owner", name: "graph-A"), graphID: graphID,
-                                       storeURL: URL(fileURLWithPath: "/another/replica.sqlite"))
+        let shared = GraphCloudBinding(zone: GraphCloudZone(scope: .shared, owner: "owner", name: "graph-A"), graphID: graphID)
         #expect(try GraphCloudNodeCodec.decode(native, binding: shared).record.id == id)
         // A CKRecord does not carry database scope. The incoming envelope must match the trusted route.
         let incoming = try GraphCloudRecordCodec.archive(native, scope: .private)
@@ -210,7 +208,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         let result = try GraphCloudNodeCodec.encode(batch, binding: binding)
         #expect(result.id == batch.id && result.items.first?.change == change)
         let empty = GraphSyncBatch(id: UUID(), graphID: graphID, items: [], epoch: UUID())
-        let invalidZone = GraphCloudBinding(zone: GraphCloudZone(scope: .private, owner: "", name: ""), graphID: graphID, storeURL: binding.storeURL)
+        let invalidZone = GraphCloudBinding(zone: GraphCloudZone(scope: .private, owner: "", name: ""), graphID: graphID)
         #expect(throws: GraphCloudNodeError.foreignZone) { try GraphCloudNodeCodec.encode(empty, binding: invalidZone) }
         let duplicate = GraphSyncBatch(id: UUID(), graphID: graphID, items: batch.items + batch.items, epoch: UUID())
         #expect(throws: GraphCloudNodeError.invalidBatch) { try GraphCloudNodeCodec.encode(duplicate, binding: binding) }
@@ -230,7 +228,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: graphID, at: dir.appendingPathComponent("Graph.sqlite"))
         _ = try await graph.transaction { try $0.insert(node()) }
-        let route = GraphCloudBinding(zone: binding.zone, graphID: graphID, storeURL: dir.appendingPathComponent("Graph.sqlite"))
+        let route = GraphCloudBinding(zone: binding.zone, graphID: graphID)
         gate.enable()
         let work = Task { try await graph.prepareCloudBatch(maximumRecords: 1, binding: route, encodingLimits: .init(maximumPayloadBytes: 1)) }
         await gate.ready.wait(); work.cancel(); gate.proceed.signal()
@@ -247,7 +245,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: graphID, at: dir.appendingPathComponent("Graph.sqlite"))
         _ = try await graph.transaction { try $0.insert(node(properties: ["value": .integer(1)])) }
-        let route = GraphCloudBinding(zone: binding.zone, graphID: graphID, storeURL: dir.appendingPathComponent("Graph.sqlite"))
+        let route = GraphCloudBinding(zone: binding.zone, graphID: graphID)
         await #expect(throws: GraphCloudNodeError.limitExceeded) { try await graph.prepareCloudBatch(maximumRecords: 10, binding: route, encodingLimits: .init(maximumPayloadBytes: 1)) }
         #expect(try await graph.collectSyncChanges() == 1)
         let batch = try await graph.prepareCloudBatch(maximumRecords: 10, binding: route)

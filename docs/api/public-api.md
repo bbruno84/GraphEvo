@@ -1564,3 +1564,14 @@ inbox envelopes; prepareCloudBatch retains pending work on encoding failure and
 never sends/acknowledges it. No public signature or native schema changes. Native
 system fields can be reused for the exact record; metadata persistence, actual
 transport, incoming effects and asset support remain subsequent work.
+
+
+## V2 package-only manual record transport
+
+[T01](../design/graphevo-2-record-transport.md) connects internal sendCloudChanges
+and applyCloudInbox operations, durable frozen attempts, native server metadata
+and atomic incoming/send receipts. Native drivers use the ContextManager engines;
+no public opener or automatic synchronization is enabled. Persisted routes contain
+GraphID and zone only; app bootstrap must open each graph at its current URL after
+restart. Unregistered resources remain pending. Schema S03 and CF01 are unchanged;
+engine-session format 1 is refused without conversion by the new format-2 reader.

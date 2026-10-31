@@ -513,6 +513,7 @@ package enum GraphTypedStoreAdapter {
             if let date = record.createdDate { node.setCreatedDate(date) }
             setEndpoints(node, subjects: subjects, objects: objects)
             try assign(node)
+            nodes[record.id] = node
         }
 
         func patch(_ patch: GraphRecordPatch, completing operationID: UUID? = nil) throws -> GraphRecord {

@@ -33,6 +33,9 @@ package struct GraphSyncBatch: Sendable {
     package let graphID: GraphID
     package let items: [GraphSyncItem]
     let epoch: UUID
+    package init(id: UUID, graphID: GraphID, items: [GraphSyncItem], epoch: UUID) {
+        self.id = id; self.graphID = graphID; self.items = items; self.epoch = epoch
+    }
 }
 
 package enum GraphSyncError: Error {
@@ -52,17 +55,19 @@ package struct GraphSyncLimits: Sendable {
 
 /// All callbacks stay on the runtime writer context; native save belongs to StoreResources.
 package struct GraphSyncAdapter: Sendable {
+    package let cloud: GraphCloudStoreAdapter?
     package let collect: @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits) throws -> Int
     package let prepare: @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits, Int) throws -> GraphSyncPrepared
     package let acknowledge: @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits, UUID, [GraphSyncChange]) throws -> Int
     package let importPatches: @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits, [GraphRecordPatch]) throws -> Void
     package init(
+        cloud: GraphCloudStoreAdapter? = nil,
         collect: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits) throws -> Int,
         prepare: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits, Int) throws -> GraphSyncPrepared,
         acknowledge: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits, UUID, [GraphSyncChange]) throws -> Int,
         importPatches: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits, [GraphRecordPatch]) throws -> Void
     ) {
-        self.collect = collect; self.prepare = prepare; self.acknowledge = acknowledge; self.importPatches = importPatches
+        self.cloud = cloud; self.collect = collect; self.prepare = prepare; self.acknowledge = acknowledge; self.importPatches = importPatches
     }
 }
 
@@ -129,6 +134,41 @@ actor GraphSyncSession {
         try begin(); defer { busy = false }
         let adapter = adapter, graphID = graphID
         try await handle.transaction { try adapter.importPatches($0, graphID, limits, patches) }
+    }
+
+    func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int, limits: GraphSyncLimits) async throws -> GraphCloudOutgoingBatch {
+        guard active == nil else { throw GraphSyncError.busy }
+        try begin(); defer { busy = false }
+        guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
+        let id = graphID
+        let result = try await handle.transaction { try cloud.prepare($0, id, binding, maximum, limits) }
+        guard !retired else { throw GraphStoreError.closed }
+        return result
+    }
+    func commitTransport(_ binding: GraphCloudTransportBinding, receipt: GraphCloudSentReceipt, limits: GraphSyncLimits) async throws {
+        try begin(); defer { busy = false }
+        guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
+        let id = graphID
+        try await handle.transaction { try cloud.sent($0, id, binding, receipt, limits) }
+    }
+    func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits) async throws {
+        try begin(); defer { busy = false }
+        guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
+        let id = graphID
+        try await handle.transaction { try cloud.apply($0, id, binding, effects, limits) }
+    }
+    func trimTransport(_ binding: GraphCloudTransportBinding, receipts: Set<UUID>) async throws {
+        try begin(); defer { busy = false }
+        guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
+        let id = graphID
+        try await handle.transaction { try cloud.trim($0, id, binding, .consumed(receipts)) }
+    }
+
+    func pruneTransport(_ binding: GraphCloudTransportBinding, retained: Set<UUID>) async throws {
+        try begin(); defer { busy = false }
+        guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
+        let id = graphID
+        try await handle.transaction { try cloud.trim($0, id, binding, .retain(retained)) }
     }
 
     func retire() { retired = true; active = nil }

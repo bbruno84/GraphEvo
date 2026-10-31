@@ -153,8 +153,13 @@ engine or cross-process acceptance. Retain this scope when integrating it.
   secure system-field reuse and PH/inbox conversion tests, without upload/import
   activation. Actual server change tags, metadata/effect persistence, dependencies,
   conflict handling and cloud-schema deployment remain open.
-- [ ] **R** Measure full-document engine-state/inbox rewrite costs and retained
-  inbox growth; count/encoded-byte limits are not total memory/I/O envelopes.
+  [T01](graphevo-2-record-transport.md) connects manual native driver hooks and
+  atomic metadata/effect receipts, with injected two-replica recovery tests and
+  actual local container relocation. Physical CloudKit delivery/change tags/CAS,
+  real process-kill/power-loss and consistent session/native backup restore are
+  still required; automatic scheduling and conflict resolution remain open.
+- [ ] **R** Measure full-document engine-state/inbox and graph transport metadata/
+  frozen-attempt rewrite costs, receipt retention and growth; count/encoded-byte limits are not total memory/I/O envelopes.
 - [ ] **B** Validate graph-level pause/resume with automatic and in-flight work,
   migrated local stores, pending changes and independent progress of other graphs.
   Cancelling an engine is not a graph-level completion barrier.

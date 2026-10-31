@@ -218,6 +218,11 @@ public class Node: NSObject, Codable {
     node.performAndWait { $0.createdDate = date }
   }
   
+  /// Internal import preserves an absent native date without inventing a timestamp.
+  package func setImportedCreatedDate(_ date: Date?) {
+    node.performAndWait { $0.setValue(date, forKey: "createdDate") }
+  }
+
   /// A reference to tags.
   public var tags: [String] {
     return node.tags

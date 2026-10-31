@@ -106,6 +106,21 @@ Its local checkpoint passes 630 tests (331 legacy, 205 store, 71 runtime,
 93 expanded cases). The initial Xcode/CoreSimulator setup mismatch was resolved
 before the successful simulator rerun. Physical cloud acceptance remains open.
 
+CF01 #110 is reviewed/merged as `900d51a`, with exact-head macOS/iOS CI
+`41184685226` green; its merge tree matches reviewed head `3d4150d`.
+
+The focused `codex/v2-record-transport` implements [T01 manual record send/import
+and durable effect receipts](graphevo-2-record-transport.md). It is not integrated.
+Native driver hooks are connected to CKSyncEngine; deterministic local tests use
+an injected bus, not physical CloudKit. Persisted graph routes contain only graph
+and zone IDs; current store URLs are runtime registrations supplied on app bootstrap.
+The engine document moves to format 2, refusing old alpha files unchanged; S03
+and CF01 remain unchanged. Assets, automatic sync and public activation remain open.
+Its local checkpoint passes 648 tests (331 legacy, 223 store, 71 runtime, 23 model)
+and selected iOS Simulator checks (87 functions / 111 expanded cases). The first
+iOS transport run failed on persisted/case-folded path use; the final path-free
+container-relocation protocol passes. Native physical CloudKit validation remains open.
+
 ## Integrated alpha implementation
 
 | Area | Implemented | Remaining acceptance limits |
@@ -150,9 +165,9 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Persist native server metadata and connect upload/import effects and receipts
-   over PH/inbox;
-   complete assets, automatic sync, pause, conflicts and sharing.
+1. Review/check/integrate T01 before the next increment. Validate native private
+   transport on devices/server schema, then complete assets, automatic sync,
+   pause, conflict policy and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
