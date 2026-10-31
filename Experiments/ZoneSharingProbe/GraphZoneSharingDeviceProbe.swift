@@ -27,7 +27,7 @@ public actor GraphZoneSharingDeviceProbe {
         guard container == "iCloud.com.valerioburiani.GraphCKDemo",
               (replica == "owner" && ["seed", "owner-edit", "observe-owner"].contains(stage)) ||
               (replica == "peer" && ["identity", "accept", "peer-edit", "observe-peer"].contains(stage)) ||
-              (replica == "fresh" && stage == "recover") else { throw Failure.request }
+              (["fresh", "current"].contains(replica) && stage == "recover") else { throw Failure.request }
         self.run = run; root = directory.appendingPathComponent(run.uuidString).appendingPathComponent(replica)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent(stage + ".started"), options: .withoutOverwriting)

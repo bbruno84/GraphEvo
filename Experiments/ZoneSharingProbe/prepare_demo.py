@@ -20,6 +20,7 @@ s = controller.read_text().replace('GraphCloudTransportDeviceProbe()', 'GraphZon
 s = s.replace('["seed", "update", "delete", "reopen", "read-baseline", "read-update", "read-delete", "audit", "read-audit"]',
               '["identity", "seed", "accept", "peer-edit", "owner-edit", "observe-owner", "observe-peer", "recover"]')
 s = s.replace('"--record-transport"', '"--zone-sharing"').replace('GraphEvo T01', 'GraphEvo T07')
+s = s.replace('["owner", "peer", "fresh"]', '["owner", "peer", "fresh", "current"]')
 s = s.replace('GraphEvoLaboratory/RecordTransport', 'GraphEvoLaboratory/ZoneSharing')
 controller.write_text(s)
 app = args.destination / "GraphEvoDemo/AppDelegate.swift"

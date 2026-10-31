@@ -17,7 +17,9 @@ a protocol result.
 5. iPad `owner-edit`: mutate A to 3; retain it through XR `observe-peer`.
 6. Copy only the invitation capabilities to a new `fresh` replica; `recover`
    inspects already accepted shares and recovers actual cloud data into empty
-   native stores. No native store/token copy is allowed.
+   native stores. No native store/token copy is allowed. A separate `current`
+   replica supports a new empty recovery after source hardening, without replaying
+   an existing stage or reusing its files.
 
 Use `PublicMirroredProbe/launch_probe.py` with `--zone-sharing STAGE RUN REPLICA`.
 Require separate passed stage reports and exact inventories; private B must not
