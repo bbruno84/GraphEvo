@@ -152,7 +152,7 @@ preservation pass on iPad/iPhone. Stale deletion removes a newer server value;
 stale update after deletion returns unknownItem without resurrection. A fresh
 replica recovers only the actual final server state. Production code/schema and
 CF01 are unchanged. A consumer resolution/rebase boundary and structural conflict
-matrix remain open. The PR records reviewed-head checks and merge disposition.
+matrix remain open. Reviewed head `de2667a` is merged as `4e9d30c`; the merge tree matches.
 Remote full CI is intentionally skipped for this excluded bridge/report increment
 under the new checkpoint policy; local review verifies the bridge matches the
 signed device build and all thirteen original passed stage reports remain retained.
@@ -205,7 +205,8 @@ The maintainer selects [explicit CI checkpoints](graphevo-2-ci-checkpoints.md)
 instead of a full macOS/iOS run on every alpha PR and every integration push.
 Review and appropriate local verification still apply to each increment. Record
 whether remote checks ran or were skipped; only an actual successful run is a
-full checkpoint. Last full reviewed checkpoint: #112, `ee073e8`, CI `41192210370`.
+full checkpoint. Latest reviewed code checkpoint: #115, `85efea1`, CI `41201271653`
+(macOS/iOS green). The following #112 runs remain historical checkpoints.
 The policy is reviewed/merged through #113 as `31eac7c`; ordinary-alpha run
 `41193277258` skipped all expensive jobs, validating policy rather than executing
 tests. Stable/v1/release automatic checks remain enabled. The #112 integration
@@ -213,9 +214,9 @@ run `41192922760` also passed on `30f7089` before the new policy took effect.
 
 ## Next steps and operating rule
 
-1. Complete the reviewed T02 integration through #114, then discuss and agree on
-   the explicit consumer resolution/rebase boundary before implementing it. Continue with structural conflicts, assets, automatic sync,
-   pause, conflict policy and sharing.
+1. T03 automatic conflict policies are integrated through #115 after review
+   corrections and full CI. Discuss the CKAsset attachment transport next;
+   structural conflicts, automatic sync, pause and sharing remain subsequent work.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
@@ -234,3 +235,28 @@ and evidence links. Update the post-alpha checklist when gates change. Keep old
 reports and dated checkpoints historical, rather than competing current-status
 documents. No release branch/tag, schema/API freeze or cloud reset is part of
 this reorganization.
+
+
+## T03 automatic conflict increment
+
+`codex/v2-conflict-policies` starts directly from integrated #114 (`4e9d30c`).
+[T03](graphevo-2-conflict-policies.md) implements local per-graph cloudWins/default
+lastEditWins, Graph-owned edit dates, durable current-local resolution, grouped
+receipts, one targeted retry and delete-wins traces. Native S03 is unchanged;
+wire/session/transport formats become 2/3/2, refusing old alpha state unchanged.
+The package-only boundary remains. The [device result](results/conflict-policies-cloudkit-2026-10-31.md)
+records bounded physical convergence separately from the broader acceptance gates.
+[PR #115](https://github.com/bbruno84/GraphEvo/pull/115) integrates this increment
+into `codex/graphevo-2` following the maintainer-authorized merge.
+Initial local validation passed 667 functions; the physical protocol passed all
+eight stages on its pinned runtime. Initial exact-head CI `41199122433` passed
+on `2f1f9bd`. Review found same-transaction identity reuse and loss of earlier
+rebases under bounded selection. The focused corrections add tracker checks and
+committed pending-ID propagation, with direct/cascade/rollback and bounded retry
+regressions. S03, wire and persisted state formats remain unchanged.
+Corrected local validation passes 671 functions (331 legacy, 246 store, 71 runtime,
+23 model); selected iOS18.5 suites pass 57 functions / 75 expanded cases. The
+corrected code head `85efea1986f51c1f7318df5dae8f7071106f9d78` passed full
+macOS/iOS checkpoint `41201271653`. Final integration-status edits are
+documentation-only and do not repeat the full checkpoint. S03 and the bounded
+physical evidence remain unchanged. No asset implementation is included.

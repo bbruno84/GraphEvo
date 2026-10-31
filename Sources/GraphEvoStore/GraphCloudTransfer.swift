@@ -20,7 +20,10 @@ package struct GraphCloudTransportBinding: Codable, Equatable, Sendable {
 package struct GraphCloudRecordFailure: Codable, Equatable, Sendable {
     package let recordName: String
     package let code: Int
-    package init(recordName: String, code: Int) { self.recordName = recordName; self.code = code }
+    package let serverRecord: GraphCloudIncoming?
+    package init(recordName: String, code: Int, serverRecord: GraphCloudIncoming? = nil) {
+        self.recordName = recordName; self.code = code; self.serverRecord = serverRecord
+    }
 }
 package struct GraphCloudSentReceipt: Codable, Equatable, Sendable {
     package let id: UUID
@@ -51,6 +54,16 @@ package struct GraphCloudSendReport: Sendable {
     package let failures: [GraphCloudRecordFailure]
     package let cleanupPending: Bool
     package let transportError: (any Error)?
+    let retryIDs: Set<GraphNodeID>
+    // Nil means no receipt transaction was settled; an empty set means the committed queue is empty.
+    let pendingIDs: Set<GraphNodeID>?
+    package let resolvedConflicts: Int
+    package let pendingRetry: Bool
+    package init(succeeded: Int, failures: [GraphCloudRecordFailure], cleanupPending: Bool, transportError: (any Error)?, resolvedConflicts: Int = 0, pendingRetry: Bool = false, retryIDs: Set<GraphNodeID> = [], pendingIDs: Set<GraphNodeID>? = nil) {
+        self.succeeded = succeeded; self.failures = failures; self.cleanupPending = cleanupPending
+        self.transportError = transportError; self.resolvedConflicts = resolvedConflicts; self.pendingRetry = pendingRetry; self.retryIDs = retryIDs
+        self.pendingIDs = pendingIDs
+    }
 }
 package enum GraphCloudFingerprint {
     package static func of<Value: Encodable>(_ value: Value) throws -> String {
@@ -61,14 +74,14 @@ package enum GraphCloudFingerprint {
 package enum GraphCloudReceiptCleanup: Sendable { case consumed(Set<UUID>), retain(Set<UUID>) }
 
 package struct GraphCloudStoreAdapter: Sendable {
-    package let prepare: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Int, GraphSyncLimits) throws -> GraphCloudOutgoingBatch
-    package let sent: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphCloudSentReceipt, GraphSyncLimits) throws -> Void
-    package let apply: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudEffect], GraphSyncLimits) throws -> Void
+    package let prepare: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Int, GraphSyncLimits, Set<GraphNodeID>?) throws -> GraphCloudOutgoingBatch
+    package let sent: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudSentReceipt], GraphSyncLimits) throws -> GraphCloudResolution
+    package let apply: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudEffect], GraphSyncLimits) throws -> GraphCloudResolution
     package let trim: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphCloudReceiptCleanup) throws -> Void
     package init(
-        prepare: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Int, GraphSyncLimits) throws -> GraphCloudOutgoingBatch,
-        sent: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphCloudSentReceipt, GraphSyncLimits) throws -> Void,
-        apply: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudEffect], GraphSyncLimits) throws -> Void,
+        prepare: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Int, GraphSyncLimits, Set<GraphNodeID>?) throws -> GraphCloudOutgoingBatch,
+        sent: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudSentReceipt], GraphSyncLimits) throws -> GraphCloudResolution,
+        apply: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudEffect], GraphSyncLimits) throws -> GraphCloudResolution,
         trim: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphCloudReceiptCleanup) throws -> Void
     ) { self.prepare = prepare; self.sent = sent; self.apply = apply; self.trim = trim }
 }
@@ -76,6 +89,20 @@ package struct GraphCloudStoreAdapter: Sendable {
 package struct GraphCloudApplyReport: Sendable {
     package let applied: Int
     package let cleanupPending: Bool
+    let retryIDs: Set<GraphNodeID>
+    package let resolvedConflicts: Int
+    package let pendingRetry: Bool
+    package init(applied: Int, cleanupPending: Bool, resolvedConflicts: Int = 0, pendingRetry: Bool = false, retryIDs: Set<GraphNodeID> = []) {
+        self.applied = applied; self.cleanupPending = cleanupPending; self.resolvedConflicts = resolvedConflicts; self.pendingRetry = pendingRetry; self.retryIDs = retryIDs
+    }
+}
+
+package struct GraphCloudResolution: Sendable {
+    package init() {}
+    package var resolved = 0
+    package var rebased = Set<GraphNodeID>()
+    package var pendingIDs = Set<GraphNodeID>()
+    package var failures: [GraphCloudRecordFailure] = []
 }
 
 @available(iOS 17, macOS 14, *)

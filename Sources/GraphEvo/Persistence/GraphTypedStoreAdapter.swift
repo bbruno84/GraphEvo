@@ -496,6 +496,8 @@ package enum GraphTypedStoreAdapter {
             guard !isShared else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             try validate(record)
             guard nodes[record.id] == nil else { throw GraphStoreError.duplicateIdentity }
+            guard !GraphMutationMetadata.isDeleted(context, id: record.id) else { throw GraphStoreError.duplicateIdentity }
+            if let root, try GraphMutationMetadata.deletedIDs(root).contains(record.id.rawValue.uuidString) { throw GraphStoreError.duplicateIdentity }
             let values = try record.properties.mapValues { try GraphValueCodec.encode($0) }
             let (subjects, objects) = try resolve(record.endpoints)
             let node: Node
@@ -514,6 +516,7 @@ package enum GraphTypedStoreAdapter {
             setEndpoints(node, subjects: subjects, objects: objects)
             try assign(node)
             nodes[record.id] = node
+            GraphMutationMetadata.touch(context, node, id: record.id)
         }
 
         func patch(_ patch: GraphRecordPatch, completing operationID: UUID? = nil) throws -> GraphRecord {
@@ -528,6 +531,7 @@ package enum GraphTypedStoreAdapter {
                 guard !createsDetails else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             }
             try validate(updated)
+            if updated == current { return current }
             let (subjects, objects) = try resolve(updated.endpoints)
             var values: [String: Data] = [:]
             for (key, change) in patch.properties {
@@ -545,6 +549,7 @@ package enum GraphTypedStoreAdapter {
             node.add(to: Array(patch.addingGroups)); node.remove(from: Array(patch.removingGroups))
             if patch.endpoints != nil { setEndpoints(node, subjects: subjects, objects: objects) }
             try assign(node)
+            GraphMutationMetadata.touch(context, node, id: patch.id)
             return updated
         }
 
@@ -584,8 +589,12 @@ package enum GraphTypedStoreAdapter {
                     // Preserve actions and their other endpoints, including valid empty actions.
                     for action in entity.actions {
                         action.remove(subjects: [entity]); action.remove(objects: [entity])
+                        if let actionID = nodes.first(where: { $0.value.sharesBackingObject(with: action) })?.key {
+                            GraphMutationMetadata.touch(context, action, id: actionID)
+                        }
                     }
                 }
+                GraphMutationMetadata.deleted(context, id: next)
                 node.delete()
                 nodes.removeValue(forKey: next)
             }

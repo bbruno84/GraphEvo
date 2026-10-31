@@ -1575,3 +1575,16 @@ no public opener or automatic synchronization is enabled. Persisted routes conta
 GraphID and zone only; app bootstrap must open each graph at its current URL after
 restart. Unregistered resources remain pending. Schema S03 and CF01 are unchanged;
 engine-session format 1 is refused without conversion by the new format-2 reader.
+
+
+### Package-only automatic conflict transport (T03)
+
+The new custom-cloud backend still has no public opening API. Its package-only
+`GraphConflictPolicy` cases are `cloudWins` and `lastEditWins` (default).
+`GraphContextManager.createGraph(id:at:conflictPolicy:)` selects a local persisted
+policy; `GraphStore.conflictPolicy` is an async throwing getter and
+`setConflictPolicy(_:)` is async throwing. All handles share changes. GraphRecord
+and its application properties are unchanged. Graph stamps hidden edit dates;
+consumers do not set them. Delete-wins overrides both policies and deleted node IDs
+cannot be reused. See the [T03 contract](../design/graphevo-2-conflict-policies.md)
+for bounded retry/report meanings, compatibility and structural refusal scope.

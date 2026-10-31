@@ -55,6 +55,7 @@ package struct GraphSyncLimits: Sendable {
 
 /// All callbacks stay on the runtime writer context; native save belongs to StoreResources.
 package struct GraphSyncAdapter: Sendable {
+    package var policy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy?) throws -> GraphConflictPolicy)?
     package let cloud: GraphCloudStoreAdapter?
     package let collect: @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits) throws -> Int
     package let prepare: @Sendable (NSManagedObjectContext, GraphID, GraphSyncLimits, Int) throws -> GraphSyncPrepared
@@ -136,26 +137,26 @@ actor GraphSyncSession {
         try await handle.transaction { try adapter.importPatches($0, graphID, limits, patches) }
     }
 
-    func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int, limits: GraphSyncLimits) async throws -> GraphCloudOutgoingBatch {
+    func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int, limits: GraphSyncLimits, onlyIDs: Set<GraphNodeID>? = nil) async throws -> GraphCloudOutgoingBatch {
         guard active == nil else { throw GraphSyncError.busy }
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        let result = try await handle.transaction { try cloud.prepare($0, id, binding, maximum, limits) }
+        let result = try await handle.transaction { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) }
         guard !retired else { throw GraphStoreError.closed }
         return result
     }
-    func commitTransport(_ binding: GraphCloudTransportBinding, receipt: GraphCloudSentReceipt, limits: GraphSyncLimits) async throws {
+    func commitTransport(_ binding: GraphCloudTransportBinding, receipts: [GraphCloudSentReceipt], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        try await handle.transaction { try cloud.sent($0, id, binding, receipt, limits) }
+        return try await handle.transaction { try cloud.sent($0, id, binding, receipts, limits) }
     }
-    func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits) async throws {
+    func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        try await handle.transaction { try cloud.apply($0, id, binding, effects, limits) }
+        return try await handle.transaction { try cloud.apply($0, id, binding, effects, limits) }
     }
     func trimTransport(_ binding: GraphCloudTransportBinding, receipts: Set<UUID>) async throws {
         try begin(); defer { busy = false }
@@ -169,6 +170,14 @@ actor GraphSyncSession {
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
         try await handle.transaction { try cloud.trim($0, id, binding, .retain(retained)) }
+    }
+
+    func conflictPolicy(_ policy: GraphConflictPolicy?) async throws -> GraphConflictPolicy {
+        try begin(); defer { busy = false }
+        guard let callback = adapter.policy else { throw GraphSyncError.unavailable }
+        let id = graphID
+        if let policy { return try await handle.transaction { try callback($0, id, policy) } }
+        return try await handle.read { try callback($0, id, nil) }
     }
 
     func retire() { retired = true; active = nil }

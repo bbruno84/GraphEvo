@@ -640,3 +640,19 @@ macOS/iOS validation is required at agreed delivery checkpoints and before
 alpha/beta tags; release/v1 automatic checks remain enabled. Existing B/R gates
 and physical-device scopes are unchanged. Record the actual tested commit/run
 when closing any gate; do not infer success from an unrun or skipped workflow.
+
+
+## T03 conflict-policy follow-ups
+
+- [ ] **B** Extend [T03](graphevo-2-conflict-policies.md) beyond bounded private
+  record fixtures: structural dependencies, sharing/permissions, account changes,
+  offline/rate limiting, actual interruption and consistent backup recovery.
+  Same-record convergence does not close the broad conflict gate.
+- [ ] **R** Measure added hidden modifiedAt rows, server conflict receipt archives,
+  deleted-ID trace growth and full-map rewrite costs on realistic workloads.
+  Transport plus traces share 32 MiB; traces cap at 100,000 IDs with explicit
+  refusal. Design/verify safe lifetime retention before claiming stable capacity;
+  do not prune automatically and risk old-event resurrection.
+- [ ] **R** Document device-clock skew consequences of lastEditWins; no distributed
+  correction or global temporal ordering is provided. Confirm policy guidance and
+  report interpretation: local resolution is distinct from confirmed publication.

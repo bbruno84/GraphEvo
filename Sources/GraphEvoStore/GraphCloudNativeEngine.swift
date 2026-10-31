@@ -111,7 +111,10 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
                        let item = candidates[name], GraphCloudNodeCodec.matchesFrozenServer(server, item: item, binding: route) {
                         saved.append(try GraphCloudRecordCodec.archive(server, scope: scope))
                         syncEngine.state.remove(pendingRecordZoneChanges: [.saveRecord(server.recordID)])
-                    } else { failures.append(.init(recordName: name, code: failure.error.code.rawValue)) }
+                    } else {
+                        let server = failure.error.code == .serverRecordChanged ? try failure.error.serverRecord.map { try GraphCloudRecordCodec.archive($0, scope: scope) } : nil
+                        failures.append(.init(recordName: name, code: failure.error.code.rawValue, serverRecord: server))
+                    }
                 }
                 for (id, error) in event.failedRecordDeletes {
                     if error.code == .unknownItem {

@@ -175,7 +175,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
     @Test func serverSuccessBeforeLocalCommitIsRecoveredWithoutAnotherSend() async throws {
         let bus = TransportBus(), fault = TransportFailureSwitch()
         let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, sent: { context, id, binding, receipt, limits in
-            try base.sent(context, id, binding, receipt, limits); try fault.failOnce()
+            let result = try base.sent(context, id, binding, receipt, limits); try fault.failOnce(); return result
         }, apply: base.apply, trim: base.trim) }
         let f = try await fixture(bus: bus, adapter: adapter)
         defer { try? FileManager.default.removeItem(at: f.directory) }
@@ -248,7 +248,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
     @Test func incomingPreSaveFailureRollsBackBothDataAndReceipt() async throws {
         let bus = TransportBus(), fault = TransportFailureSwitch()
         let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, sent: base.sent, apply: { context, id, binding, effects, limits in
-            try base.apply(context, id, binding, effects, limits); try fault.failOnce()
+            let result = try base.apply(context, id, binding, effects, limits); try fault.failOnce(); return result
         }, trim: base.trim) }
         let f = try await fixture(bus: bus, adapter: adapter)
         defer { try? FileManager.default.removeItem(at: f.directory) }
@@ -454,17 +454,19 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         #expect(!GraphCloudNodeCodec.sameServerVersion("tag", nil))
     }
 
-    @Test func pendingLocalWritesRetainInboxAndBlockUnresolvedUploads() async throws {
+    @Test func pendingLocalWritesUseLastEditPolicyAndPublishWithoutManualResolution() async throws {
         let bus = TransportBus(), f = try await fixture(bus: bus)
         defer { try? FileManager.default.removeItem(at: f.directory) }
         let a = f.graph.makeNodeID()
         _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: a, type: "Item", properties: ["value": .integer(1)])) }
         bus.inject(try incoming(GraphRecord(id: a, type: "Item", properties: ["value": .integer(99)]), f.binding.route))
         try await f.manager.fetchCloudChanges(.private, configuration: f.config)
-        await #expect(throws: GraphSyncError.pendingImport) { try await f.manager.applyCloudInbox(for: f.graph.id, configuration: f.config) }
+        let applied = try await f.manager.applyCloudInbox(for: f.graph.id, configuration: f.config)
+        #expect(applied.resolvedConflicts == 1 && applied.pendingRetry)
         #expect(try await f.graph.read { try $0.record(for: a)?.properties["value"] } == .integer(1))
-        await #expect(throws: GraphSyncError.pendingImport) { try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config) }
-        #expect(bus.sendCount == 0)
+        _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        #expect(bus.sendCount == 1)
+        #expect(try await f.graph.collectSyncChanges() == 0)
         try await finish(f)
     }
 

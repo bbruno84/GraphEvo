@@ -957,17 +957,38 @@ Do not auto-open a resource from restored cloud state. Preserve portable moves.
 Frozen attempts, server metadata and effect/receipt markers use one native save
 with the related PH changes. Native send-result envelopes must be retained before
 engine state advances. Recover those receipts and pending incoming effects before
-new sends; do not overwrite genuine pending-local conflicts or infer version
+new sends; resolve same-record conflicts under T03 and refuse unsupported structural
+conflicts atomically. Never infer version
 equality from missing change tags. Consume session envelopes only after durable
 effects. Receipt cleanup may remain pending after a successful effect; prune only
 markers absent from the validated same-session retained work. A marker is bound
 to event ID/content, account/zone, native store UUID and PH epoch.
 
-The engine document is format 2; refuse older files unchanged. Native S03/CF01 do
-not change. Import uses Node facades, dependency ordering and final validation;
+The engine document is format 3 and native transport state format 2; refuse older
+alpha state unchanged. Native S03 does not change; wire format 2 reads format 1. Import uses Node facades, dependency ordering and final validation;
 missing endpoints/conflicts retain the inbox. Zone deletion blocks transport and
 preserves local data, before unrelated app-body decoding. Never recreate it as a
 retry fallback. Raw PH-only acknowledgement/patch import is prohibited once a graph
 has transport state. Keep real server tags/CAS/device delivery, power-loss, backup
 consistency, resource envelopes, assets, automatic scheduling and account/cache
 policy gates open. Injected bus tests are not physical CloudKit acceptance.
+
+
+## V2 T03 automatic conflicts
+
+Read [T03](docs/design/graphevo-2-conflict-policies.md) before conflict/receipt or
+edit-date work. Default lastEditWins compares current consumer edit dates, ties
+cloud; cloudWins chooses remote. Policy is local root metadata shared by handles.
+Stamp actual consumer primitive changes once per transaction before save, including
+surviving action edits. No dates from PH/createdDate, no stamping imports/retries.
+Keep GraphRecord application properties unchanged and S03 unchanged.
+
+Retain validated server archives in durable conflict receipts. Settle all results
+from a send together before retiring its attempt; acknowledge only matching
+generations. A local winner keeps current data/date and rebases server fields.
+At most one targeted retry per manual call; distinguish resolved from published.
+Delete-wins and persistent deleted-ID traces prevent resurrection/ID reuse, even
+for same-cut old saves. Refuse unsupported pending structural effects atomically.
+Retain explicit trace/receipt bounds and cost gates; no automatic trace pruning,
+cloud reset, path persistence or consumer-body replay. T01/T02 physical reports
+remain pinned historical evidence, not assertions about the new policy runtime.

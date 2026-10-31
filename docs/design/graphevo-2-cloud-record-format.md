@@ -7,6 +7,10 @@ properties. Native S03 and its twelve entities remain unchanged. This increment
 provides conversion boundaries. The separate [T01 continuation](graphevo-2-record-transport.md)
 connects manual upload/import workers and receipts; CF01 alone does not activate them.
 
+Current wire format is extended by [T03](graphevo-2-conflict-policies.md): format 2
+adds an internal optional modifiedAt; format 1 remains readable with unknown date.
+The original format-1 description below is historical where superseded.
+
 ## Record shape and identity
 
 A zone is bound to one graph by the ContextManager. One Entity, Relationship or

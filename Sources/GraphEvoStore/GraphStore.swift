@@ -37,6 +37,8 @@ public struct GraphV1AdoptionReport: Sendable {
 
 /// Privileged callbacks implemented by the current Graph facade adapter.
 package struct GraphStoreAdapter: Sendable {
+    package var beginMutation: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
+    package var finishMutation: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package let initialize: @Sendable (NSManagedObjectContext, URL?) throws -> GraphV1AdoptionReport
     package let fetch: @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> GraphRecord?
     package let fetchAll: @Sendable (NSManagedObjectContext, GraphID, String, GraphNodeKind) throws -> [GraphRecord]
@@ -168,13 +170,16 @@ public actor GraphStore {
         }
     }
 
-    package func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int = 100, limits: GraphSyncLimits = .init()) async throws -> GraphCloudOutgoingBatch {
-        try await syncSession().prepareTransport(binding, maximum: maximum, limits: limits)
+    package func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int = 100, limits: GraphSyncLimits = .init(), onlyIDs: Set<GraphNodeID>? = nil) async throws -> GraphCloudOutgoingBatch {
+        try await syncSession().prepareTransport(binding, maximum: maximum, limits: limits, onlyIDs: onlyIDs)
     }
     package func commitTransport(_ binding: GraphCloudTransportBinding, receipt: GraphCloudSentReceipt, limits: GraphSyncLimits = .init()) async throws {
-        try await syncSession().commitTransport(binding, receipt: receipt, limits: limits)
+        _ = try await syncSession().commitTransport(binding, receipts: [receipt], limits: limits)
     }
-    package func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits = .init()) async throws {
+    package func commitTransport(_ binding: GraphCloudTransportBinding, receipts: [GraphCloudSentReceipt], limits: GraphSyncLimits = .init()) async throws -> GraphCloudResolution {
+        try await syncSession().commitTransport(binding, receipts: receipts, limits: limits)
+    }
+    @discardableResult package func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits = .init()) async throws -> GraphCloudResolution {
         try await syncSession().applyTransport(binding, effects: effects, limits: limits)
     }
     package func trimTransport(_ binding: GraphCloudTransportBinding, receipts: Set<UUID>) async throws {
@@ -183,6 +188,13 @@ public actor GraphStore {
 
     package func pruneTransport(_ binding: GraphCloudTransportBinding, retained: Set<UUID>) async throws {
         try await syncSession().pruneTransport(binding, retained: retained)
+    }
+
+    package var conflictPolicy: GraphConflictPolicy {
+        get async throws { try await syncSession().conflictPolicy(nil) }
+    }
+    package func setConflictPolicy(_ policy: GraphConflictPolicy) async throws {
+        _ = try await syncSession().conflictPolicy(policy)
     }
 
     public func close() async throws {
@@ -213,7 +225,10 @@ public actor GraphStore {
             return try await handle.transaction { context in
                 let scope = GraphMutation(context: context, graphID: id, adapter: adapter)
                 defer { scope.invalidate() }
-                return try body(scope)
+                try adapter.beginMutation?(context, id)
+                let result = try body(scope)
+                try adapter.finishMutation?(context, id)
+                return result
             }
         } catch { throw Self.translate(error) }
     }
