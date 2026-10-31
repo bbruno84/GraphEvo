@@ -94,16 +94,17 @@ and the Swift 6 consumer. Physical native-engine delivery remains a separate gat
 The engine foundation #109 is reviewed/merged as `e26a0cd`, with exact-head
 macOS/iOS CI `41143330378` green; the merge tree matches reviewed head `efc9fe9`.
 
-The focused [#110](https://github.com/bbruno84/GraphEvo/pull/110),
-`codex/v2-cloud-record-format`, adds [CF01 logical record conversion](graphevo-2-cloud-record-format.md)
-over immutable PH attempts and the incoming inbox envelope. It is not integrated.
+The reviewed implementation in [#110](https://github.com/bbruno84/GraphEvo/pull/110)
+returns directly from `codex/v2-cloud-record-format` and adds [CF01 logical record conversion](graphevo-2-cloud-record-format.md)
+over immutable PH attempts and the incoming inbox envelope. The PR records
+exact-head automated checks and merge disposition.
 One GraphEvoNode record represents each application primitive; properties remain
 serialized and S03 is unchanged. No outgoing worker, server metadata persistence,
 incoming application/receipt, attachment transport or remote queries are activated.
 Its local checkpoint passes 630 tests (331 legacy, 205 store, 71 runtime,
 23 model), the Swift 6 consumer and selected iOS Simulator checks (69 functions /
 93 expanded cases). The initial Xcode/CoreSimulator setup mismatch was resolved
-before the successful simulator rerun. Remote CI/review remain required.
+before the successful simulator rerun. Physical cloud acceptance remains open.
 
 ## Integrated alpha implementation
 
@@ -115,6 +116,7 @@ before the successful simulator rerun. Remote CI/review remain required.
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
+| CF01 wire format | Logical node CKRecords, lossless typed-value payload, secure native metadata reuse and PH/inbox conversion (#110) | No network upload/import activation or server metadata/effect receipts; S03 unchanged |
 | Engine foundation | ContextManager-owned private/shared sessions, exact zone routes and persisted incoming inbox (#109) | Package-only manual fetch; no upload, graph import, assets or automatic sync acceptance |
 | PH pending | Per-graph discovery, durable pending/checkpoint, immutable attempts and generation-safe acknowledgements (#108) | Package-only; controlled patches only, full engine/incoming/crash gates remain open |
 | Native identity | M16 removed application versioning; M18/S03 preserves graph/node IDs in deletion history through #107 | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
@@ -148,8 +150,8 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Review/check/integrate CF01 before the next increment. Then persist native
-   server metadata and connect upload/import effects and receipts over PH/inbox;
+1. Persist native server metadata and connect upload/import effects and receipts
+   over PH/inbox;
    complete assets, automatic sync, pause, conflicts and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
