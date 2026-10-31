@@ -247,6 +247,12 @@ wire/session/transport formats become 2/3/2, refusing old alpha state unchanged.
 The package-only boundary remains. The [device result](results/conflict-policies-cloudkit-2026-10-31.md)
 records bounded physical convergence separately from the broader acceptance gates.
 [PR #115](https://github.com/bbruno84/GraphEvo/pull/115) targets `codex/graphevo-2`.
-Final local validation passes667 functions and the physical protocol passes all
-eight stages; one full macOS/iOS CI checkpoint is requested on the final head.
-Integration remains pending review/checkpoint acceptance.
+Initial local validation passed 667 functions; the physical protocol passed all
+eight stages on its pinned runtime. Initial exact-head CI `41199122433` passed
+on `2f1f9bd`. Review found same-transaction identity reuse and loss of earlier
+rebases under bounded selection. The focused corrections add tracker checks and
+committed pending-ID propagation, with direct/cascade/rollback and bounded retry
+regressions. S03, wire and persisted state formats remain unchanged.
+Corrected local validation passes 671 functions (331 legacy, 246 store, 71 runtime,
+23 model); selected iOS18.5 suites pass 57 functions / 75 expanded cases. The
+corrected head requires a final CI checkpoint before integration.

@@ -109,6 +109,7 @@ package actor GraphContextManager {
         let receipts = try await session.sentReceipts(for: graph.id)
         var succeeded = 0, failures: [GraphCloudRecordFailure] = [], cleanup = false, resolved = 0
         var retry = Set<GraphNodeID>()
+        var pendingIDs: Set<GraphNodeID>?
         let batches = receipts.reduce(into: [UUID]()) { if !$0.contains($1.batchID) { $0.append($1.batchID) } }
         for batch in batches {
             let group = receipts.filter { $0.batchID == batch }, ids = Set(group.map(\.id))
@@ -118,9 +119,10 @@ package actor GraphContextManager {
             do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
             succeeded += group.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count }
             failures += result.failures; resolved += result.resolved; retry.formUnion(result.rebased)
+            pendingIDs = result.pendingIDs
         }
         return GraphCloudSendReport(succeeded: succeeded, failures: failures, cleanupPending: cleanup, transportError: nil,
-            resolvedConflicts: resolved, pendingRetry: !retry.isEmpty, retryIDs: retry)
+            resolvedConflicts: resolved, pendingRetry: !retry.isEmpty, retryIDs: retry, pendingIDs: pendingIDs)
     }
     package func sendCloudChanges(for graphID: GraphID, configuration: GraphCloudConfiguration,
                                   maximumRecords: Int = 100) async throws -> GraphCloudSendReport {
@@ -138,7 +140,10 @@ package actor GraphContextManager {
                 do { try await session.send(batch) } catch let caught { error = caught }
                 let result = try await Self.drainSent(session, graph: graph, binding: binding)
                 succeeded += result.succeeded; failures += result.failures; resolved += result.resolvedConflicts
-                cleanup = cleanup || result.cleanupPending; retry = result.retryIDs
+                cleanup = cleanup || result.cleanupPending
+                // Keep earlier rebases outside this bounded batch; only committed queue state can settle them.
+                if let pending = result.pendingIDs { retry.formIntersection(pending) }
+                retry.formUnion(result.retryIDs)
                 // Expected record conflicts may accompany a partial-failure error; only resolved cases qualify for a retry.
                 if let native = error as? NSError, native.domain == "CKErrorDomain", [2, 11, 14].contains(native.code), result.resolvedConflicts > 0, result.failures.isEmpty { error = nil }
                 if retry.isEmpty || error != nil || !result.failures.isEmpty { break }

@@ -57,7 +57,12 @@ prepare freezes the current value against that base. Neither arbitrary consumer
 closures nor historical mutation bodies are replayed.
 
 A manual send permits at most two native invocations: the initial selection and
-one targeted retry of rebased IDs only. A second collision remains pending. Other
+one targeted retry of rebased IDs only. A second collision remains pending.
+Rebases recovered before the first send
+remain eligible even when bounded selection excludes them from that batch.
+Settlement returns the committed pending-ID set, so earlier rebases are removed
+only when no longer pending; unsent/failed/newer generations keep pendingRetry
+visible after the single targeted pass. This transient set is not persisted. Other
 failures remain explicit and prevent the targeted retry. `resolvedConflicts` counts
 resolved competing events, including a repeated collision; it is not a unique-node
 or publication count. `succeeded` counts confirmed native successful receipts;
@@ -71,6 +76,10 @@ save under either policy. An unknownItem for a save previously carrying a native
 server change tag is remote deletion, not permission to recreate. An unknownItem
 for an unassociated new save remains an error. Native delete unknownItem still
 confirms absence. Deleted IDs are not reusable: application recovery uses new IDs.
+Insertion checks
+both durable traces and current transaction deletions, including cascaded IDs.
+Delete/reinsert with the same ID is rejected before edits; a failed transaction
+rolls back its transient and durable deletion traces together.
 
 The root's local `__graphevo_v2.deletedNodeIDs` trace survives acknowledgement and
 restart. It rejects old saves after deletion; within an inbox cut a deletion also

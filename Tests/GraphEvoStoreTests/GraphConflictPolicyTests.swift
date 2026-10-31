@@ -360,4 +360,73 @@ private final class PolicyBarrier: @unchecked Sendable {
         try await finish(f)
     }
 
+    @Test(arguments: [false, true])
+    func sameTransactionRejectsDirectAndCascadedDeletedIdentityReuse(_ cascade: Bool) async throws {
+        let f = try await fixture(), a = try await insert(f), b = try await insert(f)
+        let edge = f.graph.makeNodeID()
+        let relationship = try GraphRecord(id: edge, type: "links", endpoints: .relationship(subject: a, object: b),
+                                           createdDate: Date(timeIntervalSince1970: 1))
+        _ = try await f.graph.transaction { try $0.insert(relationship) }
+        _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        let target = cascade ? edge : a
+        let original = try #require(try await f.graph.read { try $0.record(for: target) })
+        do {
+            try await f.graph.transaction {
+                try $0.delete(a)
+                try $0.insert(original)
+            }
+            Issue.record("Deleted identity reused before transaction commit")
+        } catch GraphStoreError.duplicateIdentity { }
+        #expect(try await f.graph.read { try $0.record(for: a) } == record(a, 1))
+        #expect(try await f.graph.read { try $0.record(for: edge) } == relationship)
+        #expect(try await date(f.graph, target) == Date(timeIntervalSince1970: 100))
+        #expect(try await f.graph.collectSyncChanges() == 0)
+        try await finish(f)
+    }
+    @Test func rejectedReuseOfANewNodeRollsBackItsDeletionTrace() async throws {
+        let f = try await fixture(), id = f.graph.makeNodeID(), value = try record(id, 1)
+        do {
+            try await f.graph.transaction {
+                try $0.insert(value)
+                try $0.delete(id)
+                try $0.insert(value)
+            }
+            Issue.record("New identity reused after deletion in the same transaction")
+        } catch GraphStoreError.duplicateIdentity { }
+        #expect(try await f.graph.read { try $0.record(for: id) } == nil)
+        _ = try await f.graph.transaction { try $0.insert(value) }
+        #expect(try await date(f.graph, id) == Date(timeIntervalSince1970: 100))
+        try await finish(f)
+    }
+    @Test(arguments: [1, 2])
+    func boundedSelectionPreservesEarlierRebasesAndReportsUnsentRemainder(_ rebasedCount: Int) async throws {
+        let f = try await fixture(), first = try await insert(f), second = try await insert(f)
+        var rebased = [second]
+        if rebasedCount == 2 { rebased.append(try await insert(f)) }
+        f.bus.fetch(try rebased.map { try remote(f, $0, time: 0) })
+        try await f.manager.fetchCloudChanges(.private, configuration: f.config)
+        let report = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config, maximumRecords: 1)
+        #expect(report.resolvedConflicts == rebasedCount && report.succeeded == 2)
+        #expect(f.bus.sent.count == 2)
+        #expect(f.bus.sent[0].items.map(\.change.id) == [first])
+        #expect(f.bus.sent[1].items.map(\.change.id) == [second])
+        #expect(try await f.graph.collectSyncChanges() == rebasedCount - 1)
+        #expect(report.pendingRetry == (rebasedCount > 1))
+        try await finish(f)
+    }
+    @Test func failedTargetedRetryKeepsTheEarlierRebasePending() async throws {
+        let f = try await fixture()
+        _ = try await insert(f)
+        let id = try await insert(f)
+        f.bus.fetch([try remote(f, id, time: 0)])
+        let name = try GraphCloudNodeCodec.recordID(for: id, binding: f.binding.route).recordName
+        f.bus.script([[], [.init(recordName: name, code: CKError.Code.permissionFailure.rawValue)]])
+        try await f.manager.fetchCloudChanges(.private, configuration: f.config)
+        let report = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config, maximumRecords: 1)
+        #expect(report.pendingRetry && report.failures.count == 1 && report.succeeded == 1)
+        #expect(f.bus.sent.count == 2 && f.bus.sent[1].items.map(\.change.id) == [id])
+        #expect(try await f.graph.collectSyncChanges() == 1)
+        try await finish(f)
+    }
+
 }

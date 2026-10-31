@@ -496,6 +496,7 @@ package enum GraphTypedStoreAdapter {
             guard !isShared else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             try validate(record)
             guard nodes[record.id] == nil else { throw GraphStoreError.duplicateIdentity }
+            guard !GraphMutationMetadata.isDeleted(context, id: record.id) else { throw GraphStoreError.duplicateIdentity }
             if let root, try GraphMutationMetadata.deletedIDs(root).contains(record.id.rawValue.uuidString) { throw GraphStoreError.duplicateIdentity }
             let values = try record.properties.mapValues { try GraphValueCodec.encode($0) }
             let (subjects, objects) = try resolve(record.endpoints)

@@ -20,6 +20,9 @@ enum GraphMutationMetadata {
     static func deleted(_ context: NSManagedObjectContext, id: GraphNodeID) {
         (context.userInfo[trackerKey] as? Tracker)?.deleted.insert(id)
     }
+    static func isDeleted(_ context: NSManagedObjectContext, id: GraphNodeID) -> Bool {
+        (context.userInfo[trackerKey] as? Tracker)?.deleted.contains(id) == true
+    }
     static func finish(_ context: NSManagedObjectContext, graphID: GraphID, clock: @Sendable () -> Date) throws {
         guard let tracker = context.userInfo[trackerKey] as? Tracker else { return }
         context.userInfo.removeObject(forKey: trackerKey)

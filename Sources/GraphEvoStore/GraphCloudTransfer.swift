@@ -55,11 +55,14 @@ package struct GraphCloudSendReport: Sendable {
     package let cleanupPending: Bool
     package let transportError: (any Error)?
     let retryIDs: Set<GraphNodeID>
+    // Nil means no receipt transaction was settled; an empty set means the committed queue is empty.
+    let pendingIDs: Set<GraphNodeID>?
     package let resolvedConflicts: Int
     package let pendingRetry: Bool
-    package init(succeeded: Int, failures: [GraphCloudRecordFailure], cleanupPending: Bool, transportError: (any Error)?, resolvedConflicts: Int = 0, pendingRetry: Bool = false, retryIDs: Set<GraphNodeID> = []) {
+    package init(succeeded: Int, failures: [GraphCloudRecordFailure], cleanupPending: Bool, transportError: (any Error)?, resolvedConflicts: Int = 0, pendingRetry: Bool = false, retryIDs: Set<GraphNodeID> = [], pendingIDs: Set<GraphNodeID>? = nil) {
         self.succeeded = succeeded; self.failures = failures; self.cleanupPending = cleanupPending
         self.transportError = transportError; self.resolvedConflicts = resolvedConflicts; self.pendingRetry = pendingRetry; self.retryIDs = retryIDs
+        self.pendingIDs = pendingIDs
     }
 }
 package enum GraphCloudFingerprint {
@@ -98,6 +101,7 @@ package struct GraphCloudResolution: Sendable {
     package init() {}
     package var resolved = 0
     package var rebased = Set<GraphNodeID>()
+    package var pendingIDs = Set<GraphNodeID>()
     package var failures: [GraphCloudRecordFailure] = []
 }
 

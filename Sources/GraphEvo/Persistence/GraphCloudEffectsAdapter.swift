@@ -146,6 +146,7 @@ extension GraphSyncCheckpointAdapter {
             if let target = try identity(row, graphID: id) { deleted.insert(target.rawValue.uuidString) }
         }
         value.state.pending.removeAll { cleared.contains($0.id) }
+        result.pendingIDs = Set(value.state.pending.map(\.id))
         if result.resolved > 0 { state.attempt = nil }
         try GraphMutationMetadata.setDeletedIDs(deleted, root: value.root)
         _ = try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: id)
@@ -188,7 +189,11 @@ extension GraphSyncCheckpointAdapter {
                     guard previous == digest else { throw GraphCloudError.invalidState }
                 } else { fresh.append((receipt, digest)) }
             }
-            if fresh.isEmpty { return GraphCloudResolution() }
+            if fresh.isEmpty {
+                var result = GraphCloudResolution()
+                result.pendingIDs = Set(value.state.pending.map(\.id))
+                return result
+            }
             guard let attempt = state.attempt else { throw GraphSyncError.staleBatch }
             let sent = Dictionary(uniqueKeysWithValues: attempt.items.map { ($0.recordName, $0) })
             var succeeded = Set<String>(), seen = Set<String>(), events: [GraphNodeID: GraphCloudDecodedEvent] = [:]

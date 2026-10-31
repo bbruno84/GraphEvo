@@ -70,3 +70,27 @@ shared-account conflicts, attachments, automatic scheduling, actual crash during
 publication, consistent backup restore and lifetime deletion-trace cost remain
 open. Injected receipts establish local atomicity/races; only this physical run
 establishes actual server CAS and associated unknownItem outcomes for these cases.
+
+
+## Post-checkpoint review corrections
+
+Review of `2f1f9bd` (initial green CI `41199122433`) found two additional local
+boundaries. Deleting/reinserting an ID within one transaction bypassed the durable
+trace check, producing a live unstamped row with a PH delete. Insertion now also
+consults the current consumer tracker. Direct, cascaded and newly inserted IDs
+are covered, including complete rollback and reuse after a failed transaction.
+
+A rebase recovered before a bounded first send could be discarded from the
+retry report when that send selected another record. Receipt settlement now
+returns the actual committed pending-ID set; the manager retains earlier rebases
+until settled. Tests cover one/two earlier rebases with maximumRecords1, the
+single targeted-pass limit, unsent remainder and a failed targeted retry.
+
+These corrections are deterministic S03/transport tests. The eight-stage physical
+result above remains pinned to `348636e`; no device fixture was replayed and it
+is not presented as physical validation of these later review corrections.
+
+Corrected local validation: full macOS suite passes **671 functions** (331 legacy,
+246 store, 71 runtime, 23 model); selected iOS18.5 policy/transport/PH suites pass
+57 functions / 75 expanded cases. Manifest and diff checks pass. The PR records
+the corrected exact-head CI checkpoint separately from the initial checkpoint.
