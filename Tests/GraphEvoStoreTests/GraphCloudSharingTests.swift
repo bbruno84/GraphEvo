@@ -30,14 +30,14 @@ private actor SharingCalls {
     }
     private func fake(_ account: String, permission: GraphCloudSharePermission = .readWrite,
                       accept: (@Sendable () async throws -> Void)? = nil,
-                      calls: SharingCalls = SharingCalls()) -> GraphCloudAdapter {
+                      calls: SharingCalls = SharingCalls(), events: [GraphCloudIncoming] = []) -> GraphCloudAdapter {
         GraphCloudAdapter(sharing: GraphCloudSharingService(invite: { config, binding, owner, recipient, _, create in
             await calls.append(create)
             return GraphCloudInvitation(container: config.containerIdentifier, environment: config.environment,
                 graphID: binding.graphID, owner: owner, zoneName: binding.zone.name, recipient: recipient,
                 url: URL(string: "https://www.icloud.com/share/test")!)
-        }, accept: { _, _, _ in try await accept?(); return permission }), account: { _ in account }, make: { _, _, _, _ in
-            GraphCloudDriver(fetch: { _ in }, cancel: {})
+        }, accept: { _, _, _ in try await accept?(); return permission }), account: { _ in account }, make: { _, _, _, receive in
+            GraphCloudDriver(fetch: { _ in if !events.isEmpty { await receive(.incoming(events)) } }, cancel: {})
         })
     }
 
@@ -194,6 +194,50 @@ private actor SharingCalls {
         _ = try await session.invite(binding, recipient: "participant", permission: .readWrite)
         #expect(await calls.creates == [true])
         try await session.stop()
+    }
+
+    @Test func accessReductionCommitsBeforeMalformedPayloadAndPreservesPendingWork() async throws {
+        let config = config(), manager = manager(), id = GraphID(), invitation = invitation(config, id)
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let graph = try await manager.createGraph(id: id, at: config.directory.appendingPathComponent("A.sqlite"))
+        let control = GraphCloudIncoming(kind: .recordDeleted, zone: invitation.zone,
+            recordName: CKRecordNameZoneWideShare, recordType: CKRecord.SystemType.share)
+        let malformed = CKRecord(recordType: GraphCloudNodeCodec.recordType,
+            recordID: CKRecord.ID(recordName: "node." + UUID().uuidString.lowercased(),
+                zoneID: CKRecordZone.ID(zoneName: invitation.zone.name, ownerName: invitation.zone.owner)))
+        let payload = try GraphCloudRecordCodec.archive(malformed, scope: .shared)
+        _ = try await manager.startCloudSession(config, adapter: fake("participant", events: [control, payload]))
+        try await manager.acceptCloudInvitation(invitation, configuration: config)
+        let nodeID = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: nodeID, type: "Note")) }
+        #expect(try await graph.collectSyncChanges() == 1)
+        try await manager.fetchCloudChanges(.shared, configuration: config)
+        await #expect(throws: (any Error).self) { try await manager.applyCloudInbox(for: id, configuration: config) }
+        #expect(try await graph.participantAccess()?.writable == false)
+        #expect(try await manager.cloudInbox(config).count == 1)
+        #expect(try await graph.collectSyncChanges() == 1)
+        await #expect(throws: (any Error).self) { try await graph.transaction { _ in () } }
+        await #expect(throws: (any Error).self) { try await manager.sendCloudChanges(for: id, configuration: config) }
+        #expect(try await graph.collectSyncChanges() == 1)
+        try await graph.close(); try await manager.stopCloudSession(config)
+    }
+
+    @Test func corruptReservedAccessCannotGrantConsumerWrites() async throws {
+        let config = config(), manager = manager(), id = GraphID()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let graph = try await manager.createGraph(id: id, at: config.directory.appendingPathComponent("A.sqlite"))
+        // Trusted fault injection only; the public consumer scope cannot edit reserved metadata.
+        try await graph.transaction { scope in
+            try scope.withContext { context, _ in
+                let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+                let foreign = GraphCloudParticipantAccess(binding: .init(zone: .init(scope: .private, owner: "owner", name: "A"),
+                    graphID: GraphID()), account: "participant", permission: .readWrite, accepted: true)
+                root[dynamicMember: GraphCloudAccessMetadata.key] = try JSONEncoder().encode(foreign)
+            }
+        }
+        await #expect(throws: (any Error).self) { try await graph.transaction { _ in () } }
+        await #expect(throws: GraphCloudError.invalidState) { try await graph.participantAccess() }
+        try await graph.close()
     }
 
     @Test func oldSessionFormatIsRefusedWithoutRewritingIt() async throws {

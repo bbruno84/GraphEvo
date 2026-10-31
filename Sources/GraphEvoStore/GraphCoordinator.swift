@@ -56,12 +56,6 @@ package actor GraphCoordinator {
         }
     }
 
-    func participantAccess(_ value: GraphCloudParticipantAccess? = nil) async throws -> GraphCloudParticipantAccess? {
-        guard let access = adapter.participantAccess else { throw GraphCloudSharingError.unavailable }
-        let id = id
-        return try await handle.transaction { try access($0, id, value) }
-    }
-
     func validateCloudBinding(_ initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) async throws {
         let id = id
         try await handle.read { try initialize($0, id, false) }

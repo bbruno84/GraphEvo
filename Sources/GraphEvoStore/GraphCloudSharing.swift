@@ -17,7 +17,7 @@ package struct GraphCloudInvitation: Codable, Equatable, Sendable {
     package let recipient: String
     package let url: URL
     func validate() throws {
-        guard !container.isEmpty, !owner.isEmpty, !zoneName.isEmpty, !recipient.isEmpty,
+        guard [container, owner, zoneName, recipient].allSatisfy({ !$0.isEmpty && $0.utf8.count <= 4096 }),
               owner != recipient, url.scheme == "https", url.host?.isEmpty == false,
               url.absoluteString.utf8.count <= 4096 else { throw GraphCloudSharingError.invalidInvitation }
     }

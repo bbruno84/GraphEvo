@@ -103,17 +103,16 @@ package actor GraphContextManager {
         let binding = GraphCloudBinding(zone: invitation.zone, graphID: graphID)
         let routes = try await session.routes(in: .private) + session.routes(in: .shared)
         guard !routes.contains(where: { ($0.graphID == graphID || $0.zone == binding.zone) && $0 != binding }) else { throw GraphCloudError.ownershipConflict }
-        guard let location = locations[graphID], let entry = entries[graphID], entry.closing == nil else { throw GraphStoreError.missingGraph }
+        guard let location = locations[graphID], entries[graphID] != nil, entries[graphID]?.closing == nil else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: graphID, at: location.url)
         do {
-            let owner = try await entry.opening.value
-            let prior = try await owner.participantAccess()
+            let prior = try await graph.participantAccess()
             // Keep accepted access on an idempotent retry; a new replica is closed to consumer writes first.
             if prior == nil {
-                _ = try await owner.participantAccess(GraphCloudParticipantAccess(binding: binding, account: identity.account, permission: nil, accepted: false))
+                _ = try await graph.participantAccess(GraphCloudParticipantAccess(binding: binding, account: identity.account, permission: nil, accepted: false))
             } else if prior?.binding != binding || prior?.account != identity.account { throw GraphCloudError.ownershipConflict }
             let access = try await session.accept(invitation)
-            _ = try await owner.participantAccess(access)
+            _ = try await graph.participantAccess(access)
             automaticChanged()
             try await graph.close()
         } catch { let original = error; try? await graph.close(); throw original }
