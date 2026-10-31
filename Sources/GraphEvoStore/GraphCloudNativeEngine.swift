@@ -14,7 +14,7 @@ extension GraphCloudAdapter {
         let serialization: CKSyncEngine.State.Serialization?
         do { serialization = try state.map { try JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0) } }
         catch { throw GraphCloudError.invalidState }
-        let delegate = GraphCloudNativeDelegate(scope: scope, receive: receive)
+        let delegate = GraphCloudNativeDelegate(scope: scope, fetchRecord: { try await database.record(for: $0) }, receive: receive)
         var configuration = CKSyncEngine.Configuration(database: database, stateSerialization: serialization, delegate: delegate)
         configuration.automaticallySync = false
         let engine = CKSyncEngine(configuration)
@@ -53,8 +53,9 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
     let outbox = GraphCloudNativeOutbox()
     private let scope: GraphCloudScope
     private let receive: @Sendable (GraphCloudEvent) async -> Void
-    init(scope: GraphCloudScope, receive: @escaping @Sendable (GraphCloudEvent) async -> Void) {
-        self.scope = scope; self.receive = receive
+    private let fetchRecord: @Sendable (CKRecord.ID) async throws -> CKRecord
+    init(scope: GraphCloudScope, fetchRecord: @escaping @Sendable (CKRecord.ID) async throws -> CKRecord, receive: @escaping @Sendable (GraphCloudEvent) async -> Void) {
+        self.scope = scope; self.receive = receive; self.fetchRecord = fetchRecord
     }
     private func zone(_ id: CKRecordZone.ID) -> GraphCloudZone {
         GraphCloudZone(scope: scope, owner: id.ownerName, name: id.zoneName)
@@ -106,14 +107,21 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
                 var failures: [GraphCloudRecordFailure] = []
                 for failure in event.failedRecordSaves {
                     let name = failure.record.recordID.recordName
+                    var server: CKRecord?
+                    if failure.error.code == .serverRecordChanged, let value = failure.error.serverRecord {
+                        do { server = try await GraphCloudAsset.completeConflict(value, fetch: fetchRecord) }
+                        catch let error as CKError where error.code == .unknownItem {
+                            failures.append(.init(recordName: name, code: CKError.Code.unknownItem.rawValue)); continue
+                        } catch { throw GraphCloudError.transportUnavailable }
+                    }
                     // An ambiguous previous success is recoverable only when the complete server body equals the frozen intent.
-                    if failure.error.code == .serverRecordChanged, let server = failure.error.serverRecord,
+                    if let server,
                        let item = candidates[name], GraphCloudNodeCodec.matchesFrozenServer(server, item: item, binding: route) {
                         saved.append(try GraphCloudRecordCodec.archive(server, scope: scope))
                         syncEngine.state.remove(pendingRecordZoneChanges: [.saveRecord(server.recordID)])
                     } else {
-                        let server = failure.error.code == .serverRecordChanged ? try failure.error.serverRecord.map { try GraphCloudRecordCodec.archive($0, scope: scope) } : nil
-                        failures.append(.init(recordName: name, code: failure.error.code.rawValue, serverRecord: server))
+                        let archive = try server.map { try GraphCloudRecordCodec.archive($0, scope: scope) }
+                        failures.append(.init(recordName: name, code: failure.error.code.rawValue, serverRecord: archive))
                     }
                 }
                 for (id, error) in event.failedRecordDeletes {

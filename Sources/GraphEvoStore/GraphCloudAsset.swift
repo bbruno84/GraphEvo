@@ -44,6 +44,15 @@ package enum GraphCloudAsset {
         return copy
     }
 
+    /// Error.serverRecord contains asset references without downloaded files. Fetch a complete current server value.
+    static func completeConflict(_ server: CKRecord,
+        fetch: @Sendable (CKRecord.ID) async throws -> CKRecord) async throws -> CKRecord {
+        guard server["asset"] is CKAsset else { return server }
+        let complete = try await fetch(server.recordID)
+        guard complete.recordID == server.recordID, complete.recordType == server.recordType else { throw GraphCloudError.invalidState }
+        return complete
+    }
+
     static func materialize(_ record: CKRecord, directory: URL) throws {
         guard record["type"] as? String == GraphAttachmentPayload.graphType else { return }
         let data = try bytes(record["asset"])

@@ -247,4 +247,25 @@ private actor AssetBus {
         try await close(b); try await close(a)
     }
 
+    @available(iOS 17, macOS 14, *)
+    @Test func conflictAssetsAreFetchedBeforePortableReceiptPublication() async throws {
+        let id = GraphID(), route = GraphCloudBinding(zone: .init(scope: .private, owner: "owner", name: "zone"), graphID: id)
+        let payload = try GraphAttachmentPayload(id: .init(graphID: id), ownerID: .init(graphID: id), fileName: "photo", contentType: "public.data", data: Data([4,5,6]))
+        let record = try GraphCloudNodeCodec.encode(payload.graphRecord(), binding: route)
+        // A reference without usable content stands for the SDK's unmaterialized conflict asset.
+        record["asset"] = CKAsset(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let originalID = record.recordID
+        let complete = try await GraphCloudAsset.completeConflict(record) { requested in
+            #expect(requested == originalID)
+            return try GraphCloudNodeCodec.encode(payload.graphRecord(), binding: route)
+        }
+        #expect(try GraphCloudNodeCodec.decode(complete, binding: route).record == payload.graphRecord())
+        await #expect(throws: GraphCloudError.invalidState) {
+            _ = try await GraphCloudAsset.completeConflict(record) { _ in CKRecord(recordType: "Wrong") }
+        }
+        await #expect(throws: CKError.self) {
+            _ = try await GraphCloudAsset.completeConflict(record) { _ in throw CKError(.unknownItem) }
+        }
+    }
+
 }
