@@ -7,6 +7,10 @@ properties. Native S03 and its twelve entities remain unchanged. This increment
 provides conversion boundaries. The separate [T01 continuation](graphevo-2-record-transport.md)
 connects manual upload/import workers and receipts; CF01 alone does not activate them.
 
+Attachments are subsequently supported by [T04](graphevo-2-cloud-assets.md):
+wire3 adds CKAsset content with portable durable snapshots. The original asset
+refusal below describes the historical CF01 scope.
+
 Current wire format is extended by [T03](graphevo-2-conflict-policies.md): format 2
 adds an internal optional modifiedAt; format 1 remains readable with unknown date.
 The original format-1 description below is historical where superseded.

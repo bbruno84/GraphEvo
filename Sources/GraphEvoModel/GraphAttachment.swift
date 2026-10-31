@@ -58,6 +58,11 @@ package struct GraphAttachmentPayload: GraphModel {
         content = GraphAttachmentContent(metadata: metadata, data: data)
     }
 
+    package init(metadata: GraphAttachmentMetadata, data: Data) throws {
+        try Self.validate(metadata, data: data)
+        content = GraphAttachmentContent(metadata: metadata, data: data)
+    }
+
     package init(graphRecord: GraphRecord) throws {
         guard graphRecord.type == Self.graphType, graphRecord.endpoints == .entity else { throw GraphAttachmentError.notAnAttachment }
         if graphRecord.properties[Self.metadataKey] == nil {

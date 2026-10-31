@@ -656,3 +656,16 @@ when closing any gate; do not infer success from an unrun or skipped workflow.
 - [ ] **R** Document device-clock skew consequences of lastEditWins; no distributed
   correction or global temporal ordering is provided. Confirm policy guidance and
   report interpretation: local resolution is distinct from confirmed publication.
+
+
+## T04 asset follow-ups
+
+- [ ] **R** Measure durable portable asset copies in frozen attempts and engine
+  envelopes, whole-document rewriting, memory/I/O and send staging cleanup under
+  realistic concurrency/media, including additional asset-conflict record fetches. Keep 10MiB/file and 32MiB encoded state bounds;
+  evaluate sidecar staging only from measured evidence and a recovery design.
+- [ ] **B** Validate the new custom CKAsset path across shared-account permissions,
+  revocation/account changes, offline/throttling, interruption and consistent backup
+  recovery. Prior NSPersistentCloudKitContainer attachment evidence is historical.
+- [ ] **R** Deploy the optional GraphEvoNode asset field to production before public
+  activation and document whole-record asset conflict/clock and timeout semantics.

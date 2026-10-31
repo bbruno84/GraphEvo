@@ -29,6 +29,7 @@ package actor GraphContextManager {
     }
     private var cloudSessions: [String: CloudOpening] = [:]
     private var transportGraphs = Set<GraphID>()
+    private let attachmentRefresh = GraphCloudAttachmentRefresh()
 
     @available(iOS 17, macOS 14, *)
     package func startCloudSession(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudStatus {
@@ -175,6 +176,42 @@ package actor GraphContextManager {
             let incoming = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: maximumEvents)
             return GraphCloudApplyReport(applied: incoming.applied, cleanupPending: sent.cleanupPending || incoming.cleanupPending,
                 resolvedConflicts: sent.resolvedConflicts + incoming.resolvedConflicts, pendingRetry: sent.pendingRetry || incoming.pendingRetry)
+        }
+    }
+
+    /// Exports a verified local snapshot, refreshing through the shared engine only if absent.
+    package func exportCloudAttachment(_ id: GraphNodeID, to destination: URL,
+        configuration: GraphCloudConfiguration, timeout: Duration = .seconds(300)) async throws -> GraphAttachmentMetadata {
+        guard timeout > .zero else { throw GraphCloudError.invalidConfiguration }
+        try Task.checkCancellation()
+        guard let location = locations[id.graphID] else { throw GraphStoreError.missingGraph }
+        let graph = try await openGraph(id: id.graphID, at: location.url)
+        do {
+            var content = try await graph.read { try $0.attachment(id) }
+            if content == nil {
+                let session = try await cloud(configuration), route = try await session.route(for: id.graphID)
+                let refresh = attachmentRefresh
+                let graphKey = configuration.namespace + ":graph:" + id.graphID.rawValue.uuidString
+                let scopeKey = configuration.namespace + ":scope:" + route.zone.scope.rawValue
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    group.addTask {
+                        try await refresh.run(graphKey) {
+                            try await refresh.run(scopeKey) { try await self.fetchCloudChanges(route.zone.scope, configuration: configuration) }
+                            _ = try await self.applyCloudInbox(for: id.graphID, configuration: configuration)
+                        }
+                    }
+                    group.addTask { try await Task.sleep(for: timeout); throw GraphCloudError.attachmentTimeout }
+                    defer { group.cancelAll() }
+                    _ = try await group.next()
+                }
+                content = try await graph.read { try $0.attachment(id) }
+            }
+            guard let content else { throw GraphStoreError.missingNode }
+            try await GraphAttachmentIO.export(content.data, to: destination)
+            try await graph.close()
+            return content.metadata
+        } catch {
+            let original = error; try? await graph.close(); throw original
         }
     }
 
