@@ -139,26 +139,6 @@ jobs:
       - name: Validate independent-process local read-only access
         run: swift run --package-path IntegrationTests/PackageConsumer ProcessConsumer
 
-      - name: Validate shared observation laboratory (functional smoke only)
-        run: |
-          swift build -c release --product ObservationCostProbe
-          OBSERVATION_PROBE_BIN="$(swift build -c release --show-bin-path)"
-          python3 Experiments/SharedObservation/run.py --executable "$OBSERVATION_PROBE_BIN/ObservationCostProbe" --output "$RUNNER_TEMP/graphevo-c04-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --cases small --counts 1,8 --repetitions 1
-
-      - name: Validate native identity laboratory (functional smoke only)
-        run: |
-          swift build -c release --product IdentityLookupProbe
-          IDENTITY_PROBE_BIN="$(swift build -c release --show-bin-path)"
-          python3 Experiments/IdentityLookup/run.py --executable "$IDENTITY_PROBE_BIN/IdentityLookupProbe" --output "$RUNNER_TEMP/graphevo-identity-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --cases smoke --repetitions 1
-      - name: Validate consolidation harness (functional smoke only)
-        run: |
-          swift build -c release --package-path Experiments/ConsolidationCosts
-          GRAPHEVO_COST_BIN="$(swift build -c release --package-path Experiments/ConsolidationCosts --show-bin-path)"
-          python3 Experiments/ConsolidationCosts/run.py \
-            --executable "$GRAPHEVO_COST_BIN/CostProbe" \
-            --output "$RUNNER_TEMP/graphevo-c01-smoke" \
-            --cases small --repetitions 1
-
   package-consumer:
     name: Package consumer integration fixture
     if: >-

@@ -11,11 +11,29 @@ full validation jobs are explicitly skipped. Pushing a merge to that alpha
 integration branch does not repeat the same full suite. Do not describe either
 case as tests having passed remotely.
 
+The required order is **review → CI → merge**:
+
+1. Complete implementation and relevant local checks; open the PR without the
+   `ci-checkpoint` label.
+2. Review the change, resolve findings and re-review the corrections. Record the
+   reviewed head and any remaining limits before starting remote validation.
+3. At a required checkpoint, request full CI on that reviewed head immediately
+   before the authorized merge. CI is the final validation step, not a prerequisite
+   for starting review. Do not label a PR while review fixes are still in progress.
+4. Merge only after required checks pass and the maintainer authorizes the merge.
+   A request for review alone does not authorize CI or merge.
+
+If source changes after review, remove the label before intermediate pushes,
+complete focused re-review and appropriate local checks, then request any required
+replacement checkpoint. Do not silently reuse an earlier-code green run. A pure
+documentation change does not by itself justify rerunning unchanged library tests.
+
 A full alpha checkpoint is explicit:
 
-- Add the `ci-checkpoint` label to a focused PR when it is ready for full remote
-  validation. Both existing macOS/iOS jobs run. Further source commits on that
-  labeled PR rerun the checkpoint, so it always refers to the actual head.
+- Add the `ci-checkpoint` label to a focused PR after review is complete and it
+  is ready for the final pre-merge validation. Both existing macOS/iOS jobs run.
+  Further source commits on that labeled PR rerun the checkpoint, so it always
+  refers to the actual head.
 - For an integration-branch checkpoint, dispatch the existing `CI` workflow with
   the desired branch/ref, for example `gh workflow run ci.yml --ref codex/graphevo-2`.
   If GitHub's default-branch dispatch registration is unavailable, use the PR-label
@@ -41,6 +59,22 @@ no write permission or secrets to untrusted jobs. Adding unrelated labels does
 not restart an already labeled checkpoint. Removing the checkpoint label stops
 future automatic checkpoint runs on source updates; it does not cancel work
 already running. Existing concurrency still cancels superseded PR runs.
+
+## Validation scope
+
+CI validates the library: package manifest/build, unit/regression tests on macOS
+and iOS, diff formatting, the Swift 6 model consumer and independent-process
+consumer integration. Experimental harnesses under `Experiments/` are not CI
+steps, including their functional smoke modes. ObservationCostProbe,
+IdentityLookupProbe and ConsolidationCosts run locally when an experiment needs
+them, with separate reports. Physical CloudKit/device protocols also remain
+local, explicitly documented verification. No experimental timing or smoke run
+is a release-library gate merely because its harness exists.
+
+The previously installed three experimental smoke steps were removed at the
+maintainer's request. Keep historical CI evidence unchanged. Regression tests
+for adopted library behavior remain in the library suites; removing experimental
+harness execution does not authorize bypassing a failing regression test.
 
 ## Storage and evidence
 

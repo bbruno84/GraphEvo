@@ -669,3 +669,15 @@ when closing any gate; do not infer success from an unrun or skipped workflow.
   recovery. Prior NSPersistentCloudKitContainer attachment evidence is historical.
 - [ ] **R** Deploy the optional GraphEvoNode asset field to production before public
   activation and document whole-record asset conflict/clock and timeout semantics.
+
+
+## T05 pause follow-ups
+
+- [ ] **B** Route future automatic/background synchronization through T05 admission;
+  its manual-path evidence does not certify new SDK scheduling paths. Preserve
+  per-graph zone filtering and admission across native callbacks/receipts.
+- [ ] **R** Exercise long paused backlogs, shared-account revocation/account change,
+  stop/interruption and supported-scale control/observer resource costs without
+  raising PH/pending/inbox limits or claiming distributed writer exclusion.
+- [ ] **B** Protected migration must add its separate exclusive local access,
+  durable readiness/intent and backup contract. Process-local pause is not enough.

@@ -371,12 +371,18 @@ on shared or release branches unless explicitly requested.
 6. Publish the branch and open a PR against the intended target branch. Include
    the goal, context, behavior before/after, files or modules, tests, risks,
    limitations, follow-up work, and updated documentation.
-7. Wait for review and the checks required by the active line before merging.
+7. Follow this order: **review, CI, merge**. Complete implementation and relevant
+   local verification, open the PR without `ci-checkpoint`, then review and resolve
+   findings. Only after review is complete, immediately before an authorized merge,
+   request the required remote CI checkpoint on the reviewed head. Do not start
+   expensive alpha CI before review or while review fixes are still being prepared.
    V2 alpha PRs use the explicit [CI checkpoint policy](docs/design/graphevo-2-ci-checkpoints.md):
-   run appropriate local checks, record evidence and merge through the PR; full
-   remote CI is not required on every alpha PR. A skipped job is not a tested
+   full remote CI is not required on every alpha PR. A skipped job is not a tested
    checkpoint. Run full remote CI at agreed delivery checkpoints and before
-   alpha/beta tags. Stable/v1/release automatic checks remain required.
+   alpha/beta tags. A source change after review requires focused re-review before
+   another required checkpoint; remove the label before intermediate pushes.
+   Merge through the PR only after the required checks pass and merge is authorized.
+   Stable/v1/release automatic checks remain required.
 8. For tracked fixes, add a new commit or update the PR. Avoid rewriting shared
    branch history. Prefer a revert commit for already-merged changes.
 9. Never use destructive commands such as `git reset --hard` or `git checkout --`
@@ -606,8 +612,9 @@ point it at application/device/cloud stores, retry failed seeds or commit its
 stores/raw logs. Retain expected budget refusals and semantic assertions; do
 not silently increase budgets or remove ownership/integrity checks to improve
 measurements. Distinguish whole-process sampled peaks, operation latency, open
-costs and synthetic desktop results from supported production envelopes. CI
-runs a functional smoke only, with no timing pass threshold. Candidate metadata/
+costs and synthetic desktop results from supported production envelopes. Experimental
+harnesses, including functional smoke modes, run locally and are excluded from CI.
+CI validates library behavior and consumer integration. Candidate metadata/
 binary changes retain accepted file identity/ownership and require migration,
 whole-content backup and actual native sharing validation before selection.
 
@@ -1011,3 +1018,23 @@ byte copies are a measured-cost follow-up, not a streaming/SQL-placement guarant
 Keep independent wait cancellation/deadlines, shared refresh and exclusive caller-
 owned export destinations. No network awaits or file-system I/O inside native
 transactions. Preserve real-device evidence separately from injected transport.
+
+
+## V2 T05 graph synchronization pause
+
+Read [T05](docs/design/graphevo-2-sync-pause.md) before changing sync admission.
+The owning ContextManager tracks active/pauseRequested/paused per graph in memory.
+Reject new sync cycles after request; drain the already-admitted cycle through
+receipts, native effects and cleanup, including its bounded retry. A failed
+operation retains work and still settles its admission. Never pause by cancelling
+the common database engine. Local writes/PH remain available in the existing queue.
+
+Filter new native fetches by currently admitted zones and count existing scoped
+fetches before suspension. Global control notifications can be retained without
+applying paused graph data. T04 refresh work owns admission independently of UI
+cancellation; shared fetch coverage must include the requested graph or perform
+a targeted fetch under its existing permit. Do not allow an unrelated operation
+to borrow an old permit. Resume during draining is busy; state observation is
+newest-only, not durable replay. Full close/reopen resets process-local state;
+stop does not resume it. No automatic scheduling, distributed/migration exclusion,
+new persisted format or schema change is part of this increment.

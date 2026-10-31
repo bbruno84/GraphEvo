@@ -39,7 +39,7 @@ Seed files contain four repeated deterministic binary patterns of 1 or 10 MiB.
 They test unrelated body avoidance, not representative media compressibility or
 file-read envelopes. OS caches are uncontrolled. Never run timing alongside
 builds/tests; retain intermediate binaries and rerun representative cases on new
-fixtures before selecting a direction. CI smoke has no timing threshold.
+fixtures before selecting a direction. Functional smoke runs locally, with no timing threshold; this experimental harness is excluded from CI.
 
 The candidate adds one shared native-refresh worker per group and retains an
 independent decoder/delivery worker per subscriber. Shared raw-input and public

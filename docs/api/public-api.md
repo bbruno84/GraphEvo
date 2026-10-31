@@ -1600,3 +1600,17 @@ existing destinations are refused. Existing public GraphStore attachment/export
 methods retain local snapshot semantics. No native/temporary URL is returned.
 See [T04](../design/graphevo-2-cloud-assets.md); no public custom-cloud opening is
 introduced. Automatic CKAsset fetching does not provide metadata-first delivery.
+
+
+### Package-only per-graph sync pause (T05)
+
+ContextManager exposes `cloudSynchronizationState(for:)`,
+`observeCloudSynchronization(for:)`, `pauseCloudSynchronization(for:)` and
+`resumeCloudSynchronization(for:)`. Actor-isolated states are active,
+pauseRequested and paused. Pause drains previously admitted sync operations;
+new send/import operations report graphPaused. Local access and the existing PH
+queue remain available. Independent waiter cancellation does not undo pause.
+Resume during draining reports busy; resume never launches automatic work.
+State is process-local, shared by manager handles and reset on full runtime
+close/reopen. These package-only operations are not migration exclusivity,
+engine stop or a new public opening. See [T05](../design/graphevo-2-sync-pause.md).

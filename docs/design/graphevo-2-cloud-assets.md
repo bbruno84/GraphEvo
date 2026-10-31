@@ -96,6 +96,9 @@ decode, dependency, account, permission and network errors propagate. This is no
 a global synchronization certificate or automatic background scheduling policy.
 No per-file progress, streaming, eviction policy or unlimited retry is exposed.
 
+T05 subsequently adds [graph pause admission](graphevo-2-sync-pause.md) around
+the entire refresh and verifies shared fetch coverage after a graph resumes.
+
 ## Validation and follow-ups
 
 Deterministic S03 tests cover zero/512-byte/10MiB files, actual provider CKAsset

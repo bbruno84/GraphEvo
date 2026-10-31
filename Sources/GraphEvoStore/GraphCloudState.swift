@@ -5,7 +5,7 @@ import GraphEvoModel
 package enum GraphCloudScope: String, Codable, Sendable { case `private`, shared }
 package enum GraphCloudEnvironment: String, Codable, Sendable { case development, production }
 package enum GraphCloudError: Error, Equatable {
-    case attachmentTimeout
+    case attachmentTimeout, graphPaused
     case ownershipConflict, invalidConfiguration, invalidState, accountUnavailable, accountChanged
     case persistence, inboxLimit, unsupportedAsset, unexpectedUpload, stopped, stopping, busy, zoneUnavailable, transportUnavailable
 }
