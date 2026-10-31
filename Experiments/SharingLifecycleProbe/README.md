@@ -25,9 +25,14 @@ Sequence on different-account iPad owner / iPhone XR peer:
    worker must detect and purge it without manual refresh/fetch/apply.
 9. Owner `audit` verifies complete A/B/C cloud/local inventories and file content.
 10. After rebuilding with a later correction, optional read-only `final-audit`
-    (owner) and `removed-state` (peer) inspect the same fixture without replaying
+    (owner) and `removed-scope-state` (peer) inspect the same fixture without replaying
     any mutation. Record their separate source pins; they do not extend the
     original mutation matrix to the later source.
+
+The initial `removed-state` assertion incorrectly required an empty scope-wide
+inbox. Retain its failed report. The corrected `removed-scope-state` checks all
+bounded inbox entries for the removed zones only; work from unrelated zones is
+expected to survive. Do not replay the original stage or clear unrelated events.
 
 The bridge uses `--sharing-lifecycle STAGE RUN owner|peer` with the acknowledged
 PublicMirroredProbe launcher. Full inventories and reports stay external. This
