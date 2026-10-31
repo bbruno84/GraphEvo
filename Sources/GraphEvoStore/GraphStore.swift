@@ -153,6 +153,21 @@ public actor GraphStore {
         try await syncSession().importPatches(patches, limits: limits)
     }
 
+    /// Convert one immutable PH attempt; failed encoding releases only that attempt, never pending work.
+    package func prepareCloudBatch(maximumRecords: Int, binding: GraphCloudBinding,
+                                   systemFields: [GraphNodeID: Data] = [:],
+                                   discoveryLimits: GraphSyncLimits = .init(),
+                                   encodingLimits: GraphCloudNodeLimits = .init()) async throws -> GraphCloudOutgoingBatch {
+        guard binding.graphID == id else { throw GraphCloudNodeError.foreignGraph }
+        let session = try await syncSession()
+        let batch = try await session.prepare(maximumRecords: maximumRecords, limits: discoveryLimits)
+        do { return try GraphCloudNodeCodec.encode(batch, binding: binding, systemFields: systemFields, limits: encodingLimits) }
+        catch {
+            await session.discardPreparation(batch.id)
+            throw error
+        }
+    }
+
     public func close() async throws {
         do {
             if let ownerLease { try await ownerLease.close() }

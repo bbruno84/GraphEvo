@@ -919,3 +919,22 @@ Native scheduling is manual/package-only, with no outgoing changes or GraphRecor
 imports. CKAsset values (including encrypted/array fields) are refused without
 advancing the cursor until durable asset staging exists. Keep physical-engine,
 actual crash/power-loss, rewrite-cost, account, asset and end-to-end gates open.
+
+
+## V2 CF01 cloud record format
+
+Read [CF01](docs/design/graphevo-2-cloud-record-format.md) before wire/transport
+work. M19 selects one GraphEvoNode CKRecord per logical primitive, one bound zone
+per graph, with opaque typed-value properties. Never export native detail rows,
+controls, PH generations or local checkpoints. Native S03 remains unchanged.
+
+Canonical node UUID record names are the new explicit custom-backend protocol,
+not legacy CloudKit mapping results or v1 conversion. Require exact graph/node,
+kind, scoped route and system-field identity; never regenerate corrupt metadata.
+Retain lossless value-envelope compatibility if GraphValueCodec changes. Refuse
+attachment saves until CKAsset staging exists. Prepared artifacts are not send
+admission or receipts; failed encoding releases only its own attempt and retains
+pending work. Decode does not apply events, resolve endpoints or consume inbox
+entries. Persist server metadata/effects and implement recovery before upload
+acknowledgement or inbox consumption. Keep schema deployment, real server tags,
+private cross-device sync, conflicts, assets and migration gates open.

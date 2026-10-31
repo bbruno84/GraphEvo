@@ -149,6 +149,10 @@ engine or cross-process acceptance. Retain this scope when integrating it.
   Engine-foundation tests cover file publication failures, reopen/replay and
   drain/late-callback behavior. True crash/power-loss, inbox consumption/effect
   receipts, CKAsset staging and joint queue/engine ordering remain open.
+  [CF01](graphevo-2-cloud-record-format.md) adds lossless logical record encoding,
+  secure system-field reuse and PH/inbox conversion tests, without upload/import
+  activation. Actual server change tags, metadata/effect persistence, dependencies,
+  conflict handling and cloud-schema deployment remain open.
 - [ ] **R** Measure full-document engine-state/inbox rewrite costs and retained
   inbox growth; count/encoded-byte limits are not total memory/I/O envelopes.
 - [ ] **B** Validate graph-level pause/resume with automatic and in-flight work,

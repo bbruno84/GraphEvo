@@ -120,6 +120,11 @@ actor GraphSyncSession {
         active = nil
     }
 
+    /// Only the preparer owns this unpublished artifact. Cleanup must survive cancellation or collection.
+    func discardPreparation(_ id: UUID) {
+        if active?.id == id { active = nil }
+    }
+
     func importPatches(_ patches: [GraphRecordPatch], limits: GraphSyncLimits) async throws {
         try begin(); defer { busy = false }
         let adapter = adapter, graphID = graphID
