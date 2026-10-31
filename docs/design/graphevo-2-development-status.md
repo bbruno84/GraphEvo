@@ -19,8 +19,16 @@ downgrade with pending edits, revocation, interrupted purge/restart, empty rejoi
 leave, paused-graph control detection and intact owner/control inventories on
 iPad/XR. Later read-only checks retain their separate source pins. No remote CI
 or merge has been requested for this candidate.
-Local validation passes 748 macOS functions, 391 selected iOS checks plus a final
+Initial local validation passes 748 macOS functions, 391 selected iOS checks plus a final
 14-test lifecycle rerun, Release build, ModelConsumer and manifest/diff checks.
+The review of `f4eafe9` reproduces one P1 and two P2 recovery/control defects.
+The corrective candidate adds artifact identity checks on purge retry, guarded
+join-marker recovery and control admission after inbox saturation. Full-suite
+validation also closes registration races with native destruction/file resolution.
+The results report preserves the original physical pins and intermediate failures.
+The corrected candidate passes 757 macOS functions, 402 iOS Simulator tests,
+Release build, Swift 6 ModelConsumer and manifest/diff checks. No remote CI or
+merge has been started; the three review findings require corrective re-review.
 
 ## Latest integrated increment
 

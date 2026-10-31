@@ -62,6 +62,43 @@ The corrected XR `removed-scope-state` passes on the same fixture: both durable
 removals and absent SQLite/WAL/SHM resources survive restart, no former zone has
 pending inbox work, and unrelated scope events remain intact.
 
+## Review corrections
+
+The review of `f4eafe9` reproduces one P1 and two P2 defects with three focused
+tests. The corrective implementation preserves session format 5 and S03:
+
+- Post-destruction cleanup fingerprints retained artifacts and retires each
+  removed path. Tests replace the SQLite file both before artifact cleanup and
+  after cleanup failure; retries refuse the replacement unchanged, then resume
+  after explicit repair without releasing native claims early.
+- Interrupted acceptance reconstructs only a missing unaccepted marker on the
+  same untouched native store/generation. Application reads remain fenced until
+  explicit acceptance resumes. Nonempty, previously active and conflicting
+  generation states remain refused.
+- Inbox saturation still blocks data transport but permits verified sharing
+  control and bounded removal. Tests cover event/byte saturation, offline leave,
+  retained unrelated inbox events, restart, paused-graph foreground detection,
+  activity changes and a later sticky account failure. Retired-zone bodies are
+  discarded before payload validation/capacity accounting.
+
+The first complete correction run also exposes native metadata reads racing
+destruction during URL registration (Core Data 134070). A simulator run narrows
+the same race to filesystem URL resolution (missing-file error). Registration
+now joins the retained purge before probing disappearing files, and checks the
+membership generation again after waiting. The post-native-destruction gate
+provides a committed regression. These intermediate failures are retained in
+external evidence rather than reported as passing runs.
+
+The corrective tests are deterministic local/macOS and iOS Simulator evidence.
+The earlier physical matrix and later hardware read-only checks retain their
+original pins; they are not reattributed to this correction.
+Corrected-source validation passes 757 macOS functions (331 legacy, 332 store,
+71 runtime, 23 model), 402 iOS 18.5 Simulator store/runtime tests, the Release
+GraphEvoStore build, Swift 6 ModelConsumer and manifest/diff checks. The three
+original reproducers are committed as strengthened regressions alongside six
+additional boundary/race functions. Remote CI remains pending review completion
+and maintainer authorization.
+
 ## Local validation and limits
 
 Deterministic coverage includes aliases and query lifecycle, owned attachment
@@ -71,7 +108,7 @@ interruption after destruction, moved/current URL registration, foreign-store
 refusal, read-only incoming work with pending uploads, new generations, late
 driver callbacks, other-graph work on engine replacement and retry timing.
 
-Final macOS validation passes 748 functions (331 legacy, 323 store, 71 runtime,
+Pre-review macOS validation passes 748 functions (331 legacy, 323 store, 71 runtime,
 23 model). iOS 18.5 Simulator validation passes 391 store/runtime tests, followed
 by a passing 14-test lifecycle rerun after the final URL/observer regressions.
 The counts overlap and must not be added as unique tests. Manifest/diff checks,

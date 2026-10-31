@@ -90,6 +90,14 @@ extension GraphContextManager {
         configuration: GraphCloudConfiguration) async throws -> GraphStore {
         let session = try await cloud(configuration), id = invitation.graphID
         if let prior = try await session.membership(id) {
+            if prior.phase == .joining, !prior.hadAccess,
+               prior.binding == GraphCloudBinding(zone: invitation.zone, graphID: id) {
+                // Resume the same durable acceptance, never allocate a replacement generation.
+                try await registerCloudGraphLocation(id, at: url, configuration: configuration)
+                let graph = try await openGraph(id: id, at: url)
+                do { try await acceptCloudInvitation(invitation, configuration: configuration); return graph }
+                catch { let original = error; try? await graph.close(); throw original }
+            }
             guard prior.phase == .removed, prior.pending == nil, !FileManager.default.fileExists(atPath: url.path) else { throw GraphCloudError.busy }
             guard entries[id] == nil, purgeTasks[id] == nil else { throw GraphCloudError.busy }
             blockedSharingGraphs.remove(id); locations.removeValue(forKey: id)
@@ -105,10 +113,31 @@ extension GraphContextManager {
     package func registerCloudGraphLocation(_ id: GraphID, at url: URL, configuration: GraphCloudConfiguration) async throws {
         let session = try await cloud(configuration)
         guard let member = try await session.membership(id), member.role == .participant else { throw GraphStoreError.missingGraph }
+        guard !rejoiningGraphs.contains(id) else { throw GraphCloudError.busy }
+        if member.terminal, member.phase != .removed, let location = locations[id] {
+            let sameURL = url.standardizedFileURL.resolvingSymlinksInPath() == location.url
+            if let purge = purgeTasks[id] {
+                guard purge.namespace == configuration.namespace else { throw GraphCloudError.ownershipConflict }
+                // Even URL resolution probes the filesystem. Wait before examining disappearing files.
+                try await purge.task.value
+                guard !rejoiningGraphs.contains(id), try await session.membership(id)?.generation == member.generation else { throw GraphCloudError.busy }
+                if sameURL { return }
+                return try await registerCloudGraphLocation(id, at: url, configuration: configuration)
+            }
+            if sameURL, entries[id] != nil { return try await runSharingPurge(member, configuration: configuration) }
+        }
         let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
         if let existing = entries[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
         guard !locations.contains(where: { $0.key != id && $0.value.key == resolved.key }) else { throw GraphStoreError.ownershipConflict }
         guard case .sqlite(let canonical) = resolved.configuration.location else { throw GraphCloudError.invalidConfiguration }
+        if member.terminal, member.phase != .removed, locations[id]?.key == resolved.key {
+            // A retained owner validates destruction itself; never open a second metadata reader mid-purge.
+            if let purge = purgeTasks[id] {
+                guard purge.namespace == configuration.namespace else { throw GraphCloudError.ownershipConflict }
+                return try await purge.task.value
+            }
+            if entries[id] != nil { return try await runSharingPurge(member, configuration: configuration) }
+        }
         if FileManager.default.fileExists(atPath: canonical.path) {
             try autoreleasepool {
                 let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: canonical)
@@ -150,8 +179,16 @@ extension GraphContextManager {
         }
     }
     private func restoreSharingOwner(_ member: GraphCloudMembership, owner: GraphCoordinator) async throws {
-        guard try await owner.storeIdentity() == member.storeID,
-              let access = try await owner.participantAccess(), access.identity == member.identity,
+        guard try await owner.storeIdentity() == member.storeID else { throw GraphCloudError.invalidState }
+        var stored = try await owner.participantAccess()
+        if stored == nil, member.phase == .joining, !member.hadAccess, member.permission == nil,
+           member.pending == nil, member.reason == nil {
+            // Recover only the gap between the durable join intent and the untouched replica marker.
+            try await owner.setSharingDataAvailable(false)
+            stored = try await owner.participantAccess(.init(binding: member.binding, account: member.identity.account,
+                permission: nil, accepted: false, identity: member.identity, generation: member.generation))
+        }
+        guard let access = stored, access.identity == member.identity,
               access.generation == member.generation, access.binding == member.binding else { throw GraphCloudError.invalidState }
         if !member.terminal, member.hadAccess, !access.blocked, access.permission != member.permission {
             _ = try await owner.participantAccess(.init(binding: member.binding, account: member.identity.account,

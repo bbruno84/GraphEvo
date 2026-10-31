@@ -502,7 +502,7 @@ package actor GraphContextManager {
     private func automaticScheduler(_ config: GraphCloudConfiguration, clock: GraphAutomaticClock = .live) async throws -> GraphAutomaticSynchronizer {
         guard automaticClosing[config.namespace] == nil else { throw GraphCloudError.stopping }
         let openingID = cloudSessions[config.namespace]?.id
-        _ = try await cloud(config).identity()
+        _ = try await cloud(config).identity(control: true)
         guard automaticClosing[config.namespace] == nil else { throw GraphCloudError.stopping }
         guard cloudSessions[config.namespace]?.id == openingID else { throw GraphCloudError.stopped }
         if let existing = automatic[config.namespace] { return existing }

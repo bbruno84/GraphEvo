@@ -1079,9 +1079,17 @@ before destructive interpretation of control events/errors. Joining absence,
 network/quota/authentication and read-only downgrade are not revocation evidence.
 Persist removal first, block app access, drain/invalidate every lease, and retain
 runtime claims through native destruction and exact owned-artifact cleanup.
+Retry cleanup only for unchanged post-destruction artifacts; never adopt a file
+that appeared after cleanup or belongs to a replacement store. Recover a missing
+join marker only for the same native UUID and an untouched, unaccepted joining
+generation. Keep data access fenced until explicit acceptance finishes.
 Restart registration supplies current URLs; check native UUID/purpose without app
 payload decoding. No persisted sandbox paths or silent old-alpha conversion.
 Old generations never regain access; rejoin is explicit, empty and resets only
 the shared engine through supported nil serialization. The control worker runs
 while foreground/paused but never fetches paused app bodies. Keep Debug purge
 barriers out of Release. Record exact physical pins separately from CI/review.
+An application inbox limit keeps data transport blocked but must not disable
+membership inspection, purge or foreground lifecycle control. Reserve bounded
+journal space for participant removal; account and other fatal failures remain
+sticky and must never be bypassed by control work.

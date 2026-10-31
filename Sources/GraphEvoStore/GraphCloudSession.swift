@@ -153,8 +153,8 @@ actor GraphCloudSession {
         }
     }
 
-    private func check() throws {
-        if let failure { throw failure }
+    private func check(control: Bool = false) throws {
+        if let failure, !(control && failure == .inboxLimit) { throw failure }
         guard !stopped else { throw GraphCloudError.stopped }
         guard stopping == nil else { throw GraphCloudError.stopping }
     }
@@ -167,10 +167,16 @@ actor GraphCloudSession {
         }
     }
 
-    private func publish(_ candidate: GraphCloudDocument) throws {
+    private func publish(_ candidate: GraphCloudDocument, reservingControl: Bool = false) throws {
         guard candidate.eventCount <= configuration.maximumEvents else { throw GraphCloudError.inboxLimit }
         let data = try JSONEncoder().encode(candidate)
         guard data.count <= configuration.maximumBytes else { throw GraphCloudError.inboxLimit }
+        if reservingControl {
+            // Keep bounded space for removal intent, diagnostics and offline leave commands.
+            let participants = candidate.memberships.filter { $0.role == .participant && $0.phase != .removed }.count
+            let headroom = participants.multipliedReportingOverflow(by: 1024)
+            guard !headroom.overflow, headroom.partialValue <= configuration.maximumBytes - data.count else { throw GraphCloudError.inboxLimit }
+        }
         do { try disk.write(url, data) } catch { throw GraphCloudError.persistence }
         document = candidate
         for member in candidate.memberships {
@@ -195,28 +201,36 @@ actor GraphCloudSession {
 
     func receive(_ event: GraphCloudEvent, scope: GraphCloudScope, driverGeneration: UUID? = nil) {
         if let driverGeneration, driverGenerations[scope] != driverGeneration { return }
-        guard failure == nil, !stopped else { return }
+        guard !stopped else { return }
+        if failure != nil {
+            guard failure == .inboxLimit else { return }
+            // Saturated application transport must not hide a later account/session failure.
+            switch event { case .account, .failure: break; default: return }
+        }
         // During cancellation, admitted fetch callbacks must still be persisted.
         do {
             switch event {
             case .retryAdvice(let seconds):
                 if seconds.isFinite && seconds >= 0 { retryAdvice[scope] = max(retryAdvice[scope] ?? 0, seconds) }
             case .state(let state):
-                var next = document; next.states[scope.rawValue] = state; try publish(next)
-            case .incoming(let changes):
+                var next = document; next.states[scope.rawValue] = state; try publish(next, reservingControl: true)
+            case .incoming(let incoming):
+                let removed = Set(document.memberships.filter { $0.role == .participant && $0.terminal }.map { $0.binding.zone })
+                let changes = incoming.filter { !removed.contains($0.zone) }
                 guard changes.allSatisfy({ $0.valid && $0.zone.scope == scope }) else { throw GraphCloudError.invalidState }
                 for change in changes { try GraphCloudRecordCodec.validate(change) }
                 guard changes.count <= configuration.maximumEvents - document.eventCount else { throw GraphCloudError.inboxLimit }
                 var next = document
                 next.inbox += changes.compactMap { change in
                     let member = next.memberships.first { $0.binding.zone == change.zone && $0.role == .participant }
-                    if member?.terminal == true { return nil }
                     return GraphCloudInboxEntry(id: UUID(), change: change, membershipGeneration: member?.generation)
                 }
-                if !changes.isEmpty { try publish(next) }
+                if !changes.isEmpty { try publish(next, reservingControl: true) }
             case .sent(var receipt):
                 guard let batch = outbound[scope], receipt.batchID == batch.id, receipt.graphID == batch.graphID,
                       receipt.zone == batch.zone, receipt.zone.scope == scope else { throw GraphCloudError.invalidState }
+                let member = document.memberships.first { $0.binding.graphID == receipt.graphID && $0.role == .participant }
+                if member?.terminal == true { return }
                 let items = Dictionary(uniqueKeysWithValues: batch.items.map { ($0.recordName, $0.change.operation) })
                 let names = receipt.saved.compactMap(\.recordName) + receipt.deletedNames + receipt.failures.map(\.recordName)
                 if names.isEmpty { return }
@@ -226,11 +240,10 @@ actor GraphCloudSession {
                       receipt.failures.allSatisfy({ items[$0.recordName] != nil }) else { throw GraphCloudError.invalidState }
                 for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
                 for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
-                if let member = document.memberships.first(where: { $0.binding.graphID == receipt.graphID && $0.role == .participant }) {
-                    if member.terminal { return }
+                if let member {
                     receipt.membershipGeneration = member.generation
                 }
-                var next = document; next.sent.append(receipt); try publish(next)
+                var next = document; next.sent.append(receipt); try publish(next, reservingControl: true)
             case .failure(let error): throw error
             case .account(let account):
                 guard account == document.account else { throw GraphCloudError.accountChanged }
@@ -248,11 +261,11 @@ actor GraphCloudSession {
     }
 
     private func block(_ error: GraphCloudError) {
-        guard failure == nil else { return }
+        guard failure == nil || (failure == .inboxLimit && error != .inboxLimit) else { return }
         failure = error
         let values = Array(drivers.values)
         // Never await cancellation from the serial native delegate callback.
-        cancellation = Task { try await Self.cancelAll(values) }
+        if cancellation == nil { cancellation = Task { try await Self.cancelAll(values) } }
     }
 
     func routes(in scope: GraphCloudScope) throws -> [GraphCloudBinding] {
@@ -278,9 +291,9 @@ actor GraphCloudSession {
     }
 
     /// Control operations share the engine scope gate and participate in session stop draining.
-    private func control<Value: Sendable>(_ scope: GraphCloudScope,
+    private func control<Value: Sendable>(_ scope: GraphCloudScope, allowingDataLimit: Bool = false,
         body: @Sendable (GraphCloudSharingService, String) async throws -> Value) async throws -> Value {
-        try check()
+        try check(control: allowingDataLimit)
         guard let sharing = adapter.sharing else { throw GraphCloudSharingError.unavailable }
         guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }
         fetches += 1
@@ -289,7 +302,7 @@ actor GraphCloudSession {
             if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
         }
         let result = try await body(sharing, document.account)
-        if let failure { throw failure }
+        if let failure, !(allowingDataLimit && failure == .inboxLimit) { throw failure }
         return result
     }
 
@@ -336,8 +349,8 @@ actor GraphCloudSession {
             identity: try identity(), generation: member?.generation)
     }
 
-    func identity() throws -> GraphCloudSessionIdentity {
-        try check()
+    func identity(control: Bool = false) throws -> GraphCloudSessionIdentity {
+        try check(control: control)
         return GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
     }
     func send(_ batch: GraphCloudOutgoingBatch) async throws {
@@ -436,12 +449,12 @@ extension GraphCloudSession {
     private func verifySharingAccount(_ expected: String) async throws {
         let actual = try await adapter.account(configuration.containerIdentifier)
         guard actual == expected else { block(.accountChanged); throw GraphCloudError.accountChanged }
-        try check()
+        try check(control: true)
     }
-    func memberships() throws -> [GraphCloudMembership] { try check(); return document.memberships }
-    func membership(_ id: GraphID) throws -> GraphCloudMembership? { try check(); return document.memberships.first { $0.binding.graphID == id } }
+    func memberships() throws -> [GraphCloudMembership] { try check(control: true); return document.memberships }
+    func membership(_ id: GraphID) throws -> GraphCloudMembership? { try check(control: true); return document.memberships.first { $0.binding.graphID == id } }
     func updateMembership(_ value: GraphCloudMembership) throws {
-        try check()
+        try check(control: true)
         if let prior = document.memberships.first(where: { $0.binding.graphID == value.binding.graphID }) {
             guard prior.generation == value.generation, prior.binding == value.binding else { throw GraphCloudError.invalidState }
         }
@@ -468,7 +481,7 @@ extension GraphCloudSession {
     }
     func inspectSharing(_ binding: GraphCloudBinding) async throws -> GraphCloudShareSnapshot? {
         let config = configuration
-        return try await control(binding.zone.scope) { service, account in
+        return try await control(binding.zone.scope, allowingDataLimit: true) { service, account in
             guard let inspect = service.operations?.inspect else { throw GraphCloudSharingError.unavailable }
             try await self.verifySharingAccount(account)
             return try await inspect(config, binding, account)
@@ -479,7 +492,7 @@ extension GraphCloudSession {
     func executeSharing(_ member: GraphCloudMembership) async throws {
         guard let intent = member.pending else { return }
         let config = configuration
-        try await control(member.binding.zone.scope) { service, account in
+        try await control(member.binding.zone.scope, allowingDataLimit: true) { service, account in
             guard let execute = service.operations?.execute else { throw GraphCloudSharingError.unavailable }
             try await self.verifySharingAccount(account)
             try await execute(config, member.binding, account, intent)
@@ -497,7 +510,7 @@ extension GraphCloudSession {
         guard var member = try membership(id), member.generation == generation, member.role == .participant, member.terminal else { throw GraphCloudError.invalidState }
         if let forget = drivers[member.binding.zone.scope]?.forget {
             let zone = member.binding.zone
-            try await control(zone.scope) { _, _ in try await forget(zone) }
+            try await control(zone.scope, allowingDataLimit: true) { _, _ in try await forget(zone) }
         }
         member.phase = .removed; member.permission = nil; member.failure = nil
         var next = document

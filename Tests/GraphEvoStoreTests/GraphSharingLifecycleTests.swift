@@ -86,9 +86,11 @@ private actor RemovalGate {
         let graph: GraphStore
         let invitation: GraphCloudInvitation
     }
-    private func fixture(registry: StoreRegistry = StoreRegistry(), disk: GraphCloudDisk = .live) async throws -> Fixture {
+    private func fixture(registry: StoreRegistry = StoreRegistry(), disk: GraphCloudDisk = .live,
+                         maximumBytes: Int = 32 * 1024 * 1024) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Lifecycle-\(UUID())")
-        let config = GraphCloudConfiguration(containerIdentifier: "iCloud.lifecycle.\(UUID())", environment: .development, directory: root.appendingPathComponent("Engine"))
+        let config = GraphCloudConfiguration(containerIdentifier: "iCloud.lifecycle.\(UUID())", environment: .development,
+            directory: root.appendingPathComponent("Engine"), maximumBytes: maximumBytes)
         let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
         let cloud = LifecycleCloud(), id = GraphID(), url = root.appendingPathComponent("Graph.sqlite")
         let graph = try await manager.createGraph(id: id, at: url)
@@ -357,5 +359,204 @@ private actor RemovalGate {
         try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
     }
     #endif
+
+    @Test(arguments: [false, true]) func retryAfterDestructionRejectsReplacementAndCanResumeAfterRepair(_ cleaned: Bool) async throws {
+        let failure = FailureOnce()
+        var hooks = StoreLifecycleHooks()
+        if cleaned { hooks.didDestroy = { try await failure.fail() } }
+        else { hooks.beforeDestroyedArtifactCleanup = { try await failure.fail() } }
+        let f = try await fixture(registry: StoreRegistry(hooks: hooks))
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        await #expect(throws: (any Error).self) { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
+        if cleaned { #expect(!FileManager.default.fileExists(atPath: f.url.path)) }
+        let unrelated = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let source = f.root.appendingPathComponent("Unrelated.sqlite")
+        let other = try await unrelated.createGraph(id: GraphID(), at: source)
+        _ = try await other.transaction { try $0.insert(GraphRecord(id: other.makeNodeID(), type: "MustSurvive")) }
+        try await other.close()
+        let unchanged = try Data(contentsOf: source)
+        if FileManager.default.fileExists(atPath: f.url.path) { try FileManager.default.removeItem(at: f.url) }
+        try FileManager.default.copyItem(at: source, to: f.url)
+        await #expect(throws: (any Error).self) { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
+        #expect(FileManager.default.fileExists(atPath: f.url.path), "A replacement store must survive a retry of the old purge")
+        #expect(try Data(contentsOf: f.url) == unchanged)
+        #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .purging)
+        // Remove only the copied test replacement, then resume the original terminal cleanup.
+        try FileManager.default.removeItem(at: f.url)
+        #expect(try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config).phase == .removed)
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
+    @Test func inboxLimitDoesNotPreventAccessRevocationAndCompletedPurge() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let event = GraphCloudIncoming(kind: .zoneChanged, zone: f.invitation.zone)
+        await f.cloud.queue(Array(repeating: event, count: f.config.maximumEvents))
+        await #expect(throws: GraphCloudError.inboxLimit) { try await f.manager.fetchCloudChanges(.shared, configuration: f.config) }
+        await f.cloud.setPermission(nil)
+        await #expect(throws: GraphCloudError.zoneUnavailable) {
+            try await f.manager.refreshCloudSharing(for: f.graph.id, configuration: f.config)
+        }
+        try await waitRemoved(f)
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        #expect(try await f.manager.cloudStatus(f.config).failure == .inboxLimit)
+        await #expect(throws: GraphCloudError.inboxLimit) { try await f.manager.fetchCloudChanges(.shared, configuration: f.config) }
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
+    @Test func joiningJournalBeforeRootMetadataRecoversAndCompletesExplicitAcceptance() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let id = GraphID(), url = f.root.appendingPathComponent("InterruptedJoin.sqlite")
+        let graph = try await f.manager.createGraph(id: id, at: url)
+        let session = try await f.manager.cloud(f.config)
+        let owner = try await f.manager.entries[id]!.opening.value
+        let binding = GraphCloudBinding(zone: .init(scope: .shared, owner: "owner", name: "Interrupted"), graphID: id)
+        let invitation = GraphCloudInvitation(container: f.config.containerIdentifier, environment: f.config.environment, graphID: id,
+            owner: "owner", zoneName: binding.zone.name, recipient: "participant", url: URL(string: "https://www.icloud.com/share/Interrupted")!)
+        let joined = try await session.beginMembership(binding, storeID: owner.storeIdentity(), shareIdentity: GraphCloudShareIdentity.of(invitation.url))
+        try await graph.close(); try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
+        try await restarted.registerCloudGraphLocation(id, at: url, configuration: f.config)
+        let reopened = try await restarted.openGraph(id: id, at: url)
+        await #expect(throws: (any Error).self) { try await reopened.read { _ in () } }
+        let marker = try #require(try await reopened.participantAccess())
+        #expect(!marker.accepted && marker.permission == nil && marker.generation == joined.generation)
+        let accepted = try await restarted.acceptCloudInvitation(invitation, at: url, configuration: f.config)
+        #expect(try await restarted.cloudSharingStatus(for: id, configuration: f.config).generation == joined.generation)
+        #expect(try await restarted.cloudSharingStatus(for: id, configuration: f.config).phase == .active)
+        _ = try await accepted.read { _ in true }
+        try await accepted.close(); try await reopened.close()
+        try await restarted.stopCloudSession(f.config)
+    }
+
+    @Test func foregroundControlPurgesPausedGraphAfterInboxLimit() async throws {
+        let f = try await fixture(), clock = AutomaticTestClock()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let event = GraphCloudIncoming(kind: .zoneChanged, zone: f.invitation.zone)
+        await f.cloud.queue(Array(repeating: event, count: f.config.maximumEvents))
+        await #expect(throws: GraphCloudError.inboxLimit) { try await f.manager.fetchCloudChanges(.shared, configuration: f.config) }
+        try await f.manager.pauseCloudSynchronization(for: f.graph.id)
+        await f.cloud.setPermission(nil)
+        try await f.manager.setAutomaticCloudSynchronizationActive(true, configuration: f.config, clock: clock.value)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase != .removed {
+            guard ContinuousClock.now < deadline else { throw GraphCloudSharingError.metadataPending }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        try await f.manager.setAutomaticCloudSynchronizationActive(false, configuration: f.config, clock: clock.value)
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
+    @Test func accountFailureAfterInboxLimitStillBlocksControlAndPreservesReplica() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let session = try await f.manager.cloud(f.config)
+        let event = GraphCloudIncoming(kind: .zoneChanged, zone: f.invitation.zone)
+        await session.receive(.incoming(Array(repeating: event, count: f.config.maximumEvents)), scope: .shared)
+        #expect(try await f.manager.cloudStatus(f.config).failure == .inboxLimit)
+        await session.receive(.account("different-account"), scope: .shared)
+        #expect(try await f.manager.cloudStatus(f.config).failure == .accountChanged)
+        await f.cloud.setPermission(nil)
+        await #expect(throws: GraphCloudError.accountChanged) { try await f.manager.refreshCloudSharing(for: f.graph.id, configuration: f.config) }
+        await #expect(throws: GraphCloudError.accountChanged) { try await f.manager.setAutomaticCloudSynchronizationActive(true, configuration: f.config) }
+        #expect(FileManager.default.fileExists(atPath: f.url.path))
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
+    @Test(arguments: [false, true]) func byteLimitReservesRemovalSpaceAndRetainsUnrelatedInbox(_ offlineLeave: Bool) async throws {
+        let f = try await fixture(maximumBytes: 16 * 1024)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let url = f.config.directory.appendingPathComponent("session.json")
+        var candidate = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: url))
+        let event = GraphCloudIncoming(kind: .zoneChanged, zone: .init(scope: .shared, owner: "owner", name: "Unrelated"))
+        var prefix: [GraphCloudIncoming] = []
+        while true {
+            var next = candidate; next.inbox.append(.init(id: UUID(), change: event))
+            if try JSONEncoder().encode(next).count > f.config.maximumBytes - 1024 { break }
+            candidate = next; prefix.append(event)
+        }
+        #expect(!prefix.isEmpty)
+        await f.cloud.queue(prefix)
+        try await f.manager.fetchCloudChanges(.shared, configuration: f.config)
+        let retained = try await f.manager.cloudInbox(f.config, limit: f.config.maximumEvents)
+        var overflow = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: url))
+        overflow.inbox.append(.init(id: UUID(), change: event))
+        #expect(try JSONEncoder().encode(overflow).count <= f.config.maximumBytes)
+        await f.cloud.queue([event])
+        await #expect(throws: GraphCloudError.inboxLimit) { try await f.manager.fetchCloudChanges(.shared, configuration: f.config) }
+        if offlineLeave {
+            await f.cloud.failCommand(CKError(.networkUnavailable))
+            let status = try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
+            #expect(status.phase == .removed && status.remoteOperationPending)
+        } else {
+            await f.cloud.setPermission(nil)
+            await #expect(throws: GraphCloudError.zoneUnavailable) { try await f.manager.refreshCloudSharing(for: f.graph.id, configuration: f.config) }
+            try await waitRemoved(f)
+        }
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        #expect(try await f.manager.cloudInbox(f.config, limit: f.config.maximumEvents) == retained)
+        #expect(try Data(contentsOf: url).count <= f.config.maximumBytes)
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        await f.cloud.failCommand(nil)
+        _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
+        if offlineLeave { #expect(try await restarted.leaveCloudShare(for: f.graph.id, configuration: f.config).remoteOperationPending == false) }
+        #expect(try await restarted.cloudInbox(f.config, limit: f.config.maximumEvents) == retained)
+        try await restarted.stopCloudSession(f.config)
+    }
+    @Test(arguments: ["nonempty", "active", "generation"])
+    func missingJoinMarkerRecoveryRefusesUnrelatedOrPreviouslyActiveState(_ invalid: String) async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let id = GraphID(), url = f.root.appendingPathComponent("Unrecoverable.sqlite")
+        let graph = try await f.manager.createGraph(id: id, at: url)
+        if invalid == "nonempty" { _ = try await graph.transaction { try $0.insert(GraphRecord(id: graph.makeNodeID(), type: "Existing")) } }
+        let session = try await f.manager.cloud(f.config), owner = try await f.manager.entries[id]!.opening.value
+        let binding = GraphCloudBinding(zone: .init(scope: .shared, owner: "owner", name: "Invalid"), graphID: id)
+        var member = try await session.beginMembership(binding, storeID: owner.storeIdentity(), shareIdentity: "invalid-join")
+        if invalid == "active" { member.phase = .active; member.hadAccess = true; member.permission = .readWrite; try await session.updateMembership(member) }
+        if invalid == "generation" {
+            _ = try await owner.participantAccess(.init(binding: binding, account: member.identity.account, permission: nil,
+                accepted: false, identity: member.identity, generation: UUID()))
+        }
+        try await graph.close(); try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
+        try await restarted.registerCloudGraphLocation(id, at: url, configuration: f.config)
+        await #expect(throws: (any Error).self) { try await restarted.openGraph(id: id, at: url) }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        try await restarted.stopCloudSession(f.config)
+    }
+
+    @Test func lateRemovedZoneBodiesDoNotConsumeCapacityOrPoisonControl() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let status = try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
+        #expect(status.phase == .removed)
+        let session = try await f.manager.cloud(f.config)
+        let invalid = GraphCloudIncoming(kind: .recordChanged, zone: f.invitation.zone,
+            recordName: "late", recordType: GraphCloudNodeCodec.recordType, recordArchive: Data([0]))
+        await session.receive(.incoming(Array(repeating: invalid, count: f.config.maximumEvents + 1)), scope: .shared)
+        #expect(try await f.manager.cloudStatus(f.config).failure == nil)
+        #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .removed)
+        #expect(try await f.manager.cloudInbox(f.config).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
+
+
+    @Test func registrationJoinsAdmittedPurgeWithoutReadingDestroyedNativeMetadata() async throws {
+        let gate = RemovalGate()
+        var hooks = StoreLifecycleHooks(); hooks.beforeDestroyedArtifactCleanup = { await gate.enter() }
+        let f = try await fixture(registry: StoreRegistry(hooks: hooks))
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let leave = Task { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
+        await gate.wait()
+        let registration = Task { try await f.manager.registerCloudGraphLocation(f.graph.id, at: f.url, configuration: f.config) }
+        await gate.release()
+        #expect(try await leave.value.phase == .removed)
+        try await registration.value
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
 
 }

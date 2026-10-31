@@ -1649,4 +1649,9 @@ register current recovery locations and explicitly accept into a new empty store
 Confirmed loss and leave remove the participant replica even with pending edits;
 old GraphStore handles are closed. Read-only downgrade retains data and continues
 imports. Reopened participant data requires verified session-journal attachment.
+Interrupted acceptance can resume at the current URL for its existing joining
+generation. A missing local marker is reconstructed only for a verified untouched
+replica, without granting application access. Inbox saturation blocks data
+transport while membership verification and removal remain available; account
+and other fatal session failures continue to block both paths.
 See [T08](../design/graphevo-2-sharing-lifecycle.md) for state format 5 and recovery.

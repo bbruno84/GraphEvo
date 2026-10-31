@@ -12,6 +12,7 @@ struct StoreLifecycleHooks: Sendable {
     var didBeginClose: (@Sendable () async -> Void)?
     var beforeDetach: (@Sendable () async throws -> Void)?
     var beforeDestroy: (@Sendable () async throws -> Void)?
+    var beforeDestroyedArtifactCleanup: (@Sendable () async throws -> Void)?
     var didDestroy: (@Sendable () async throws -> Void)?
     var didLoadStore: (@Sendable (URL?) throws -> Void)?
 }
@@ -31,6 +32,12 @@ actor StoreResources {
     private var closing = false
     private var dataAvailable = true
     private var destructionIssued = false
+    private struct DestructionArtifact: Equatable {
+        let identity: FileIdentity
+        let size: UInt64
+        let modified: Date
+    }
+    private var destructionArtifacts: [URL: DestructionArtifact]?
     private var admitted = 0
     private var drain: CheckedContinuation<Void, Never>?
 
@@ -319,19 +326,48 @@ actor StoreResources {
                 try container.persistentStoreCoordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
             }
             destructionIssued = true
+            destructionArtifacts = try destructionURLs(url).reduce(into: [:]) { result, artifact in
+                if let identity = try destructionArtifact(artifact) { result[artifact] = identity }
+            }
             try await detach(releasing: false, runHook: false)
         } else {
             try await detach(releasing: false)
         }
+        try await hooks.beforeDestroyedArtifactCleanup?()
         // Core Data destroys the store/content first. Remove only its explicitly owned SQLite artifacts;
         // some SDK versions retain empty SQLite/WAL/SHM placeholders after the native destruction.
-        for artifact in [url, URL(fileURLWithPath: url.path + "-wal"), URL(fileURLWithPath: url.path + "-shm")] {
+        guard destructionIssued, destructionArtifacts != nil else { throw StoreRuntimeError.storeReplaced(url) }
+        // A path that was absent, replaced, modified or already cleaned is never adopted by a retry.
+        for artifact in destructionURLs(url) {
+            if let current = try destructionArtifact(artifact), destructionArtifacts?[artifact] != current {
+                throw StoreRuntimeError.storeReplaced(artifact)
+            }
+        }
+        for artifact in destructionURLs(url) {
             do {
                 if FileManager.default.fileExists(atPath: artifact.path) { try FileManager.default.removeItem(at: artifact) }
             } catch let error as CocoaError where error.code == .fileNoSuchFile { }
+            destructionArtifacts?.removeValue(forKey: artifact)
         }
         try await hooks.didDestroy?()
         for gateway in gateways { gateway.release() }
+    }
+
+    private func destructionURLs(_ url: URL) -> [URL] {
+        [url, URL(fileURLWithPath: url.path + "-wal"), URL(fileURLWithPath: url.path + "-shm")]
+    }
+    private func destructionArtifact(_ url: URL) throws -> DestructionArtifact? {
+        let attributes: [FileAttributeKey: Any]
+        do { attributes = try FileManager.default.attributesOfItem(atPath: url.path) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              (attributes[.referenceCount] as? NSNumber)?.intValue == 1,
+              let device = attributes[.systemNumber] as? NSNumber,
+              let inode = attributes[.systemFileNumber] as? NSNumber,
+              let size = attributes[.size] as? NSNumber,
+              let modified = attributes[.modificationDate] as? Date else { throw StoreRuntimeError.storeReplaced(url) }
+        return DestructionArtifact(identity: FileIdentity(device: device.uint64Value, inode: inode.uint64Value),
+                                   size: size.uint64Value, modified: modified)
     }
 
     private func detach(releasing: Bool = true, runHook: Bool = true) async throws {

@@ -55,6 +55,14 @@ artifact cleanup; failed cleanup remains quarantined and retryable. The native
 store UUID and exclusive graph purpose are checked before deletion. Wrong or
 replaced resources are refused. A genuinely uncertain/corrupt resource is not
 silently erased as another graph.
+After native destruction, an in-memory ledger records the exact leftover file
+identities, sizes and modification dates before detachment. Cleanup validates the
+whole set before unlinking, and retires each entry when removed. Retries reject
+changed/new artifacts, including a replacement at an already cleaned path; they
+never adopt the replacement as another native placeholder.
+Registration for an owned terminal replica joins its purge before probing file
+attributes or native metadata. Waiting callbacks recheck the membership generation
+and refuse concurrent rejoin, so an old registration cannot touch a new owner.
 
 Reserved local participant metadata carries full session identity, membership
 generation and a terminal block. Reopened participants do not admit application
@@ -63,6 +71,12 @@ store UUID. Control-only metadata and purge recovery remain available. Bootstrap
 supplies current file URLs; no sandbox/container path is persisted. If the native
 files are already absent after an interruption, the journal can finish transport
 cleanup without recreating a store. Unverifiable leftover sidecars are refused.
+The session join intent precedes the local marker in a separate transaction. A
+restart may reconstruct a missing unaccepted marker only when native UUID,
+session identity and joining generation match, access has never been established,
+and the replica remains untouched. Active state, nonempty data and conflicting
+markers are refused. Application admission stays blocked; explicit acceptance at
+the same current URL resumes that generation rather than allocating another one.
 
 Late releases and callbacks are scoped to owner/membership/engine generations.
 Terminal incoming bodies are dropped; removal clears retained data envelopes and
@@ -81,8 +95,16 @@ control admissions; stop drains admitted control work and already-started purges
 for that session before teardown. Other sessions' purges do not delay its stop.
 Retry delays use 5/15/30/60/120/300 seconds, capped jitter and larger retryAfter;
 busy waits one second. Hints/activity never bypass a retry delay, including hints
-received while a failing operation is in flight. Permanent failures require an explicit retry. No data queue
-or application snapshots are introduced by this worker.
+received while a failing operation is in flight. Permanent failures require an
+explicit retry. No data queue or application snapshots are introduced by this worker.
+An application `inboxLimit` retains the existing data-transport failure and old
+engine checkpoint; it does not disable membership/status metadata, access
+inspection, removal commands or purge. Foreground activity can still be changed
+while the data path is blocked. Incoming records, engine state and receipts leave
+1 KiB per nonremoved participant within the configured byte cap for removal
+intent/diagnostics and offline leave. Event and byte hard limits remain enforced;
+unrelated inbox work is preserved. Account changes and other fatal failures still
+block both paths, including account signals arriving after inbox saturation.
 
 ## Validation and gates
 
