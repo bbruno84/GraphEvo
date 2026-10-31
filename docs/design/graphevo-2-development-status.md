@@ -123,6 +123,21 @@ and selected iOS Simulator checks (87 functions / 111 expanded cases). The first
 iOS transport run failed on persisted/case-folded path use; the final path-free
 container-relocation protocol passes. Native physical CloudKit validation remains open.
 
+T01 #111 is reviewed/merged as `06b5ae5`, with exact-head macOS/iOS CI
+`41190746167` green; the merge tree matches reviewed head `5d588ea`.
+An initial CI store-test process exit (`41189893048`) did not reproduce in local
+iOS 18.5 validation (222 functions / 262 expanded cases) or the final CI run.
+The cause remains undiagnosed; explicit iOS result-bundle retention was added.
+The focused `codex/v2-record-transport-device` now prepares the
+[real transport laboratory](../../Experiments/RecordTransportProbe/README.md).
+Its external-only bridge does not activate a public production opener or merge
+prototype sync code. [Ten real private-device stages](results/record-transport-cloudkit-2026-10-31.md)
+now pass across iPad/iPhone: exact server/peer values, updates/deletions, real server
+metadata reuse, owner reopen and genuinely empty final recovery. B remains unchanged
+and imports do not feed upload; final complete local/server inventories contain no
+unexpected records. Conflicts, assets, sharing and interruption gates
+remain open; the focused evidence/harness branch is not integrated yet.
+
 ## Integrated alpha implementation
 
 | Area | Implemented | Remaining acceptance limits |
@@ -133,7 +148,7 @@ container-relocation protocol passes. Native physical CloudKit validation remain
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
-| CF01 / T01 transport | Logical node CKRecords, manual engine send/import, durable frozen attempts, server metadata and atomic effect receipts (#110/#111) | Injected transport acceptance only; real server delivery/CAS, assets and public activation remain open; S03 unchanged |
+| CF01 / T01 transport | Logical node CKRecords, manual engine send/import, durable attempts, server metadata/effect receipts (#110/#111); bounded private device recovery reported separately | Genuine server conflicts/CAS recovery, assets and public activation remain open; S03 unchanged |
 | Engine foundation | ContextManager-owned private/shared sessions, path-free zone routes, persisted inbox/results (#109/#111) | Package-only manual scheduling; real device/account/sharing and automatic sync acceptance remain open |
 | PH pending | Per-graph discovery, durable pending/checkpoint, immutable attempts and generation-safe acknowledgements (#108) | Package-only; controlled patches only, full engine/incoming/crash gates remain open |
 | Native identity | M16 removed application versioning; M18/S03 preserves graph/node IDs in deletion history through #107 | Defaults unchanged; selected-model and custom-sync device/cloud gates remain open |
@@ -167,8 +182,8 @@ before conversion. M16 removes public format DTOs rather than enabling a product
 
 ## Next steps and operating rule
 
-1. Complete #111 review/check/integration before the next increment. Validate native
-   private transport on devices/server schema, then complete assets, automatic sync,
+1. Review/check/integrate the bounded T01 private device evidence/harness, then
+   complete genuine conflict behavior, assets, automatic sync,
    pause, conflict policy and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
