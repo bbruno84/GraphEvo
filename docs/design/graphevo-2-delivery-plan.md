@@ -252,6 +252,13 @@ v1 guidance remains accessible.
 
 ## Migration manager renewal
 
+The current [migration foundations roadmap](graphevo-2-migration-foundations.md)
+orders reversible local write admission, a central verified BackupManager with
+caller-supplied reasons, independent shared graph-control metadata, an isolated
+working graph/PH baseline and recoverable publication. These are planned on top
+of reviewed #120; neither the foundations nor mandatory v1 conversion are complete.
+Consumer-defined compatibility and cross-device coordination remain consumer policy.
+
 The [M1–M6 plan](graphevo-2-migration-manager.md) renews the manager alongside
 mandatory v1 conversion. Consumers define application-data migrations; native schema evolution remains
 internal GraphEvo work. GraphEvo manages

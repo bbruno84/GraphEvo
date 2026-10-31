@@ -344,6 +344,14 @@ API compatibility remains optional; data migration is a stable-release gate.
 
 ## PA09 — backups, restoration and retention
 
+The [current roadmap](graphevo-2-migration-foundations.md) adds a central
+BackupManager with a caller-supplied manifest reason and a reversible graph-local
+write reservation. Both remain unimplemented. Validate nested reservations,
+all-handle drainage and explicit app/widget exclusion before claiming migration
+isolation. Current one-graph/store backups must preserve other graphs' shared
+engine/session state and must not roll back the cloud control ledger. Historical
+paired-store evidence below retains its original backend scope.
+
 - [ ] **B** Define consistent closed/quiescent backup prerequisites and whole-content
   inventory, including external bytes, both native resources, auxiliary files and
   operation ledgers; identify existing narrow migration backup callers to replace.

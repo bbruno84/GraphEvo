@@ -29,10 +29,21 @@ The results report preserves the original physical pins and intermediate failure
 The corrected candidate passes 757 macOS functions, 402 iOS Simulator tests,
 Release build, Swift 6 ModelConsumer and manifest/diff checks. No remote CI or
 merge has been started. The [corrective review of `70909cf`](https://github.com/bbruno84/GraphEvo/pull/120#pullrequestreview-5725012469)
-closes all three findings without additional blockers in the reviewed paths;
-the next step is the maintainer-authorized CI checkpoint.
+closes all three findings without additional blockers in the reviewed paths.
+The maintainer subsequently deferred CI to a combined checkpoint with the next
+increment while billing resets; T08 remains reviewed and unmerged.
+
+## Planned migration foundations
+
+Next planning work: [migration foundations](graphevo-2-migration-foundations.md)
+on `codex/v2-migration-foundations`, based on reviewed #120 at `8dda893` by the
+maintainer's explicit instruction. No migration/runtime implementation or merge
+is implied. Cloud/local admission, central verified backups and independent graph
+control metadata precede consumer execution/publication. Remote CI is explicitly
+deferred to one combined checkpoint after local checks/review while billing resets.
 
 ## Latest integrated increment
+
 
 [T07 explicit custom zone sharing](graphevo-2-zone-sharing.md),
 [PR #119](https://github.com/bbruno84/GraphEvo/pull/119), integrates directly into
