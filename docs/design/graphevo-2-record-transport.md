@@ -1,6 +1,7 @@
 # GraphEvo 2 — T01 manual record transport and effect receipts
 
-Status: package-only implementation on `codex/v2-record-transport`, based directly
+Status: package-only implementation in [#111](https://github.com/bbruno84/GraphEvo/pull/111)
+on `codex/v2-record-transport`, based directly
 on reviewed/merged #110 (`900d51a`, exact-head CI `41184685226`). It connects CF01
 to the ContextManager's private/shared engines and to exclusive native graph
 coordinators. Native S03, CF01 and public signatures remain unchanged. Assets,

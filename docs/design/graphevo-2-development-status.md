@@ -109,7 +109,8 @@ before the successful simulator rerun. Physical cloud acceptance remains open.
 CF01 #110 is reviewed/merged as `900d51a`, with exact-head macOS/iOS CI
 `41184685226` green; its merge tree matches reviewed head `3d4150d`.
 
-The focused `codex/v2-record-transport` implements [T01 manual record send/import
+The focused [#111](https://github.com/bbruno84/GraphEvo/pull/111),
+`codex/v2-record-transport`, implements [T01 manual record send/import
 and durable effect receipts](graphevo-2-record-transport.md). It is not integrated.
 Native driver hooks are connected to CKSyncEngine; deterministic local tests use
 an injected bus, not physical CloudKit. Persisted graph routes contain only graph
