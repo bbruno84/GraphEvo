@@ -3,7 +3,8 @@
 Status: package-only implementation on `codex/v2-sync-engine-foundation`, based
 on reviewed/merged #108 (`0ddd613`). The native model remains S03. The [T01 continuation](graphevo-2-record-transport.md)
 now supplies manual transport/effect receipts and a path-free format-2 session
-document; the initial #109 checkpoint below retains its historical scope. That
+document; T03 advances it to format 3 and the [T07 sharing candidate](graphevo-2-zone-sharing.md)
+to format 4. The initial #109 checkpoint below retains its historical scope. That
 checkpoint introduced no public opener, wire format, record upload or application import. The retained
 CS01/PH01 experiments are evidence; their implementations are not merged.
 

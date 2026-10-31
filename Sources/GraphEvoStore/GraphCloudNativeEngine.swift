@@ -3,7 +3,7 @@ import Foundation
 
 @available(iOS 17, macOS 14, *)
 extension GraphCloudAdapter {
-    static let live = GraphCloudAdapter(account: { identifier in
+    static let live = GraphCloudAdapter(sharing: .live, account: { identifier in
         guard Bundle.main.bundleURL.pathExtension != "appex" else { throw GraphCloudError.invalidConfiguration }
         let container = CKContainer(identifier: identifier)
         guard try await container.accountStatus() == .available else { throw GraphCloudError.accountUnavailable }

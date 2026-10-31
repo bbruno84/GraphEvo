@@ -6,6 +6,39 @@ delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
+## Latest integrated increment
+
+[T07 explicit custom zone sharing](graphevo-2-zone-sharing.md),
+[PR #119](https://github.com/bbruno84/GraphEvo/pull/119), integrates directly into
+`codex/graphevo-2` from #118 (`9238b95`), after review, corrective re-review,
+full CI and the maintainer-authorized merge. No experiment implementation or
+new public opener is promoted. Native S03 is unchanged; the session document
+advances to format 4, without changing cloud node/asset or transport formats.
+
+Owner graph zones stay private; account-targeted read-write/read-only invitations
+expose the same zones to participants through the shared engine. Acceptance,
+local import and current cloud authorization remain distinct observations.
+The first review reproduced two P2 issues: premature create intent and control
+records hidden by a bounded application prefix. Corrected source `b171cde`
+passes both original reproducers and six committed regressions; corrective
+re-review finds no remaining blocker in the reviewed paths.
+
+Reviewed head `61b066a0520bd2da81a7e477e4aaa5f9417c3ff6` passes full macOS/iOS
+[checkpoint 41228512926](https://github.com/bbruno84/GraphEvo/actions/runs/41228512926),
+requested after review. Final integration-status edits are documentation-only;
+library code, tests and workflow remain identical to the reviewed, CI-tested head.
+Local validation passes 731 macOS functions (331 legacy,306 store,71 runtime,
+23 model), 83 selected iOS tests, Swift 6 ModelConsumer and manifest/diff checks.
+
+The [physical report](results/zone-sharing-2026-10-31.md) retains the original
+nine-stage matrix's `02b294e`/`d5e4693` pins and the three-stage `b171cde`
+identity/create/accept recheck. It covers private/shared routing, permissions,
+a private control, files, bidirectional edits and empty recovery within those
+actual scopes. No reset, store/token copy or consumed mutation replay occurred.
+Leave/revoke/purge/reinvite, account/cached-read policy, offline/stale permission,
+crash/backup, protected migrations and public activation remain separate gates.
+The workflow remains **review → CI → authorized merge**; this is not beta entry.
+
 ## Active branch and completed reorganization
 
 Develop on **`codex/graphevo-2`**. C01 #78 is integrated as `f47776f`; cumulative

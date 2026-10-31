@@ -1051,3 +1051,20 @@ before coalescing; imports/bookkeeping must not feed uploads. No permanent graph
 lease or idle timer/feed retain cycle. New hints cannot bypass retryAfter/backoff,
 permanent graph failures or sticky session failures. Foreground polling is not
 background/APNs acceptance. Experiments/devices remain local; review precedes CI.
+
+
+## V2 T07 explicit zone sharing
+
+Read [T07](docs/design/graphevo-2-zone-sharing.md) before custom sharing changes.
+Owners remain in private zones; participants bind the owner's zone in shared.
+Use private account-targeted capabilities without persisted local paths. Keep
+CKShare control records out of primitive decoding and prioritize them before
+bounded application inbox selection. Complete read-only preflight before reserving
+creation; persist intent in an awaited operation-scoped callback immediately
+before the native create/save. Never clear ambiguous-save intent on a generic
+network error. Inspect already accepted invitations on recovery, and protect
+an empty participant replica before acceptance. Consumer permissions must cover
+all handles, reopenings and attachments; imports bypass consumer write checks.
+Sharing uses T05 admission and the session scope gate/drain. S03 is unchanged;
+new session format 4 refuses old alpha state without modifying it. Historical
+A5 native sharing is not the replacement backend's acceptance evidence.

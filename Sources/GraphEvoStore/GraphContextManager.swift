@@ -76,6 +76,48 @@ package actor GraphContextManager {
         automaticChanged()
     }
 
+    /// Explicit private invitations; share creation does not certify publication of pending edits.
+    package func cloudSharingIdentity(_ configuration: GraphCloudConfiguration) async throws -> String {
+        try await cloud(configuration).identity().account
+    }
+
+    package func inviteCloudParticipant(_ recipient: String, to graphID: GraphID,
+        permission: GraphCloudSharePermission = .readWrite,
+        configuration: GraphCloudConfiguration) async throws -> GraphCloudInvitation {
+        try await withTransport(graphID, configuration: configuration) { session, _, binding, _ in
+            try await session.invite(binding.route, recipient: recipient, permission: permission)
+        }
+    }
+
+    /// The caller creates an empty graph with the invitation's identity at a current local URL first.
+    package func acceptCloudInvitation(_ invitation: GraphCloudInvitation,
+        configuration: GraphCloudConfiguration) async throws {
+        let graphID = invitation.graphID, permit = try admitSynchronization(invitation.graphID)
+        defer { finishSynchronization(permit) }
+        guard transportGraphs.insert(graphID).inserted else { throw GraphCloudError.busy }
+        defer { transportGraphs.remove(graphID) }
+        try invitation.validate()
+        let session = try await cloud(configuration), identity = try await session.identity()
+        guard invitation.container == identity.container, invitation.environment == identity.environment,
+              invitation.recipient == identity.account else { throw GraphCloudSharingError.invalidInvitation }
+        let binding = GraphCloudBinding(zone: invitation.zone, graphID: graphID)
+        let routes = try await session.routes(in: .private) + session.routes(in: .shared)
+        guard !routes.contains(where: { ($0.graphID == graphID || $0.zone == binding.zone) && $0 != binding }) else { throw GraphCloudError.ownershipConflict }
+        guard let location = locations[graphID], entries[graphID] != nil, entries[graphID]?.closing == nil else { throw GraphStoreError.missingGraph }
+        let graph = try await openGraph(id: graphID, at: location.url)
+        do {
+            let prior = try await graph.participantAccess()
+            // Keep accepted access on an idempotent retry; a new replica is closed to consumer writes first.
+            if prior == nil {
+                _ = try await graph.participantAccess(GraphCloudParticipantAccess(binding: binding, account: identity.account, permission: nil, accepted: false))
+            } else if prior?.binding != binding || prior?.account != identity.account { throw GraphCloudError.ownershipConflict }
+            let access = try await session.accept(invitation)
+            _ = try await graph.participantAccess(access)
+            automaticChanged()
+            try await graph.close()
+        } catch { let original = error; try? await graph.close(); throw original }
+    }
+
     package func fetchCloudChanges(_ scope: GraphCloudScope, configuration: GraphCloudConfiguration) async throws {
         _ = try await fetchAdmitted(scope, configuration: configuration)
     }
@@ -203,6 +245,23 @@ package actor GraphContextManager {
         // Access reduction must not wait for unrelated application payload decoding.
         if entries.contains(where: { $0.change.kind == .zoneDeleted }) { entries = entries.filter { $0.change.kind == .zoneDeleted } }
         if entries.isEmpty { return GraphCloudApplyReport(applied: 0, cleanupPending: false) }
+        // Apply access controls independently: malformed application payloads cannot postpone a reduction.
+        let controls = entries.filter { GraphCloudShareControl.isControl($0.change) }
+        if !controls.isEmpty {
+            let permissions = try controls.map { try GraphCloudShareControl.permission($0.change, binding: binding.route) }
+            if binding.route.zone.scope == .shared {
+                guard let prior = try await graph.participantAccess(), prior.binding == binding.route else { throw GraphCloudError.invalidState }
+                // One local publication per cut; replay cannot temporarily restore an earlier permission.
+                let deleted = controls.contains { $0.change.kind == .recordDeleted }
+                let permission = deleted ? nil : permissions.last!
+                _ = try await graph.participantAccess(GraphCloudParticipantAccess(binding: prior.binding,
+                    account: prior.account, permission: permission, accepted: prior.accepted))
+            }
+            // The local metadata transaction is idempotent if inbox cleanup fails or the process exits here.
+            try await session.consume(Set(controls.map(\.id)))
+            entries.removeAll { GraphCloudShareControl.isControl($0.change) }
+            if entries.isEmpty { return GraphCloudApplyReport(applied: controls.count, cleanupPending: false) }
+        }
         let effects = try entries.map { try GraphCloudEffect($0, binding: binding.route) }
         _ = try await session.identity()
         let result = try await graph.applyTransport(binding, effects: effects)
@@ -210,7 +269,7 @@ package actor GraphContextManager {
         try await session.consume(ids)
         var cleanup = false
         do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
-        return GraphCloudApplyReport(applied: entries.count, cleanupPending: cleanup, resolvedConflicts: result.resolved,
+        return GraphCloudApplyReport(applied: entries.count + controls.count, cleanupPending: cleanup, resolvedConflicts: result.resolved,
             pendingRetry: !result.rebased.isEmpty, retryIDs: result.rebased)
     }
     package func applyCloudInbox(for graphID: GraphID, configuration: GraphCloudConfiguration,

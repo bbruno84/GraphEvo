@@ -91,8 +91,9 @@ resolution is deliberately not implemented.
 
 ## Alpha state and bounds
 
-The engine session document is **format 3**, native graph transport state **format
-2**. Incompatible alpha state is refused unchanged; use new fixtures, without
+T03 introduced engine session **format 3** and native graph transport **format
+2**. The [T07 sharing continuation](graphevo-2-zone-sharing.md) advances only the
+session document to **format 4**. Incompatible alpha state is refused unchanged; use new fixtures, without
 resetting the test container. This is separate from mandatory v1 data conversion.
 Bindings remain graph + complete zone identity, without persisted sandbox paths.
 Native store UUID and PH epoch retain their validation role.

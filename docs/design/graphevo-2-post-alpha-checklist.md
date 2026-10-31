@@ -695,3 +695,16 @@ when closing any gate; do not infer success from an unrun or skipped workflow.
 - [ ] **B** Retain shared participant, interruption/backup and protected migration
   gates; automatic foreground operation neither excludes local writers nor
   certifies migration readiness. See [T06](graphevo-2-automatic-sync.md).
+
+
+## T07 sharing follow-ups
+
+Integrated [T07](graphevo-2-zone-sharing.md), [#119](https://github.com/bbruno84/GraphEvo/pull/119), has a
+[nine-stage two-account result](results/zone-sharing-2026-10-31.md), covering
+read-write/read-only and bidirectional entity/file recovery with a private control.
+It retains release gates for invitation
+UI/URL routing, leave/revoke/purge/reinvite, account and cached-read policy,
+permission changes/offline/stale controls, concurrent invitations and actual
+interruption fault injection. Measure additional root access metadata and bounded
+session share-attempt markers with backup/recovery costs. Initial two-account
+sharing evidence does not close these gates or authorize native schema changes.
