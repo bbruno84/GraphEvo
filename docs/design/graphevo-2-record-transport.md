@@ -7,6 +7,10 @@ to the ContextManager's private/shared engines and to exclusive native graph
 coordinators. Native S03, CF01 and public signatures remain unchanged. Assets,
 sharing UI/lifecycle, automatic scheduling and public activation are later work.
 
+Current behavior is extended by [T03 automatic conflicts](graphevo-2-conflict-policies.md):
+wire 2, session 3, transport 2, automatic same-record policies and delete-wins.
+The sections below record the original T01 contract where superseded.
+
 ## Portable graph registration
 
 Persisted bindings contain **GraphID and the complete database/owner/zone ID**.

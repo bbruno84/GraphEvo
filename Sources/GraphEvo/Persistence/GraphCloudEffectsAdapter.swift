@@ -245,7 +245,10 @@ extension GraphSyncCheckpointAdapter {
             var latest: [GraphNodeID: GraphCloudDecodedEvent] = [:]
             for effect in fresh {
                 switch effect.event {
-                case .save(let decoded): latest[decoded.record.id] = effect.event
+                case .save(let decoded):
+                    // Identities cannot be reused: deletion dominates even a later stale save in this cut.
+                    if case .delete? = latest[decoded.record.id] { continue }
+                    latest[decoded.record.id] = effect.event
                 case .delete(let id): latest[id] = effect.event
                 case .zoneChanged: break
                 case .zoneDeleted: state.zoneDeleted = true

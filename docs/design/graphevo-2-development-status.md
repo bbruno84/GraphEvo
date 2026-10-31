@@ -152,7 +152,7 @@ preservation pass on iPad/iPhone. Stale deletion removes a newer server value;
 stale update after deletion returns unknownItem without resurrection. A fresh
 replica recovers only the actual final server state. Production code/schema and
 CF01 are unchanged. A consumer resolution/rebase boundary and structural conflict
-matrix remain open. The PR records reviewed-head checks and merge disposition.
+matrix remain open. Reviewed head `de2667a` is merged as `4e9d30c`; the merge tree matches.
 Remote full CI is intentionally skipped for this excluded bridge/report increment
 under the new checkpoint policy; local review verifies the bridge matches the
 signed device build and all thirteen original passed stage reports remain retained.
@@ -213,9 +213,10 @@ run `41192922760` also passed on `30f7089` before the new policy took effect.
 
 ## Next steps and operating rule
 
-1. Complete the reviewed T02 integration through #114, then discuss and agree on
-   the explicit consumer resolution/rebase boundary before implementing it. Continue with structural conflicts, assets, automatic sync,
-   pause, conflict policy and sharing.
+1. Complete [T03 automatic conflict policies](graphevo-2-conflict-policies.md)
+   directly from integrated #114, with one full CI checkpoint after local/device
+   validation. Continue with structural conflicts, assets, automatic sync, pause
+   and sharing.
 2. Complete protected application-data migration and mandatory v1 conversion on
    the selected architecture; retain existing schema/format decisions and backups.
 3. Resolve the [post-alpha beta/stable gates](graphevo-2-post-alpha-checklist.md).
@@ -234,3 +235,15 @@ and evidence links. Update the post-alpha checklist when gates change. Keep old
 reports and dated checkpoints historical, rather than competing current-status
 documents. No release branch/tag, schema/API freeze or cloud reset is part of
 this reorganization.
+
+
+## T03 automatic conflict increment
+
+`codex/v2-conflict-policies` starts directly from integrated #114 (`4e9d30c`).
+[T03](graphevo-2-conflict-policies.md) implements local per-graph cloudWins/default
+lastEditWins, Graph-owned edit dates, durable current-local resolution, grouped
+receipts, one targeted retry and delete-wins traces. Native S03 is unchanged;
+wire/session/transport formats become 2/3/2, refusing old alpha state unchanged.
+The package-only boundary remains. The [device result](results/conflict-policies-cloudkit-2026-10-31.md)
+records bounded physical convergence separately from the broader acceptance gates.
+PR/checkpoint and integration disposition must be recorded when available.

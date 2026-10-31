@@ -214,6 +214,19 @@ private final class PolicyBarrier: @unchecked Sendable {
         #expect(try await f.graph.collectSyncChanges() == 0)
         try await finish(f)
     }
+    @Test(arguments: [false, true])
+    func deletionDominatesStaleSaveInTheSameInboxCut(_ deletionFirst: Bool) async throws {
+        let f = try await fixture(), id = try await insert(f)
+        let saved = try remote(f, id, time: 500)
+        let deleted = GraphCloudIncoming(kind: .recordDeleted, zone: f.binding.route.zone,
+            recordName: saved.recordName, recordType: GraphCloudNodeCodec.recordType)
+        f.bus.fetch(deletionFirst ? [deleted, saved] : [saved, deleted])
+        try await f.manager.fetchCloudChanges(.private, configuration: f.config)
+        _ = try await f.manager.applyCloudInbox(for: f.graph.id, configuration: f.config)
+        #expect(try await f.graph.read { try $0.record(for: id) } == nil)
+        #expect(try await f.graph.collectSyncChanges() == 0)
+        try await finish(f)
+    }
     @Test func survivingActionIsStampedInTheDeletionTransaction() async throws {
         let f = try await fixture(), a = try await insert(f), b = try await insert(f)
         let action = f.graph.makeNodeID()
@@ -274,6 +287,41 @@ private final class PolicyBarrier: @unchecked Sendable {
         #expect(try await f.graph.collectSyncChanges() == 0)
         #expect(try await date(f.graph, id) == Date(timeIntervalSince1970: 200))
         #expect(f.bus.sent.isEmpty)
+        try await finish(f)
+    }
+    @Test(arguments: [false, true])
+    func knownDateBeatsUnknownInEitherDirection(_ localUnknown: Bool) async throws {
+        let f = try await fixture(), id = try await insert(f)
+        if localUnknown { try await setRawDate(f, id: id, malformed: false) }
+        f.bus.script([[failure(try remote(f, id, time: localUnknown ? 0 : nil))]])
+        _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        #expect(try await f.graph.read { try $0.record(for: id) } == record(id, localUnknown ? 2 : 1))
+        #expect(try await date(f.graph, id) == Date(timeIntervalSince1970: localUnknown ? 0 : 100))
+        try await finish(f)
+    }
+    @Test func unknownItemWithoutPriorServerAssociationRemainsAnError() async throws {
+        let f = try await fixture(), id = try await insert(f)
+        let name = try GraphCloudNodeCodec.recordID(for: id, binding: f.binding.route).recordName
+        f.bus.script([[.init(recordName: name, code: CKError.Code.unknownItem.rawValue)]])
+        let report = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        #expect(report.failures.count == 1 && report.resolvedConflicts == 0 && f.bus.sent.count == 1)
+        #expect(try await f.graph.read { try $0.record(for: id) } == record(id, 1))
+        #expect(try await f.graph.collectSyncChanges() == 1)
+        try await finish(f)
+    }
+    @Test func replayedConflictReceiptDoesNotOverrideAnEditAfterResolution() async throws {
+        let f = try await fixture(.cloudWins), id = try await insert(f)
+        let batch = try await f.graph.prepareTransport(f.binding)
+        let receipt = GraphCloudSentReceipt(batchID: batch.id, graphID: f.graph.id, zone: batch.zone,
+            saved: [], deletedNames: [], failures: [failure(try remote(f, id, time: 200))])
+        let resolved = try await f.graph.commitTransport(f.binding, receipts: [receipt])
+        #expect(resolved.resolved == 1)
+        f.clock.set(300); try await change(f, id, 4)
+        let replayed = try await f.graph.commitTransport(f.binding, receipts: [receipt])
+        #expect(replayed.resolved == 0)
+        #expect(try await f.graph.read { try $0.record(for: id) } == record(id, 4))
+        #expect(try await date(f.graph, id) == Date(timeIntervalSince1970: 300))
+        #expect(try await f.graph.collectSyncChanges() == 1)
         try await finish(f)
     }
     @Test func oldTransportStateIsRefusedUnchanged() async throws {

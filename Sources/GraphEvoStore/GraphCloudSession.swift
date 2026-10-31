@@ -80,7 +80,7 @@ actor GraphCloudSession {
                 for receipt in doc.sent {
                     guard doc.bindings.contains(where: { $0.graphID == receipt.graphID && $0.zone == receipt.zone }) else { throw GraphCloudError.invalidState }
                     for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
-                for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
+                    for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
                 }
                 for entry in doc.inbox { try GraphCloudRecordCodec.validate(entry.change) }
             } else {
