@@ -21,7 +21,7 @@ package struct GraphCloudInvitation: Codable, Equatable, Sendable {
               owner != recipient, url.scheme == "https", url.host?.isEmpty == false,
               url.absoluteString.utf8.count <= 4096 else { throw GraphCloudSharingError.invalidInvitation }
     }
-    var zone: GraphCloudZone { .init(scope: .shared, owner: owner, name: zoneName) }
+    package var zone: GraphCloudZone { .init(scope: .shared, owner: owner, name: zoneName) }
 }
 
 /// Stored only in reserved local metadata. Absence means an ordinary local/owner graph.

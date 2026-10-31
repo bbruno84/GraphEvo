@@ -37,6 +37,7 @@ package struct GraphCloudZone: Codable, Hashable, Sendable {
 package struct GraphCloudBinding: Codable, Equatable, Sendable {
     package let zone: GraphCloudZone
     package let graphID: GraphID
+    package init(zone: GraphCloudZone, graphID: GraphID) { self.zone = zone; self.graphID = graphID }
 }
 
 /// Secure CKRecord archives are retained before explicit CF01 conversion and graph application.
