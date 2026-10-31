@@ -99,3 +99,12 @@ No new CI or merge is requested during this review-only task.
 Post-review full local macOS validation passes 690 functions (331 legacy,
 265 store,71 runtime,23 model). The corrected concurrent-close/reopen regression
 also passes 25 repeated executions. Manifest and diff checks pass.
+
+## Post-review pre-merge checkpoint
+
+At the maintainer's explicit request, reviewed source head
+`3f5fd31b44a706125109231ec189a11a8e9e1dab` passes full macOS/iOS CI
+`41218175454`. Model/process consumer checks pass; the three experimental smoke
+steps are absent. PR117 integrates after this checkpoint and the authorized merge.
+Final integration-status edits are documentation-only; code and workflow remain
+identical to the reviewed, CI-tested head. No release tag or beta acceptance.

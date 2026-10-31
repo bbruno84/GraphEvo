@@ -1,7 +1,7 @@
 # GraphEvo 2 — T05 per-graph synchronization pause
 
-Status: package-only increment on `codex/v2-graph-sync-pause`, directly from
-reviewed/merged #116 (`3b495ba`). Read with [T01](graphevo-2-record-transport.md),
+Status: package-only increment integrated through reviewed #117 into
+`codex/graphevo-2`, directly from reviewed/merged #116 (`3b495ba`). Read with [T01](graphevo-2-record-transport.md),
 [T03](graphevo-2-conflict-policies.md) and [T04](graphevo-2-cloud-assets.md).
 S03, wire formats, graph/engine documents and public opening paths are unchanged.
 
