@@ -363,6 +363,7 @@ package actor GraphContextManager {
     }
 
     // Internal lifecycle diagnostics for deterministic ownership tests.
+    var attachmentRefreshWaiterCount: Int { get async { await attachmentRefresh.registeredWaiterCount } }
     var attachmentFetchWaiterCount: Int { get async { await attachmentFetch.registeredWaiterCount } }
     var registeredGraphCount: Int { entries.count }
     var registeredHandleCount: Int { entries.values.reduce(0) { $0 + $1.tokens.count } }

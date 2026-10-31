@@ -58,3 +58,21 @@ automatic/background scheduling, shared-account permissions, EDGE latency,
 long backlogs, crash/backup behavior or migration exclusivity. Pause remains
 process-local and does not exclude local or external writers. S03 and wire/state
 formats remain unchanged. The final remote CI disposition belongs to the PR.
+
+## Checkpoint correction
+
+Initial checkpoint `41215698406` on `d1a1ed4` passed macOS but failed one iOS
+assertion in the pre-existing shared-attachment cancellation test: the total fetch
+count was not one. The test launched its second caller without proving it had
+joined the held refresh before releasing the first operation. Under full-suite
+scheduling, Task construction alone does not establish that overlap. The corrected
+test waits for two registered refresh waiters before cancellation and barrier
+release, preserving the exact one-fetch assertion. An internal read-only waiter
+diagnostic supports this barrier; production synchronization behavior is unchanged.
+Targeted local asset/pause suites pass 19 functions. The final PR records the
+subsequent full iOS verification and corrected remote checkpoint; the initial
+failure is retained and is not counted as a successful checkpoint.
+
+Corrected full local iOS18.5 validation passes: 689 discovered functions,
+688 passed and one existing platform skip; 743 expanded executions passed.
+The corrected asset/pause subset also passes 19 local macOS functions.

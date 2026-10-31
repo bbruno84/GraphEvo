@@ -168,6 +168,13 @@ private actor AssetBus {
         _ = try await b.graph.transaction { try $0.insert(GraphRecord(id: local, type: "Independent")) }
         let destination = b.directory.appendingPathComponent("complete.bin")
         let second = Task { try await b.manager.exportCloudAttachment(content.metadata.id, to: destination, configuration: b.config) }
+        // Prove both callers joined the held refresh before cancelling/releasing either wait.
+        // Merely constructing a Task does not establish overlap on a loaded simulator.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+        while await b.manager.attachmentRefreshWaiterCount < 2 {
+            guard ContinuousClock.now < deadline else { await gate.release(); throw GraphCloudError.invalidState }
+            try await Task.sleep(for: .milliseconds(1))
+        }
         first.cancel()
         do { _ = try await first.value; Issue.record("Cancelled wait returned content") } catch is CancellationError { }
         do {

@@ -302,3 +302,13 @@ iPad/iPhone. Full local validation passes 690 functions (331 legacy, 265 store,
 ModelConsumer, manifest and diff checks pass. [PR #117](https://github.com/bbruno84/GraphEvo/pull/117)
 targets `codex/graphevo-2`; its final full CI checkpoint is recorded on the PR.
 This section does not claim integration or beta acceptance.
+
+Initial T05 checkpoint `41215698406` passed macOS but failed an iOS shared-asset
+fetch-count assertion. The test now proves both callers joined the held refresh
+before releasing it, using an internal waiter diagnostic. The original assertion
+is retained; production pause/transport behavior and the device runtime remain
+unchanged. Corrected verification and final remote disposition are recorded on #117.
+
+Corrected full local iOS18.5 validation passes: 689 discovered functions,
+688 passed and one existing platform skip; 743 expanded executions passed.
+The corrected asset/pause subset also passes 19 local macOS functions.
