@@ -92,6 +92,9 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
                 }
                 await receive(.incoming(changes))
             case .sentDatabaseChanges(let event):
+                for failure in event.failedZoneSaves {
+                    if let delay = failure.error.retryAfterSeconds { await receive(.retryAdvice(delay)) }
+                }
                 let batch = try await outbox.current()
                 let expected = CKRecordZone.ID(zoneName: batch.zone.name, ownerName: batch.zone.owner)
                 guard event.deletedZoneIDs.isEmpty, event.failedZoneDeletes.isEmpty,
@@ -106,6 +109,7 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
                 var deleted = event.deletedRecordIDs.map(\.recordName)
                 var failures: [GraphCloudRecordFailure] = []
                 for failure in event.failedRecordSaves {
+                    if let delay = failure.error.retryAfterSeconds { await receive(.retryAdvice(delay)) }
                     let name = failure.record.recordID.recordName
                     var server: CKRecord?
                     if failure.error.code == .serverRecordChanged, let value = failure.error.serverRecord {
@@ -125,6 +129,7 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
                     }
                 }
                 for (id, error) in event.failedRecordDeletes {
+                    if let delay = error.retryAfterSeconds { await receive(.retryAdvice(delay)) }
                     if error.code == .unknownItem {
                         deleted.append(id.recordName); syncEngine.state.remove(pendingRecordZoneChanges: [.deleteRecord(id)])
                     } else { failures.append(.init(recordName: id.recordName, code: error.code.rawValue)) }

@@ -120,7 +120,7 @@ actor StoreResources {
             // didSave is delivered on the saving context's queue; no context escapes this callback.
             guard let context = note.object as? NSManagedObjectContext,
                   let coordinator, context.persistentStoreCoordinator === coordinator else { return }
-            hub.publish(.contextSave)
+            hub.publish(.contextSave, transactionAuthor: context.transactionAuthor)
         })
         changeObservers.append(NotificationCenter.default.addObserver(forName: .NSPersistentStoreRemoteChange,
             object: coordinator, queue: nil) { _ in hub.publish(.storeChange) })

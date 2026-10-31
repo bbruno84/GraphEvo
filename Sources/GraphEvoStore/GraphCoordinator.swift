@@ -67,6 +67,10 @@ package actor GraphCoordinator {
                                    ownerLease: GraphCoordinatorLease(handle: lease, sync: syncSession, onClose: onClose))
     }
 
+    func localCommitFeed() async throws -> StoreInvalidationFeed {
+        try await handle.invalidationFeed(localCommitsOnly: true)
+    }
+
     func close() async throws {
         await syncSession?.retire()
         try await handle.close()

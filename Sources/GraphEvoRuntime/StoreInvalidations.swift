@@ -43,6 +43,7 @@ package struct StoreInvalidationSequence: AsyncSequence, Sendable {
 package final class StoreInvalidationHub: Sendable {
     private struct Subscriber: Sendable {
         let owner: UUID
+        let localCommitsOnly: Bool
         let continuation: AsyncStream<StoreInvalidation>.Continuation
     }
     private struct State: Sendable {
@@ -52,13 +53,13 @@ package final class StoreInvalidationHub: Sendable {
     }
     private let state = OSAllocatedUnfairLock(initialState: State())
 
-    package func subscribe(owner: UUID) -> StoreInvalidationFeed {
+    package func subscribe(owner: UUID, localCommitsOnly: Bool = false) -> StoreInvalidationFeed {
         let id = UUID(), pair = AsyncStream<StoreInvalidation>.makeStream(bufferingPolicy: .bufferingNewest(1))
         pair.continuation.onTermination = { [weak self] _ in self?.remove(id) }
         // Install the initial hint before registration so a newer invalidation cannot be overwritten by it.
         pair.continuation.yield(StoreInvalidation(reason: .initial))
         let flags = state.withLock { state in
-            if !state.closed { state.subscribers[id] = Subscriber(owner: owner, continuation: pair.continuation) }
+            if !state.closed { state.subscribers[id] = Subscriber(owner: owner, localCommitsOnly: localCommitsOnly, continuation: pair.continuation) }
             return (state.closed, state.accountChanged)
         }
         if flags.1 { pair.continuation.yield(StoreInvalidation(reason: .accountChange)) }
@@ -77,10 +78,12 @@ package final class StoreInvalidationHub: Sendable {
         let target = state.withLock { ($0.subscribers[id]?.continuation, $0.accountChanged) }
         target.0?.yield(StoreInvalidation(reason: target.1 ? .accountChange : .refresh))
     }
-    package func publish(_ reason: StoreInvalidationReason) {
+    package func publish(_ reason: StoreInvalidationReason, transactionAuthor: String? = nil) {
         let delivery = state.withLock { state in
             if case .accountChange = reason { state.accountChanged = true }
-            return (state.subscribers.values.map(\.continuation), state.accountChanged)
+            let localCommit = reason == .contextSave && transactionAuthor != "GraphEvo.v2.import" && transactionAuthor != "GraphEvo.v2.syncMetadata"
+            let targets = state.subscribers.values.filter { !$0.localCommitsOnly || localCommit || state.accountChanged }
+            return (targets.map(\.continuation), state.accountChanged)
         }
         for continuation in delivery.0 { continuation.yield(StoreInvalidation(reason: delivery.1 ? .accountChange : reason)) }
     }
