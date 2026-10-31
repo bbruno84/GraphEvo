@@ -28,7 +28,9 @@ validation also closes registration races with native destruction/file resolutio
 The results report preserves the original physical pins and intermediate failures.
 The corrected candidate passes 757 macOS functions, 402 iOS Simulator tests,
 Release build, Swift 6 ModelConsumer and manifest/diff checks. No remote CI or
-merge has been started; the three review findings require corrective re-review.
+merge has been started. The [corrective review of `70909cf`](https://github.com/bbruno84/GraphEvo/pull/120#pullrequestreview-5725012469)
+closes all three findings without additional blockers in the reviewed paths;
+the next step is the maintainer-authorized CI checkpoint.
 
 ## Latest integrated increment
 

@@ -98,6 +98,10 @@ GraphEvoStore build, Swift 6 ModelConsumer and manifest/diff checks. The three
 original reproducers are committed as strengthened regressions alongside six
 additional boundary/race functions. Remote CI remains pending review completion
 and maintainer authorization.
+The [corrective review of `70909cf`](https://github.com/bbruno84/GraphEvo/pull/120#pullrequestreview-5725012469)
+closes the three findings with no additional blocker in the reviewed paths.
+Subsequent status edits are documentation-only; the tested library/test source
+remains exactly that commit. CI and merge still require maintainer authorization.
 
 ## Local validation and limits
 
