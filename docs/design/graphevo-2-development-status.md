@@ -8,35 +8,48 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-The [MF02 compressed backup package candidate](graphevo-2-backup-packages.md)
-is ready for review in [PR #121](https://github.com/bbruno84/GraphEvo/pull/121)
-on `codex/v2-compressed-backups`, directly from #120 (`2009582`).
-The maintainer selected `.geb` for local and exported single-file packages.
-It follows the
-[migration foundations roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment)
-for compressed local packages, manifest discovery and async portable export/import.
-This candidate adds a bounded manifest-first container and
-streamed raw DEFLATE through SDK zlib, retaining legacy directory reads. Graph
-holds end after coherent native copying; compression/verification run afterward.
-Package import copies into a backup collection; independent cross-user graph
-activation remains separate executor work. The maintainer subsequently authorized
-review/corrections, CI and merge if successful. The
-[review](results/backup-packages-review-2026-11-01.md) reproduced one P2: a rejected
-nested legacy import created a child in its source. Correction `8bf64b0` closes
-it through export's existing preflight, with direct/alias regressions; corrective
-re-review found no remaining blocker in the examined paths. CI follows local checks.
-The [MF02 results](results/backup-packages-2026-11-01.md) record 785 macOS and
-430 iOS Simulator functions, Release/consumer checks and successful native package
-transport/recovery in both directions between macOS and iOS Simulator. A mixed
-native fixture reduces approximately 8.85 MB to 4.26 MB; this is local synthetic
-evidence, not physical/production-scale acceptance. Original result pins remain
-historical; corrected validation is recorded with the review/checkpoint.
-Corrected source `8bf64b0` passes 786 macOS and 431 selected iOS Simulator
-functions, Release, Swift 6 consumer and manifest/diff checks. The corrective
-re-review closes the P2; one remote checkpoint follows before authorized merge.
-New work starts from `codex/graphevo-2`, not the retained T08/MF01 topic branches.
+No active implementation branch follows #121 yet. The next migration foundation
+is [independent graph control metadata/shared ledger](graphevo-2-migration-foundations.md#graph-control-metadata-and-shared-ledger),
+with contract/concurrency/access details to settle before implementation. New
+focused work starts from `codex/graphevo-2`. Independent cross-user graph
+activation, migration working-copy publication and v1 conversion remain open;
+package collection import does not silently activate them.
 
-## Latest integrated increment — T08 and MF01
+## Latest integrated increment — MF02 compressed backup packages
+
+[PR #121](https://github.com/bbruno84/GraphEvo/pull/121) integrates
+[MF02](graphevo-2-backup-packages.md) directly into `codex/graphevo-2` from #120
+(`2009582`). Completed local and exported backups use the maintainer-selected
+`.geb` extension and the same manifest-first single-file format. Bounded SDK zlib
+streaming preserves strict framing/input/expansion checks; legacy directory
+backups remain readable/exportable. No schema, graph/cloud wire or session
+format changes are introduced.
+
+Snapshot-owned graph/cloud holds end after coherent native copying. Compression
+and verification continue asynchronously, preserving manual/other holds. Export
+copies an existing compressed package; import copies it into another collection.
+Native validation, complete attachment checks and PH-preserving materialization
+remain distinct from graph/cloud activation or in-place rollback.
+
+[Original results](results/backup-packages-2026-11-01.md) retain source `3e509f0`,
+compression measurements and successful native transfer/recovery in both
+macOS/iOS Simulator directions. The mixed fixture reduces approximately 8.85 MB
+to 4.26 MB. This is bounded local evidence, not physical/account/production-scale
+acceptance. The [review/correction](results/backup-packages-review-2026-11-01.md)
+reproduced one P2 in legacy import preflight; `8bf64b0` closes it with committed
+direct/alias source-preservation regressions. Corrective re-review found no
+remaining blocker in the examined paths.
+
+Corrected validation passes 786 macOS functions (331 legacy, 356 store, 76 runtime,
+23 model), 431 selected iOS Simulator functions/510 invocations, Release build,
+Swift 6 ModelConsumer and manifest/diff checks. The one
+[macOS/iOS checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/41289164075)
+passes on reviewed/documented head `89644e1`, including ModelConsumer and
+independent-process local read-only checks. Final integration-status edits are
+documentation-only; no source/test/workflow changes follow the green checkpoint.
+The maintainer authorized merge after successful review/corrections and CI.
+
+## Earlier integrated increment — T08 and MF01
 
 [PR #120](https://github.com/bbruno84/GraphEvo/pull/120) integrates
 [T08 sharing lifecycle](graphevo-2-sharing-lifecycle.md) and

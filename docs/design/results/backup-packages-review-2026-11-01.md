@@ -43,3 +43,12 @@ The maintainer authorized review/corrections → CI → merge on success. The re
 checkpoint follows corrective review; no failed local reproducer is presented as
 successful acceptance. Power-loss, physical/production scale and independent
 cross-user graph activation remain open.
+
+## Remote checkpoint and integration
+
+[CI run 41289164075](https://github.com/bbruno84/GraphEvo/actions/runs/41289164075)
+passes on `89644e1` after corrective re-review, covering macOS/iOS suites,
+ModelConsumer and independent-process local reading. The maintainer authorized
+merge on success. Final integration-status edits are documentation-only;
+source/tests/workflow remain identical to the green checkpoint. Original local
+transport/measurement pins and broader acceptance limits remain unchanged.

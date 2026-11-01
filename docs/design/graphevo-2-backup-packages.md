@@ -1,13 +1,15 @@
 # MF02 — compressed GraphEvo Backup packages
 
-Status: package-only candidate on `codex/v2-compressed-backups`, directly from
-`codex/graphevo-2` at #120 (`2009582`). No schema, record wire format or cloud
+Status: package-only baseline integrated through #121 into `codex/graphevo-2`,
+developed on `codex/v2-compressed-backups` directly from #120 (`2009582`). No schema, record wire format or cloud
 session change. This extends [MF01](graphevo-2-local-maintenance.md).
-Implementation source `3e509f0` is ready for review after local validation.
+Original package implementation/measurement source is `3e509f0`.
 Delivery: [PR #121](https://github.com/bbruno84/GraphEvo/pull/121). The
 [review/correction](results/backup-packages-review-2026-11-01.md) closes one P2
 in legacy import preflight at `8bf64b0`. The maintainer authorized continuing
-through CI and merge on success after corrective review.
+through CI and merge on success after corrective review. The
+[combined macOS/iOS checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/41289164075)
+passes on `89644e1`; final integration-status changes are documentation-only.
 
 ## Package and discovery
 
@@ -121,6 +123,6 @@ The [MF02 results](results/backup-packages-2026-11-01.md) retain local checks,
 measurements, failed prototype behavior and bidirectional macOS/iOS Simulator
 package recovery, without claiming independent-user graph activation.
 
-Update API, status and post-alpha gates. Deliver one direct PR to
+API, status and post-alpha gates are updated in the direct #121 delivery to
 `codex/graphevo-2`. Review/corrections precede remote CI and authorized merge;
-no CI is requested during implementation. Measurements/laboratories stay local.
+no CI was requested during implementation. Measurements/laboratories stay local.

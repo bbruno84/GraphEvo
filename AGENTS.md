@@ -1118,9 +1118,9 @@ pause and local reservation. Keep the v1 backup helper unchanged unless a separa
 validated v1 route is explicitly implemented. MF01 and T08 integrate together in
 #120 after corrective review and one combined CI checkpoint. Future increments
 start from `codex/graphevo-2` and retain review/corrections before CI and authorized
-merge. MF02's compressed package candidate extends this baseline separately.
+merge. MF02's compressed packages extend this baseline in #121.
 
-## V2 MF02 backup package candidate
+## V2 MF02 backup packages
 
 Read [MF02](docs/design/graphevo-2-backup-packages.md) before package changes.
 The selected extension is `.geb`. Keep manifest-first discovery independent of
@@ -1134,3 +1134,6 @@ Keep legacy directory reads/export, durable retention and native attachment/PH
 verification. Package import does not activate a graph or restore account/share/
 engine state. Independent cross-user graph adoption remains executor work.
 Measurements and cross-platform probes stay local; review precedes CI and merge.
+MF02 integrates through #121 after corrective review and one combined macOS/iOS
+checkpoint. Future increments start from `codex/graphevo-2`; retain package import
+versus independent graph activation as separate contracts and acceptance evidence.

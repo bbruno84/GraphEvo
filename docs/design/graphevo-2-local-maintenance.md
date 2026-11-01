@@ -77,7 +77,7 @@ bindings generate no persisted sandbox paths; caller artifacts remain opaque.
 Whole unretained bundles can move or be renamed.
 The integrated MF01 baseline uses uncompressed directories. The
 [next backup increment](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment)
-is implemented by the [MF02 candidate](graphevo-2-backup-packages.md): compressed
+is implemented by [MF02/#121](graphevo-2-backup-packages.md): compressed
 `.geb` local payloads, manifest discovery and async package export/import. MF02
 retains MF01 directory reads; cross-user graph activation remains separate.
 
