@@ -8,15 +8,16 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF04a completes logical emptying through [PR #123](https://github.com/bbruno84/GraphEvo/pull/123).
-No next implementation branch is open. The next increment implements the
-[MF04 workspace contract](graphevo-2-migration-workspace.md): protected coherent
-copy, working-purpose admission and a fresh working-store PH boundary, then
-bounded sealing/recovery. The temporary graph remains isolated from cloud until
-later publication. Validate the working graph before creating/verifying the
-original backup and before publication. The consumer owns migration eligibility
-and data meaning; workspace activation/publication and mandatory v1 conversion
-remain open.
+MF04b is in progress on `codex/v2-working-graph`, directly from integrated
+MF04a/#123 (`3b0c326`). The [workspace contract](graphevo-2-migration-workspace.md)
+now has protected complete-copy preparation, working-purpose runtime admission,
+a fresh working PH baseline and close/discard. Sealing/reduction, restart
+activation and original-store publication remain the next increment, with
+participant workspaces gated on T08 integration. No backup is created before
+final working-copy validation; no new schema, cloud format or session format.
+The [local result](results/migration-workspace-preparation-2026-11-01.md) records
+broad macOS/iOS checks and final focused cleanup regression coverage. Review and
+corrections precede the one requested CI checkpoint and authorized merge. The current branch does not change the integrated baseline below.
 
 ## Latest integrated increment — MF04a logical emptying
 

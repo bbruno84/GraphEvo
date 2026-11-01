@@ -31,6 +31,18 @@ enum GraphCoordinatorFactory {
         return GraphCoordinatorAdapter(graph: graph, sync: sync, initializePolicy: { context, id, policy in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
+        }, prepareWorkspace: { context, id in
+            try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
+            let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+            guard try GraphCloudAccessMetadata.read(root) == nil else { throw GraphMigrationWorkspaceError.participantUnsupported }
+            guard let coordinator = context.persistentStoreCoordinator, let store = coordinator.persistentStores.first,
+                  let workspaceID = coordinator.metadata(for: store)[StoreNativeContext.workspaceKey] as? String else {
+                throw GraphMigrationWorkspaceError.invalidWorkspace
+            }
+            root[dynamicMember: GraphTypedStoreAdapter.prefix + "workspaceBoundary"] = workspaceID
+            root[dynamicMember: GraphSyncCheckpointAdapter.stateKey] = nil
+            root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] = nil
+            context.transactionAuthor = GraphSyncCheckpointAdapter.metadataAuthor
         }, validateBackup: { context, id in
             try GraphValueDecodingDiagnostics.checking {
                 let session = try GraphTypedStoreAdapter.Session(context, id, database: true)

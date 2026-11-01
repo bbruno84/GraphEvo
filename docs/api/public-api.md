@@ -1748,3 +1748,23 @@ Cloud-backed graphs enqueue ordinary PH deletes for normal transport; zone, shar
 and ledger remain. Local success does not certify delivery or an atomic/global
 cloud wipe, and does not delete records absent from the local replica. Exports and
 backups remain caller-owned. See [MF04a](../design/graphevo-2-logical-emptying.md).
+
+
+### Isolated migration preparation (package-only)
+
+`GraphContextManager.prepareMigrationWorkspace(for:at:) async throws -> GraphMigrationWorkspace`
+protects an open local/owner original with owned cloud-data pause and local-write
+holds, then returns a complete mutable `graph` with the same GraphID/node IDs,
+independent files and no sync session. The destination must be absent with an
+existing parent. Participant sources are refused. Native runtime admission
+rejects ordinary opening/activation of the marked copy.
+
+`GraphMigrationWorkspace.id`, `.graph`, `.directory` and `.descriptor` identify
+the working copy. `close() async throws` drains and closes working access,
+preserves files and releases only its source holds. `discard() async throws`
+then removes verified owned files; unknown/replaced resources are refused.
+Normal transactions, queries, observations, attachments and `removeAll()` operate
+only on the working copy. Its fresh PH baseline follows setup, excluding original
+pending work and pre-copy history. No backup or cloud publication happens here.
+Sealing, PH change sets, restart activation and protected publication remain
+unimplemented. See [MF04b and the remaining contract](../design/graphevo-2-migration-workspace.md).

@@ -1182,3 +1182,20 @@ MF04a integrates through #123 after review and full macOS/iOS CI #311 on
 `5ca2644`; review added two adversarial tests without changing shipping source
 `a19ae62`. The MF04 workspace/publication contract remains design-only; do not
 claim that GraphStore.removeAll by itself creates an isolated migration copy.
+
+
+## V2 MF04b isolated working copies
+
+Read [MF04](docs/design/graphevo-2-migration-workspace.md) before workspace work.
+Preparation uses owned source cloud/local holds, a complete native copy and exact
+workspace-purpose admission. No sync session is attached to the editable copy;
+ordinary runtime openings must refuse it. Participant workspaces remain disabled.
+Preserve application identities/content and deleted-ID evidence, clear only the
+copy's transport/checkpoint authority and capture a fresh PH token after one
+working setup transaction. Never guess native sortable fields or use dates as a
+history cut. No backup is created before final validation. Close/discard drain
+working access; removal checks physical directory/file identity and bounded
+ownership markers after detachment. Failed cleanup retains files/native claims.
+Sealing, PH reduction, restart/source-freshness recovery and publication are still
+separate work; descriptors are not an activation or migration-completion claim.
+Review/corrections precede CI and authorized merge; physical labs stay local.

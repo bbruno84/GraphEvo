@@ -393,9 +393,13 @@ paired-store evidence below retains its original backend scope.
   read-write guest/concurrent-writer/account-change and scale coverage stays open;
   retain local and physical evidence separately; no workspace/publication gate closes here.
 - [ ] **B** Implement and validate the isolated working graph and explicit PH
-  range/seal contract. [MF04](graphevo-2-migration-workspace.md) is design-only:
-  preparation must preserve the original/backup, reject ordinary cloud activation,
-  bind history to the exact working instance and survive interrupted sealing.
+  range/seal contract. [MF04b preparation](graphevo-2-migration-workspace.md) is implemented on the focused
+  working-graph branch, pending integration. It preserves the protected original
+  without creating a premature backup and refuses ordinary cloud activation.
+  Complete bounded sealing/reduction, restart/source-freshness recovery and
+  fault/scale acceptance. The [local preparation result](results/migration-workspace-preparation-2026-11-01.md)
+  keeps broad/final focused checks separate. Bind history to the exact working
+  instance and survive interrupted sealing.
   Participant-origin workspace activation also requires permission and T08
   revocation/purge integration before enabling that route. A change manifest
   alone does not establish safe original-store publication.

@@ -20,13 +20,15 @@ package struct StoreConfiguration: Sendable, Equatable {
     package let cloudKitContainerIdentifier: String?
     package let sharedStoreURL: URL?
     package let exclusiveGraphID: UUID?
+    package let workspaceID: UUID?
 
-    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil, exclusiveGraphID: UUID? = nil) {
+    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil, exclusiveGraphID: UUID? = nil, workspaceID: UUID? = nil) {
         self.location = location
         self.access = access
         self.cloudKitContainerIdentifier = cloudKitContainerIdentifier
         self.sharedStoreURL = sharedStoreURL
         self.exclusiveGraphID = exclusiveGraphID
+        self.workspaceID = workspaceID
     }
 }
 
@@ -78,6 +80,9 @@ struct ResolvedStore: Sendable {
     }
 
     init(_ configuration: StoreConfiguration) throws {
+        if configuration.workspaceID != nil && configuration.exclusiveGraphID == nil {
+            throw StoreRuntimeError.invalidConfiguration("A workspace requires exclusive graph ownership.")
+        }
         if configuration.exclusiveGraphID != nil {
             guard case .sqlite = configuration.location, configuration.access == .readWrite,
                   configuration.cloudKitContainerIdentifier == nil, configuration.sharedStoreURL == nil else {
@@ -127,7 +132,7 @@ struct ResolvedStore: Sendable {
                 throw StoreRuntimeError.invalidConfiguration("Private and shared stores must use distinct files.")
             }
             self.configuration = StoreConfiguration(location: .sqlite(canonical), access: configuration.access,
-                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url, exclusiveGraphID: configuration.exclusiveGraphID)
+                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url, exclusiveGraphID: configuration.exclusiveGraphID, workspaceID: configuration.workspaceID)
             secondaryResources = secondary.map { [$0] } ?? []
             _ = try fileIdentity()
         }
@@ -146,6 +151,7 @@ struct ResolvedStore: Sendable {
     func isCompatible(with other: ResolvedStore) throws -> Bool {
         guard configuration.access == other.configuration.access,
               configuration.exclusiveGraphID == other.configuration.exclusiveGraphID,
+              configuration.workspaceID == other.configuration.workspaceID,
               configuration.cloudKitContainerIdentifier == other.configuration.cloudKitContainerIdentifier else { return false }
         return try resources.map(\.key) == other.resources.map(\.key)
     }

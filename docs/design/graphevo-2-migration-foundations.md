@@ -9,7 +9,9 @@ compressed package/export/import baseline in #121 after corrective review and
 CI. [MF03](graphevo-2-shared-ledger.md) delivers the bounded shared-control ledger
 in #122 after corrective review and full CI checkpoint #303. Independent cross-user
 graph activation and remaining executor steps stay
-open. Future branches start from `codex/graphevo-2`.
+open. MF04b's protected working-copy preparation is implemented on
+`codex/v2-working-graph`, pending review/checkpoint/integration; bounded sealing,
+restart activation and publication remain open. Future branches start from `codex/graphevo-2`.
 
 ## Responsibility boundary
 
