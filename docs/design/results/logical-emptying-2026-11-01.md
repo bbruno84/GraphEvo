@@ -125,6 +125,11 @@ review before authorized integration. No workspace behavior is certified.
 After review, full [CI #311](https://github.com/bbruno84/GraphEvo/actions/runs/41301437693)
 passed macOS and iOS on reviewed head
 `5ca26449a45704e8ebbb95a51f72fba0e781c0ef`, including the added regression tests.
+The macOS log records 828 passing functions. The iOS summary records 826 passing
+functions and one existing legacy test skipped:
+`GraphMigrationManagerTests.testStoreCreatedBetweenPreInitAndReadyKeepsOneMigrationCoordinator`,
+because the simulator sandbox does not expose the temporary directory's `/private`
+alias. No new emptying test was skipped; there were zero test failures.
 The label was added only after review and removed after success before recording
 these documentation-only integration notes. Shipping library source remains
 `a19ae62`; unchanged library tests are not rerun for evidence documentation alone.
