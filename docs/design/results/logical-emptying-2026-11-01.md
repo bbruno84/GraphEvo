@@ -95,8 +95,8 @@ separate from physical network-failure evidence.
 
 MF04 working-copy identity, sealing/recovery, post-validation backup and
 original-store migration publication remain design-only. Mandatory v1 conversion
-and the post-alpha gates remain open. PR #123 is ready for review; remote CI and
-merge have not been requested for this implementation. Follow review/corrections,
+and the post-alpha gates remain open. At the original candidate report, review/CI/merge had not yet been requested;
+the completed review and subsequent checkpoint are recorded below. Follow review/corrections,
 then any requested full checkpoint, then authorized merge. No laboratory was
 added to CI.
 
@@ -118,3 +118,15 @@ passes **12 emptying functions / 13 invocations**. The earlier complete suites a
 eight physical stages retain shipping-source pin `a19ae62`; they were not rerun
 merely for added regression tests. Full remote validation follows this completed
 review before authorized integration. No workspace behavior is certified.
+
+
+## Remote checkpoint and integration
+
+After review, full [CI #311](https://github.com/bbruno84/GraphEvo/actions/runs/41301437693)
+passed macOS and iOS on reviewed head
+`5ca26449a45704e8ebbb95a51f72fba0e781c0ef`, including the added regression tests.
+The label was added only after review and removed after success before recording
+these documentation-only integration notes. Shipping library source remains
+`a19ae62`; unchanged library tests are not rerun for evidence documentation alone.
+PR #123 records the authorized merge into `codex/graphevo-2`. Physical laboratories
+were not added to CI. Workspace and broader beta/stable gates remain open.

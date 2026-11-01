@@ -3,7 +3,7 @@
 Status: design and implementation plan, based on integrated MF03/#122
 (`5b22750`). This contract precedes the implementation of migration-roadmap step 4.
 The workspace APIs below remain design-only. The
-[MF04a logical-emptying candidate](graphevo-2-logical-emptying.md) implements
+[integrated MF04a logical-emptying API](graphevo-2-logical-emptying.md) implements
 `GraphStore.removeAll` / `GraphMutation.removeAll` independently of workspace
 activation. A focused MF04 branch returns
 directly to `codex/graphevo-2`; no experiment/integration branch stack is needed.

@@ -386,7 +386,7 @@ paired-store evidence below retains its original backend scope.
 - [ ] **B** Complete large logical-emptying acceptance: native/resource/payload
   costs, external-byte reclamation, cumulative deleted-ID/PH limits, concurrent
   remote insertions and permission/account changes during deletion delivery.
-  [MF04a](graphevo-2-logical-emptying.md) is a bounded candidate using existing
+  [MF04a](graphevo-2-logical-emptying.md) integrates through #123 after review and CI #311, using existing
   deletion queues and tombstone retention, not a global cloud reset. The
   [bounded iPad/XR result](results/logical-emptying-2026-11-01.md) retains exact
   empty/repopulated inventories and share/ledger/control-graph continuity; physical

@@ -1,6 +1,6 @@
 # MF04a — logical graph emptying
 
-Status: implementation candidate on `codex/v2-migration-workspace`, directly
+Status: implementation baseline delivered through #123 on `codex/v2-migration-workspace`, directly
 based on MF03/#122 (`5b22750`) for integration into `codex/graphevo-2` through #123.
 This supplies graph emptying, not the MF04 workspace or migration executor.
 
@@ -79,7 +79,7 @@ No new queue, engine, persistent format or migration registry is introduced.
 
 ## Validation and workflow
 
-The [candidate result](results/logical-emptying-2026-11-01.md) records passing local
+The [result](results/logical-emptying-2026-11-01.md) records passing local
 macOS/iOS checks and the eight-stage iPad/XR protocol at `a19ae62`. It separates
 injected partial/late-receipt coverage from actual sharing/asset/deletion delivery.
 

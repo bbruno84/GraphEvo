@@ -1177,3 +1177,8 @@ Use the existing PH/CKSyncEngine delete path; never destroy the zone/share, rese
 PH or discard a frozen batch as a shortcut. A late old-save success must leave a
 newer delete pending. Local success is not global cloud emptiness/convergence.
 The workspace executor remains separate design work. Review precedes CI and merge.
+
+MF04a integrates through #123 after review and full macOS/iOS CI #311 on
+`5ca2644`; review added two adversarial tests without changing shipping source
+`a19ae62`. The MF04 workspace/publication contract remains design-only; do not
+claim that GraphStore.removeAll by itself creates an isolated migration copy.
