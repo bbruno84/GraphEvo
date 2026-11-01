@@ -9,7 +9,8 @@ integration into the main v2 branch or beta readiness.
 ## Current focused work
 
 The [MF02 compressed backup package candidate](graphevo-2-backup-packages.md)
-is in progress on `codex/v2-compressed-backups`, directly from #120 (`2009582`).
+is ready for review in [PR #121](https://github.com/bbruno84/GraphEvo/pull/121)
+on `codex/v2-compressed-backups`, directly from #120 (`2009582`).
 The maintainer selected `.geb` for local and exported single-file packages.
 It follows the
 [migration foundations roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment)
