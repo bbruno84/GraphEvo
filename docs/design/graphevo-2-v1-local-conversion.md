@@ -116,7 +116,9 @@ No new schema column, cloud node/asset format or session format is introduced.
 A local binary property can exceed the existing inline cloud-record allowance;
 local preservation does not certify remote publishability or reinterpret it as
 an attachment. Large-property handling before cloud activation remains an
-explicit v1 acceptance gate. Source completeness, actual production/historical
+explicit v1 acceptance gate. Select one authoritative converted graph/mapping;
+independent random-ID conversions must not populate the same cloud graph.
+Source completeness, actual production/historical
 fixtures, paired stores, public bootstrap integration, account/device cloud
 activation, physical kill/power-loss, external-process writers and scale remain
 open. Backups created by abandoned failed conversions remain retained until an

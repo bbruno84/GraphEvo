@@ -13,7 +13,10 @@ MF07 explicit local v1 conversion is in progress on
 [contract](graphevo-2-v1-local-conversion.md) covers a stopped read-only v1 source,
 complete verified legacy backup, distinct S03 destination and atomic identity-map/
 receipt commit. Default openers, S03 and cloud formats remain unchanged. Local
-verification/review is underway; no cloud migration or full v1 acceptance is claimed.
+macOS/iOS, four physical local conversion/restart stages and review pass; the
+[result](results/v1-local-conversion-2026-11-01.md) separates their scope. The
+single full CI checkpoint/integration is pending; no cloud migration or full v1
+acceptance is claimed.
 
 MF06 delivers representative consumer evidence through
 [PR #127](https://github.com/bbruno84/GraphEvo/pull/127), directly from #126.
@@ -26,8 +29,9 @@ changes. Review found no remaining blocking findings. This laboratory/evidence
 increment does not rerun full CI on unchanged shipping code; #324 remains its
 last full checkpoint. Default CI continues to exclude the laboratory.
 
-Next: define the mandatory v1 source identity/value/attachment conversion and
-coordinated cloud cutover. Public executor exposure, participant-origin workspaces,
+After MF07: integrate supported opt-in bootstrap and production/historical
+source acceptance, then new-cloud activation of one authoritative converted graph.
+Old-cloud format conversion is outside this increment. Public executor exposure, participant-origin workspaces,
 fresh shared bootstrap after publication and broader interruption/scale acceptance
 remain separate work. Consumers retain semantics and cross-device policy.
 
