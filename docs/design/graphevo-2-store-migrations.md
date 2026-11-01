@@ -1,8 +1,8 @@
 # MF08 — repeatable internal store migrations
 
-Status: package-only implementation on `codex/v2-store-migration-structure`,
-based directly on integrated #129. Review and the final CI checkpoint precede
-integration. This structures the existing MF07 conversion without introducing
+Status: package-only implementation in [PR #130](https://github.com/bbruno84/GraphEvo/pull/130),
+based directly on integrated #129. Local/device checks and review pass; the final
+CI checkpoint precedes integration. This structures the existing MF07 conversion without introducing
 another manager, registry or automatic opening path.
 
 ## One definition per supported transition
@@ -77,3 +77,7 @@ Consumer application-data migrations remain a separate path. Historical source,
 large-data/cloud activation, public bootstrap, physical interruption and scale
 gates stay open. See [MF07](graphevo-2-v1-local-conversion.md) and the
 [post-alpha checklist](graphevo-2-post-alpha-checklist.md).
+
+[Results](results/store-migration-structure-2026-11-01.md) retain local checks,
+review and two physical compatibility-recovery stages, without broadening MF07
+acceptance.
