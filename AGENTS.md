@@ -1289,3 +1289,9 @@ retain legacy property versions without format admission. Keep fixed-operation
 backup reuse, native receipt integrity, cancellation outcome and failed-cleanup
 ownership. No paths are serialized. Public bootstrap, historical source/large
 binary acceptance and cloud activation remain separate gates.
+
+MF07 integrates through #129 after local/device review and one full macOS/iOS
+checkpoint #331 on `f24029a` (shipping source `f72c2e3`). Retain the
+[scoped result](docs/design/results/v1-local-conversion-2026-11-01.md): four physical
+local stages are not cloud activation or production-source acceptance. Do not
+publish independent random-ID conversions into the same new cloud graph.

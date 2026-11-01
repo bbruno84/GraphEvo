@@ -3,8 +3,13 @@
 Implementation source: `f72c2e32809528b7b1a85a6284ee16ee985cd2b9`, based on #128,
 [PR #129](https://github.com/bbruno84/GraphEvo/pull/129). The
 [contract](../graphevo-2-v1-local-conversion.md) defines the supported local route.
-This records local/device verification and review before the single full CI
-checkpoint. No cloud conversion/activation is performed.
+The single full [CI checkpoint #331](https://github.com/bbruno84/GraphEvo/actions/runs/41336556416)
+passes after local/device review on `f24029a02d7c7ea86d7400758c07236e9f28959f`.
+macOS: 886 functions plus both consumers. iOS: 884 functions / 987 passed
+invocations, one known legacy temporary-directory-alias skip and no failures.
+CI uses macOS 15 / Xcode 16.4 / Swift 6.1 / iOS 18.5. Final integration notes
+are documentation-only; shipping source/tests match the checkpoint exactly.
+No cloud conversion/activation is performed.
 
 ## Local checks
 
@@ -34,6 +39,11 @@ Thirteen new functions/eighteen invocations cover:
 | Null/opaque values | Unambiguous null retained or ambiguous value explicitly refused, never omitted. Known wrapper values retain a secure opaque archive and semantic canonical fingerprint. |
 | Relocation | Same-volume movement of source/destination/backup root recovers using current URLs; no path is serialized. |
 | Cleanup failure | Committed proof plus visible cleanup error; native claims stay reserved and another graph continues. Quarantined fixtures are retained. |
+
+The read-only source-model audit also compares `Model.swift` against v1
+`origin/develop` at `4dc0a7f9a717ee535e9b630b998cd6c869a2d538`: only the fresh
+factory refactor differs; entity/attribute construction is unchanged. This is
+source inspection, not certification of an app's production file.
 
 ## Review findings and corrections
 

@@ -358,8 +358,9 @@ close O04 or mark the wider beta/stable items above complete.
   inline cloud allowance; preserving a Data value locally is not CKAsset migration.
   Select one authoritative initial import/mapping before activating peers; separate
   local conversions must not publish competing random IDs into the same graph.
-  [Local/device results](results/v1-local-conversion-2026-11-01.md) retain the
-  implementation's bounded scope and do not close the whole v1 gate.
+  #129 integrates the bounded local route after review and full CI #331;
+  [local/device results](results/v1-local-conversion-2026-11-01.md) retain the
+  exact pin and scope and do not close the whole v1 gate.
   Old-cloud conversion/coexistence is not part of this local increment.
 
 Sources: specification S11, delivery plan migration workstream, V08, D07/M02/M09.

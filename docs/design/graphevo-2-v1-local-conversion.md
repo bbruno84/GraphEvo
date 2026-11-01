@@ -1,7 +1,8 @@
 # MF07 — explicit local v1 to S03 conversion
 
-Status: package-only implementation on `codex/v2-local-v1-conversion`, based on
-#128. This supplies the first bounded local conversion route, not automatic
+Status: package-only implementation integrates through
+[PR #129](https://github.com/bbruno84/GraphEvo/pull/129), based directly on #128,
+after review and full CI #331 on `f24029a`. This supplies the first bounded local conversion route, not automatic
 public migration, a cloud cutover or completion of mandatory v1 acceptance.
 
 ## Admission and supported source
@@ -99,8 +100,11 @@ cancellation or native-detach/unpin failure, but pending cleanup is not a ready
 Graph certificate. Failed detachment retains runtime claims and may require
 process restart. Precommit cleanup failures retain both the original failure and
 cleanup failure. Successful cleanup releases only this operation's backup pin.
-Call the existing awaited `openGraph(id:at:)` after conversion/cleanup to enter
-the ordinary lifecycle; there is no automatic public-opening interception yet.
+Enter the ordinary lifecycle with the existing awaited `openGraph(id:at:)`.
+The receipt proves data commit; successful opening separately establishes
+availability. A backup-unpin warning does not undo data, while failed native
+detachment can still prevent opening. There is no automatic public-opening
+interception yet.
 
 ## Bounds and remaining gates
 
