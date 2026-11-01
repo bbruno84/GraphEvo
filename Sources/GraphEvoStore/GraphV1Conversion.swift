@@ -3,24 +3,12 @@ import Foundation
 import GraphEvoModel
 import GraphEvoRuntime
 
-package enum GraphV1ConversionError: Error { case unavailable, busy, invalidRequest, unsupportedSource, limitExceeded, staleSource, conflictingDestination, invalidReceipt }
-package struct GraphV1ConversionCleanupFailure: Error {
-    package let operationID: UUID
-    package let failure: any Error
-    package let cleanupFailure: any Error
-}
-package struct GraphV1ConversionLimits: Sendable {
-    package let maximumRecords: Int
-    package let maximumNativeRows: Int
-    package let maximumPayloadBytes: Int
-    package init(maximumRecords: Int = 10_000, maximumNativeRows: Int = 100_000, maximumPayloadBytes: Int = 32 * 1024 * 1024) {
-        self.maximumRecords = maximumRecords; self.maximumNativeRows = maximumNativeRows; self.maximumPayloadBytes = maximumPayloadBytes
-    }
-    package func validate() throws {
-        guard (1...10_000).contains(maximumRecords), (1...100_000).contains(maximumNativeRows),
-              (1...512 * 1024 * 1024).contains(maximumPayloadBytes) else { throw GraphV1ConversionError.limitExceeded }
-    }
-}
+// Existing v1 names remain source aliases; persisted intent/receipt formats are unchanged.
+package typealias GraphV1ConversionError = GraphStoreMigrationError
+package typealias GraphV1ConversionCleanupFailure = GraphStoreMigrationCleanupFailure
+package typealias GraphV1ConversionLimits = GraphStoreMigrationLimits
+package typealias GraphV1ConversionResult = GraphStoreMigrationResult<GraphV1ConversionReceipt>
+
 package struct GraphV1Snapshot: Sendable {
     package let storeID: String
     package let fingerprint: String
@@ -52,13 +40,6 @@ package struct GraphV1ConversionReceipt: Codable, Sendable, Equatable {
         self.intent = intent; self.targetStoreID = targetStoreID; self.nodeIDs = nodeIDs
     }
 }
-package struct GraphV1ConversionResult: Sendable {
-    package let receipt: GraphV1ConversionReceipt
-    package let backupURL: URL
-    /// Data is committed even when native detachment or backup unpin needs later recovery.
-    package let cleanupPending: Bool
-    package let cleanupFailure: (any Error)?
-}
 package struct GraphV1ConversionAdapter: Sendable {
     package let targetSchemaIdentifier: String
     package let sourceSchema: StoreSchema
@@ -74,79 +55,33 @@ package struct GraphV1ConversionAdapter: Sendable {
 }
 
 extension GraphV1ConversionAdapter {
-    var backupValidator: GraphBackupManager.Validator {
+    package var migrationSource: GraphStoreMigrationSource {
         let conversion = self
-        return { url, id in
-            let handle = try await StoreRegistry.shared.open(.init(location: .sqlite(url), access: .readOnly, legacyReadOnly: true), schema: conversion.sourceSchema)
-            do {
-                let identity = try await handle.read { try conversion.snapshot($0, id, .init(maximumPayloadBytes: 512 * 1024 * 1024)).storeID }
-                try await handle.close(); return identity
-            } catch {
-                let failure = error; do { try await handle.close() } catch { throw error }; throw failure
-            }
+        return GraphStoreMigrationSource(schema: sourceSchema, legacyReadOnly: true) { context, id in
+            try conversion.snapshot(context, id, .init(maximumPayloadBytes: 512 * 1024 * 1024)).storeID
         }
+    }
+    var migration: GraphStoreMigrationDefinition<GraphV1Snapshot, GraphV1ConversionIntent, GraphV1ConversionReceipt> {
+        GraphStoreMigrationDefinition(source: migrationSource, targetSchemaIdentifier: targetSchemaIdentifier,
+            backupArtifactName: "__graphevo_v1Conversion.json", inspect: snapshot,
+            sourceState: { .init(storeID: $0.storeID, fingerprint: $0.fingerprint) },
+            makeIntent: { .init(operationID: $0, graphID: $1, sourceFile: $2, snapshot: $3) },
+            encodeIntent: { try $0.encoded() }, readReceipt: receipt,
+            validateReceipt: { receipt, intent, snapshot in
+                guard receipt.intent == intent, Set(receipt.nodeIDs.keys) == Set(snapshot.nodeIDs.keys) else {
+                    throw GraphStoreMigrationError.conflictingDestination
+                }
+            }, apply: apply)
     }
 }
 
 extension GraphContextManager {
-    /// Explicit stopped-writer local conversion. Source and destination are distinct; no cloud session is started.
+    /// Executes the concrete v1 recipe through the shared internal migration sequence.
     package func convertLocalV1Store(at sourceURL: URL, to destinationURL: URL, graphID: GraphID, operationID: UUID,
         backupsIn backupRoot: URL, reason: String = "Before local v1 to v2 conversion",
         limits: GraphV1ConversionLimits = .init()) async throws -> GraphV1ConversionResult {
-        try limits.validate()
-        guard let conversion = adapter.v1Conversion, schema.identifier == conversion.targetSchemaIdentifier else { throw GraphV1ConversionError.unavailable }
-        guard convertingV1.insert(graphID).inserted else { throw GraphV1ConversionError.busy }
-        defer { convertingV1.remove(graphID) }
-        let source = try StoreRegistry.resolve(.init(location: .sqlite(sourceURL), access: .readOnly, legacyReadOnly: true))
-        let destination = try StoreRegistry.resolve(.init(location: .sqlite(destinationURL), exclusiveGraphID: graphID.rawValue))
-        guard source.key != destination.key, case .sqlite(let sourceURL) = source.configuration.location,
-              case .sqlite(let destinationURL) = destination.configuration.location,
-              !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, reason.utf8.count <= 4096 else { throw GraphV1ConversionError.invalidRequest }
-        let sourceFile = try WorkspaceFileIdentity(sourceURL)
-        let input = try await registry.open(source.configuration, schema: conversion.sourceSchema)
-        var target: StoreHandle?, committed: GraphV1ConversionReceipt?
-        do {
-            let snapshot = try await input.read { try conversion.snapshot($0, graphID, limits) }
-            let intent = GraphV1ConversionIntent(operationID: operationID, graphID: graphID, sourceFile: sourceFile, snapshot: snapshot)
-            if FileManager.default.fileExists(atPath: destinationURL.path) {
-                let handle = try await registry.open(destination.configuration, schema: schema); target = handle
-                if let existing = try await handle.read({ try conversion.receipt($0, graphID) }) {
-                    guard existing.intent == intent, Set(existing.nodeIDs.keys) == Set(snapshot.nodeIDs.keys) else { throw GraphV1ConversionError.conflictingDestination }
-                    committed = existing
-                }
-            }
-            if committed == nil {
-                let reservation = try await input.reserveMaintenance()
-                do {
-                    _ = try await backups.create(for: graphID, storeID: snapshot.storeID, schema: conversion.sourceSchema.identifier,
-                        in: backupRoot, reason: reason, artifacts: [.init(name: "__graphevo_v1Conversion.json", data: try intent.encoded())],
-                        backupID: operationID, retentionOwner: operationID, immutableArtifact: "__graphevo_v1Conversion.json") { url in
-                            try await input.copyStore(to: url, reservation: reservation)
-                        }
-                    await reservation.release()
-                } catch { await reservation.release(); throw error }
-                guard try WorkspaceFileIdentity(sourceURL) == sourceFile else { throw GraphV1ConversionError.staleSource }
-                let current = try await input.read { try conversion.snapshot($0, graphID, limits) }
-                guard current.storeID == snapshot.storeID, current.fingerprint == snapshot.fingerprint else { throw GraphV1ConversionError.staleSource }
-                if target == nil { target = try await registry.open(destination.configuration, schema: schema) }
-                guard let target else { throw GraphV1ConversionError.invalidRequest }
-                committed = try await target.transaction { try conversion.apply($0, intent, snapshot) }
-            }
-            guard let committed else { throw GraphV1ConversionError.invalidReceipt }
-            // Native commit is authoritative. Cancellation or cleanup cannot change its outcome.
-            var cleanup: (any Error)?
-            do { try await target?.close() } catch { cleanup = error }
-            do { try await input.close() } catch { cleanup = cleanup ?? error }
-            let backupURL = backupRoot.standardizedFileURL.resolvingSymlinksInPath().appendingPathComponent(operationID.uuidString).appendingPathExtension("geb")
-            do { try await backups.releaseRetention(at: backupURL, owner: operationID) } catch { cleanup = cleanup ?? error }
-            return .init(receipt: committed, backupURL: backupURL, cleanupPending: cleanup != nil, cleanupFailure: cleanup)
-        } catch {
-            let failure = error
-            var cleanup: (any Error)?
-            do { try await target?.close() } catch { cleanup = error }
-            do { try await input.close() } catch { cleanup = cleanup ?? error }
-            if let cleanup { throw GraphV1ConversionCleanupFailure(operationID: operationID, failure: failure, cleanupFailure: cleanup) }
-            throw failure
-        }
+        guard let conversion = adapter.v1Conversion else { throw GraphV1ConversionError.unavailable }
+        return try await migrateStore(using: conversion.migration, request: .init(sourceURL: sourceURL,
+            destinationURL: destinationURL, graphID: graphID, operationID: operationID, backupRoot: backupRoot, reason: reason), limits: limits)
     }
 }

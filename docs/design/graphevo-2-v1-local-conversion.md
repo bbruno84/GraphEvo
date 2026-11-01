@@ -127,3 +127,10 @@ fixtures, paired stores, public bootstrap integration, account/device cloud
 activation, physical kill/power-loss, external-process writers and scale remain
 open. Backups created by abandoned failed conversions remain retained until an
 explicit retention decision. No beta/stable migration gate closes here.
+
+## Repeatable execution structure
+
+[MF08](graphevo-2-store-migrations.md) extracts the common protected execution
+sequence under ContextManager. The v1 adapter remains the concrete definition
+and retains its snapshot, intent, receipt and backup artifact formats. This
+refactor does not broaden the accepted v1 source or enable public bootstrap.

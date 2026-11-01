@@ -8,13 +8,34 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF07 explicit local v1 conversion integrates through
-[PR #129](https://github.com/bbruno84/GraphEvo/pull/129), directly from #128.
+MF08 internal migration structure integrates through
+[PR #130](https://github.com/bbruno84/GraphEvo/pull/130), directly from #129.
 No next implementation branch is open. Next: supported opt-in bootstrap and
 production/historical source acceptance, then new-cloud activation of one
 authoritative converted graph. Old-cloud format conversion is outside this scope.
 
-## Latest integrated increment — MF07 local v1 conversion
+## Latest integrated increment — MF08 internal migration structure
+
+The [contract](graphevo-2-store-migrations.md) separates concrete typed transition
+definitions from ContextManager's shared protected conversion sequence. There is
+no new manager, registry, automatic chain or public opening path. V1 remains the
+first concrete definition with unchanged snapshot/intent/receipt formats. The
+shared transaction validates its returned receipt before save. A second synthetic
+native-source definition exercises reuse without the v1 adapter.
+
+[Results](results/store-migration-structure-2026-11-01.md) retain 890 local macOS
+functions, 558 selected iOS functions/664 invocations, both consumers and two
+physical compatibility-recovery stages on source `fdf22c3`. Old MF07 receipts,
+UUIDs, later target edits and unchanged sources survive the refactor. No new
+CloudKit or physical restore claim is added. Review finds no remaining blocker.
+One full [CI checkpoint #335](https://github.com/bbruno84/GraphEvo/actions/runs/41343266347)
+passes on reviewed head `3505fd5ac487a56e968be2c90bf772e11f907095`: 890 macOS
+functions and both consumers; 888 iOS passed functions/994 passed invocations
+with one known legacy simulator-alias skip. Final integration notes are
+documentation-only; shipping source/tests match the checkpoint exactly.
+Production-source/public-bootstrap/cloud/scale gates remain open.
+
+## Earlier integrated increment — MF07 local v1 conversion
 
 The [contract](graphevo-2-v1-local-conversion.md) supplies a stopped read-only v1
 source, complete verified legacy backup, distinct S03 destination and atomic

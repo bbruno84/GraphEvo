@@ -180,7 +180,7 @@ private final class V1ConversionGate: @unchecked Sendable {
             snapshot: conversion.snapshot, receipt: conversion.receipt, apply: { context, intent, snapshot in
                 let result = try conversion.apply(context, intent, snapshot); try failure(); return result
             })
-        return .init(graph: base.graph, sync: base.sync, v1Conversion: replacement, initializePolicy: base.initializePolicy,
+        return .init(graph: base.graph, sync: base.sync, v1Conversion: replacement, migrationSource: replacement.migrationSource, initializePolicy: base.initializePolicy,
             publication: base.publication, workspace: base.workspace, prepareWorkspace: base.prepareWorkspace,
             validateBackup: base.validateBackup, initialize: base.initialize)
     }

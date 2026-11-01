@@ -5,6 +5,7 @@ import GraphEvoRuntime
 
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
+    package let migrationSource: GraphStoreMigrationSource?
     package let v1Conversion: GraphV1ConversionAdapter?
     package let publication: GraphMigrationPublicationAdapter?
     package let workspace: GraphMigrationWorkspaceAdapter?
@@ -15,14 +16,14 @@ package struct GraphCoordinatorAdapter: Sendable {
     package let sync: GraphSyncAdapter?
     package let initialize: @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void
 
-    package init(graph: GraphStoreAdapter, sync: GraphSyncAdapter? = nil, v1Conversion: GraphV1ConversionAdapter? = nil,
+    package init(graph: GraphStoreAdapter, sync: GraphSyncAdapter? = nil, v1Conversion: GraphV1ConversionAdapter? = nil, migrationSource: GraphStoreMigrationSource? = nil,
                  initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)? = nil,
                  publication: GraphMigrationPublicationAdapter? = nil,
                  workspace: GraphMigrationWorkspaceAdapter? = nil,
                  prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
-        self.graph = graph; self.sync = sync; self.v1Conversion = v1Conversion; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace; self.workspace = workspace; self.publication = publication
+        self.graph = graph; self.sync = sync; self.v1Conversion = v1Conversion; self.migrationSource = migrationSource; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace; self.workspace = workspace; self.publication = publication
     }
 }
 
