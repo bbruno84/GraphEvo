@@ -8,7 +8,8 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-The focused branch `codex/v2-migration-workspace` defines the
+The focused branch `codex/v2-migration-workspace`, in draft
+[PR #123](https://github.com/bbruno84/GraphEvo/pull/123), defines the
 [MF04 workspace contract and implementation plan](graphevo-2-migration-workspace.md),
 directly from integrated MF03/#122 (`5b22750`). This is documentation-only
 preparation for migration-roadmap step 4, not implemented APIs or a completed
