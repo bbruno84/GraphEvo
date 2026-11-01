@@ -13,6 +13,14 @@ This increment implements value mapping and a candidate-schema adapter. It does
 The [specification](graphevo-2-specification.md) and
 [delivery plan](graphevo-2-delivery-plan.md) retain those gates.
 
+## Current extension-only mapping correction
+
+[The current contract](graphevo-2-extension-model-mapping.md) allows a Foundation-only
+domain model with UUID identity and a separate GraphEvo conformance file. It adds
+explicit graph-scoped serialization and supersedes the historical requirement
+below that every application model store a GraphNodeID. The earlier examples and
+adapter limitations retain their historical scope.
+
 ## Modules and application contract
 
 The Foundation-only `GraphEvoModel` target compiles in Swift 6 language mode.

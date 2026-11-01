@@ -8,7 +8,7 @@ private struct QueryPerson: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { let _: String = try graphRecord.value(for: "name"); record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 private struct QueryEdge: GraphModel {
     static let graphType = "Q.edge"
@@ -16,7 +16,7 @@ private struct QueryEdge: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 private struct QueryAction: GraphModel {
     static let graphType = "Q.action"
@@ -24,7 +24,7 @@ private struct QueryAction: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
 @Suite(.timeLimit(.minutes(1))) struct GraphQueryTests {

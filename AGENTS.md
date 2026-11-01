@@ -1313,3 +1313,21 @@ MF08 integrates through #130 after review and full checkpoint #335 on `3505fd5`.
 Retain the [scoped result](docs/design/results/store-migration-structure-2026-11-01.md):
 two physical old-receipt recovery stages establish compatibility, not new cloud
 activation, production-source acceptance or another physical restore certificate.
+
+
+## Application model identities and extension mapping
+
+Read [the mapping contract](docs/design/graphevo-2-extension-model-mapping.md).
+Domain models may store Foundation UUIDs with the GraphEvo conformance in another
+file. Typed operations supply GraphID; detached UUID serialization must supply it
+explicitly. Never regenerate IDs, infer a current graph or add an identity registry.
+Validate type/kind and bound identity on both mapping directions. UUID operations
+are graph-local; GraphNodeID references and endpoints retain cross-graph checks.
+Keep checked Sendable on the original type's file as required by Swift. Small
+GraphNodeID conveniences do not authorize API/source compatibility promises or
+native/wire changes. Keep the TP01 experiment separate from production adoption.
+
+The extension mapping correction integrates through #131. Corrected full CI #340
+passes on `b665706`, after #338 caught the multi-file consumer's `main.swift` /
+`@main` conflict on Swift 6.1. Keep the consumer entry point named
+`ModelConsumer.swift`; no runtime/schema change was needed for that correction.

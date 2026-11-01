@@ -108,7 +108,10 @@ package struct GraphAttachmentPayload: GraphModel {
     }
 
     /// Existing envelopes remain readable and replaceable without adding shared native rows.
-    package func graphRecord() throws -> GraphRecord { try graphRecord(legacy: false) }
+    package func graphRecord(in graphID: GraphID) throws -> GraphRecord {
+        guard graphID == id.graphID else { throw GraphModelError.crossGraphReference }
+        return try graphRecord(legacy: false)
+    }
 
     package func graphRecord(legacy: Bool) throws -> GraphRecord {
         let encoder = PropertyListEncoder(); encoder.outputFormat = .binary

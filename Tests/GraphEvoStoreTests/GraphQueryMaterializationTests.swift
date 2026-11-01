@@ -12,14 +12,14 @@ import GraphEvoModel
         let record: GraphRecord
         var id: GraphNodeID { record.id }
         init(graphRecord: GraphRecord) throws { record = graphRecord }
-        func graphRecord() throws -> GraphRecord { record }
+        func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
     }
     private struct Other: GraphModel {
         static let graphType = "matrix.other"
         static let graphKind: GraphNodeKind = .entity
         let id: GraphNodeID
         init(graphRecord: GraphRecord) throws { id = graphRecord.id }
-        func graphRecord() throws -> GraphRecord { try GraphRecord(id: id, type: Self.graphType) }
+        func graphRecord(in graphID: GraphID) throws -> GraphRecord { try GraphRecord(id: id, type: Self.graphType) }
     }
     private func budget() throws -> GraphQueryBudget { try GraphQueryBudget(maximumCandidates: 100, maximumPropertyBytes: 16 * 1024) }
 

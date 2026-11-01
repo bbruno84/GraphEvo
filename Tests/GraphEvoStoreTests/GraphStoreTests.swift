@@ -17,7 +17,7 @@ private struct Person: GraphModel {
         name = try graphRecord.value(for: "name")
         nickname = try graphRecord.value(for: "nickname")
     }
-    func graphRecord() throws -> GraphRecord {
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord {
         try GraphRecord(id: id, type: Self.graphType, properties: ["name": name.graphValue, "nickname": nickname.graphValue])
     }
 }
@@ -28,7 +28,7 @@ private struct Link: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
 private struct Event: GraphModel {
@@ -37,7 +37,7 @@ private struct Event: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
 private func fixtureDirectory() throws -> URL {

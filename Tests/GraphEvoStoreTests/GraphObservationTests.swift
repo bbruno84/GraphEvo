@@ -10,7 +10,7 @@ struct ObservedItem: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 struct ObservationTestFailure: Error {}
 func observationQuery() throws -> GraphQuery<ObservedItem> {

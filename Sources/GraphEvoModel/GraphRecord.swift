@@ -81,15 +81,23 @@ public struct GraphRecord: Sendable, Equatable {
     public func decoded<Model: GraphModel>(as type: Model.Type = Model.self) throws -> Model {
         try validate(type: Model.graphType, kind: Model.graphKind)
         let model = try Model(graphRecord: self)
-        guard model.id == id else { throw GraphModelError.identityMismatch }
+        guard try model.graphNodeID(in: id.graphID) == id else { throw GraphModelError.identityMismatch }
         return model
     }
 
-    public init<Model: GraphModel>(_ model: Model) throws {
-        let record = try model.graphRecord()
+    /// Binds the application's identity to an explicitly selected graph.
+    public init<Model: GraphModel>(_ model: Model, in graphID: GraphID) throws {
+        let identity = try model.graphNodeID(in: graphID)
+        guard identity.graphID == graphID else { throw GraphModelError.crossGraphReference }
+        let record = try model.graphRecord(in: graphID)
         try record.validate(type: Model.graphType, kind: Model.graphKind)
-        guard record.id == model.id else { throw GraphModelError.identityMismatch }
+        guard record.id == identity else { throw GraphModelError.identityMismatch }
         self = record
+    }
+
+    /// Convenience for existing models that already carry a graph-scoped identity.
+    public init<Model: GraphModel>(_ model: Model) throws where Model.ID == GraphNodeID {
+        try self.init(model, in: model.id.graphID)
     }
 
     private func validate(type: String, kind: GraphNodeKind) throws {
@@ -99,12 +107,26 @@ public struct GraphRecord: Sendable, Equatable {
 }
 
 /// Application-defined mapping with stable persisted keys and transferable results.
-public protocol GraphModel: Sendable {
-    var id: GraphNodeID { get }
+public protocol GraphModel: Identifiable, Sendable where ID: Sendable {
     static var graphType: String { get }
     static var graphKind: GraphNodeKind { get }
     init(graphRecord: GraphRecord) throws
-    func graphRecord() throws -> GraphRecord
+    /// Returns the stable node identity for the supplied persistence scope.
+    func graphNodeID(in graphID: GraphID) throws -> GraphNodeID
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord
+}
+
+extension GraphModel where ID == UUID {
+    public func graphNodeID(in graphID: GraphID) -> GraphNodeID {
+        GraphNodeID(graphID: graphID, rawValue: id)
+    }
+}
+
+extension GraphModel where ID == GraphNodeID {
+    public func graphNodeID(in graphID: GraphID) -> GraphNodeID { id }
+
+    /// Existing graph-scoped models can still request a detached record without a separate scope.
+    public func graphRecord() throws -> GraphRecord { try graphRecord(in: id.graphID) }
 }
 
 public enum GraphModelError: Error {

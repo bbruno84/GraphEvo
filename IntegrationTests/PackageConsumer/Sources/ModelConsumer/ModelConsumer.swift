@@ -2,22 +2,6 @@ import Combine
 import Foundation
 import GraphEvo
 
-private struct Profile: GraphModel {
-    static let graphType = "example.profile.v1"
-    static let graphKind: GraphNodeKind = .entity
-    let id: GraphNodeID
-    let displayName: String
-
-    init(id: GraphNodeID, displayName: String) { self.id = id; self.displayName = displayName }
-    init(graphRecord: GraphRecord) throws {
-        id = graphRecord.id
-        displayName = try graphRecord.value(for: "display_name")
-    }
-    func graphRecord() throws -> GraphRecord {
-        try GraphRecord(id: id, type: Self.graphType, properties: ["display_name": displayName.graphValue])
-    }
-}
-
 @main struct ModelConsumer {
     static func main() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvo-TypedConsumer-\(UUID())")
@@ -25,15 +9,16 @@ private struct Profile: GraphModel {
         let url = directory.appendingPathComponent("Graph.sqlite")
         let store = try await GraphStore.open(at: url)
         let graphID = store.id
-        let profile = Profile(id: store.makeNodeID(), displayName: "Ada")
+        let profileNodeID = store.makeNodeID()
+        let profile = Profile(id: profileNodeID.rawValue, displayName: "Ada")
         try await store.insert(profile)
         let original = try await Task.detached { try await store.fetch(profile.id, as: Profile.self) }.value
         guard original?.displayName == "Ada" else { throw GraphStoreError.missingNode }
         let future = try GraphEncodedValue(codec: "example.future", version: 7, data: Data([0, 255]))
         try await store.transaction { scope in
-            _ = try scope.patch(GraphRecordPatch(id: profile.id, properties: ["unknown": .set(.encoded(future))]))
+            _ = try scope.patch(GraphRecordPatch(id: profileNodeID, properties: ["unknown": .set(.encoded(future))]))
         }
-        let patch = try GraphRecordPatch(id: profile.id, properties: ["display_name": .set("Grace".graphValue)])
+        let patch = try GraphRecordPatch(id: profileNodeID, properties: ["display_name": .set("Grace".graphValue)])
         let updated = try await store.patch(patch, as: Profile.self)
         let name = await MainActor.run { updated.displayName }
         guard name == "Grace" else { throw GraphModelError.invalidValue }
@@ -53,14 +38,14 @@ private struct Profile: GraphModel {
         try await checkCombine(store, query: descriptor)
         try await store.close()
         let reopened = try await GraphStore.open(at: url)
-        let retained = try await reopened.read { try $0.record(for: profile.id) }
-        guard reopened.id == graphID, retained?.id == profile.id,
+        let retained = try await reopened.read { try $0.record(for: profileNodeID) }
+        guard reopened.id == graphID, retained?.id == profileNodeID,
               retained?.properties["unknown"] == .encoded(future) else { throw GraphStoreError.corruptIdentity }
         let sourceFile = directory.appendingPathComponent("input.bin")
         try Data([0, 128, 255]).write(to: sourceFile)
-        let attachment = try await reopened.importAttachment(from: sourceFile, ownedBy: profile.id)
+        let attachment = try await reopened.importAttachment(from: sourceFile, ownedBy: profileNodeID)
         guard try await reopened.attachment(attachment.id)?.data == Data([0, 128, 255]) else { throw GraphAttachmentError.incompleteOrInvalidContent }
-        try await reopened.delete(profile.id)
+        try await reopened.delete(profileNodeID)
         guard try await reopened.attachment(attachment.id) == nil else { throw GraphAttachmentError.incompleteOrInvalidContent }
         guard try await reopened.fetchAll(Profile.self).isEmpty else { throw GraphModelError.invalidValue }
         try await reopened.close()
@@ -74,7 +59,7 @@ private struct Profile: GraphModel {
             throw GraphModelError.invalidValue
         } catch GraphMirroringError.localDatabase { }
         let first = try await database.createGraph(), control = try await database.createGraph()
-        let member = Profile(id: first.makeNodeID(), displayName: "Independent graph")
+        let member = Profile(id: first.makeNodeID().rawValue, displayName: "Independent graph")
         try await first.insert(member)
         guard try await control.fetchAll(Profile.self).isEmpty else { throw GraphModelError.invalidValue }
         try await database.close()
@@ -86,10 +71,11 @@ private struct Profile: GraphModel {
         let native = try await GraphDatabase.open(at: nativeURL, schema: .nativeIdentity)
         guard try await native.graphIDs().isEmpty else { throw GraphModelError.invalidValue }
         let nativeGraph = try await native.createGraph()
-        let nativeProfile = Profile(id: nativeGraph.makeNodeID(), displayName: "Grace")
+        let nativeNodeID = nativeGraph.makeNodeID()
+        let nativeProfile = Profile(id: nativeNodeID.rawValue, displayName: "Grace")
         try await nativeGraph.insert(nativeProfile)
         guard try await native.validateIntegrity(of: nativeGraph.id) == 1 else { throw GraphModelError.invalidValue }
-        let nativeQuery = GraphQuery<Profile>(budget: try GraphQueryBudget(maximumCandidates: 128)).where(.id(nativeProfile.id))
+        let nativeQuery = GraphQuery<Profile>(budget: try GraphQueryBudget(maximumCandidates: 128)).where(.id(nativeNodeID))
         guard try await nativeGraph.query(nativeQuery).items.first?.displayName == "Grace" else { throw GraphModelError.invalidValue }
         try await checkCombine(nativeGraph, query: nativeQuery)
         try await nativeGraph.close(); try await native.close()

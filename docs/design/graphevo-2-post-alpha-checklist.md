@@ -50,6 +50,12 @@ deleted-node history through six flags, without new columns. PH01 remains
 experimental evidence; model adoption does not close history processing,
 checkpoint/queue recovery or selected-model/custom-sync cloud gates.
 
+- [x] Allow Foundation-only domain files and separate GraphEvo mapping extensions.
+  [M20 / #131](graphevo-2-extension-model-mapping.md) verifies UUID/context binding,
+  same-UUID graph isolation, native reopen and typed observation with a two-file
+  independent consumer. Corrected full CI #340 passes after the retained #338
+  consumer entry-point failure. This closes the narrow API requirement, not
+  production model/migration/cloud acceptance.
 - [x] Select the native 2.0 target after reviewing query, attachment, sharing and
   migration requirements: [S01](graphevo-2-persistent-schema.md), 2026-10-30.
   Retain twelve entities; select graph/node projections, optional node data
