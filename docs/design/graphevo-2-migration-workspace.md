@@ -1,7 +1,8 @@
 # MF04 — isolated migration workspace and PH change set
 
-Status: MF04b preparation is implemented on `codex/v2-working-graph`, directly
-from integrated MF04a/#123 (`3b0c326`), pending review and CI. The package-only
+Status: MF04b preparation integrates through [PR #124](https://github.com/bbruno84/GraphEvo/pull/124),
+directly from MF04a/#123 (`3b0c326`) after review and full CI checkpoint #317 on
+`181b80c`. The package-only
 preparer, ordinary working GraphStore, native purpose fence, fresh PH baseline,
 close and ownership-checked discard are implemented. **Seal, PH reduction,
 restart activation and publication remain design-only.** The

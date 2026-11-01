@@ -1199,3 +1199,10 @@ ownership markers after detachment. Failed cleanup retains files/native claims.
 Sealing, PH reduction, restart/source-freshness recovery and publication are still
 separate work; descriptors are not an activation or migration-completion claim.
 Review/corrections precede CI and authorized merge; physical labs stay local.
+
+
+MF04b integrates through #124 after review and one full macOS/iOS CI checkpoint
+#317 on `181b80c`. Shipping source remains `168eb0a`; review adds two negative
+admission checks. Integration notes are documentation-only. Future work starts
+from `codex/graphevo-2`; keep seal/reduction, restart/source freshness, participant
+activation and publication gates open until separately implemented and validated.

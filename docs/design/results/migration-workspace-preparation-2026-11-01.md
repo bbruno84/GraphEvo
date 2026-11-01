@@ -3,7 +3,7 @@
 Date: 2026-11-01. Base: integrated MF04a/#123 (`3b0c326`). Implementation:
 `codex/v2-working-graph`, source/test pin `168eb0a67f198d865f772f25cc6c0c2ceca2827f`,
 [PR #124](https://github.com/bbruno84/GraphEvo/pull/124) directly to
-`codex/graphevo-2`, pending review and CI.
+`codex/graphevo-2`, reviewed and passing full CI before authorized merge.
 This is local preparation evidence, not publication/cloud-convergence acceptance.
 
 ## Delivered boundary
@@ -78,3 +78,27 @@ and original-store publication remain unimplemented. Retained files cannot yet
 be reactivated through a supported workspace API. Full native failure/power-loss,
 external-process writers, filesystem races, scale/memory/disk envelopes and actual
 cloud publication remain separate acceptance work. No beta/stable gate closes.
+
+## Review, CI and integration checkpoint
+
+Review completed without remaining blocking findings. Commit `181b80c` adds two
+negative checks to the existing admission test (correct workspace UUID with a
+foreign GraphID; existing store missing its workspace marker). Shipping source
+remains identical to `168eb0a`. The 11-function workspace suite passed locally.
+
+The single full [CI checkpoint #317](https://github.com/bbruno84/GraphEvo/actions/runs/41306827139)
+passed on `181b80cbb3321878e801f4cf380c8a810086c425`, after review and before merge:
+
+- macOS: 839 functions passed; model consumer and independent-process read-only
+  consumer passed with Xcode 16.4 / Swift 6.1 on macOS 15.
+- iOS 18.5: 837 functions / 924 invocations passed, no failures, one pre-existing
+  legacy alias test skipped because the simulator lacks the temporary `/private`
+  path alias (`testStoreCreatedBetweenPreInitAndReadyKeepsOneMigrationCoordinator`).
+- Diff formatting passed. No failure artifact was uploaded. Physical/cloud
+  laboratories remained outside CI.
+
+The checkpoint label was removed after success and before documentation-only
+integration notes. Those notes leave Sources, Tests, Package.swift,
+IntegrationTests and workflows identical to the reviewed/tested head. They do not
+request another full run. Integration is through #124 into `codex/graphevo-2`;
+no beta gate, release or tag is implied.
