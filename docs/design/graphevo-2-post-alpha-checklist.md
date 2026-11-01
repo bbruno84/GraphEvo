@@ -365,6 +365,10 @@ paired-store evidence below retains its original backend scope.
   interruption recovery separately. Validate transfer between devices and
   independent cross-user import without inherited sharing/transport ownership.
   See [backup roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment).
+  [MF02](graphevo-2-backup-packages.md) integrates the `.geb` package-only baseline
+  in #121 after corrective review and the combined CI checkpoint;
+  independent cross-user graph activation and production/media-scale acceptance
+  remain open even when package transfer/import succeeds.
 
 - [ ] **B** Define consistent closed/quiescent backup prerequisites and whole-content
   inventory, including external bytes, both native resources, auxiliary files and
