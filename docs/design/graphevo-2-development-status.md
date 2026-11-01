@@ -8,16 +8,39 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF05 protected original-store publication is in progress on
-`codex/v2-migration-publication`, based directly on MF04c/#125. The
-[contract](graphevo-2-migration-publication.md) adds a verified original backup,
-bounded atomic final-state application and durable local commit/recovery evidence.
-Local macOS/selected iOS tests, seven iPad/XR stages and review pass; the
-[result](results/migration-publication-2026-11-01.md) separates their evidence.
-The full CI checkpoint and integration are pending. Participant workspaces and mandatory v1 conversion remain
-separate work.
+MF05 completes protected owner/local original-store publication through
+[PR #126](https://github.com/bbruno84/GraphEvo/pull/126). No next implementation
+branch is open. Next: exercise the protected workflow with a representative
+consumer and define the mandatory v1 source-conversion/cutover route. Public
+executor exposure, participant-origin workspaces, fresh shared bootstrap after
+publication and broader interruption/scale acceptance remain separate work.
+Consumers retain application semantics and cross-device coordination.
 
-## Latest integrated increment — MF04c workspace seal and recovery
+## Latest integrated increment — MF05 original-store publication
+
+[MF05](graphevo-2-migration-publication.md) publishes sealed final primitives and
+deletions through one bounded original transaction, after a complete verified
+pinned backup. A native receipt recovers a lost result without overwriting later
+ordinary edits. Original SQLite, PH, frozen transport and queue/control metadata
+are retained; no consumer body is replayed. Success releases only owned holds.
+S03, cloud/asset formats and session format 6 are unchanged.
+
+The [result](results/migration-publication-2026-11-01.md) records 873 local macOS
+functions, 541 selected local iOS functions, both independent consumers and seven
+real iPad-owner/XR-read-only-participant stages on source `a143f32`. Review found
+no remaining blocking issues. One full [CI checkpoint #324](https://github.com/bbruno84/GraphEvo/actions/runs/41321832287)
+passes on reviewed head `2c37e587d6dccbbe3e3971b7e1efe07455294484`: 873 macOS
+functions and both consumers; 871 iOS functions/969 passed invocations with one
+known legacy simulator-alias skip. Integration notes change documentation only;
+shipping source/tests are byte-identical to that checkpoint.
+
+Atomic publication is bounded at 10,000 selected records and the normal pending/
+native PH limits. Latest-only receipts and retained backups after abandoned
+failures require explicit recovery/retention policy. This is not globally atomic
+cloud migration, participant execution, power-loss/production-scale acceptance
+or mandatory v1 conversion.
+
+## Earlier integrated increment — MF04c workspace seal and recovery
 
 [PR #125](https://github.com/bbruno84/GraphEvo/pull/125) groups bounded PH reduction,
 authoritative native sealing, explicit restart/source-freshness recovery and

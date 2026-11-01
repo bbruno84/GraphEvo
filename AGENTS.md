@@ -1252,3 +1252,8 @@ cleanup warning. Do not persist backup/store paths. Respect the default sync
 pending/native-change limits rather than hiding a partial or oversized commit.
 The source capability must never reuse the workspace sealing privilege. Local
 commit is not cloud acknowledgement, distributed exclusion or v1 conversion.
+
+MF05 integrates through #126 after local/device review and one full macOS/iOS
+CI checkpoint #324 on `2c37e58` (shipping source `a143f32`). Retain the bounded
+[result](docs/design/results/migration-publication-2026-11-01.md); seven physical
+stages do not close participant-origin, physical interruption, scale or v1 gates.

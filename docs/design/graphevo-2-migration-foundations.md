@@ -12,7 +12,10 @@ graph activation and remaining executor steps stay
 open. MF04b's protected working-copy preparation integrates through
 #124 after review and full CI checkpoint #317; MF04c groups bounded sealing,
 restart/source-freshness recovery and safe cleanup through #125 after corrective
-review and full CI #320. Original-store publication remains open. Future branches start from `codex/graphevo-2`.
+review and full CI #320. [MF05](graphevo-2-migration-publication.md) supplies bounded original-store
+publication and backup/receipt recovery through #126 after local/device review
+and full CI #324. Consumer semantics, participant-origin execution and mandatory
+v1 source conversion remain open. Future branches start from `codex/graphevo-2`.
 
 ## Responsibility boundary
 

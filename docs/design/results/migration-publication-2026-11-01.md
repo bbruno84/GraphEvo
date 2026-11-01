@@ -3,7 +3,13 @@
 Implementation and physical source pin: `a143f32e50308cef5467f240a6f94966c09ea41f`,
 based on MF04c/#125 (`607adb4`), delivered by
 [PR #126](https://github.com/bbruno84/GraphEvo/pull/126).
-This records local and physical evidence before the final CI checkpoint.
+The single full [CI checkpoint #324](https://github.com/bbruno84/GraphEvo/actions/runs/41321832287)
+passes on reviewed head `2c37e587d6dccbbe3e3971b7e1efe07455294484` after local/device
+verification and review. macOS: 873 functions plus both consumers. iOS: 871 passed
+functions, 969 passed invocations and one known legacy temporary-directory-alias
+skip, no failures/crashes. Runner: macOS 15 / Xcode 16.4 / Swift 6.1 / iOS 18.5.
+Final integration notes are documentation-only; shipping code/tests match the
+checkpoint exactly. No second full run is required for those notes.
 
 ## Local verification and review
 

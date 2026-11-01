@@ -411,7 +411,12 @@ paired-store evidence below retains its original backend scope.
   alone does not establish safe original-store publication.
 - [ ] **B** Validate [MF05 publication](graphevo-2-migration-publication.md): one
   bounded atomic original commit, verified pinned backup, native receipt recovery,
-  unchanged frozen transport and ordinary PH generations. Preserve the 10,000-ID
+  unchanged frozen transport and ordinary PH generations. #126 integrates the
+  bounded implementation after review and CI #324; its
+  [result](results/migration-publication-2026-11-01.md) separates local and real
+  owner-to-read-only-participant recovery evidence. Participant-origin execution,
+  fresh-after-publication shared bootstrap and physical interruption remain open.
+  Preserve the 10,000-ID
   projected pending and 100,000-native-change limits; measure payload/copy costs.
   The latest-only receipt can refuse old workspace recovery after a subsequent
   migration. Review retained orphan backups after abandoned failures and explicit
