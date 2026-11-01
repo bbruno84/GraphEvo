@@ -362,6 +362,9 @@ close O04 or mark the wider beta/stable items above complete.
   [local/device results](results/v1-local-conversion-2026-11-01.md) retain the
   exact pin and scope and do not close the whole v1 gate.
   Old-cloud conversion/coexistence is not part of this local increment.
+  [MF08](graphevo-2-store-migrations.md) factors the protected sequence into
+  concrete internal definitions; this does not close public bootstrap, future
+  staged/in-place schema or production-source acceptance gates.
 
 Sources: specification S11, delivery plan migration workstream, V08, D07/M02/M09.
 API compatibility remains optional; data migration is a stable-release gate.

@@ -1814,3 +1814,16 @@ after successful conversion/cleanup; automatic public migration is not enabled.
 Limits default to 10,000 records, 100,000 native rows and 32 MiB weighted payload,
 with explicit native-preview/PH, mapping and receipt bounds. Unknown/ambiguous
 values refuse conversion instead of dropping data. See [MF07](../design/graphevo-2-v1-local-conversion.md).
+
+
+### Internal store migration definitions (package-only)
+
+`GraphStoreMigrationDefinition<Snapshot, Intent, Receipt>` separates concrete
+source inspection/conversion/receipt validation from ContextManager's shared
+`migrateStore(using:request:limits:)` sequence. The factory supplies one explicit
+`GraphStoreMigrationSource`; unsupported configurations fail before conversion.
+`GraphStoreMigrationRequest` carries current URLs and stable request IDs without
+serializing paths. `GraphStoreMigrationResult<Receipt>` distinguishes native
+commit from pending cleanup. V1 error/limit/result names remain package aliases.
+This is library infrastructure, not consumer registration or automatic public
+migration. No public signature changes. See [MF08](../design/graphevo-2-store-migrations.md).

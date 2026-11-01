@@ -60,16 +60,16 @@ struct GraphCloudBackupSnapshot: Codable, Sendable {
 package actor GraphBackupManager {
     typealias Validator = @Sendable (URL, GraphID) async throws -> String
     private let validateNative: Validator
-    private let validateLegacy: Validator?
-    private let legacySchemaIdentifier: String?
+    private let validateMigrationSource: Validator?
+    private let migrationSourceSchemaIdentifier: String?
     private let schemaIdentifier: String
     private let limits: GraphBackupLimits
     private struct Intent: Codable { let format: Int; let id: UUID; let backupID: UUID }
     private struct Retention: Codable { let format: Int; let backupID: UUID; var owners: Set<UUID> }
 
-    init(schemaIdentifier: String, limits: GraphBackupLimits = .init(), legacySchemaIdentifier: String? = nil, validateLegacy: Validator? = nil, validate: @escaping Validator) {
+    init(schemaIdentifier: String, limits: GraphBackupLimits = .init(), migrationSourceSchemaIdentifier: String? = nil, validateMigrationSource: Validator? = nil, validate: @escaping Validator) {
         self.schemaIdentifier = schemaIdentifier; self.limits = limits; validateNative = validate
-        self.legacySchemaIdentifier = legacySchemaIdentifier; self.validateLegacy = validateLegacy
+        self.migrationSourceSchemaIdentifier = migrationSourceSchemaIdentifier; self.validateMigrationSource = validateMigrationSource
     }
 
     func create(for graphID: GraphID, storeID: String, schema: String, in root: URL,
@@ -315,10 +315,11 @@ package actor GraphBackupManager {
               manifest.files.allSatisfy({ Self.relative($0.path) && $0.sha256.count == 64 }) else { throw GraphBackupError.invalidBackup }
     }
     private func accepts(_ schema: String) -> Bool {
-        schema == schemaIdentifier || (schema == legacySchemaIdentifier && validateLegacy != nil)
+        schema == schemaIdentifier || (schema == migrationSourceSchemaIdentifier && validateMigrationSource != nil)
     }
     private func validator(_ schema: String) -> Validator {
-        if schema == legacySchemaIdentifier, let validateLegacy { return validateLegacy }
+        if schema == schemaIdentifier { return validateNative }
+        if schema == migrationSourceSchemaIdentifier, let validateMigrationSource { return validateMigrationSource }
         return validateNative
     }
     private func validate(_ directory: URL, manifest: GraphBackupManifest) async throws {

@@ -10,7 +10,10 @@ integration into the main v2 branch or beta readiness.
 
 MF07 explicit local v1 conversion integrates through
 [PR #129](https://github.com/bbruno84/GraphEvo/pull/129), directly from #128.
-No next implementation branch is open. Next: supported opt-in bootstrap and
+[MF08](graphevo-2-store-migrations.md) is in progress on
+`codex/v2-store-migration-structure`: reusable internal definitions and the shared
+ContextManager conversion sequence, without a new manager or registry. Next
+after integration: supported opt-in bootstrap and
 production/historical source acceptance, then new-cloud activation of one
 authoritative converted graph. Old-cloud format conversion is outside this scope.
 

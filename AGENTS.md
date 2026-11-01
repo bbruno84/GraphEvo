@@ -1295,3 +1295,16 @@ checkpoint #331 on `f24029a` (shipping source `f72c2e3`). Retain the
 [scoped result](docs/design/results/v1-local-conversion-2026-11-01.md): four physical
 local stages are not cloud activation or production-source acceptance. Do not
 publish independent random-ID conversions into the same new cloud graph.
+
+
+## V2 MF08 repeatable internal store migrations
+
+Read [MF08](docs/design/graphevo-2-store-migrations.md). Keep concrete transition
+snapshot/intent/receipt types separate from ContextManager's shared protected
+sequence. The factory selects one supported source explicitly; do not introduce
+a global registry, automatic chains or a second manager. Validate the returned
+receipt inside the destination transaction before save. Preserve v1 durable
+formats, backup pin ownership and post-commit cleanup semantics. Definitions
+cannot save independently or escape contexts. The current sequence converts a
+stopped source into a distinct store; it does not implicitly rebind registrations,
+preserve another layout's cloud state or authorize in-place/staged migrations.

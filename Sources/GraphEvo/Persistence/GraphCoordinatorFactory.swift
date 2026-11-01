@@ -30,7 +30,7 @@ enum GraphCoordinatorFactory {
             }
             return try GraphMutationMetadata.policy(root)
         }
-        return GraphCoordinatorAdapter(graph: graph, sync: sync, v1Conversion: GraphV1NativeConversion.adapter, initializePolicy: { context, id, policy in
+        return GraphCoordinatorAdapter(graph: graph, sync: sync, v1Conversion: GraphV1NativeConversion.adapter, migrationSource: GraphV1NativeConversion.adapter.migrationSource, initializePolicy: { context, id, policy in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
         }, publication: GraphMigrationNativePublication.adapter, workspace: GraphMigrationNativeWorkspace.adapter, prepareWorkspace: { context, id in

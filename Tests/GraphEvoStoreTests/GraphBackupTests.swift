@@ -77,8 +77,18 @@ private struct BackupValidationGate: Sendable {
         } else { Issue.record("Expected failed read during maintenance") }
         operation.cancel()
         await #expect(throws: CancellationError.self) { try await operation.value }
-        if case .value(let result) = await values.next() { #expect(result.items.isEmpty) }
-        else { Issue.record("Expected automatic recovery after maintenance cancellation") }
+        // Refresh and admission hints can leave more than one expected failure in flight.
+        // Require automatic recovery, without assuming the next buffered state is already the value.
+        var recovered = false
+        recovery: while let state = await values.next() {
+            switch state {
+            case .value(let result): #expect(result.items.isEmpty); recovered = true; break recovery
+            case .failure(let error):
+                if case GraphStoreError.resourceReserved = error { continue }
+                Issue.record("Unexpected error during maintenance recovery"); break recovery
+            }
+        }
+        #expect(recovered, "Expected automatic recovery after maintenance cancellation")
         observation.cancel(); gate.resume.signal(); try await reader.value
         try await graph.close(); restricted.continuation.finish()
     }
