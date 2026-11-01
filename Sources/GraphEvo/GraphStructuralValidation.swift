@@ -74,7 +74,7 @@ internal enum GraphStructuralValidator {
     }
 
     /// The caller owns the source context's queue. Only IDs and the coordinator cross queues.
-    static func validate(_ ids: [NSManagedObjectID], from source: NSManagedObjectContext) -> [GraphStructuralValidationResult] {
+    static func validate(_ ids: [NSManagedObjectID], from source: NSManagedObjectContext, legacyReadOnly: Bool = false) -> [GraphStructuralValidationResult] {
         guard !ids.isEmpty else { return [] }
         var ancestor: NSManagedObjectContext? = source
         while let parent = ancestor?.parent { ancestor = parent }
@@ -86,8 +86,11 @@ internal enum GraphStructuralValidator {
         context.undoManager = nil
         return context.performAndWait {
             do {
-                // SQLite supports query generations; in-memory stores do not.
-                if coordinator.persistentStores.allSatisfy({ $0.type == NSSQLiteStoreType }) {
+                guard !legacyReadOnly || coordinator.persistentStores.allSatisfy({ $0.isReadOnly }) else {
+                    throw GraphStructuralValidationError.unexpectedEntity
+                }
+                // A stopped read-only legacy source cannot initialize v2 query-generation tracking.
+                if !legacyReadOnly && coordinator.persistentStores.allSatisfy({ $0.type == NSSQLiteStoreType }) {
                     try context.setQueryGenerationFrom(.current)
                 }
                 let reader = Reader(context: context)

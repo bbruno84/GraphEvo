@@ -22,8 +22,10 @@ package struct StoreConfiguration: Sendable, Equatable {
     package let exclusiveGraphID: UUID?
     package let workspaceID: UUID?
     package let workspaceSessionID: UUID?
+    /// Stopped-writer v1 import only: do not enable PH or query-generation tracking on the source.
+    package let legacyReadOnly: Bool
 
-    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil, exclusiveGraphID: UUID? = nil, workspaceID: UUID? = nil, workspaceSessionID: UUID? = nil) {
+    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil, exclusiveGraphID: UUID? = nil, workspaceID: UUID? = nil, workspaceSessionID: UUID? = nil, legacyReadOnly: Bool = false) {
         self.location = location
         self.access = access
         self.cloudKitContainerIdentifier = cloudKitContainerIdentifier
@@ -31,6 +33,7 @@ package struct StoreConfiguration: Sendable, Equatable {
         self.exclusiveGraphID = exclusiveGraphID
         self.workspaceID = workspaceID
         self.workspaceSessionID = workspaceSessionID
+        self.legacyReadOnly = legacyReadOnly
     }
 }
 
@@ -82,6 +85,13 @@ struct ResolvedStore: Sendable {
     }
 
     init(_ configuration: StoreConfiguration) throws {
+        if configuration.legacyReadOnly {
+            guard configuration.access == .readOnly, configuration.exclusiveGraphID == nil,
+                  configuration.cloudKitContainerIdentifier == nil, configuration.sharedStoreURL == nil,
+                  configuration.workspaceID == nil else {
+                throw StoreRuntimeError.invalidConfiguration("Legacy conversion sources require standalone read-only admission.")
+            }
+        }
         if configuration.workspaceSessionID != nil && configuration.workspaceID == nil {
             throw StoreRuntimeError.invalidConfiguration("A workspace session requires a workspace identity.")
         }
@@ -137,7 +147,7 @@ struct ResolvedStore: Sendable {
                 throw StoreRuntimeError.invalidConfiguration("Private and shared stores must use distinct files.")
             }
             self.configuration = StoreConfiguration(location: .sqlite(canonical), access: configuration.access,
-                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url, exclusiveGraphID: configuration.exclusiveGraphID, workspaceID: configuration.workspaceID, workspaceSessionID: configuration.workspaceSessionID)
+                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url, exclusiveGraphID: configuration.exclusiveGraphID, workspaceID: configuration.workspaceID, workspaceSessionID: configuration.workspaceSessionID, legacyReadOnly: configuration.legacyReadOnly)
             secondaryResources = secondary.map { [$0] } ?? []
             _ = try fileIdentity()
         }
@@ -155,6 +165,7 @@ struct ResolvedStore: Sendable {
 
     func isCompatible(with other: ResolvedStore) throws -> Bool {
         guard configuration.access == other.configuration.access,
+              configuration.legacyReadOnly == other.configuration.legacyReadOnly,
               configuration.exclusiveGraphID == other.configuration.exclusiveGraphID,
               configuration.workspaceID == other.configuration.workspaceID,
               configuration.workspaceSessionID == other.configuration.workspaceSessionID,

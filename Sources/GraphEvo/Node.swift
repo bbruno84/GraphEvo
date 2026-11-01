@@ -180,6 +180,20 @@ public class Node: NSObject, Codable {
     }
   }
 
+  /// Legacy detail metadata retained by explicit conversion; not a format admission rule.
+  package var runtimePropertyVersions: [String: Int] {
+    node.propertySet.reduce(into: [:]) { result, property in
+      if let version = property.appDataVersionValue { result[property.name] = version }
+    }
+  }
+
+  package func runtimeSetPropertyVersions(_ versions: [String: Int]) throws {
+    for (name, version) in versions {
+      guard let property = node.propertySet.first(where: { $0.name == name }) else { throw GraphStoreError.corruptIdentity }
+      property.appDataVersionValue = version
+    }
+  }
+
   package var runtimeObjectID: NSManagedObjectID { node.objectID }
 
   package func sharesBackingObject(with other: Node) -> Bool { node === other.node }

@@ -8,9 +8,16 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+MF07 explicit local v1 conversion is in progress on
+`codex/v2-local-v1-conversion`, based on #128. The
+[contract](graphevo-2-v1-local-conversion.md) covers a stopped read-only v1 source,
+complete verified legacy backup, distinct S03 destination and atomic identity-map/
+receipt commit. Default openers, S03 and cloud formats remain unchanged. Local
+verification/review is underway; no cloud migration or full v1 acceptance is claimed.
+
 MF06 delivers representative consumer evidence through
 [PR #127](https://github.com/bbruno84/GraphEvo/pull/127), directly from #126.
-No next implementation branch is open. The [local-only laboratory](../../Experiments/ConsumerMigrationFlow/README.md)
+The [local-only laboratory](../../Experiments/ConsumerMigrationFlow/README.md)
 and [result](results/consumer-migration-flow-2026-11-01.md) cover consumer recovery,
 ledger visibility during data pause, complete publication and independent peer
 verification. Six local functions/ten invocations on macOS and iOS and ten real

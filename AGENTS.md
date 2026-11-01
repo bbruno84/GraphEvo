@@ -1274,3 +1274,18 @@ See [the scoped result](docs/design/results/consumer-migration-flow-2026-11-01.m
 MF06 evidence integrates through #127 after local macOS/iOS and physical review;
 it adds no shipping code or normal CI target. Reviewed laboratory source is
 `bb97123`; full shipping checkpoint #324 remains applicable by byte equivalence.
+
+
+## V2 MF07 explicit local v1 conversion
+
+Read [MF07](docs/design/graphevo-2-v1-local-conversion.md). Convert only the known
+v1 model from a stopped standalone read-only source into a distinct S03 target.
+The restricted legacy reader cannot enable PH/pinned query generations or mix
+with normal aliases; normal v2 reading is unchanged. Validate before a complete
+legacy backup, then commit root/records/random identities/map/receipt atomically.
+Never rewrite the source, derive UUIDs from native URIs, transplant old PH/cloud
+metadata or start sync. Refuse unknown/ambiguous values rather than drop them;
+retain legacy property versions without format admission. Keep fixed-operation
+backup reuse, native receipt integrity, cancellation outcome and failed-cleanup
+ownership. No paths are serialized. Public bootstrap, historical source/large
+binary acceptance and cloud activation remain separate gates.

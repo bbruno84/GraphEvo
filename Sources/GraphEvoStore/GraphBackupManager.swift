@@ -60,23 +60,26 @@ struct GraphCloudBackupSnapshot: Codable, Sendable {
 package actor GraphBackupManager {
     typealias Validator = @Sendable (URL, GraphID) async throws -> String
     private let validateNative: Validator
+    private let validateLegacy: Validator?
+    private let legacySchemaIdentifier: String?
     private let schemaIdentifier: String
     private let limits: GraphBackupLimits
     private struct Intent: Codable { let format: Int; let id: UUID; let backupID: UUID }
     private struct Retention: Codable { let format: Int; let backupID: UUID; var owners: Set<UUID> }
 
-    init(schemaIdentifier: String, limits: GraphBackupLimits = .init(), validate: @escaping Validator) {
+    init(schemaIdentifier: String, limits: GraphBackupLimits = .init(), legacySchemaIdentifier: String? = nil, validateLegacy: Validator? = nil, validate: @escaping Validator) {
         self.schemaIdentifier = schemaIdentifier; self.limits = limits; validateNative = validate
+        self.legacySchemaIdentifier = legacySchemaIdentifier; self.validateLegacy = validateLegacy
     }
 
     func create(for graphID: GraphID, storeID: String, schema: String, in root: URL,
-                reason: String?, artifacts: [GraphBackupArtifact], backupID: UUID? = nil, retentionOwner: UUID? = nil,
+                reason: String?, artifacts: [GraphBackupArtifact], backupID: UUID? = nil, retentionOwner: UUID? = nil, immutableArtifact: String = "__graphevo_publication.json",
                 copy: @Sendable (URL) async throws -> Void) async throws -> GraphBackup {
         if let reason {
             guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   reason.utf8.count <= 4096 else { throw GraphBackupError.invalidReason }
         }
-        guard schema == schemaIdentifier, Set(artifacts.map(\.name)).count == artifacts.count,
+        guard accepts(schema), Set(artifacts.map(\.name)).count == artifacts.count,
               artifacts.allSatisfy({ Self.component($0.name) }) else { throw GraphBackupError.invalidBackup }
         let root = try Self.directory(root), lease = try BackupRootLease(root)
         defer { lease.release() }
@@ -87,7 +90,7 @@ package actor GraphBackupManager {
             let manifest = try readManifest(destination)
             guard manifest.id == id, manifest.graphID == graphID, manifest.nativeStoreID == storeID,
                   manifest.schemaIdentifier == schema, manifest.reason == reason,
-                  let intent = artifacts.first(where: { $0.name == "__graphevo_publication.json" }),
+                  let intent = artifacts.first(where: { $0.name == immutableArtifact }),
                   manifest.files.contains(where: { $0.path == "artifacts/" + intent.name &&
                     $0.sha256 == SHA256.hash(data: intent.data).map { String(format: "%02x", $0) }.joined() }) else { throw GraphBackupError.invalidBackup }
             try await validate(destination, manifest: manifest)
@@ -306,14 +309,21 @@ package actor GraphBackupManager {
     }
     private func checkManifest(_ manifest: GraphBackupManifest) throws {
         guard manifest.format == 1, manifest.storePath == "payload/Graph.sqlite", !manifest.nativeStoreID.isEmpty,
-              manifest.schemaIdentifier == schemaIdentifier, manifest.files.count <= limits.maximumFiles,
+              accepts(manifest.schemaIdentifier), manifest.files.count <= limits.maximumFiles,
               Set(manifest.files.map(\.path)).count == manifest.files.count,
               manifest.files.contains(where: { $0.path == manifest.storePath }),
               manifest.files.allSatisfy({ Self.relative($0.path) && $0.sha256.count == 64 }) else { throw GraphBackupError.invalidBackup }
     }
+    private func accepts(_ schema: String) -> Bool {
+        schema == schemaIdentifier || (schema == legacySchemaIdentifier && validateLegacy != nil)
+    }
+    private func validator(_ schema: String) -> Validator {
+        if schema == legacySchemaIdentifier, let validateLegacy { return validateLegacy }
+        return validateNative
+    }
     private func validate(_ directory: URL, manifest: GraphBackupManifest) async throws {
         if try Self.isPackage(directory) {
-            let limits = limits, native = validateNative
+            let limits = limits, native = validator(manifest.schemaIdentifier)
             let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("GraphBackupVerify-" + UUID().uuidString)
             try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: false)
             var detached = true
@@ -338,7 +348,7 @@ package actor GraphBackupManager {
         defer { if detached { try? FileManager.default.removeItem(at: scratch) } }
         try FileManager.default.copyItem(at: directory.appendingPathComponent("payload"), to: scratch.appendingPathComponent("payload"))
         do {
-            guard try await validateNative(scratch.appendingPathComponent(manifest.storePath), manifest.graphID) == manifest.nativeStoreID else { throw GraphBackupError.invalidBackup }
+            guard try await validator(manifest.schemaIdentifier)(scratch.appendingPathComponent(manifest.storePath), manifest.graphID) == manifest.nativeStoreID else { throw GraphBackupError.invalidBackup }
         } catch {
             if case StoreRuntimeError.shutdownFailed = error { detached = false }
             throw error
