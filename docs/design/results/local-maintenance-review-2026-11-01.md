@@ -86,3 +86,8 @@ and diff checks. The simulator summary reports no failures/skips/runtime warning
 The combined remote checkpoint is recorded in the development status and PR.
 Compression/portable import remain planned
 follow-up work; this correction does not expand the backup format or schema.
+
+The combined [CI run 41286055397](https://github.com/bbruno84/GraphEvo/actions/runs/41286055397)
+passes on `bcac4bc` after corrective re-review, including macOS/iOS suites,
+ModelConsumer and independent-process local reading. Final integration-status
+edits are documentation-only; the validated source/tests/workflow are unchanged.

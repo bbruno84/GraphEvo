@@ -1,12 +1,11 @@
 # GraphEvo 2 — migration foundations roadmap
 
-Status: [MF01](graphevo-2-local-maintenance.md) is the package-only implementation
-candidate for prerequisites 1–2; later steps remain roadmap decisions. Work starts
-from reviewed T08 PR #120 (`8dda893`) on
-`codex/v2-migration-foundations`, as explicitly requested by the maintainer.
-T08 remains unmerged. Actions quota is available again as of 2026-11-01; retain
-one combined checkpoint after local validation, review and corrections. Quota
-availability alone does not authorize a merge or release.
+Status: [MF01](graphevo-2-local-maintenance.md) supplies the package-only baseline
+for prerequisites 1–2, integrated with T08 through #120 into `codex/graphevo-2`.
+Development started from reviewed T08 at `8dda893`, as explicitly requested.
+The combined checkpoint passed after corrective review; the maintainer authorized
+merge on success. Step 2a is the next planned backup increment; later steps remain
+roadmap decisions. Future branches start from `codex/graphevo-2`.
 
 ## Responsibility boundary
 

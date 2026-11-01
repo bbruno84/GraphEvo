@@ -1,7 +1,8 @@
 # MF01 — local reservations and verified graph backups
 
-Status: package-only candidate on `codex/v2-migration-foundations`, based on
-reviewed T08 #120. This implements the first two prerequisites of the
+Status: package-only baseline integrated through #120 into `codex/graphevo-2`,
+after review, corrections and the combined macOS/iOS checkpoint. Developed on
+`codex/v2-migration-foundations` from reviewed T08. This implements the first two prerequisites of the
 [migration roadmap](graphevo-2-migration-foundations.md). No public graph opener,
 consumer migration executor, shared ledger, v1 conversion or in-place cloud
 restoration is activated. S03 and cloud/session formats are unchanged.
@@ -138,6 +139,7 @@ cleanup, durable retention, graph-only cloud evidence and pause ownership.
 See the [MF01 local results](results/local-maintenance-2026-11-01.md) for the
 verified scope and remaining acceptance limits.
 
-Keep local/simulator results distinct from physical/cloud acceptance. No remote
-CI is requested before review. The selected workflow remains one combined
-checkpoint with #120, then authorized integration into `codex/graphevo-2`.
+Keep local/simulator results distinct from physical/cloud acceptance. Corrected
+source `c174e4a` passes re-review and the combined
+[CI checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/41286055397)
+on `bcac4bc` before the authorized #120 merge. Final status edits are documentation-only.

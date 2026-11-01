@@ -346,8 +346,9 @@ API compatibility remains optional; data migration is a stable-release gate.
 
 The [current roadmap](graphevo-2-migration-foundations.md) adds a central
 BackupManager with a caller-supplied manifest reason and a reversible graph-local
-write reservation. [MF01](graphevo-2-local-maintenance.md) supplies their package-only
-candidate with complete local snapshot/empty-destination restoration, caller
+write reservation. [MF01](graphevo-2-local-maintenance.md), integrated in #120 after
+corrective review and the combined CI checkpoint, supplies their package-only
+baseline with complete local snapshot/empty-destination restoration, caller
 reasons, native content checks and durable retention. The
 [local result](results/local-maintenance-2026-11-01.md) verifies the candidate
 on macOS/iOS Simulator, without closing physical/cross-process acceptance.

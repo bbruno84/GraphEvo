@@ -1115,5 +1115,7 @@ Finite root locks protect file operations; durable retention owners protect
 required backups without a migration-lifetime file lock. Unknown/corrupt ownership
 is not deletion authority. Cleanup must preserve another caller's manual cloud
 pause and local reservation. Keep the v1 backup helper unchanged unless a separately
-validated v1 route is explicitly implemented. MF01 and #120 share the maintainer's
-combined review/CI checkpoint; do not run CI or merge during implementation.
+validated v1 route is explicitly implemented. MF01 and T08 integrate together in
+#120 after corrective review and one combined CI checkpoint. Future increments
+start from `codex/graphevo-2` and retain review/corrections before CI and authorized
+merge. Compressed local packages/export/import remain roadmap work.
