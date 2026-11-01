@@ -48,12 +48,18 @@ The [local results](results/local-maintenance-2026-11-01.md) record 774 macOS an
 419 selected iOS Simulator functions, with native attachment/PH recovery and no
 new physical CloudKit claim. The [MF01 review of `1e9a16d`](results/local-maintenance-review-2026-11-01.md)
 reproduces two P2 defects: rejected nested restore mutates the source backup, and
-maintenance cancellation omits the observation recovery hint. Correct and
-re-review both before the combined CI; the previous suite did not cover them.
+maintenance cancellation omits the observation recovery hint. Correction
+`c174e4a` and its re-review close both with committed direct/aliased destination,
+runtime hint and actual observed-query recovery regressions. No remaining
+blocker was found in the corrective paths. The previous suite did not cover them.
 The [backup follow-up](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment)
 records compressed local packages, manifest-based discovery and async portable
 export/import. This is planned work, not part of MF01's uncompressed bundles.
-Actions quota is available again; review/corrections still precede the combined CI.
+Actions quota is available again. The maintainer authorized continuing the flow:
+corrective review, one combined CI checkpoint, then merge only if successful.
+Corrected source `c174e4a` passes 777 macOS functions, 422 selected iOS Simulator
+functions, Release build, Swift 6 ModelConsumer and manifest/diff checks. The
+corrective re-review found no remaining blocker; the combined CI is next.
 
 ## Latest integrated increment
 

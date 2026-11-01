@@ -27,7 +27,9 @@ participant cannot obtain a backup through privileged maintenance admission.
 The runtime additionally has an exclusive maintenance reservation. It rejects
 new reads/writes, drains admitted readers/writers and permits only the owned
 snapshot operation. A second maintenance acquisition reports busy. Maintenance
-release invalidates observations so recoverable busy reads can refresh. Neither
+release invalidates observations so recoverable busy reads can refresh.
+Normal release and cancelled acquisition both emit the recovery invalidation;
+idempotent duplicate release emits no additional hint. Neither
 mode is a cloud pause, a consumer write queue or a cross-process writer fence.
 Uncoordinated external/legacy writers must be stopped; app/widget, protected-data
 and suspension acceptance remains open. These operations are for the application

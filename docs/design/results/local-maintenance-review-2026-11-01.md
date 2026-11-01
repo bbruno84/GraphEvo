@@ -52,3 +52,37 @@ No other blocker was identified in this bounded review. Correct both findings,
 add committed regressions and re-review before the combined CI checkpoint.
 Actions quota is available again, but CI and merge were not requested by this
 review. No physical mutation or container reset was performed.
+
+## Corrective re-review
+
+Corrected source: `c174e4a`. The maintainer subsequently authorized correcting
+both findings and continuing through review, CI and merge if successful.
+
+- Restore now resolves the existing ancestor of the destination before appending
+  missing path components. It rejects containment before creating directories;
+  this also covers a symlink pointing into the source when its requested child
+  directory does not exist. Regression tests compare the original directory
+  inventory and reverify the complete source for direct and aliased paths.
+- Cancellation uses the same idempotent release path as normal release. A removed
+  maintenance restriction emits exactly one recovery hint; a stale second release
+  does not. A committed runtime regression checks buffered hints after cancellation.
+- An additional integration regression observes a query before maintenance,
+  forces a rescan during drainage to expose the busy failure, cancels acquisition
+  and receives a recovered query value without any post-cancellation manual
+  refresh or new write. The admitted reader stays alive through recovery.
+
+The first direct-path correction did not cover a missing child beneath a symlink;
+the strengthened test caught this before delivery. The final ancestor-resolution
+implementation passes both cases. An initial observation test attempted a new
+subscription during maintenance and was adjusted to exercise an existing live
+query, matching the reported recovery contract.
+
+Re-review of the final corrective diff found no remaining blocker in these paths.
+The targeted backup/reservation suites pass with the committed regressions.
+Final local validation passes 777 macOS functions (331 legacy, 347 store,
+76 runtime, 23 model), 422 selected iOS 18.5 Simulator functions (487 invocations
+including parameters), Release package build, Swift 6 ModelConsumer, manifest
+and diff checks. The simulator summary reports no failures/skips/runtime warnings.
+The combined remote checkpoint is recorded in the development status and PR.
+Compression/portable import remain planned
+follow-up work; this correction does not expand the backup format or schema.
