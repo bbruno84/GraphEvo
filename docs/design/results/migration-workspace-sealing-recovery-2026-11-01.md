@@ -1,7 +1,8 @@
 # MF04c — bounded workspace sealing and explicit recovery
 
 Date: 2026-11-01. Base: integrated MF04b/#124 (`7c2b5a9`). Focused branch:
-`codex/v2-workspace-seal-recovery`, directly targeting `codex/graphevo-2`.
+`codex/v2-workspace-seal-recovery`, [PR #125](https://github.com/bbruno84/GraphEvo/pull/125)
+directly into `codex/graphevo-2` after review and CI.
 This groups sealing, PH reduction, explicit restart/source freshness and cleanup
 activation ownership into one functional increment. It is not publication evidence.
 
@@ -87,3 +88,30 @@ external-process writers, hostile filesystem races, cross-volume/device workspac
 adoption and production scale remain open. Tokens/native seal metadata and full
 validation/copy costs stay on the post-alpha checklist. No beta/stable gate or
 release/tag closes here. CI is requested only after review on the final code.
+
+
+## Review, CI and integration
+
+Corrective commit `75b95b1419768934aced22e72d189fbf66b1906a` resolves the two P2
+review findings: count privileged control saves as admitted writers, and fence
+consumer mutation by seal-row presence even with a missing/corrupt value. Recovery
+refuses that invalid value. The added native corruption regression and final
+49-function local macOS/iOS validation passed (60 iOS invocations). No remaining
+blocking finding was recorded.
+
+The single full [CI checkpoint #320](https://github.com/bbruno84/GraphEvo/actions/runs/41311865161)
+passed on that reviewed head, after review and before the delegated merge:
+
+- macOS: 860 functions passed (331 XCTest, 430 store, 76 runtime, 23 model),
+  with Swift 6 and independent-process consumers passing.
+- iOS 18.5: 858 functions / 954 invocations passed, no failures; one pre-existing
+  legacy alias test skipped because its simulator temporary directory lacks the
+  `/private` alias. No crash/unexpected runner restart was reported in the logs.
+- Manifest/diff checks passed; no failure artifact uploaded. Laboratories and
+  the local two-process protocol remained outside CI.
+
+The checkpoint label was removed after success and before documentation-only
+integration notes. Sources, Tests, Package.swift, IntegrationTests and workflows
+remain identical to the reviewed/tested head. No second full checkpoint is needed
+for those notes. Integration through #125 does not select a release/tag or close
+any broader beta/stable gate.

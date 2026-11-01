@@ -397,8 +397,11 @@ paired-store evidence below retains its original backend scope.
   after review and full CI #317. It preserves the protected original
   without creating a premature backup and refuses ordinary cloud activation.
   MF04c implements bounded sealing/reduction, restart/source-freshness recovery
-  and activation-bound cleanup on its focused branch, pending review/integration.
-  Complete native fault/power-loss, external-process and production-scale acceptance. The [local preparation result](results/migration-workspace-preparation-2026-11-01.md)
+  and activation-bound cleanup through #125 after corrective review and CI #320.
+  The [MF04c result](results/migration-workspace-sealing-recovery-2026-11-01.md)
+  retains a two-process injected pre-detach-failure/recovery protocol separately
+  from final corrective CI. Complete physical I/O/power-loss, external-process
+  writer and production-scale acceptance. The [local preparation result](results/migration-workspace-preparation-2026-11-01.md)
   keeps broad/final focused checks separate. Bind history to the exact working
   instance and survive interrupted sealing. Measure full validation/copy costs
   and reserved native seal metadata (default 4 MiB, hard maximum 8 MiB); physical

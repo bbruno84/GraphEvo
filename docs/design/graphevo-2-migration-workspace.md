@@ -1,7 +1,8 @@
 # MF04 — isolated migration workspace and PH change set
 
-Status: MF04c is implemented on `codex/v2-workspace-seal-recovery`, directly from
-integrated MF04b/#124 (`7c2b5a9`), pending final review/checkpoint/integration.
+Status: MF04c integrates through [PR #125](https://github.com/bbruno84/GraphEvo/pull/125),
+directly from MF04b/#124 (`7c2b5a9`) after corrective review and full CI #320 on
+`75b95b1`.
 Preparation, bounded PH reduction/sealing, explicit restart recovery and
 ownership-checked close/discard are package-only. **Original-store publication,
 its backup/executor journal and participant workspaces remain separate work.**

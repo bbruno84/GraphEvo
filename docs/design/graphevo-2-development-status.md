@@ -8,19 +8,39 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF04c is in progress on `codex/v2-workspace-seal-recovery`, directly from
-integrated MF04b/#124 (`7c2b5a9`). This groups bounded PH reconstruction, native
-sealing, explicit restart/source-freshness recovery and stale-control/cleanup
-ownership into one functional increment and one final review/CI checkpoint.
-See the [implemented MF04 contract](graphevo-2-migration-workspace.md).
-The [scoped result](results/migration-workspace-sealing-recovery-2026-11-01.md)
-records local suite and independent-process fault/recovery evidence.
-Original-store publication, pre-publication backup/executor recovery and mandatory
-v1 conversion remain separate. Participant workspace activation stays gated on
-T08 lifecycle integration. S03 and cloud/session formats are unchanged; new
-workspace descriptor format 2 refuses previous alpha documents unchanged.
+MF04c completes the local workspace lifecycle through
+[PR #125](https://github.com/bbruno84/GraphEvo/pull/125). No next implementation
+branch is open. Next: protected original-store publication, with a verified
+original backup after final workspace validation, bounded final-state application
+and durable commit/recovery evidence. Publication must preserve the original PH,
+current queue/transport state and control metadata; never replace its SQLite or
+transplant the working PH. Participant workspaces, actual CloudKit migration
+publication and mandatory v1 conversion remain separate acceptance work.
 
-## Latest integrated increment — MF04b isolated working-copy preparation
+## Latest integrated increment — MF04c workspace seal and recovery
+
+[PR #125](https://github.com/bbruno84/GraphEvo/pull/125) groups bounded PH reduction,
+authoritative native sealing, explicit restart/source-freshness recovery and
+activation-bound owned cleanup directly from MF04b/#124 (`7c2b5a9`) into
+`codex/graphevo-2`. A sealed GraphStore remains readable and rejects mutation;
+new activations fence stale controls. Source bookkeeping is allowed only without
+reconstructed application effects. Cleanup retains native/global claims through
+detachment and deletion. S03, application cloud formats and session format 6 are
+unchanged; format-2 workspaces refuse older alpha documents unchanged.
+
+Review corrected two P2 findings (writer accounting and corrupt marker-row
+admission); final focused macOS/iOS checks passed. The single full
+[CI checkpoint #320](https://github.com/bbruno84/GraphEvo/actions/runs/41311865161)
+passed on reviewed head `75b95b1419768934aced22e72d189fbf66b1906a`: macOS 860
+functions plus both consumers; iOS 858 functions / 954 invocations passed, no
+failures and one pre-existing legacy simulator-alias skip. Subsequent integration
+notes are documentation-only and do not rerun unchanged code/tests.
+The [scoped result](results/migration-workspace-sealing-recovery-2026-11-01.md)
+retains the independent-process native-fault/recovery protocol at `a1334e2`
+separately from corrective review and CI. No cloud publication, participant,
+power-loss, external-writer, scale or beta acceptance is inferred.
+
+## Earlier integrated increment — MF04b isolated working-copy preparation
 
 [PR #124](https://github.com/bbruno84/GraphEvo/pull/124) delivers protected complete
 copying, native working-purpose admission, a fresh working PH baseline and

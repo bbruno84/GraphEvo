@@ -11,8 +11,8 @@ in #122 after corrective review and full CI checkpoint #303. Independent cross-u
 graph activation and remaining executor steps stay
 open. MF04b's protected working-copy preparation integrates through
 #124 after review and full CI checkpoint #317; MF04c groups bounded sealing,
-restart/source-freshness recovery and safe cleanup on its focused branch, pending
-review/integration. Original-store publication remains open. Future branches start from `codex/graphevo-2`.
+restart/source-freshness recovery and safe cleanup through #125 after corrective
+review and full CI #320. Original-store publication remains open. Future branches start from `codex/graphevo-2`.
 
 ## Responsibility boundary
 

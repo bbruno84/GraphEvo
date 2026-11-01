@@ -1229,3 +1229,11 @@ cannot use that control path. Cleanup detaches while retaining runtime/global
 claims through removal and failure/retry. Seal/close release only owned holds;
 committed seals survive cancellation and restart. Participant activation and
 original-store publication/backup/executor recovery remain separate gates.
+
+
+MF04c integrates through #125 after corrective review and one full macOS/iOS
+checkpoint #320 on `75b95b1`. Keep the two-process native-fault/recovery evidence
+at `a1334e2` distinct from final corruption/admission corrections. Subsequent
+integration notes are documentation-only. Next publication work must acquire its
+own protected original-store commit path and verified pre-publication backup;
+workspace maintenance privilege explicitly refuses ordinary source stores.
