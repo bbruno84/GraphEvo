@@ -14,8 +14,10 @@ open. MF04b's protected working-copy preparation integrates through
 restart/source-freshness recovery and safe cleanup through #125 after corrective
 review and full CI #320. [MF05](graphevo-2-migration-publication.md) supplies bounded original-store
 publication and backup/receipt recovery through #126 after local/device review
-and full CI #324. Consumer semantics, participant-origin execution and mandatory
-v1 source conversion remain open. Future branches start from `codex/graphevo-2`.
+and full CI #324. [MF06](../../Experiments/ConsumerMigrationFlow/README.md) then exercises a
+synthetic consumer with local recovery and real iPad/XR ledger/data verification,
+without changing shipping targets or adding another executor. Consumer semantics,
+participant-origin execution and mandatory v1 source conversion remain open. Future branches start from `codex/graphevo-2`.
 
 ## Responsibility boundary
 
