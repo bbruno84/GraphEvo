@@ -46,7 +46,14 @@ metadata, working-copy execution/publication and v1 conversion remain subsequent
 work. In-place/cloud restoration and cross-process writer fencing remain open.
 The [local results](results/local-maintenance-2026-11-01.md) record 774 macOS and
 419 selected iOS Simulator functions, with native attachment/PH recovery and no
-new physical CloudKit claim. MF01 still requires review before the combined CI.
+new physical CloudKit claim. The [MF01 review of `1e9a16d`](results/local-maintenance-review-2026-11-01.md)
+reproduces two P2 defects: rejected nested restore mutates the source backup, and
+maintenance cancellation omits the observation recovery hint. Correct and
+re-review both before the combined CI; the previous suite did not cover them.
+The [backup follow-up](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment)
+records compressed local packages, manifest-based discovery and async portable
+export/import. This is planned work, not part of MF01's uncompressed bundles.
+Actions quota is available again; review/corrections still precede the combined CI.
 
 ## Latest integrated increment
 

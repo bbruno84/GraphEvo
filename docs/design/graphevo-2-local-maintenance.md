@@ -72,6 +72,10 @@ The manifest stores backup/graph/native-store identities, schema, creation date,
 reason, relative inventory, byte sizes and SHA-256 values. Library manifests and
 bindings generate no persisted sandbox paths; caller artifacts remain opaque.
 Whole unretained bundles can move or be renamed.
+These MF01 bundles are currently uncompressed directories. The
+[next backup increment](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment)
+will add compressed local payloads, inexpensive manifest discovery and async
+export/import; portable cross-user import is not a current capability.
 
 New bundles are built in a hidden owned staging directory and become visible by
 same-parent directory publication only after verification. Checks reject missing,

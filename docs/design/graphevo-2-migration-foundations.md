@@ -4,8 +4,9 @@ Status: [MF01](graphevo-2-local-maintenance.md) is the package-only implementati
 candidate for prerequisites 1–2; later steps remain roadmap decisions. Work starts
 from reviewed T08 PR #120 (`8dda893`) on
 `codex/v2-migration-foundations`, as explicitly requested by the maintainer.
-T08 remains unmerged. Billing availability defers remote CI to one combined
-checkpoint after local validation and review; no merge or release is implied.
+T08 remains unmerged. Actions quota is available again as of 2026-11-01; retain
+one combined checkpoint after local validation, review and corrections. Quota
+availability alone does not authorize a merge or release.
 
 ## Responsibility boundary
 
@@ -22,6 +23,7 @@ and its agreed coordinated cutover remain separate acceptance work.
 |---|---|---|
 | 1 | Local write admission | Reversibly refuse new consumer writes on the original graph, then await already admitted writes. All handles of that resource share the gate; unrelated graphs progress. Use owned reservations so one caller cannot release another's restriction. |
 | 2 | Central BackupManager | ContextManager obtains the appropriate cloud/local reservations; the backup service creates, inventories, verifies and restores complete graph backups. A verified backup is a prerequisite for migration. |
+| 2a | Compressed portable backup packages | Complete the local backup format with compressed payloads, inexpensive manifest listing and async export/import. Measure compression before selecting one archive format. MF01 directory bundles remain the current implementation until this follow-up is reviewed. |
 | 3 | Independent graph control metadata | A durable local JSON journal and dedicated CloudKit control records accompany the graph outside its application primitives/Core Data schema. The migration ledger is the first use; allow future graph-related control information. |
 | 4 | Isolated working graph and PH range | Give the consumer an ordinary mutable working Graph, isolated from live cloud transport. Use an explicit PH baseline to discover its changes; do not introduce a library-wide snapshot diff or domain reconciliation. |
 | 5 | Publication and recovery | Apply the changed final primitives/deletions to the protected original, with durable commit evidence, truthful outcomes and restart recovery. Do not replace an original SQLite file as a shortcut to cloud publication. |
@@ -65,6 +67,40 @@ reconciled with the current session instead of copying an entire multi-graph
 session document back. Local restoration after publication is not cloud rollback;
 a cloud-visible reversal is a new compensating operation. Reuse/replacement of
 the existing v1 backup helper must be assessed without weakening v1 behavior.
+
+### Compressed local packages and portability — next backup increment
+
+The filesystem and per-backup manifest are authoritative. Do not require a
+central registration database: a copied/imported package must be discoverable.
+An optional future index is disposable and rebuildable from manifests. Listing
+reads bounded manifests without extracting payloads; it is not full verification.
+
+Completed local backups should contain a compressed payload, with their manifest
+readable without full extraction. Stage the coherent native snapshot, release
+graph-local/cloud snapshot reservations once that immutable copy and required
+recovery evidence have been captured, then compress and verify asynchronously.
+Publish the complete manifest/payload package atomically only after successful
+verification. Cancellation or failure must preserve the source and previously
+published backups; incomplete owned stages remain recoverable. Distinguish
+coherent source copying, atomic package visibility and power-loss durability.
+
+Export produces one transportable package from the completed local backup,
+reusing the compressed payload rather than repeating snapshot/compression work.
+Choose the archive/container layout with manifest consistency and retention in
+mind; the exact format and compression algorithm are not yet selected. Benchmark
+database-heavy and already-compressed media fixtures for size, latency, memory
+and temporary disk usage. Keep compression/decompression streaming and bounded;
+validate cancellation, truncated archives, unsafe paths, expansion limits and
+checksum/native reopen before declaring an import/restoration successful.
+
+Packages use relative references and contain all library-owned content needed
+for the supported restore. Verify movement to another device explicitly.
+Import for another user creates an independent graph with fresh graph/cloud
+ownership and no inherited share participation, account binding, transport
+cursors or upload work. Define identity remapping and attachment/reference
+preservation before implementing this route; it is distinct from same-graph
+recovery. Informational recovery evidence is not authority to reactivate a
+previous user's session. Cross-user import is not implemented by MF01.
 
 ### Graph control metadata and shared ledger
 

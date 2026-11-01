@@ -358,6 +358,13 @@ isolation. Current one-graph/store backups must preserve other graphs' shared
 engine/session state and must not roll back the cloud control ledger. Historical
 paired-store evidence below retains its original backend scope.
 
+- [ ] **B** Complete compressed local packages with manifest-based filesystem
+  discovery, async export/import and bounded extraction; select the format from
+  database/media measurements. Verify coherent copy, atomic publication and
+  interruption recovery separately. Validate transfer between devices and
+  independent cross-user import without inherited sharing/transport ownership.
+  See [backup roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment).
+
 - [ ] **B** Define consistent closed/quiescent backup prerequisites and whole-content
   inventory, including external bytes, both native resources, auxiliary files and
   operation ledgers; identify existing narrow migration backup callers to replace.
