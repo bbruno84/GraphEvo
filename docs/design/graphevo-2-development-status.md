@@ -8,14 +8,14 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF04c completes the local workspace lifecycle through
-[PR #125](https://github.com/bbruno84/GraphEvo/pull/125). No next implementation
-branch is open. Next: protected original-store publication, with a verified
-original backup after final workspace validation, bounded final-state application
-and durable commit/recovery evidence. Publication must preserve the original PH,
-current queue/transport state and control metadata; never replace its SQLite or
-transplant the working PH. Participant workspaces, actual CloudKit migration
-publication and mandatory v1 conversion remain separate acceptance work.
+MF05 protected original-store publication is in progress on
+`codex/v2-migration-publication`, based directly on MF04c/#125. The
+[contract](graphevo-2-migration-publication.md) adds a verified original backup,
+bounded atomic final-state application and durable local commit/recovery evidence.
+Local macOS and selected iOS tests pass; physical publication, final review and
+the full CI checkpoint are pending. No integration or cloud acceptance is claimed
+before those results. Participant workspaces and mandatory v1 conversion remain
+separate work.
 
 ## Latest integrated increment — MF04c workspace seal and recovery
 

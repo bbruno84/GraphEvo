@@ -26,8 +26,13 @@ extension GraphContextManager {
 
     package func createBackup(for id: GraphID, in root: URL, reason: String? = nil,
                               artifacts: [GraphBackupArtifact] = []) async throws -> GraphBackup {
-        guard let location = locations[id] else { throw GraphStoreError.missingGraph }
         guard !artifacts.contains(where: { $0.name.hasPrefix("__graphevo_") }) else { throw GraphBackupError.invalidBackup }
+        return try await snapshotBackup(for: id, in: root, reason: reason, artifacts: artifacts)
+    }
+
+    func snapshotBackup(for id: GraphID, in root: URL, reason: String?, artifacts: [GraphBackupArtifact],
+                        backupID: UUID? = nil, retentionOwner: UUID? = nil) async throws -> GraphBackup {
+        guard let location = locations[id] else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: id, at: location.url)
         var cloudHold: StoreReservation?, localHold: StoreReservation?
         do {
@@ -44,7 +49,7 @@ extension GraphContextManager {
                 }
             }
             let result = try await backups.create(for: id, storeID: storeID, schema: schema.identifier,
-                in: root, reason: reason, artifacts: captured) { url in
+                in: root, reason: reason, artifacts: captured, backupID: backupID, retentionOwner: retentionOwner) { url in
                     try await owner.copyStore(to: url, reservation: held)
                     await held.release(); await cloudReservation.release()
                 }

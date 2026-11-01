@@ -1237,3 +1237,18 @@ at `a1334e2` distinct from final corruption/admission corrections. Subsequent
 integration notes are documentation-only. Next publication work must acquire its
 own protected original-store commit path and verified pre-publication backup;
 workspace maintenance privilege explicitly refuses ordinary source stores.
+
+
+## V2 MF05 protected original publication
+
+Read [MF05](docs/design/graphevo-2-migration-publication.md). Validate/seal before
+creating the original verified backup. Publish final primitives via one bounded
+normal source transaction; never replace SQLite, transplant PH or replay consumer
+bodies. Preserve frozen attempts and source queue/control metadata. Commit the
+native receipt atomically with application effects; recover it before freshness
+checks, including after later ordinary edits. Only the latest receipt is retained.
+Keep failed-publication backups durably pinned; post-commit unpin failure is a
+cleanup warning. Do not persist backup/store paths. Respect the default sync
+pending/native-change limits rather than hiding a partial or oversized commit.
+The source capability must never reuse the workspace sealing privilege. Local
+commit is not cloud acknowledgement, distributed exclusion or v1 conversion.

@@ -5,6 +5,7 @@ import GraphEvoRuntime
 
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
+    package let publication: GraphMigrationPublicationAdapter?
     package let workspace: GraphMigrationWorkspaceAdapter?
     package let prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package let initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)?
@@ -15,11 +16,12 @@ package struct GraphCoordinatorAdapter: Sendable {
 
     package init(graph: GraphStoreAdapter, sync: GraphSyncAdapter? = nil,
                  initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)? = nil,
+                 publication: GraphMigrationPublicationAdapter? = nil,
                  workspace: GraphMigrationWorkspaceAdapter? = nil,
                  prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
-        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace; self.workspace = workspace
+        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace; self.workspace = workspace; self.publication = publication
     }
 }
 
@@ -30,9 +32,10 @@ package actor GraphCoordinator {
     private let adapter: GraphStoreAdapter
     private let syncSession: GraphSyncSession?
     private let workspace: GraphMigrationWorkspaceAdapter?
+    private let publication: GraphMigrationPublicationAdapter?
 
-    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil) {
-        self.id = id; self.handle = handle; self.adapter = adapter; self.workspace = workspace
+    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil) {
+        self.id = id; self.handle = handle; self.adapter = adapter; self.workspace = workspace; self.publication = publication
         self.syncSession = sync.map { GraphSyncSession(graphID: id, handle: handle, adapter: $0) }
     }
 
@@ -44,7 +47,7 @@ package actor GraphCoordinator {
         if creating && exists { throw GraphStoreError.duplicateIdentity }
         if !creating && !exists { throw GraphStoreError.missingStore }
         let handle = try await registry.open(configuration, schema: schema)
-        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace)
+        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication)
         do {
             if creating {
                 try await handle.transaction {
@@ -73,7 +76,23 @@ package actor GraphCoordinator {
                                 schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
         let handle = try await registry.open(configuration, schema: schema)
         try await handle.setDataAvailable(false, terminal: true)
-        return GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace)
+        return GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication)
+    }
+    func publicationReceipt(for workspace: UUID) async throws -> GraphMigrationPublicationReceipt? {
+        guard let publication else { return nil }
+        let id = id
+        return try await handle.controlRead { try publication.receipt($0, id, workspace) }
+    }
+    func preflightPublication(_ descriptor: GraphMigrationWorkspaceDescriptor, seal: GraphMigrationChangeSet) async throws {
+        guard let publication else { throw GraphMigrationPublicationError.unavailable }
+        try await handle.controlRead { try publication.preflight($0, descriptor, seal) }
+    }
+    func publish(_ descriptor: GraphMigrationWorkspaceDescriptor, seal: GraphMigrationChangeSet,
+                 intent: GraphMigrationPublicationIntent, items: [GraphMigrationPublicationItem], reservation: StoreReservation) async throws -> GraphMigrationPublicationReceipt {
+        guard let publication else { throw GraphMigrationPublicationError.unavailable }
+        return try await handle.publicationTransaction(graphID: id.rawValue, reservation: reservation) {
+            try publication.apply($0, descriptor, seal, intent, items)
+        }
     }
     func validateMigrationSource(_ boundary: GraphMigrationBoundary) async throws {
         guard let workspace else { throw GraphMigrationWorkspaceError.unavailable }

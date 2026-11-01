@@ -397,3 +397,12 @@ per-graph CloudKit engine or application resolver.
 No beta/stable gate closes at design time. The implementation must report which
 rows passed and retain broader power-loss, external-process writer, production
 scale, source-publication and mandatory v1-conversion gates separately.
+
+## MF05 original-store publication
+
+The separate [MF05 contract](graphevo-2-migration-publication.md) implements the
+publication boundary after sealing: verified pinned backup, one bounded original
+transaction, native receipt recovery and normal PH/transport generation handling.
+It supersedes the earlier future-publication wording above for this increment.
+Publication is local atomicity; cloud delivery and consumer coordination remain
+separate. Larger batched publication and participant workspaces are not enabled.

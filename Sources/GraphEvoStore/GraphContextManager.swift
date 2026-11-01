@@ -16,6 +16,8 @@ package actor GraphContextManager {
         var tokens: Set<UUID> = []
         var closing: Task<Void, any Error>?
     }
+    nonisolated let migrationIdentity = UUID()
+    var publishingMigrations = Set<GraphID>()
     let registry: StoreRegistry
     let schema: StoreSchema
     let adapter: GraphCoordinatorAdapter

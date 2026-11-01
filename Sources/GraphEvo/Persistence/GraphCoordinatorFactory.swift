@@ -33,7 +33,7 @@ enum GraphCoordinatorFactory {
         return GraphCoordinatorAdapter(graph: graph, sync: sync, initializePolicy: { context, id, policy in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
-        }, workspace: GraphMigrationNativeWorkspace.adapter, prepareWorkspace: { context, id in
+        }, publication: GraphMigrationNativePublication.adapter, workspace: GraphMigrationNativeWorkspace.adapter, prepareWorkspace: { context, id in
             try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             guard try GraphCloudAccessMetadata.read(root) == nil else { throw GraphMigrationWorkspaceError.participantUnsupported }
@@ -42,6 +42,7 @@ enum GraphCoordinatorFactory {
                 throw GraphMigrationWorkspaceError.invalidWorkspace
             }
             root[dynamicMember: GraphTypedStoreAdapter.prefix + "workspaceBoundary"] = workspaceID
+            root[dynamicMember: GraphMigrationNativePublication.receiptKey] = nil
             root[dynamicMember: GraphSyncCheckpointAdapter.stateKey] = nil
             root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] = nil
             context.transactionAuthor = GraphMigrationNativeWorkspace.baselineAuthor(UUID(uuidString: workspaceID)!)

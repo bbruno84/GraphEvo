@@ -1782,5 +1782,16 @@ Source bookkeeping is allowed only with no reconstructed application effects.
 Activations rotate cleanup authority; stale controls cannot delete a reopened
 copy. Detached cleanup retains native claims through deletion and on failure.
 
-Original-store publication and its protected backup/executor recovery remain
-unimplemented. Participant workspaces stay refused. See [MF04](../design/graphevo-2-migration-workspace.md).
+`GraphContextManager.publishMigrationWorkspace(_:backupsIn:reason:limits:) async throws -> GraphMigrationPublicationResult`
+seals/validates, verifies a complete original backup, then commits all selected
+final records/deletes and a native receipt atomically on the original. Default
+limits: 10,000 records and 32 MiB weighted logical payload; the normal pending
+and native PH limits also apply. No source-file replacement or consumer replay.
+`receipt` proves local commit, not cloud delivery; `backupURL` uses the current
+caller root. `backupRetentionPending` reports a failed post-commit unpin without
+turning success into failure. Retry/reopen recovers the latest matching native
+receipt before source-freshness checks, preserving subsequent ordinary edits.
+Only this workspace's source holds are released on commit. Failed attempts retain
+the verified backup; corruption refuses retry. Participant workspaces remain
+refused. See [MF04](../design/graphevo-2-migration-workspace.md) and
+[MF05](../design/graphevo-2-migration-publication.md).

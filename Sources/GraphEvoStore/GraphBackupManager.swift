@@ -70,7 +70,7 @@ package actor GraphBackupManager {
     }
 
     func create(for graphID: GraphID, storeID: String, schema: String, in root: URL,
-                reason: String?, artifacts: [GraphBackupArtifact],
+                reason: String?, artifacts: [GraphBackupArtifact], backupID: UUID? = nil, retentionOwner: UUID? = nil,
                 copy: @Sendable (URL) async throws -> Void) async throws -> GraphBackup {
         if let reason {
             guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -80,11 +80,23 @@ package actor GraphBackupManager {
               artifacts.allSatisfy({ Self.component($0.name) }) else { throw GraphBackupError.invalidBackup }
         let root = try Self.directory(root), lease = try BackupRootLease(root)
         defer { lease.release() }
-        let id = UUID(), stage = root.appendingPathComponent(".stage-" + id.uuidString)
+        let id = backupID ?? UUID(), stageID = UUID()
+        let stage = root.appendingPathComponent(".stage-" + stageID.uuidString)
         let destination = root.appendingPathComponent(id.uuidString).appendingPathExtension(GraphBackupPackage.fileExtension)
+        if backupID != nil, FileManager.default.fileExists(atPath: destination.path) {
+            let manifest = try readManifest(destination)
+            guard manifest.id == id, manifest.graphID == graphID, manifest.nativeStoreID == storeID,
+                  manifest.schemaIdentifier == schema, manifest.reason == reason,
+                  let intent = artifacts.first(where: { $0.name == "__graphevo_publication.json" }),
+                  manifest.files.contains(where: { $0.path == "artifacts/" + intent.name &&
+                    $0.sha256 == SHA256.hash(data: intent.data).map { String(format: "%02x", $0) }.joined() }) else { throw GraphBackupError.invalidBackup }
+            try await validate(destination, manifest: manifest)
+            if let retentionOwner { try pin(destination, id: id, owner: retentionOwner) }
+            return GraphBackup(url: destination, manifest: manifest)
+        }
         try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: stage) }
-        try JSONEncoder().encode(Intent(format: 1, id: id, backupID: id)).write(to: stage.appendingPathComponent("intent.json"), options: .atomic)
+        try JSONEncoder().encode(Intent(format: 1, id: stageID, backupID: id)).write(to: stage.appendingPathComponent("intent.json"), options: .atomic)
         let payload = stage.appendingPathComponent("payload")
         try FileManager.default.createDirectory(at: payload, withIntermediateDirectories: false)
         let store = payload.appendingPathComponent("Graph.sqlite")
@@ -105,6 +117,7 @@ package actor GraphBackupManager {
         try await GraphBackupPackage.perform { try GraphBackupPackage.pack(stage, manifest: manifest, to: archive, limits: limits) }
         try await validate(archive, manifest: manifest)
         try Task.checkCancellation()
+        if let retentionOwner { try pin(destination, id: id, owner: retentionOwner) }
         try FileManager.default.moveItem(at: archive, to: destination)
         return GraphBackup(url: destination, manifest: manifest)
     }
@@ -234,6 +247,13 @@ package actor GraphBackupManager {
         guard try readRetention(directory, id: manifest.id).owners.isEmpty else { throw GraphBackupError.retained }
         try FileManager.default.removeItem(at: directory)
         try? FileManager.default.removeItem(at: retentionURL(directory, id: manifest.id))
+    }
+    /// Called under the backup root lease, before atomic package visibility when creating.
+    private func pin(_ directory: URL, id: UUID, owner: UUID) throws {
+        var value = try readRetention(directory, id: id)
+        guard value.owners.count < 1024 || value.owners.contains(owner) else { throw GraphBackupError.limitExceeded }
+        value.owners.insert(owner)
+        try writeRetention(value, directory: directory)
     }
     private func retentionURL(_ directory: URL, id: UUID) -> URL {
         directory.deletingLastPathComponent().appendingPathComponent(".retention-" + id.uuidString + ".json")

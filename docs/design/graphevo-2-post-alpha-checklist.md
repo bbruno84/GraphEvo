@@ -409,6 +409,13 @@ paired-store evidence below retains its original backend scope.
   Participant-origin workspace activation also requires permission and T08
   revocation/purge integration before enabling that route. A change manifest
   alone does not establish safe original-store publication.
+- [ ] **B** Validate [MF05 publication](graphevo-2-migration-publication.md): one
+  bounded atomic original commit, verified pinned backup, native receipt recovery,
+  unchanged frozen transport and ordinary PH generations. Preserve the 10,000-ID
+  projected pending and 100,000-native-change limits; measure payload/copy costs.
+  The latest-only receipt can refuse old workspace recovery after a subsequent
+  migration. Review retained orphan backups after abandoned failures and explicit
+  retention release. Neither receipt nor queue emptiness proves global migration.
 - [ ] **R** Wire complete backups into actual conversion/recovery paths and verify
   bytes/checksums and successful reopen, interrupted copies/restores and protected
   source preservation. SQLite/WAL/SHM copying alone is insufficient for files.
