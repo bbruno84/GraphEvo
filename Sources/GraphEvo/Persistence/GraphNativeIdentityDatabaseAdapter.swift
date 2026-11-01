@@ -16,7 +16,7 @@ enum GraphNativeIdentityDatabaseAdapter {
     static func makeDatabase(allowsMirroring: Bool = false) -> GraphDatabaseAdapter {
         let access = access(allowsMirroring: allowsMirroring)
         let base = GraphTypedStoreAdapter.database
-        let graph = GraphStoreAdapter(initialize: { _, _ in throw GraphStoreError.unsupportedLayout },
+        var graph = GraphStoreAdapter(initialize: { _, _ in throw GraphStoreError.unsupportedLayout },
             fetch: { context, graphID, id in
                 guard id.graphID == graphID else { throw GraphStoreError.foreignGraph }
                 return try access.record(context, id: id)
@@ -41,6 +41,11 @@ enum GraphNativeIdentityDatabaseAdapter {
                 guard let query = base.graph.query else { throw GraphStoreError.unsupportedLayout }
                 return try query(context, graphID, request)
             })
+        graph.removeAll = { context, graphID, maximum in
+            try access.checkGraph(context, graphID: graphID)
+            guard let remove = base.graph.removeAll else { throw GraphStoreError.unsupportedLayout }
+            return try remove(context, graphID, maximum)
+        }
         return GraphDatabaseAdapter(graph: graph, catalog: { try access.catalog($0) }, create: { context, id in
             if let coordinator = context.persistentStoreCoordinator,
                coordinator.persistentStores.contains(where: { coordinator.metadata(for: $0)[StoreNativeContext.historySyncGraphKey] != nil }) {

@@ -25,7 +25,7 @@ and its agreed coordinated cutover remain separate acceptance work.
 | Order | Work | Required behavior |
 |---|---|---|
 | 1 | Local write admission | Reversibly refuse new consumer writes on the original graph, then await already admitted writes. All handles of that resource share the gate; unrelated graphs progress. Use owned reservations so one caller cannot release another's restriction. |
-| 2 | Central BackupManager | ContextManager obtains the appropriate cloud/local reservations; the backup service creates, inventories, verifies and restores complete graph backups. A verified backup is a prerequisite for migration. |
+| 2 | Central BackupManager | ContextManager obtains the appropriate cloud/local reservations; the backup service creates, inventories, verifies and restores complete graph backups. Create/verify the original backup after working-copy validation and before original-store publication. |
 | 2a | Compressed portable backup packages | MF02/#121 supplies compressed `.geb` files, manifest listing and async package export/import, with retained legacy directory reads. Physical/production-scale and independent cross-user graph activation gates remain open. |
 | 3 | Independent graph control metadata | MF03/#122 supplies bounded shared ledger/control transport. A durable local JSON journal and dedicated CloudKit control records accompany the graph outside its application primitives/Core Data schema. The migration ledger is the first use; allow future graph-related control information. |
 | 4 | Isolated working graph and PH range | Give the consumer an ordinary mutable working Graph, isolated from live cloud transport. Use an explicit PH baseline to discover its changes; do not introduce a library-wide snapshot diff or domain reconciliation. |
@@ -166,6 +166,8 @@ coverage; do not replay consumed probe mutations or reset cloud implicitly.
 
 The [historical manager plan](graphevo-2-migration-manager.md) retains M1/M2a
 evidence. Its native-mirroring/import-version assumptions do not define this new
-custom-sync implementation. Update the execution contract before implementing
-steps 4–5. Beta/stable gates stay in the
+custom-sync implementation. [MF04](graphevo-2-migration-workspace.md) defines the proposed working-copy/PH
+execution contract and ordered implementation/test plan for step 4. It remains
+documentation-only; step-5 original-store publication/recovery needs its own
+concrete contract before activation. Beta/stable gates stay in the
 [post-alpha checklist](graphevo-2-post-alpha-checklist.md).

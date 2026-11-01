@@ -8,13 +8,43 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF03 completes the shared-control metadata foundation through [PR #122](https://github.com/bbruno84/GraphEvo/pull/122).
-No next implementation branch is open. The next migration work is the working-copy
-and publication/recovery contract; consumer migration eligibility and data meaning
-remain consumer-owned. Unmirrored local journals, independent cross-user graph
-activation and mandatory v1 conversion remain open.
+MF04a completes logical emptying through [PR #123](https://github.com/bbruno84/GraphEvo/pull/123).
+No next implementation branch is open. The next increment implements the
+[MF04 workspace contract](graphevo-2-migration-workspace.md): protected coherent
+copy, working-purpose admission and a fresh working-store PH boundary, then
+bounded sealing/recovery. The temporary graph remains isolated from cloud until
+later publication. Validate the working graph before creating/verifying the
+original backup and before publication. The consumer owns migration eligibility
+and data meaning; workspace activation/publication and mandatory v1 conversion
+remain open.
 
-## Latest integrated increment — MF03 bounded shared ledger
+## Latest integrated increment — MF04a logical emptying
+
+[PR #123](https://github.com/bbruno84/GraphEvo/pull/123) delivers the
+[MF04a GraphStore/GraphMutation.removeAll API](graphevo-2-logical-emptying.md)
+directly from integrated MF03 (`5b22750`) into `codex/graphevo-2`. It uses normal
+local transactions/PH-backed delete batches while preserving graph controls,
+zone, share, ledger and other graphs. S03, application node/asset formats and
+session format 6 are unchanged. This does not implement the workspace or certify
+a global/atomic cloud wipe.
+
+Review found no remaining defect. Two adversarial regressions were added for
+cross-graph incoming actions and caught limit refusal without partial emptying;
+focused validation passed 15 macOS functions and 12 iOS functions / 13 invocations.
+The [result](results/logical-emptying-2026-11-01.md) retains the earlier complete
+826-function macOS and 494-function iOS checks plus eight iPad/XR physical stages
+at unchanged shipping pin `a19ae62`.
+
+Full [CI checkpoint #311](https://github.com/bbruno84/GraphEvo/actions/runs/41301437693)
+passed macOS and iOS on reviewed head
+`5ca26449a45704e8ebbb95a51f72fba0e781c0ef`, including the added regressions,
+after review and before merge. Subsequent checkpoint/integration notes change only
+documentation and do not rerun unchanged library tests. The PR records the final
+merge and integration commit. Physical RW guest, concurrent remote writers,
+account/permission change, fault/scale and external-storage reclamation gates
+remain open.
+
+## Earlier integrated increment — MF03 bounded shared ledger
 
 [PR #122](https://github.com/bbruno84/GraphEvo/pull/122) delivers
 [MF03](graphevo-2-shared-ledger.md) directly from #121 (`d17676d`) into

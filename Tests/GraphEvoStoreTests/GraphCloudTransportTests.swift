@@ -129,6 +129,86 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         try await a.graph.close(); try await finish(b)
     }
 
+    @Test func removeAllUsesNormalBatchesAndPeerImportsDoNotReuploadDeletes() async throws {
+        let bus = TransportBus(), container = UUID().uuidString, id = GraphID()
+        let a = try await fixture(bus: bus, container: container, graphID: id)
+        defer { try? FileManager.default.removeItem(at: a.directory) }
+        let ids = (0..<137).map { _ in a.graph.makeNodeID() }
+        try await a.graph.transaction { scope in
+            for node in ids { try scope.insert(GraphRecord(id: node, type: "Removal.Bulk")) }
+        }
+        #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 100)
+        #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 37)
+        try await a.manager.stopCloudSession(a.config)
+        let b = try await fixture(bus: bus, container: container, graphID: id)
+        defer { try? FileManager.default.removeItem(at: b.directory) }
+        try await b.manager.fetchCloudChanges(.private, configuration: b.config)
+        _ = try await b.manager.applyCloudInbox(for: id, configuration: b.config)
+        #expect(try await b.graph.read { try $0.record(for: ids[0]) != nil })
+        try await b.manager.stopCloudSession(b.config)
+        _ = try await a.manager.startCloudSession(a.config, adapter: bus.adapter)
+        let ledger = try await a.manager.updateGraphLedger(for: id, configuration: a.config, mutation: .information(Data("{\"keep\":true}".utf8)))
+        #expect(try await a.graph.removeAll() == 137)
+        #expect(try await a.manager.graphLedger(for: id, configuration: a.config) == ledger)
+        #expect(try await a.manager.cloudBinding(for: a.binding.route.zone, configuration: a.config) == a.binding.route)
+        #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 100)
+        #expect(try await a.graph.collectSyncChanges() == 37)
+        #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 37)
+        #expect(try await a.graph.collectSyncChanges() == 0)
+        try await a.manager.stopCloudSession(a.config)
+        _ = try await b.manager.startCloudSession(b.config, adapter: bus.adapter)
+        try await b.manager.fetchCloudChanges(.private, configuration: b.config)
+        _ = try await b.manager.applyCloudInbox(for: id, configuration: b.config)
+        let absent = try await b.graph.read { scope in try ids.allSatisfy { try scope.record(for: $0) == nil } }
+        #expect(absent)
+        #expect(try await b.graph.collectSyncChanges() == 0)
+        #expect(try await b.graph.removeAll() == 0)
+        try await a.graph.close(); try await finish(b)
+    }
+
+    @Test func lateSaveSuccessAfterRemoveAllKeepsPendingDeleteAndNeverRecreatesRecord() async throws {
+        let bus = TransportBus(), f = try await fixture(bus: bus)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        let id = f.graph.makeNodeID()
+        _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: id, type: "Removal.InFlight")) }
+        let frozen = try await f.graph.prepareTransport(f.binding)
+        #expect(try await f.graph.removeAll() == 1)
+        let receipt = try bus.send(frozen)
+        try await f.graph.commitTransport(f.binding, receipt: receipt)
+        #expect(try await f.graph.read { try $0.record(for: id) == nil })
+        #expect(try await f.graph.collectSyncChanges() == 1)
+        let deletion = try await f.graph.prepareTransport(f.binding)
+        #expect(deletion.items.count == 1 && deletion.items[0].change.operation == .delete)
+        #expect(deletion.items[0].change.generation > frozen.items[0].change.generation)
+        try await f.graph.commitTransport(f.binding, receipt: bus.send(deletion))
+        #expect(try await f.graph.collectSyncChanges() == 0)
+        try await finish(f)
+    }
+
+    @Test func failedRemovalUploadRetainsOnlyFailedDeleteAcrossStoreRestart() async throws {
+        let bus = TransportBus(), f = try await fixture(bus: bus)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        let a = f.graph.makeNodeID(), b = f.graph.makeNodeID()
+        try await f.graph.transaction { scope in
+            try scope.insert(GraphRecord(id: a, type: "Removal.Partial"))
+            try scope.insert(GraphRecord(id: b, type: "Removal.Partial"))
+        }
+        _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        #expect(try await f.graph.removeAll() == 2)
+        bus.failNames([try GraphCloudNodeCodec.recordID(for: b, binding: f.binding.route).recordName])
+        let partial = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        #expect(partial.succeeded == 1 && partial.failures.count == 1)
+        #expect(try await f.graph.collectSyncChanges() == 1)
+        try await f.graph.close()
+        let reopened = try await f.manager.openGraph(id: f.graph.id, at: f.storeURL)
+        #expect(try await reopened.read { try $0.record(for: b) == nil })
+        #expect(try await reopened.collectSyncChanges() == 1)
+        bus.failNames([])
+        #expect(try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config).succeeded == 1)
+        #expect(try await reopened.collectSyncChanges() == 0)
+        try await reopened.close(); try await f.manager.stopCloudSession(f.config)
+    }
+
     @Test func frozenAttemptAndMetadataSurviveReopenAndOldSuccessKeepsNewerEdit() async throws {
         let bus = TransportBus(), f = try await fixture(bus: bus)
         defer { try? FileManager.default.removeItem(at: f.directory) }

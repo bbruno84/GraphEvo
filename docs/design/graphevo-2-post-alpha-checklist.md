@@ -383,6 +383,22 @@ paired-store evidence below retains its original backend scope.
   costs and reserved 512-KiB headroom per enabled graph before production sizing.
   Unmirrored local journals and migration-data commit-marker recovery remain open;
   diagnostic history rotation must not delete unresolved executor evidence.
+- [ ] **B** Complete large logical-emptying acceptance: native/resource/payload
+  costs, external-byte reclamation, cumulative deleted-ID/PH limits, concurrent
+  remote insertions and permission/account changes during deletion delivery.
+  [MF04a](graphevo-2-logical-emptying.md) integrates through #123 after review and CI #311, using existing
+  deletion queues and tombstone retention, not a global cloud reset. The
+  [bounded iPad/XR result](results/logical-emptying-2026-11-01.md) retains exact
+  empty/repopulated inventories and share/ledger/control-graph continuity; physical
+  read-write guest/concurrent-writer/account-change and scale coverage stays open;
+  retain local and physical evidence separately; no workspace/publication gate closes here.
+- [ ] **B** Implement and validate the isolated working graph and explicit PH
+  range/seal contract. [MF04](graphevo-2-migration-workspace.md) is design-only:
+  preparation must preserve the original/backup, reject ordinary cloud activation,
+  bind history to the exact working instance and survive interrupted sealing.
+  Participant-origin workspace activation also requires permission and T08
+  revocation/purge integration before enabling that route. A change manifest
+  alone does not establish safe original-store publication.
 - [ ] **R** Wire complete backups into actual conversion/recovery paths and verify
   bytes/checksums and successful reopen, interrupted copies/restores and protected
   source preservation. SQLite/WAL/SHM copying alone is insufficient for files.

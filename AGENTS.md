@@ -1162,3 +1162,23 @@ MF03 integrates through #122 after corrective review and full CI #303 on
 `a2f029a`; subsequent integration/evidence updates are documentation-only. Keep
 original physical evidence (`9c6ee82`) distinct from corrective scheduler and
 generation-fence tests (`7dd8ecf`). Migration execution remains separate work.
+
+
+## V2 MF04a logical emptying
+
+Read [MF04a](docs/design/graphevo-2-logical-emptying.md) before graph emptying.
+GraphStore/GraphMutation.removeAll performs one scoped preflight and one normal
+transaction, preserving GraphID/catalog/membership and sync/transport metadata.
+Detach hidden membership and application-action inverses before deleting entities;
+the legacy facade otherwise deletes connected Actions. Preserve cancellation,
+permissions, identity/deletion evidence and per-graph isolation. Limits bound
+selected logical records, not complete native inventory or attachment memory.
+Use the existing PH/CKSyncEngine delete path; never destroy the zone/share, reset
+PH or discard a frozen batch as a shortcut. A late old-save success must leave a
+newer delete pending. Local success is not global cloud emptiness/convergence.
+The workspace executor remains separate design work. Review precedes CI and merge.
+
+MF04a integrates through #123 after review and full macOS/iOS CI #311 on
+`5ca2644`; review added two adversarial tests without changing shipping source
+`a19ae62`. The MF04 workspace/publication contract remains design-only; do not
+claim that GraphStore.removeAll by itself creates an isolated migration copy.

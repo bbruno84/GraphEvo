@@ -1727,3 +1727,24 @@ cannot affect a new generation. Session format 6 is deliberately incompatible wi
 older alpha session documents; S03 and application wire formats are unchanged.
 This is a migration foundation, not an executor, format registry or distributed
 lock. See [MF03](../design/graphevo-2-shared-ledger.md).
+
+### Logical graph emptying
+
+`GraphStore.removeAll(maximumRecords: Int = 10_000) async throws -> Int` removes
+all application primitives and owned attachments in one normal local transaction.
+`GraphMutation.removeAll(maximumRecords:) throws -> Int` joins its enclosing
+transaction, so a consumer can empty and repopulate atomically. Both return the
+number of logical records removed, including attachments; an empty writable graph
+returns zero. GraphID, hidden catalog/membership, conflict policy and sync metadata
+remain intact. Limits must be positive; `GraphRemovalError.invalidLimit` and
+`.recordLimitExceeded` refuse before destructive edits. The record limit is not
+a total native inventory, payload memory, SQL-I/O or remote-work bound.
+
+Normal cancellation/rollback, writer admission, read-only and participant
+permissions apply. Existing history-sync delete-wins retains deleted IDs and
+rejects their reuse; repopulation uses fresh IDs. Other local layouts keep their
+existing identity policy. Query observations refresh through normal invalidations.
+Cloud-backed graphs enqueue ordinary PH deletes for normal transport; zone, share
+and ledger remain. Local success does not certify delivery or an atomic/global
+cloud wipe, and does not delete records absent from the local replica. Exports and
+backups remain caller-owned. See [MF04a](../design/graphevo-2-logical-emptying.md).

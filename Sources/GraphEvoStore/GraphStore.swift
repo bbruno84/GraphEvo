@@ -39,6 +39,7 @@ public struct GraphV1AdoptionReport: Sendable {
 
 /// Privileged callbacks implemented by the current Graph facade adapter.
 package struct GraphStoreAdapter: Sendable {
+    package var removeAll: (@Sendable (NSManagedObjectContext, GraphID, Int) throws -> Int)?
     package var participantAccess: (@Sendable (NSManagedObjectContext, GraphID, GraphCloudParticipantAccess?) throws -> GraphCloudParticipantAccess?)?
     package var beginMutation: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package var finishMutation: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
