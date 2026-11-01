@@ -1,6 +1,7 @@
 # MF03 — bounded shared graph ledger
 
-Status: package-only candidate on `codex/v2-shared-ledger`, directly from #121
+Status: package-only candidate in [PR #122](https://github.com/bbruno84/GraphEvo/pull/122)
+on `codex/v2-shared-ledger`, directly from #121
 (`d17676d`) to `codex/graphevo-2`. This implements the graph-control metadata
 foundation, not a consumer migration executor or a distributed lock.
 

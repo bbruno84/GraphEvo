@@ -8,6 +8,7 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+[PR #122](https://github.com/bbruno84/GraphEvo/pull/122) on
 `codex/v2-shared-ledger` implements the package-only [MF03 bounded shared ledger](graphevo-2-shared-ledger.md)
 directly from #121 (`d17676d`) for a PR to `codex/graphevo-2`. It retains full
 current/previous operations, 32 compact events and bounded consumer JSON outside

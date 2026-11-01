@@ -51,6 +51,12 @@ The configured test container was `iCloud.com.valerioburiani.GraphCKDemo`.
 Fixture run: `65150C88-21F4-4C22-BF38-8A4DC7B451C2`. Writers remained alive until
 independent peer observation. No background/APNs delivery claim is made.
 
+Probe source SHA-256 for the first five stages:
+`f7454367398f58f011bf89f815d7b34be3e063d414f276e80853500a51ae2b17`.
+The audit-only extension added native inventory assertions without changing the
+shipping library; its source SHA-256 was
+`4dd755e42f8eda0bfebfb85258f289220ba98b3a2032104beeee457035ea5705`.
+
 The disposable signed host pinned the runtime above and injected its bridge only
 outside the checkout. Xcode's connector requested approval; CLI build/install/
 launch/file transfer completed the already-authorized protocol. No laboratory,
