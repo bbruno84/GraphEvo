@@ -1,7 +1,8 @@
 # MF05 — protected original-store publication
 
 Status: implementation on `codex/v2-migration-publication`, based on MF04c/#125.
-This package-only increment completes the local publication boundary, not the
+Local and seven-stage iPad/XR [results](results/migration-publication-2026-11-01.md)
+pass; final CI/integration are pending. This package-only increment completes the local publication boundary, not the
 consumer's migration policy, public executor or mandatory v1 conversion.
 
 ## Ordering and ownership

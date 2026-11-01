@@ -12,9 +12,9 @@ MF05 protected original-store publication is in progress on
 `codex/v2-migration-publication`, based directly on MF04c/#125. The
 [contract](graphevo-2-migration-publication.md) adds a verified original backup,
 bounded atomic final-state application and durable local commit/recovery evidence.
-Local macOS and selected iOS tests pass; physical publication, final review and
-the full CI checkpoint are pending. No integration or cloud acceptance is claimed
-before those results. Participant workspaces and mandatory v1 conversion remain
+Local macOS/selected iOS tests, seven iPad/XR stages and review pass; the
+[result](results/migration-publication-2026-11-01.md) separates their evidence.
+The full CI checkpoint and integration are pending. Participant workspaces and mandatory v1 conversion remain
 separate work.
 
 ## Latest integrated increment — MF04c workspace seal and recovery

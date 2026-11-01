@@ -4,8 +4,8 @@ Status: MF04c integrates through [PR #125](https://github.com/bbruno84/GraphEvo/
 directly from MF04b/#124 (`7c2b5a9`) after corrective review and full CI #320 on
 `75b95b1`.
 Preparation, bounded PH reduction/sealing, explicit restart recovery and
-ownership-checked close/discard are package-only. **Original-store publication,
-its backup/executor journal and participant workspaces remain separate work.**
+ownership-checked close/discard are package-only. Original-store publication and its backup/receipt are implemented separately in
+[MF05](graphevo-2-migration-publication.md); participant workspaces remain refused.
 The [MF04a logical-emptying API](graphevo-2-logical-emptying.md) remains available.
 S03, application cloud formats and shared-session format 6 are unchanged.
 
@@ -298,8 +298,8 @@ it neither recaptures a later cut nor reexecutes the consumer.
 The change set is an immutable, workspace-bound manifest of logical identity,
 kind and final operation, plus provenance and start/end range evidence. It is
 not a bag of native object IDs, cloud records or an unbounded snapshot of all
-attachment bodies. Later publication reads final records/files from the sealed
-workspace in explicitly bounded batches. Change counts do not certify a total
+attachment bodies. MF05 reads selected final records/files from the sealed
+workspace under an explicit allowance for one atomic local publication. Change counts do not certify a total
 memory, SQL-I/O or attachment-size bound.
 
 Use explicit transaction/native-change/logical-change limits, initially aligned
