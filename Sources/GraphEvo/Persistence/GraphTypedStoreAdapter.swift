@@ -27,7 +27,7 @@ package enum GraphTypedStoreAdapter {
     )
 
     private static func makeAdapter(database: Bool) -> GraphStoreAdapter {
-        GraphStoreAdapter(
+        var adapter = GraphStoreAdapter(
             initialize: { context, backup in
                 guard !database else { throw GraphStoreError.unsupportedLayout }
                 return try initialize(context, backupRoot: backup)
@@ -87,6 +87,12 @@ package enum GraphTypedStoreAdapter {
                 }
             }
         )
+        adapter.removeAll = { context, graphID, maximum in
+            try GraphValueDecodingDiagnostics.checking {
+                try Session(context, graphID, database: database).removeAll(maximumRecords: maximum)
+            }
+        }
+        return adapter
     }
 
     private static func catalog(_ context: NSManagedObjectContext) throws -> [GraphID] {
@@ -551,6 +557,55 @@ package enum GraphTypedStoreAdapter {
             try assign(node)
             GraphMutationMetadata.touch(context, node, id: patch.id)
             return updated
+        }
+
+        func removeAll(maximumRecords: Int) throws -> Int {
+            guard maximumRecords > 0 else { throw GraphRemovalError.invalidLimit }
+            try requireWriteAccess()
+            guard nodes.count <= maximumRecords else { throw GraphRemovalError.recordLimitExceeded }
+            let check = StoreNativeContext.cancellationCheck(in: context)
+            // One inventory/preflight for the entire graph, before any destructive edits.
+            let selected = nodes.sorted {
+                let lhs = $0.value is Entity ? 1 : 0, rhs = $1.value is Entity ? 1 : 0
+                return lhs == rhs ? $0.key.rawValue.uuidString < $1.key.rawValue.uuidString : lhs < rhs
+            }
+            for (id, node) in selected {
+                try check()
+                try validate(snapshot(node, id: id))
+                if isShared, let container = context.userInfo[StoreNativeContext.containerKey] as? NSPersistentCloudKitContainer,
+                   !container.canDeleteRecord(forManagedObjectWith: node.runtimeObjectID) {
+                    throw GraphStoreError.permissionDenied
+                }
+            }
+            let entities = selected.compactMap { $0.value as? Entity }
+            let selectedIDs = Set(selected.map { $0.value.runtimeObjectID })
+            for entity in entities {
+                guard entity.relationships.allSatisfy({ selectedIDs.contains($0.runtimeObjectID) }),
+                      entity.actions.allSatisfy({ selectedIDs.contains($0.runtimeObjectID) || membership?.sharesBackingObject(with: $0) == true }) else {
+                    throw GraphStoreError.unresolvedReference
+                }
+            }
+            if let membership {
+                let entityIDs = Set(entities.map(\.runtimeObjectID))
+                guard membership.objects.allSatisfy({ entityIDs.contains($0.runtimeObjectID) }) else {
+                    throw GraphStoreError.unresolvedReference
+                }
+            }
+            // ManagedEntity deletion also deletes connected actions. Detach the retained
+            // membership control first, and clear application-action inverses explicitly.
+            membership?.remove(objects: entities)
+            for (_, node) in selected {
+                if let action = node as? Action {
+                    action.remove(subjects: action.subjects); action.remove(objects: action.objects)
+                }
+            }
+            for (id, node) in selected {
+                try check()
+                GraphMutationMetadata.deleted(context, id: id)
+                node.delete()
+                nodes.removeValue(forKey: id)
+            }
+            return selected.count
         }
 
         func delete(_ id: GraphNodeID) throws {

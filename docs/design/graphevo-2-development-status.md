@@ -8,17 +8,17 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-The focused branch `codex/v2-migration-workspace`, in draft
-[PR #123](https://github.com/bbruno84/GraphEvo/pull/123), defines the
-[MF04 workspace contract and implementation plan](graphevo-2-migration-workspace.md),
-directly from integrated MF03/#122 (`5b22750`). This is documentation-only
-preparation for migration-roadmap step 4, not implemented APIs or a completed
-migration executor. It fixes protected-source coherent working copies, supported logical emptying,
-native opening isolation, fresh working-store PH boundaries and bounded sealing.
-The original backup is deferred until after validation and before publication. The plan deliberately keeps original-store
-publication/recovery as the following contract. Consumer migration eligibility
-and domain meaning remain consumer-owned. Independent-user restore activation,
-unmirrored local journals and mandatory v1 conversion remain open.
+The focused branch `codex/v2-migration-workspace`, in
+[PR #123](https://github.com/bbruno84/GraphEvo/pull/123), now implements the
+[MF04a logical-emptying candidate](graphevo-2-logical-emptying.md). The general
+GraphStore/GraphMutation API preserves graph controls and uses normal PH/delete
+transport; it is not a native CloudKit zone purge. The
+[MF04 workspace contract](graphevo-2-migration-workspace.md) remains design-only.
+No working-copy activation, seal/recovery or migration publication is claimed.
+The agreed executor flow keeps the original protected, validates the working copy,
+then creates/verifies the original backup before publication. Consumer migration
+eligibility/domain meaning remain consumer-owned. Source and physical evidence
+will be recorded before review; CI follows review/corrections, not implementation.
 
 ## Latest integrated increment — MF03 bounded shared ledger
 

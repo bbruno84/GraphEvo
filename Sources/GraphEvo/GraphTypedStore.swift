@@ -6,6 +6,7 @@ public typealias GraphStore = GraphEvoStore.GraphStore
 public typealias GraphReadScope = GraphEvoStore.GraphReadScope
 public typealias GraphMutation = GraphEvoStore.GraphMutation
 public typealias GraphStoreError = GraphEvoStore.GraphStoreError
+public typealias GraphRemovalError = GraphEvoStore.GraphRemovalError
 public typealias GraphV1AdoptionReport = GraphEvoStore.GraphV1AdoptionReport
 
 extension GraphStore {

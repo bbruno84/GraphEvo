@@ -2,7 +2,10 @@
 
 Status: design and implementation plan, based on integrated MF03/#122
 (`5b22750`). This contract precedes the implementation of migration-roadmap step 4.
-No API below is implemented by this document. A focused MF04 branch returns
+The workspace APIs below remain design-only. The
+[MF04a logical-emptying candidate](graphevo-2-logical-emptying.md) implements
+`GraphStore.removeAll` / `GraphMutation.removeAll` independently of workspace
+activation. A focused MF04 branch returns
 directly to `codex/graphevo-2`; no experiment/integration branch stack is needed.
 
 ## Purpose and boundary
@@ -144,12 +147,12 @@ avoid treating it as deletion of a baseline record. No ID reuse is authorized.
 
 ## Supported logical emptying
 
-Provide an explicit package-only `GraphMigrationWorkspace.removeAll(limits:)`
-operation for the editable working copy. With default explicit workspace limits,
-the intended consumer call is:
+Provide `GraphStore.removeAll(maximumRecords:)`, also available on GraphMutation
+inside an enclosing transaction. This operation applies to operational local/cloud
+graphs as well as a future workspace. The intended workspace call is:
 
 ```swift
-try await workspace.removeAll()
+try await workspace.graph.removeAll()
 // Repopulate workspace.graph with ordinary Graph transactions and fresh node IDs.
 ```
 
@@ -167,8 +170,8 @@ rolls back the entire emptying operation. After commit it reports the committed
 outcome. Refuse explicit work/identity/history limits without partial emptying or
 silently raising budgets. Emptying an already empty graph is a no-op.
 
-Serialize emptying against seal/close/discard and reject it on sealed or closed
-workspaces. It affects only the working copy; source holds remain in force and
+The workspace's runtime write fence serializes/refuses emptying against
+seal/close/discard and rejects it on sealed or closed workspaces. It affects only the working copy; source holds remain in force and
 no network transfer starts. Query observations follow normal committed changes.
 
 PH reduction retains deletions of baseline records and final inserts made after
@@ -188,7 +191,6 @@ Proposed package-only control surface:
 actor GraphMigrationWorkspace {
     nonisolated let id: UUID
     nonisolated let graph: GraphStore
-    func removeAll(limits: GraphMigrationWorkspaceLimits = .init()) async throws
     func seal(limits: GraphMigrationWorkspaceLimits) async throws -> GraphMigrationChangeSet
     func close() async throws
     func discard() async throws
