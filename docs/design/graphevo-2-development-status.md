@@ -24,6 +24,11 @@ coordinated cloud cutover. Public executor exposure, participant-origin workspac
 fresh shared bootstrap after publication and broader interruption/scale acceptance
 remain separate work. Consumers retain semantics and cross-device policy.
 
+Also planned: [complete local/cloud graph deletion](graphevo-2-delivery-plan.md#complete-graph-deletion--planned-lifecycle-work)
+as a separate lifecycle capability, not a prerequisite for migration. API and
+recovery/backup-retention semantics remain to design; no deletion is implemented
+or executed by this roadmap update.
+
 ## Latest integrated increment — MF05 original-store publication
 
 [MF05](graphevo-2-migration-publication.md) publishes sealed final primitives and
