@@ -8,6 +8,8 @@ private actor LifecycleWorkBus {
     let ids = [GraphID(), GraphID()]
     var calls: [GraphID: Int] = [:]
     var failure: (any Error)?
+    var generation = UUID()
+    func replaceGeneration() { generation = UUID() }
     func setFailure(_ error: (any Error)?) { failure = error }
     func step(_ id: GraphID) -> (any Error)? { calls[id, default: 0] += 1; return id == ids[0] ? failure : nil }
 }
@@ -66,6 +68,62 @@ private actor LifecycleStepGate {
         #expect(await bus.calls[ids[0]] == 2)
         await worker.shutdown()
     }
+    @Test func hintDuringSuccessfulTurnRunsAgainWithoutWaitingForPeriodicTimer() async throws {
+        let clock = AutomaticTestClock(), bus = LifecycleWorkBus(), gate = LifecycleStepGate(), id = GraphID()
+        let worker = GraphSharingLifecycleWorker(clock: clock.value, inventory: { [id] }, step: { _ in
+            _ = await bus.step(id)
+            await gate.enter()
+            return nil
+        })
+        await worker.setActive(true, revision: 1)
+        await gate.wait()
+        await worker.request([id])
+        await gate.release()
+        try await wait { let idle = await worker.diagnosticIdle; let count = await bus.calls[id]; return idle && count == 2 }
+        #expect(clock.now == 0)
+        #expect(await bus.calls[id] == 2)
+        #expect(await worker.retryDeadline(id) == 60)
+        await worker.shutdown()
+    }
+
+    @Test func replacementGenerationDoesNotInheritOldFailureOrBackoff() async throws {
+        let clock = AutomaticTestClock(), bus = LifecycleWorkBus(), gate = LifecycleStepGate()
+        let id = bus.ids[0]
+        let worker = GraphSharingLifecycleWorker(clock: clock.value, generation: { _ in await bus.generation }, inventory: { [id] }, step: { _ in
+            let failure = await bus.step(id)
+            await gate.enter()
+            return failure
+        })
+        await bus.setFailure(CKError(.quotaExceeded))
+        await worker.setActive(true, revision: 1)
+        await gate.wait()
+        await bus.replaceGeneration(); await bus.setFailure(nil)
+        await worker.request([id])
+        await gate.release()
+        try await wait { let idle = await worker.diagnosticIdle; let count = await bus.calls[id]; return idle && count == 2 }
+        #expect(await worker.retryDeadline(id) == 60)
+        // A later replacement also clears an already recorded permanent failure.
+        await bus.setFailure(CKError(.quotaExceeded)); await worker.request([id])
+        try await wait { await worker.retryDeadline(id) == .infinity }
+        await bus.replaceGeneration(); await bus.setFailure(nil); await worker.request([id])
+        try await wait { let idle = await worker.diagnosticIdle; let count = await bus.calls[id]; return idle && count == 4 }
+        #expect(clock.now == 0)
+        await worker.shutdown()
+    }
+
+    @Test func inactivityDuringGenerationLookupDoesNotAdmitAnotherTurn() async throws {
+        let clock = AutomaticTestClock(), bus = LifecycleWorkBus(), gate = LifecycleStepGate(), id = GraphID(), generation = UUID()
+        let worker = GraphSharingLifecycleWorker(clock: clock.value, generation: { _ in
+            await gate.enter(); return generation
+        }, inventory: { [id] }, step: { await bus.step($0) })
+        await worker.setActive(true, revision: 1)
+        await gate.wait()
+        await worker.setActive(false, revision: 2)
+        await gate.release()
+        await worker.shutdown()
+        #expect(await bus.calls.isEmpty)
+    }
+
     @Test func hintDuringInFlightFailureDoesNotBypassResultingBackoff() async throws {
         let clock = AutomaticTestClock(), bus = LifecycleWorkBus(), gate = LifecycleStepGate(), id = GraphID()
         await bus.setFailure(CKError(.networkUnavailable))

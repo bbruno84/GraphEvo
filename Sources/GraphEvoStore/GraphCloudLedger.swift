@@ -90,70 +90,75 @@ extension GraphCloudSession {
     func synchronizeLedger(_ id: GraphID, discardPending: Bool = false) async throws -> GraphLedgerStatus {
         let entry = try ensureLedger(id, writing: false), config = configuration
         let service = try ledgerService()
-        return try await withScopeControl(entry.binding.zone.scope, allowingDataLimit: true) { session in
-            try await session.verifyLedgerAccount()
-            for attempt in 0..<2 {
-                let remote = try await service.fetch(config, entry.binding)
-                var current = try session.checkedLedger(id, generation: entry.generation)
-                if discardPending {
-                    guard let remote else {
-                        if current.serverRevision != nil || current.pending { throw GraphLedgerError.unavailable }
-                        return current.status
-                    }
-                    current.value = remote.value; current.serverRevision = remote.value.revision
-                    current.pending = false; current.pendingBase = nil; current.inflight = nil; current.conflict = false
-                    current.conflicting = nil
-                    current.recoveryRequired = current.recoveryRequired && remote.value.current?.origin == session.ledgerClientID && remote.value.current?.state.terminal == false
-                    current.failure = nil
-                    try session.saveLedger(current, signal: false); return current.status
-                }
-                if !current.pending {
-                    if let remote {
-                        guard remote.value.revision != current.value.revision || remote.value == current.value else { throw GraphLedgerError.invalidData }
+        do {
+            return try await withScopeControl(entry.binding.zone.scope, allowingDataLimit: true) { session in
+                try await session.verifyLedgerAccount()
+                for attempt in 0..<2 {
+                    let remote = try await service.fetch(config, entry.binding)
+                    var current = try session.checkedLedger(id, generation: entry.generation)
+                    if discardPending {
+                        guard let remote else {
+                            if current.serverRevision != nil || current.pending { throw GraphLedgerError.unavailable }
+                            return current.status
+                        }
                         current.value = remote.value; current.serverRevision = remote.value.revision
-                        current.conflicting = nil; current.conflict = false; current.failure = nil
-                        if remote.value.current?.origin != session.ledgerClientID || remote.value.current?.state.terminal != false { current.recoveryRequired = false }
-                    } else if current.serverRevision != nil {
-                        current.conflict = true; current.failure = "The previously observed control record is unavailable."
+                        current.pending = false; current.pendingBase = nil; current.inflight = nil; current.conflict = false
+                        current.conflicting = nil
+                        current.recoveryRequired = current.recoveryRequired && remote.value.current?.origin == session.ledgerClientID && remote.value.current?.state.terminal == false
+                        current.failure = nil
+                        try session.saveLedger(current, signal: false); return current.status
                     }
-                    try session.saveLedger(current, signal: false); return current.status
-                }
-                if remote?.value.revision == current.value.revision {
-                    guard remote?.value == current.value else { throw GraphLedgerError.invalidData }
-                    current.pending = false; current.pendingBase = nil; current.inflight = nil; current.serverRevision = remote?.value.revision
-                    current.conflict = false; current.conflicting = nil; current.failure = nil
-                    try session.saveLedger(current, signal: false); return current.status
-                }
-                if let inflight = current.inflight, remote?.value.revision == inflight.revision {
-                    guard remote?.value == inflight else { throw GraphLedgerError.invalidData }
-                    current.serverRevision = inflight.revision; current.pendingBase = inflight.revision; current.inflight = nil
+                    if !current.pending {
+                        if let remote {
+                            guard remote.value.revision != current.value.revision || remote.value == current.value else { throw GraphLedgerError.invalidData }
+                            current.value = remote.value; current.serverRevision = remote.value.revision
+                            current.conflicting = nil; current.conflict = false; current.failure = nil
+                            if remote.value.current?.origin != session.ledgerClientID || remote.value.current?.state.terminal != false { current.recoveryRequired = false }
+                        } else if current.serverRevision != nil {
+                            current.conflict = true; current.failure = "The previously observed control record is unavailable."
+                        }
+                        try session.saveLedger(current, signal: false); return current.status
+                    }
+                    if remote?.value.revision == current.value.revision {
+                        guard remote?.value == current.value else { throw GraphLedgerError.invalidData }
+                        current.pending = false; current.pendingBase = nil; current.inflight = nil; current.serverRevision = remote?.value.revision
+                        current.conflict = false; current.conflicting = nil; current.failure = nil
+                        try session.saveLedger(current, signal: false); return current.status
+                    }
+                    if let inflight = current.inflight, remote?.value.revision == inflight.revision {
+                        guard remote?.value == inflight else { throw GraphLedgerError.invalidData }
+                        current.serverRevision = inflight.revision; current.pendingBase = inflight.revision; current.inflight = nil
+                        try session.saveLedger(current, signal: false)
+                    }
+                    guard !current.conflict, remote?.value.revision == current.pendingBase else {
+                        current.conflict = true; current.conflicting = remote?.value; current.failure = "Concurrent graph control changes require explicit resolution."
+                        try session.saveLedger(current, signal: false); return current.status
+                    }
+                    if current.recoveryRequired { return current.status }
+                    do { try session.requireLedgerUpload(id) }
+                    catch GraphLedgerError.readOnly {
+                        current.failure = "The graph permits incoming control updates but is read-only."
+                        try session.saveLedger(current, signal: false); return current.status
+                    }
+                    let sent = current.value
+                    current.inflight = sent
                     try session.saveLedger(current, signal: false)
+                    do {
+                        let saved = try await service.save(config, entry.binding, sent, remote)
+                        guard saved.value == sent else { throw GraphLedgerError.invalidData }
+                        var latest = try session.checkedLedger(id, generation: entry.generation)
+                        latest.serverRevision = sent.revision; latest.failure = nil; latest.inflight = nil
+                        if latest.value.revision == sent.revision {
+                            latest.pending = false; latest.pendingBase = nil
+                        } else { latest.pending = true; latest.pendingBase = sent.revision }
+                        try session.saveLedger(latest, signal: false); return latest.status
+                    } catch let error as CKError where error.code == .serverRecordChanged && attempt == 0 { continue }
                 }
-                guard !current.conflict, remote?.value.revision == current.pendingBase else {
-                    current.conflict = true; current.conflicting = remote?.value; current.failure = "Concurrent graph control changes require explicit resolution."
-                    try session.saveLedger(current, signal: false); return current.status
-                }
-                if current.recoveryRequired { return current.status }
-                do { try session.requireLedgerUpload(id) }
-                catch GraphLedgerError.readOnly {
-                    current.failure = "The graph permits incoming control updates but is read-only."
-                    try session.saveLedger(current, signal: false); return current.status
-                }
-                let sent = current.value
-                current.inflight = sent
-                try session.saveLedger(current, signal: false)
-                do {
-                    let saved = try await service.save(config, entry.binding, sent, remote)
-                    guard saved.value == sent else { throw GraphLedgerError.invalidData }
-                    var latest = try session.checkedLedger(id, generation: entry.generation)
-                    latest.serverRevision = sent.revision; latest.failure = nil; latest.inflight = nil
-                    if latest.value.revision == sent.revision {
-                        latest.pending = false; latest.pendingBase = nil
-                    } else { latest.pending = true; latest.pendingBase = sent.revision }
-                    try session.saveLedger(latest, signal: false); return latest.status
-                } catch let error as CKError where error.code == .serverRecordChanged && attempt == 0 { continue }
+                throw GraphLedgerError.conflict
             }
-            throw GraphLedgerError.conflict
+        } catch {
+            try? recordLedgerFailure(id, generation: entry.generation, error: error)
+            throw error
         }
     }
 }
@@ -174,13 +179,8 @@ extension GraphContextManager {
     @discardableResult package func reconcileGraphLedger(for id: GraphID, configuration: GraphCloudConfiguration,
         acceptCloud: Bool = false) async throws -> GraphLedgerStatus {
         let session = try await cloud(configuration), generation = ledgerSessionGeneration(configuration)
-        do {
-            let result = try await session.synchronizeLedger(id, discardPending: acceptCloud)
-            if ledgerSessionGeneration(configuration) == generation { await ledgerControlSuccess(id, configuration: configuration) }
-            return result
-        } catch {
-            try? await session.recordLedgerFailure(id, error: error)
-            throw error
-        }
+        let result = try await session.synchronizeLedger(id, discardPending: acceptCloud)
+        if ledgerSessionGeneration(configuration) == generation { await ledgerControlSuccess(id, configuration: configuration) }
+        return result
     }
 }

@@ -667,9 +667,12 @@ extension GraphCloudSession {
             !document.memberships.contains(where: { $0.binding.graphID == entry.binding.graphID && $0.terminal })
         }.map { $0.binding.graphID }
     }
-    func recordLedgerFailure(_ id: GraphID, error: any Error) throws {
-        guard let entry = document.ledgers.first(where: { $0.binding.graphID == id }) else { return }
-        var next = try checkedLedger(id, generation: entry.generation)
+    func ledgerGeneration(_ id: GraphID) throws -> UUID? {
+        _ = try ledgerBinding(id, writing: false)
+        return document.ledgers.first { $0.binding.graphID == id }?.generation
+    }
+    func recordLedgerFailure(_ id: GraphID, generation: UUID, error: any Error) throws {
+        var next = try checkedLedger(id, generation: generation)
         let native = error as NSError
         next.failure = native.domain == "CKErrorDomain" ? "Cloud control request failed (code \(native.code))." : "Graph control request failed: \(String(describing: error as? GraphLedgerError ?? .unavailable))."
         try saveLedger(next, signal: false)

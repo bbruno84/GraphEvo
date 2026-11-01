@@ -13,13 +13,17 @@ extension GraphContextManager {
             guard ledgerSessionGeneration(configuration) == sessionID, ledgerActivity[configuration.namespace]?.revision == revision else { return }
             let key = configuration.namespace + ":" + scope.rawValue
             if ledgerWorkers[key] == nil, !enabled.isEmpty {
-                ledgerWorkers[key] = GraphSharingLifecycleWorker(clock: clock, retryPermission: true, inventory: { [weak self] in
+                ledgerWorkers[key] = GraphSharingLifecycleWorker(clock: clock, retryPermission: true, generation: { [weak self] id in
+                    guard let self else { return nil }
+                    return try? await self.ledgerCloud(configuration, generation: sessionID).ledgerGeneration(id)
+                }, inventory: { [weak self] in
                     guard let self else { return [] }
                     return (try? await self.ledgerCloud(configuration, generation: sessionID).enabledLedgerIDs(in: scope)) ?? []
                 }, step: { [weak self] id in
                     guard let self else { return GraphCloudError.stopped }
                     do {
                         let session = try await self.ledgerCloud(configuration, generation: sessionID)
+                        let generation = try await session.ensureLedger(id, writing: false).generation
                         do {
                             if let member = try await session.membership(id), member.role == .participant, !member.terminal {
                                 try await self.refreshCloudMembership(id, configuration: configuration)
@@ -27,7 +31,7 @@ extension GraphContextManager {
                             _ = try await session.synchronizeLedger(id)
                             return nil
                         } catch {
-                            try? await session.recordLedgerFailure(id, error: error)
+                            try? await session.recordLedgerFailure(id, generation: generation, error: error)
                             return error
                         }
                     } catch { return error }

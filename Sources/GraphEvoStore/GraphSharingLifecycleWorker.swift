@@ -7,6 +7,8 @@ import GraphEvoRuntime
 actor GraphSharingLifecycleWorker {
     private let inventory: @Sendable () async -> [GraphID]
     private let step: @Sendable (GraphID) async -> (any Error)?
+    private let generation: (@Sendable (GraphID) async -> UUID?)?
+    private var generations: [GraphID: UUID] = [:]
     private let clock: GraphAutomaticClock
     private let retryPermission: Bool
     private var active = false
@@ -18,9 +20,10 @@ actor GraphSharingLifecycleWorker {
     private var blocked = Set<GraphID>()
     private var failures: [GraphID: Int] = [:]
     private var explicit: Set<GraphID> = []
-    init(clock: GraphAutomaticClock, retryPermission: Bool = false, inventory: @escaping @Sendable () async -> [GraphID],
+    init(clock: GraphAutomaticClock, retryPermission: Bool = false,
+         generation: (@Sendable (GraphID) async -> UUID?)? = nil, inventory: @escaping @Sendable () async -> [GraphID],
          step: @escaping @Sendable (GraphID) async -> (any Error)?) {
-        self.clock = clock; self.retryPermission = retryPermission; self.inventory = inventory; self.step = step
+        self.clock = clock; self.retryPermission = retryPermission; self.generation = generation; self.inventory = inventory; self.step = step
     }
     func setActive(_ value: Bool, revision: UInt64) {
         guard revision >= self.revision else { return }
@@ -49,14 +52,29 @@ actor GraphSharingLifecycleWorker {
     }
     private func run() async {
         let ids = await inventory(), now = clock.now()
-        deadlines = deadlines.filter { ids.contains($0.key) }
+        let retained = Set(ids)
+        for id in Set(deadlines.keys).union(blocked).union(waiting).union(explicit).union(generations.keys).subtracting(retained) {
+            forget(id)
+        }
         for id in ids.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
             guard active else { break }
+            let currentGeneration: UUID?
+            if let generation {
+                currentGeneration = await generation(id)
+                guard active else { break }
+                guard let currentGeneration else { forget(id); continue }
+                if generations[id] != currentGeneration {
+                    forget(id); generations[id] = currentGeneration; deadlines[id] = clock.now()
+                }
+            } else { currentGeneration = nil }
             let requested = explicit.remove(id) != nil
             guard (deadlines[id] ?? now) <= clock.now() || requested else { continue }
-            if let error = await step(id) {
-                applyFailure(id, error: error)
-            } else { recordSuccess(id) }
+            let error = await step(id)
+            if let generation, await generation(id) != currentGeneration {
+                // A replacement participation must not inherit an admitted old turn's result.
+                forget(id); deadlines[id] = clock.now(); continue
+            }
+            if let error { applyFailure(id, error: error) } else { recordSuccess(id) }
         }
         job = nil
         guard active else { return }
@@ -65,13 +83,19 @@ actor GraphSharingLifecycleWorker {
             do { try await clock.sleep(next); try Task.checkCancellation(); await self?.wake() } catch {}
         }
     }
+    private func forget(_ id: GraphID) {
+        deadlines.removeValue(forKey: id); generations.removeValue(forKey: id)
+        waiting.remove(id); blocked.remove(id); explicit.remove(id); failures.removeValue(forKey: id)
+    }
     var diagnosticIdle: Bool { job == nil }
     func retryDeadline(_ id: GraphID) -> Double? { deadlines[id] }
     func recordFailure(_ id: GraphID, error: any Error) {
         applyFailure(id, error: error); pump()
     }
     func recordSuccess(_ id: GraphID) {
-        waiting.remove(id); blocked.remove(id); failures[id] = 0; deadlines[id] = clock.now() + 60
+        waiting.remove(id); blocked.remove(id); failures[id] = 0
+        // A signal received during the admitted turn belongs to the next turn.
+        deadlines[id] = clock.now() + (explicit.contains(id) ? 0 : 60)
     }
     private func applyFailure(_ id: GraphID, error: any Error) {
         explicit.remove(id)

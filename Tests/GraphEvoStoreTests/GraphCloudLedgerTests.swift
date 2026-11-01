@@ -215,6 +215,28 @@ private actor LedgerServer {
         try await session.stop()
     }
 
+    @Test func lateFailureCannotAnnotateReplacementParticipationLedger() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let server = LedgerServer(), id = GraphID(), session = try await GraphCloudSession.open(configuration(root), adapter: server.adapter)
+        let route = binding(id, scope: .shared)
+        var membership = try await member(session, route: route, permission: .readWrite)
+        try await session.updateMembership(membership); try await session.bind(route)
+        _ = try await begin(session, id)
+        let old = try await session.ensureLedger(id, writing: false)
+        membership.phase = .purging; try await session.updateMembership(membership)
+        try await session.completePurge(id, generation: membership.generation)
+        var replacement = try await session.beginMembership(route, storeID: "replacement-store", shareIdentity: "replacement-share")
+        replacement.phase = .active; replacement.hadAccess = true; replacement.permission = .readWrite
+        try await session.updateMembership(replacement); try await session.bind(route)
+        let fresh = try await begin(session, id, phase: "new-participation")
+        await #expect(throws: GraphLedgerError.unavailable) {
+            try await session.recordLedgerFailure(id, generation: old.generation, error: CKError(.quotaExceeded))
+        }
+        #expect(try await session.ledgerStatus(id) == fresh)
+        #expect(try await session.ensureLedger(id, writing: false).generation != old.generation)
+        try await session.stop()
+    }
+
     @Test func accountChangeTerminatesLedgerObservationWithoutExposingCachedData() async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let server = LedgerServer(), id = GraphID(), session = try await GraphCloudSession.open(configuration(root), adapter: server.adapter)
@@ -338,6 +360,29 @@ private actor LedgerServer {
         try await graph.close()
         #expect(try await m.graphLedger(for: id, configuration: config).ledger?.current?.kind == "migration")
         try await m.stopCloudSession(config)
+    }
+
+    @Test func automaticEditDuringSendPublishesNewRevisionWithoutPeriodicDelay() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let server = LedgerServer(), clock = AutomaticTestClock(), gate = LedgerSaveGate()
+        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let id = GraphID(), graph = try await m.createGraph(id: id, at: root.appendingPathComponent("Graph.sqlite"))
+        let config = configuration(root.appendingPathComponent("Engine")); _ = try await m.startCloudSession(config, adapter: server.adapter)
+        try await m.bindCloudZone(binding(id).zone, to: id, configuration: config)
+        try await m.pauseCloudSynchronization(for: id)
+        let initial = try await m.updateGraphLedger(for: id, configuration: config, mutation: .begin(kind: "migration", phase: "3", information: Data("{}".utf8)))
+        await server.configure(gate: gate)
+        try await m.setAutomaticCloudSynchronizationActive(true, configuration: config, clock: clock.value)
+        await gate.wait()
+        let latest = try await m.updateGraphLedger(for: id, configuration: config,
+            mutation: .progress(operation: #require(initial.ledger?.current?.id), phase: "4"))
+        await gate.release()
+        try await wait { try await m.graphLedger(for: id, configuration: config).confirmedRevision == latest.ledger?.revision }
+        #expect(clock.now == 0)
+        #expect(await server.stored?.current?.phase == "4")
+        #expect(await server.saves == 2)
+        #expect(try await graph.collectSyncChanges() == 0)
+        try await graph.close(); try await m.stopCloudSession(config)
     }
 
     @Test func automaticControlContinuesDuringPauseAndRespectsInactivityAndBackoff() async throws {
