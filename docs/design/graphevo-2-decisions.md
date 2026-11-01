@@ -29,6 +29,8 @@ the [delivery plan](graphevo-2-delivery-plan.md) identifies when to settle them.
 | M18 | Use Persistent History as the committed-change source; adopt S03 with six identity-preservation flags | PH01 provides bounded evidence. Keep S02 shape and indexes, preserve deleted graph/node IDs, use schema.3 and fresh alpha stores; implement the processor/pending checkpoint separately, without a per-mutation change journal. See [S03](graphevo-2-history-schema.md) |
 | M19 | Represent logical Graph primitives in custom CloudKit records with an opaque typed-value payload | One zone per graph and one record per node; native Core Data rows remain local. Retain the original serialized-property direction after discussing remote queries; typed property columns/remote graph queries and attachments are deferred. See [CF01](graphevo-2-cloud-record-format.md) |
 
+| M20 | Keep application models independent of GraphEvo stored types; allow the complete conformance in a separate extension | Foundation UUIDs bind to the persistence scope's GraphID without ID regeneration or a lookup registry. Preserve graph-aware references and validate mapping in both directions; see [extension mapping](graphevo-2-extension-model-mapping.md). |
+
 M13 records the 2026-10-29 fresh-store decision.
 M14/M15 record the 2026-10-30 migration boundary and
 [selected native schema](graphevo-2-persistent-schema.md). The subsequent runtime

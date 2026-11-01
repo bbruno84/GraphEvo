@@ -17,7 +17,7 @@ private struct Person: GraphModel {
         name = try graphRecord.value(for: "name")
         nickname = try graphRecord.value(for: "nickname")
     }
-    func graphRecord() throws -> GraphRecord {
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord {
         try GraphRecord(id: id, type: Self.graphType,
                         properties: ["name": name.graphValue, "nickname": nickname.graphValue])
     }
@@ -29,7 +29,7 @@ private struct Link: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
 private struct Event: GraphModel {
@@ -38,7 +38,7 @@ private struct Event: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
 @Suite struct GraphModelTests {
@@ -167,7 +167,7 @@ private struct Event: GraphModel {
                 record = graphRecord
                 id = GraphNodeID(graphID: graphRecord.id.graphID)
             }
-            func graphRecord() throws -> GraphRecord { record }
+            func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
         }
         let record = try GraphRecord(id: .init(graphID: GraphID()), type: "record")
         #expect(throws: GraphModelError.self) { try record.decoded(as: IncorrectModel.self) }

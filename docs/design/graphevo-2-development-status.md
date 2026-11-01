@@ -10,7 +10,12 @@ integration into the main v2 branch or beta readiness.
 
 MF08 internal migration structure integrates through
 [PR #130](https://github.com/bbruno84/GraphEvo/pull/130), directly from #129.
-No next implementation branch is open. Next: supported opt-in bootstrap and
+The focused `codex/v2-extension-model-mapping` correction separates application
+UUIDs from graph references, supporting Foundation-only model files and separate
+mapping extensions. See [the contract](graphevo-2-extension-model-mapping.md).
+TP01 remains a retained experiment on `codex/experiment-typed-properties`, not an
+adopted native schema/planner. After the mapping correction, native-property
+schema/planner design can resume. Migration work remains supported opt-in bootstrap and
 production/historical source acceptance, then new-cloud activation of one
 authoritative converted graph. Old-cloud format conversion is outside this scope.
 

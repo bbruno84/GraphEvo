@@ -250,6 +250,11 @@ public actor GraphStore {
         try await read { try $0.fetch(id, as: type) }
     }
 
+    /// Resolves an application UUID in this store's graph.
+    public func fetch<Model: GraphModel>(_ id: UUID, as type: Model.Type = Model.self) async throws -> Model? {
+        try await read { try $0.fetch(id, as: type) }
+    }
+
     public func fetchAll<Model: GraphModel>(_ type: Model.Type) async throws -> [Model] {
         try await read { try $0.fetchAll(type) }
     }
@@ -261,6 +266,8 @@ public actor GraphStore {
     public func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) async throws -> Model {
         try await transaction { try $0.patch(patch, as: type) }
     }
+
+    public func delete(_ id: UUID) async throws { try await transaction { try $0.delete(id) } }
 
     public func delete(_ id: GraphNodeID) async throws { try await transaction { try $0.delete(id) } }
 

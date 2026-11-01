@@ -11,7 +11,7 @@ private struct CatalogItem: GraphModel {
     init(graphRecord: GraphRecord) throws {
         id = graphRecord.id; label = try graphRecord.value(for: "label")
     }
-    func graphRecord() throws -> GraphRecord {
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord {
         try GraphRecord(id: id, type: Self.graphType, properties: ["label": label.graphValue])
     }
 }

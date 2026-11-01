@@ -9,7 +9,7 @@ private struct Item: GraphModel {
     let record: GraphRecord
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 private struct Fixture: Codable { let marker: String; let graph: GraphID; let ids: [GraphNodeID] }
 private enum Failure: Error { case arguments, mismatch }

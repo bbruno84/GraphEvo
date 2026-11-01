@@ -31,6 +31,11 @@ public class GraphReadScope {
         try record(for: id)?.decoded(as: type)
     }
 
+    /// Resolves an application UUID within this graph; it does not search other graphs.
+    public func fetch<Model: GraphModel>(_ id: UUID, as type: Model.Type = Model.self) throws -> Model? {
+        try fetch(GraphNodeID(graphID: graphID, rawValue: id), as: type)
+    }
+
     public func fetchAll<Model: GraphModel>(_ type: Model.Type) throws -> [Model] {
         try withContext { context, adapter in
             try adapter.fetchAll(context, graphID, Model.graphType, Model.graphKind).map { try $0.decoded(as: type) }
@@ -41,7 +46,8 @@ public class GraphReadScope {
 /// Explicit edits run on the native transaction queue and commit only when the body succeeds.
 public final class GraphMutation: GraphReadScope {
     @discardableResult public func insert<Model: GraphModel>(_ model: Model) throws -> GraphNodeID {
-        try insert(GraphRecord(model))
+        guard try model.graphNodeID(in: graphID).graphID == graphID else { throw GraphStoreError.foreignGraph }
+        return try insert(GraphRecord(model, in: graphID))
     }
 
     @discardableResult public func insert(_ record: GraphRecord) throws -> GraphNodeID {
@@ -60,6 +66,10 @@ public final class GraphMutation: GraphReadScope {
         let model = try patch.applying(to: current).decoded(as: type)
         _ = try self.patch(patch)
         return model
+    }
+
+    public func delete(_ id: UUID) throws {
+        try delete(GraphNodeID(graphID: graphID, rawValue: id))
     }
 
     public func delete(_ id: GraphNodeID) throws {

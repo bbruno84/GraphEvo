@@ -8,7 +8,7 @@ private struct Item: GraphModel {
     let value: Int64
     init(id: GraphNodeID, value: Int64) { self.id = id; self.value = value }
     init(graphRecord: GraphRecord) throws { id = graphRecord.id; value = try graphRecord.value(for: "value") }
-    func graphRecord() throws -> GraphRecord { try GraphRecord(id: id, type: Self.graphType, properties: ["value": .integer(value)]) }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { try GraphRecord(id: id, type: Self.graphType, properties: ["value": .integer(value)]) }
 }
 
 @main private struct ProcessConsumer {

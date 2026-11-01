@@ -27,7 +27,7 @@ private struct FailableDecodedItem: GraphModel {
         if graphRecord.properties["decode"] == .string("fail") { throw ObservationTestFailure() }
         record = graphRecord
     }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
 private struct IndependentlyDecodedItem: GraphModel {
@@ -37,7 +37,7 @@ private struct IndependentlyDecodedItem: GraphModel {
     let construction = UUID()
     var id: GraphNodeID { record.id }
     init(graphRecord: GraphRecord) throws { record = graphRecord }
-    func graphRecord() throws -> GraphRecord { record }
+    func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
 @Suite(.timeLimit(.minutes(1))) struct GraphSharedObservationLabTests {

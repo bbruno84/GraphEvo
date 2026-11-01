@@ -383,7 +383,8 @@ extension GraphStore {
     }
 
     @discardableResult public func insertShared<Model: GraphModel>(_ model: Model) async throws -> GraphNodeID {
-        let ids = try await insertShared([GraphRecord(model)])
+        guard try model.graphNodeID(in: id).graphID == id else { throw GraphStoreError.foreignGraph }
+        let ids = try await insertShared([GraphRecord(model, in: id)])
         guard let id = ids.first else { throw GraphStoreError.corruptIdentity }
         return id
     }

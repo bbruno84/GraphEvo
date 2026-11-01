@@ -868,10 +868,12 @@ available for v1 stores. See the
   references must have the same graph ID.
 - `GraphRecord.value<Value: GraphPropertyValue>(for:as:) throws -> Value`:
   defaults `as` to Value.self; missing keys and failed typed decoding differ.
-- `GraphModel: Sendable`: read-only `id: GraphNodeID`; static `graphType: String`
-  and `graphKind: GraphNodeKind`; `init(graphRecord: GraphRecord) throws` and
-  `graphRecord() throws -> GraphRecord`.
-- `GraphRecord.init<Model: GraphModel>(_ model: Model) throws` and
+- `GraphModel: Identifiable, Sendable where ID: Sendable`: application identity
+  (`UUID` and `GraphNodeID` have default bindings); static `graphType: String`
+  and `graphKind: GraphNodeKind`; `init(graphRecord: GraphRecord) throws`,
+  `graphNodeID(in: GraphID) throws -> GraphNodeID` and
+  `graphRecord(in: GraphID) throws -> GraphRecord`.
+- `GraphRecord.init<Model: GraphModel>(_ model: Model, in graphID: GraphID) throws` and
   `decoded<Model: GraphModel>(as: Model.Type = Model.self) throws -> Model`:
   checked mapping validates type, kind and identity. Application decoding and
   semantic validation belong to the consumer; their errors propagate unchanged.
@@ -926,10 +928,12 @@ func transaction<Value: Sendable>(
 func fetch<Model: GraphModel>(
     _ id: GraphNodeID, as type: Model.Type = Model.self
 ) async throws -> Model?
+func fetch<Model: GraphModel>(_ id: UUID, as type: Model.Type = Model.self) async throws -> Model?
 func fetchAll<Model: GraphModel>(_ type: Model.Type) async throws -> [Model]
 @discardableResult func insert<Model: GraphModel>(_ model: Model) async throws -> GraphNodeID
 func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) async throws -> Model
 func delete(_ id: GraphNodeID) async throws
+func delete(_ id: UUID) async throws
 ```
 
 `GraphReadScope` is a context-confined class without Sendable conformance. Its
@@ -945,6 +949,7 @@ and `fetchAll(_:)` counterparts of the actor methods. It expires after the body.
 func patch(_ patch: GraphRecordPatch) throws -> GraphRecord
 func patch<Model: GraphModel>(_ patch: GraphRecordPatch, as type: Model.Type) throws -> Model
 func delete(_ id: GraphNodeID) throws
+func delete(_ id: UUID) throws
 ```
 
 Bodies do not suspend. Insert entities before referencing them. A failed body
@@ -1827,3 +1832,21 @@ serializing paths. `GraphStoreMigrationResult<Receipt>` distinguishes native
 commit from pending cleanup. V1 error/limit/result names remain package aliases.
 This is library infrastructure, not consumer registration or automatic public
 migration. No public signature changes. See [MF08](../design/graphevo-2-store-migrations.md).
+
+
+### Extension-only application model mapping
+
+`GraphModel: Identifiable, Sendable where ID: Sendable` requires logical type/kind,
+`init(graphRecord:)`, `graphNodeID(in:)` and `graphRecord(in:)`. UUID identities map
+to the supplied GraphID by default. Thus the domain file can import only Foundation
+and the entire GraphEvo conformance can live in another file. Serialization uses
+`GraphRecord(model, in: graphID)`; decoding validates the complete bound identity.
+Store/scope typed inserts supply their own GraphID. UUID `fetch(_:as:)` and
+`delete(_:)` overloads resolve only within that graph; scoped references/patches
+and endpoints retain GraphNodeID checks.
+
+Existing `ID == GraphNodeID` models keep their original graph mapping and the
+context-free `GraphRecord(model)` / `graphRecord()` conveniences; conformers update
+the serializer requirement to `graphRecord(in:)`. No stored identity, native model
+or wire format changes. See [extension model mapping](../design/graphevo-2-extension-model-mapping.md)
+for the complete two-file example and Sendable constraints.
