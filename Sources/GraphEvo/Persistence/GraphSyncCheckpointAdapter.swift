@@ -180,7 +180,9 @@ enum GraphSyncCheckpointAdapter {
         throw GraphSyncError.unresolvedChange
     }
 
-    static func reconcile(_ context: NSManagedObjectContext, value: inout Loaded, limits: GraphSyncLimits) throws {
+    @discardableResult
+    static func reconcile(_ context: NSManagedObjectContext, value: inout Loaded, limits: GraphSyncLimits,
+                          workspace: Bool = false, excludingAuthor: String? = nil, requiredAuthor: String? = nil) throws -> Set<GraphNodeID> {
         let check = StoreNativeContext.cancellationCheck(in: context)
         // Tokens remain context-confined; only their secure Data representation is persisted/transferred.
         let token: NSPersistentHistoryToken?
@@ -191,7 +193,11 @@ enum GraphSyncCheckpointAdapter {
         request.resultType = .transactionsAndChanges
         guard let fetch = NSPersistentHistoryTransaction.fetchRequest else { throw GraphSyncError.historyUnavailable }
         // Excluding bookkeeping at fetch avoids a checkpoint-write -> history -> checkpoint-write loop.
-        fetch.predicate = NSPredicate(format: "author == nil OR author != %@", metadataAuthor)
+        if !workspace { fetch.predicate = NSPredicate(format: "author == nil OR author != %@", metadataAuthor) }
+        else {
+            fetch.fetchLimit = limits.maximumTransactions + 1
+            if let excludingAuthor { fetch.predicate = NSPredicate(format: "author == nil OR author != %@", excludingAuthor) }
+        }
         request.fetchRequest = fetch
         request.affectedStores = context.persistentStoreCoordinator?.persistentStores
         let transactions: [NSPersistentHistoryTransaction]
@@ -205,7 +211,9 @@ enum GraphSyncCheckpointAdapter {
         var count = 0
         for transaction in transactions {
             try check()
-            guard transaction.author == localAuthor || transaction.author == importAuthor,
+            let accepted = requiredAuthor.map { transaction.author == $0 }
+                ?? (transaction.author == localAuthor || (!workspace && transaction.author == importAuthor))
+            guard accepted,
                   transaction.transactionNumber > value.state.transaction,
                   let changes = transaction.changes else { throw GraphSyncError.unknownAuthor }
             guard changes.count <= limits.maximumChanges - count else { throw GraphSyncError.historyLimit }
@@ -240,6 +248,15 @@ enum GraphSyncCheckpointAdapter {
                 guard let row = try? context.existingObject(with: change.changedObjectID) else { throw GraphSyncError.unresolvedChange }
                 if let id = try identity(row, graphID: value.state.graphID) { ids[change.changedObjectID] = id }
                 else { controls.insert(change.changedObjectID) }
+            }
+        }
+        if workspace, Set(ids.values).count != ids.count { throw GraphSyncError.unresolvedChange }
+        var inserted = Set<GraphNodeID>()
+        if workspace {
+            for transaction in transactions {
+                for change in transaction.changes ?? [] where change.changeType == .insert {
+                    if let id = ids[change.changedObjectID] { inserted.insert(id) }
+                }
             }
         }
         var ownerGroups: [OwnerGroup: Set<GraphNodeID>] = [:]
@@ -300,5 +317,6 @@ enum GraphSyncCheckpointAdapter {
             value.state.token = try NSKeyedArchiver.archivedData(withRootObject: transaction.token, requiringSecureCoding: true)
         }
         value.state.pending = pending.values.sorted(by: ordered)
+        return inserted
     }
 }

@@ -1766,5 +1766,21 @@ then removes verified owned files; unknown/replaced resources are refused.
 Normal transactions, queries, observations, attachments and `removeAll()` operate
 only on the working copy. Its fresh PH baseline follows setup, excluding original
 pending work and pre-copy history. No backup or cloud publication happens here.
-Sealing, PH change sets, restart activation and protected publication remain
-unimplemented. See [MF04b and the remaining contract](../design/graphevo-2-migration-workspace.md).
+`seal(limits: GraphMigrationWorkspaceLimits = .init()) async throws -> GraphMigrationChangeSet`
+freezes writes and commits a validated, bounded logical ID/kind/save-or-delete
+manifest in reserved native metadata. Reads continue; repeated seal returns the
+same value. Before-save cancellation rolls back; after-save cancellation returns
+the committed seal. No file bodies are included. Limits default to 4096 / 100,000 /
+10,000 transactions/native changes/final logical changes and 4 MiB encoded bytes.
+
+`GraphContextManager.openMigrationWorkspace(for:at:limits:) async throws -> GraphMigrationWorkspace`
+reacquires original holds and validates descriptor format 2, exact store/file
+identities, source freshness, retained PH and complete structure/files. It restores
+editable or sealed state without replay. Current URLs permit same-volume moves;
+replaced/copied files and incompatible format-1 alpha workspaces are refused.
+Source bookkeeping is allowed only with no reconstructed application effects.
+Activations rotate cleanup authority; stale controls cannot delete a reopened
+copy. Detached cleanup retains native claims through deletion and on failure.
+
+Original-store publication and its protected backup/executor recovery remain
+unimplemented. Participant workspaces stay refused. See [MF04](../design/graphevo-2-migration-workspace.md).

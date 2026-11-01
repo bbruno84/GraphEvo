@@ -8,13 +8,15 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF04b completes preparation through [PR #124](https://github.com/bbruno84/GraphEvo/pull/124).
-No next implementation branch is open. Next: bounded PH reduction/sealing and
-explicit restart/source-freshness recovery under the
-[MF04 contract](graphevo-2-migration-workspace.md), followed by protected
-original-store publication. Participant workspaces remain gated on T08 lifecycle
-integration. Create/verify the original backup after final working-copy validation
-and before publication. Mandatory v1 conversion remains separate acceptance work.
+MF04c is in progress on `codex/v2-workspace-seal-recovery`, directly from
+integrated MF04b/#124 (`7c2b5a9`). This groups bounded PH reconstruction, native
+sealing, explicit restart/source-freshness recovery and stale-control/cleanup
+ownership into one functional increment and one final review/CI checkpoint.
+See the [implemented MF04 contract](graphevo-2-migration-workspace.md).
+Original-store publication, pre-publication backup/executor recovery and mandatory
+v1 conversion remain separate. Participant workspace activation stays gated on
+T08 lifecycle integration. S03 and cloud/session formats are unchanged; new
+workspace descriptor format 2 refuses previous alpha documents unchanged.
 
 ## Latest integrated increment — MF04b isolated working-copy preparation
 

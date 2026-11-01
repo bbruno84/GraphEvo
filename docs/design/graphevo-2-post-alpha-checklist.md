@@ -396,10 +396,13 @@ paired-store evidence below retains its original backend scope.
   range/seal contract. [MF04b preparation](graphevo-2-migration-workspace.md) integrates through #124
   after review and full CI #317. It preserves the protected original
   without creating a premature backup and refuses ordinary cloud activation.
-  Complete bounded sealing/reduction, restart/source-freshness recovery and
-  fault/scale acceptance. The [local preparation result](results/migration-workspace-preparation-2026-11-01.md)
+  MF04c implements bounded sealing/reduction, restart/source-freshness recovery
+  and activation-bound cleanup on its focused branch, pending review/integration.
+  Complete native fault/power-loss, external-process and production-scale acceptance. The [local preparation result](results/migration-workspace-preparation-2026-11-01.md)
   keeps broad/final focused checks separate. Bind history to the exact working
-  instance and survive interrupted sealing.
+  instance and survive interrupted sealing. Measure full validation/copy costs
+  and reserved native seal metadata (default 4 MiB, hard maximum 8 MiB); physical
+  file-identity binding deliberately refuses copied/cross-volume workspace adoption.
   Participant-origin workspace activation also requires permission and T08
   revocation/purge integration before enabling that route. A change manifest
   alone does not establish safe original-store publication.

@@ -5,6 +5,7 @@ import GraphEvoRuntime
 
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
+    package let workspace: GraphMigrationWorkspaceAdapter?
     package let prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package let initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)?
     package let validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
@@ -14,10 +15,11 @@ package struct GraphCoordinatorAdapter: Sendable {
 
     package init(graph: GraphStoreAdapter, sync: GraphSyncAdapter? = nil,
                  initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)? = nil,
+                 workspace: GraphMigrationWorkspaceAdapter? = nil,
                  prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
-        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace
+        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace; self.workspace = workspace
     }
 }
 
@@ -27,9 +29,10 @@ package actor GraphCoordinator {
     private let handle: StoreHandle
     private let adapter: GraphStoreAdapter
     private let syncSession: GraphSyncSession?
+    private let workspace: GraphMigrationWorkspaceAdapter?
 
-    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?) {
-        self.id = id; self.handle = handle; self.adapter = adapter
+    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil) {
+        self.id = id; self.handle = handle; self.adapter = adapter; self.workspace = workspace
         self.syncSession = sync.map { GraphSyncSession(graphID: id, handle: handle, adapter: $0) }
     }
 
@@ -41,7 +44,7 @@ package actor GraphCoordinator {
         if creating && exists { throw GraphStoreError.duplicateIdentity }
         if !creating && !exists { throw GraphStoreError.missingStore }
         let handle = try await registry.open(configuration, schema: schema)
-        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync)
+        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace)
         do {
             if creating {
                 try await handle.transaction {
@@ -70,7 +73,12 @@ package actor GraphCoordinator {
                                 schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
         let handle = try await registry.open(configuration, schema: schema)
         try await handle.setDataAvailable(false, terminal: true)
-        return GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync)
+        return GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace)
+    }
+    func validateMigrationSource(_ boundary: GraphMigrationBoundary) async throws {
+        guard let workspace else { throw GraphMigrationWorkspaceError.unavailable }
+        let id = id
+        try await handle.controlRead { try workspace.validateSource($0, id, boundary) }
     }
     func migrationBoundary() async throws -> GraphMigrationBoundary {
         try await handle.controlRead { try GraphMigrationBoundary.capture($0) }

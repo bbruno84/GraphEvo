@@ -5,6 +5,13 @@ import GraphEvoRuntime
 
 package enum GraphMigrationWorkspaceError: Error, Equatable {
     case unavailable
+    case closed
+    case sealed
+    case invalidLimit
+    case historyLimit
+    case changeLimit
+    case encodedLimit
+    case staleSource
     case invalidDestination
     case invalidWorkspace
     case historyUnavailable
@@ -24,7 +31,10 @@ package struct GraphMigrationBoundary: Codable, Sendable, Equatable {
     package let transaction: Int64?
     package let token: Data
 
-    static func capture(_ context: NSManagedObjectContext, after prior: Self? = nil) throws -> Self {
+    package init(storeID: String, transaction: Int64?, token: Data) {
+        self.storeID = storeID; self.transaction = transaction; self.token = token
+    }
+    package static func capture(_ context: NSManagedObjectContext, after prior: Self? = nil) throws -> Self {
         guard let coordinator = context.persistentStoreCoordinator,
               coordinator.persistentStores.count == 1, let store = coordinator.persistentStores.first,
               let storeID = coordinator.metadata(for: store)[NSStoreUUIDKey] as? String,
@@ -68,6 +78,8 @@ package struct GraphMigrationWorkspaceDescriptor: Codable, Sendable, Equatable {
     package let storePath: String
     package let source: GraphMigrationBoundary
     package let baseline: GraphMigrationBoundary
+    package let sourceFile: WorkspaceFileIdentity
+    package let workingFile: WorkspaceFileIdentity
 }
 
 /// An isolated editable graph. Sealing, restart activation and publication are subsequent increments.
@@ -77,6 +89,14 @@ package actor GraphMigrationWorkspace {
     package nonisolated let descriptor: GraphMigrationWorkspaceDescriptor
     package nonisolated let directory: URL
     private let handle: StoreHandle
+    private let registry: StoreRegistry
+    private let schema: StoreSchema
+    private let activationID: UUID
+    private var cleanupHandle: StoreHandle?
+    private let workspaceAdapter: GraphMigrationWorkspaceAdapter?
+    private var sealed: GraphMigrationChangeSet?
+    private var sealHold: StoreReservation?
+    private var sealing: Task<GraphMigrationChangeSet, any Error>?
     private let sourceHold: StoreReservation
     private let storeOwnership: WorkspaceFileIdentity
     private let ownership: WorkspaceDirectoryIdentity
@@ -84,18 +104,59 @@ package actor GraphMigrationWorkspace {
     private var discarding: Task<Void, any Error>?
 
     init(graph: GraphStore, handle: StoreHandle, descriptor: GraphMigrationWorkspaceDescriptor,
-         directory: URL, sourceHold: StoreReservation, ownership: WorkspaceDirectoryIdentity, storeOwnership: WorkspaceFileIdentity) {
+         directory: URL, sourceHold: StoreReservation, ownership: WorkspaceDirectoryIdentity, storeOwnership: WorkspaceFileIdentity,
+         adapter: GraphMigrationWorkspaceAdapter?, registry: StoreRegistry, schema: StoreSchema, activationID: UUID, sealed: GraphMigrationChangeSet? = nil, sealHold: StoreReservation? = nil) {
         self.id = descriptor.id; self.graph = graph; self.handle = handle
         self.descriptor = descriptor; self.directory = directory; self.sourceHold = sourceHold
         self.ownership = ownership; self.storeOwnership = storeOwnership
+        self.registry = registry; self.schema = schema; self.activationID = activationID
+        self.workspaceAdapter = adapter; self.sealed = sealed; self.sealHold = sealHold
+    }
+
+    /// Freeze one coherent PH cut and commit its authoritative seal in the same native transaction.
+    package func seal(limits: GraphMigrationWorkspaceLimits = .init()) async throws -> GraphMigrationChangeSet {
+        guard closing == nil, discarding == nil else { throw GraphMigrationWorkspaceError.closed }
+        if let sealed { return sealed }
+        if let sealing { return try await sealing.value }
+        try limits.validate()
+        guard let workspaceAdapter else { throw GraphMigrationWorkspaceError.unavailable }
+        let handle = handle, descriptor = descriptor
+        let task = Task<GraphMigrationChangeSet, any Error> {
+            let writes = try await handle.suspendWrites()
+            var maintenance: StoreReservation?
+            do {
+                maintenance = try await handle.reserveMaintenance()
+                let value = try await handle.workspaceTransaction(reservation: maintenance!) {
+                    try workspaceAdapter.seal($0, descriptor, limits)
+                }
+                // A committed seal is success; caller cancellation cannot reopen the working graph.
+                self.didSeal(value, hold: writes)
+                await maintenance?.release()
+                return value
+            } catch {
+                await maintenance?.release(); await writes.release()
+                throw error
+            }
+        }
+        sealing = task
+        // Forward cancellation only to this preparation attempt; never replay a consumer body.
+        do {
+            let result = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            sealing = nil; return result
+        } catch { sealing = nil; throw error }
+    }
+    private func didSeal(_ result: GraphMigrationChangeSet, hold: StoreReservation) {
+        sealed = result; sealHold = hold
     }
 
     /// End all working access and release only this migration's original-store holds; retain files.
     package func close() async throws {
         if let closing { return try await closing.value }
-        let graph = graph, handle = handle, sourceHold = sourceHold
+        let graph = graph, handle = handle, sourceHold = sourceHold, sealing = sealing
         let task = Task {
+            _ = try? await sealing?.value
             try await handle.setDataAvailable(false, terminal: true)
+            await self.releaseSealHold()
             try await graph.close()
             try await handle.close()
             await sourceHold.release()
@@ -105,25 +166,42 @@ package actor GraphMigrationWorkspace {
         catch { closing = nil; throw error }
     }
 
+    private func releaseSealHold() async { await sealHold?.release(); sealHold = nil }
+
     /// Destruction is explicit and follows successful native detachment and ownership validation.
     package func discard() async throws {
         if let discarding { return try await discarding.value }
-        let directory = directory, descriptor = descriptor, ownership = ownership, storeOwnership = storeOwnership
         let task = Task {
             try await self.close()
-            try WorkspaceFiles.remove(directory, descriptor: descriptor, ownership: ownership, storeOwnership: storeOwnership)
+            try await self.removeOwnedFiles()
         }
         discarding = task
         do { try await task.value }
         catch { discarding = nil; throw error }
     }
 
+    private func removeOwnedFiles() async throws {
+        let directory = directory, descriptor = descriptor, ownership = ownership, storeOwnership = storeOwnership, activationID = activationID
+        guard try WorkspaceDirectoryIdentity(directory) == ownership,
+              try WorkspaceFileIdentity(directory.appendingPathComponent(descriptor.storePath)) == storeOwnership,
+              try WorkspaceFiles.activation(directory) == activationID else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+        if cleanupHandle == nil {
+            cleanupHandle = try await registry.open(.init(location: .sqlite(directory.appendingPathComponent(descriptor.storePath)),
+                exclusiveGraphID: descriptor.graphID.rawValue, workspaceID: id, workspaceSessionID: UUID()), schema: schema)
+        }
+        try await cleanupHandle!.discardWorkspace {
+            guard try WorkspaceFiles.activation(directory) == activationID else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+            try WorkspaceFiles.remove(directory, descriptor: descriptor, ownership: ownership, storeOwnership: storeOwnership)
+        }
+    }
+
     deinit {
         guard closing == nil else { return }
-        let graph = graph, handle = handle, hold = sourceHold
+        let graph = graph, handle = handle, hold = sourceHold, sealHold = sealHold
         Task {
             do {
                 try await handle.setDataAvailable(false, terminal: true)
+                await sealHold?.release()
                 try await graph.close(); try await handle.close()
                 await hold.release()
             } catch { /* Retain native registry claims and working files on failed detachment. */ }
@@ -132,6 +210,67 @@ package actor GraphMigrationWorkspace {
 }
 
 extension GraphContextManager {
+    /// Reacquire source holds and prove provenance/history before any editable working access.
+    package func openMigrationWorkspace(for id: GraphID, at directory: URL,
+                                       limits: GraphMigrationWorkspaceLimits = .init()) async throws -> GraphMigrationWorkspace {
+        try limits.validate()
+        guard let workspaceAdapter = adapter.workspace, let location = locations[id] else { throw GraphMigrationWorkspaceError.unavailable }
+        let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
+        let descriptor = try WorkspaceFiles.read(directory)
+        guard descriptor.graphID == id, descriptor.schema == schema.identifier else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+        let retained = try await openGraph(id: id, at: location.url)
+        var cloud: StoreReservation?, writes: StoreReservation?, maintenance: StoreReservation?, sealedWrites: StoreReservation?
+        var working: StoreHandle?
+        do {
+            guard let entry = entries[id] else { throw GraphStoreError.closed }
+            let owner = try await entry.opening.value
+            cloud = try await reserveCloudPause(for: id)
+            writes = try await owner.suspendLocalWrites()
+            guard try await owner.participantAccess() == nil else { throw GraphMigrationWorkspaceError.participantUnsupported }
+            guard try WorkspaceFileIdentity(location.url) == descriptor.sourceFile else { throw GraphMigrationWorkspaceError.staleSource }
+            try await owner.validateMigrationSource(descriptor.source)
+            let url = directory.appendingPathComponent(descriptor.storePath)
+            guard try WorkspaceFileIdentity(url) == descriptor.workingFile else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+            let sessionID = UUID()
+            let handle = try await registry.open(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue,
+                workspaceID: descriptor.id, workspaceSessionID: sessionID), schema: schema)
+            working = handle
+            maintenance = try await handle.reserveMaintenance()
+            let adapter = adapter
+            let sealed = try await handle.workspaceTransaction(reservation: maintenance!) { context in
+                try adapter.initialize(context, id, false)
+                let result = try workspaceAdapter.inspect(context, descriptor, limits)
+                guard !context.hasChanges else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+                return result
+            }
+            if sealed != nil { sealedWrites = try await handle.suspendWrites() }
+            let ownership = try WorkspaceDirectoryIdentity(directory), storeOwnership = try WorkspaceFileIdentity(url)
+            guard storeOwnership == descriptor.workingFile else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+            _ = try WorkspaceFiles.activation(directory)
+            try Data(sessionID.uuidString.utf8).write(to: directory.appendingPathComponent("activation"), options: .atomic)
+            await maintenance?.release(); maintenance = nil
+            try Task.checkCancellation()
+            let graph = GraphStore.attached(id: id, handle: try await handle.newLease(), adapter: adapter.graph)
+            let heldCloud = cloud!, heldWrites = writes!
+            let hold = StoreReservation(id: descriptor.id) {
+                await heldWrites.release(); await heldCloud.release(); try? await retained.close()
+            }
+            return GraphMigrationWorkspace(graph: graph, handle: handle, descriptor: descriptor, directory: directory,
+                sourceHold: hold, ownership: ownership, storeOwnership: storeOwnership, adapter: workspaceAdapter,
+                registry: registry, schema: schema, activationID: sessionID, sealed: sealed, sealHold: sealedWrites)
+        } catch {
+            let original = error
+            await maintenance?.release(); await sealedWrites?.release()
+            var cleanup: (any Error)?
+            if case StoreRuntimeError.shutdownFailed = original { cleanup = original }
+            if let working { do { try await working.close() } catch { cleanup = error } }
+            await writes?.release(); await cloud?.release()
+            do { try await retained.close() } catch { if cleanup == nil { cleanup = error } }
+            if let cleanup { throw GraphMigrationWorkspaceCleanupFailure(directory: directory, preparationFailure: original, cleanupFailure: cleanup) }
+            throw original
+        }
+    }
+
     /// Protect the original and return a complete, explicitly non-syncing editable copy.
     package func prepareMigrationWorkspace(for id: GraphID, at destination: URL) async throws -> GraphMigrationWorkspace {
         guard let prepare = adapter.prepareWorkspace, let validate = adapter.validateBackup,
@@ -150,6 +289,7 @@ extension GraphContextManager {
             writes = try await owner.suspendLocalWrites()
             guard try await owner.participantAccess() == nil else { throw GraphMigrationWorkspaceError.participantUnsupported }
             let source = try await owner.migrationBoundary()
+            let sourceFile = try WorkspaceFileIdentity(location.url)
             let workspaceID = UUID()
             let staging = destination.deletingLastPathComponent().appendingPathComponent(".workspace-" + workspaceID.uuidString)
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
@@ -164,7 +304,9 @@ extension GraphContextManager {
             try Task.checkCancellation()
             // Only detached, private staging files are marked through the native metadata API.
             try WorkspaceFiles.mark(store, workspaceID: workspaceID, graphID: id)
-            let configuration = StoreConfiguration(location: .sqlite(store), exclusiveGraphID: id.rawValue, workspaceID: workspaceID)
+            let sessionID = UUID()
+            try Data(sessionID.uuidString.utf8).write(to: staging.appendingPathComponent("activation"), options: .withoutOverwriting)
+            let configuration = StoreConfiguration(location: .sqlite(store), exclusiveGraphID: id.rawValue, workspaceID: workspaceID, workspaceSessionID: sessionID)
             let handle = try await registry.open(configuration, schema: schema)
             working = handle
             let adapter = adapter
@@ -175,8 +317,9 @@ extension GraphContextManager {
                 try validate(context, id)
             }
             let baseline = try await handle.controlRead { try GraphMigrationBoundary.capture($0, after: beforeSetup) }
-            let descriptor = GraphMigrationWorkspaceDescriptor(format: 1, id: workspaceID, graphID: id,
-                schema: schema.identifier, storePath: "Graph.sqlite", source: source, baseline: baseline)
+            let descriptor = GraphMigrationWorkspaceDescriptor(format: 2, id: workspaceID, graphID: id,
+                schema: schema.identifier, storePath: "Graph.sqlite", source: source, baseline: baseline,
+                sourceFile: sourceFile, workingFile: try WorkspaceFileIdentity(store))
             let bytes = try JSONEncoder().encode(descriptor)
             guard bytes.count <= WorkspaceFiles.descriptorLimit else { throw GraphMigrationWorkspaceError.invalidWorkspace }
             try bytes.write(to: staging.appendingPathComponent("workspace.json"), options: .withoutOverwriting)
@@ -187,7 +330,7 @@ extension GraphContextManager {
             try FileManager.default.moveItem(at: staging, to: destination)
             published = true
             let final = try await registry.open(.init(location: .sqlite(destination.appendingPathComponent(descriptor.storePath)),
-                exclusiveGraphID: id.rawValue, workspaceID: workspaceID), schema: schema)
+                exclusiveGraphID: id.rawValue, workspaceID: workspaceID, workspaceSessionID: sessionID), schema: schema)
             working = final
             try await final.read { context in
                 try adapter.initialize(context, id, false)
@@ -204,7 +347,7 @@ extension GraphContextManager {
             }
             return GraphMigrationWorkspace(graph: graph, handle: final, descriptor: descriptor,
                 directory: destination, sourceHold: hold, ownership: ownership,
-                storeOwnership: storeOwnership)
+                storeOwnership: storeOwnership, adapter: adapter.workspace, registry: registry, schema: schema, activationID: sessionID)
         } catch {
             let original = error
             // Never remove an attached stage, even if native cleanup itself failed.
@@ -242,7 +385,7 @@ struct WorkspaceDirectoryIdentity: Sendable, Equatable {
     }
 }
 
-struct WorkspaceFileIdentity: Sendable, Equatable {
+package struct WorkspaceFileIdentity: Codable, Sendable, Equatable {
     let device: UInt64
     let inode: UInt64
     init(_ url: URL) throws {
@@ -256,8 +399,38 @@ struct WorkspaceFileIdentity: Sendable, Equatable {
     }
 }
 
-private enum WorkspaceFiles {
+enum WorkspaceFiles {
     static let descriptorLimit = 256 * 1024
+    static func activation(_ directory: URL) throws -> UUID {
+        let url = directory.appendingPathComponent("activation")
+        _ = try WorkspaceFileIdentity(url)
+        guard let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber, size.intValue == 36,
+              let text = String(data: try Data(contentsOf: url), encoding: .utf8), let id = UUID(uuidString: text), id.uuidString == text else {
+            throw GraphMigrationWorkspaceError.invalidWorkspace
+        }
+        return id
+    }
+    static func read(_ directory: URL) throws -> GraphMigrationWorkspaceDescriptor {
+        _ = try WorkspaceDirectoryIdentity(directory)
+        _ = try activation(directory)
+        func data(_ name: String, maximum: Int) throws -> Data {
+            let url = directory.appendingPathComponent(name)
+            _ = try WorkspaceFileIdentity(url)
+            guard let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber,
+                  size.intValue <= maximum else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+            return try Data(contentsOf: url)
+        }
+        let descriptor: GraphMigrationWorkspaceDescriptor
+        do { descriptor = try JSONDecoder().decode(GraphMigrationWorkspaceDescriptor.self, from: data("workspace.json", maximum: descriptorLimit)) }
+        catch { throw GraphMigrationWorkspaceError.invalidWorkspace }
+        guard descriptor.format == 2, descriptor.storePath == "Graph.sqlite",
+              descriptor.sourceFile != descriptor.workingFile, descriptor.baseline.transaction.map({ $0 > 0 }) == true,
+              !descriptor.source.storeID.isEmpty, !descriptor.baseline.storeID.isEmpty,
+              try data("owner", maximum: 36) == Data(descriptor.id.uuidString.utf8) else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+        _ = try GraphMigrationHistory.token(descriptor.source.token)
+        _ = try GraphMigrationHistory.token(descriptor.baseline.token)
+        return descriptor
+    }
     static func destination(_ url: URL, source: URL) throws -> URL {
         guard url.isFileURL, url.host == nil || url.host == "localhost", url.query == nil, url.fragment == nil else {
             throw GraphMigrationWorkspaceError.invalidDestination

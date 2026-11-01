@@ -1,61 +1,98 @@
 # MF04 — isolated migration workspace and PH change set
 
-Status: MF04b preparation integrates through [PR #124](https://github.com/bbruno84/GraphEvo/pull/124),
-directly from MF04a/#123 (`3b0c326`) after review and full CI checkpoint #317 on
-`181b80c`. The package-only
-preparer, ordinary working GraphStore, native purpose fence, fresh PH baseline,
-close and ownership-checked discard are implemented. **Seal, PH reduction,
-restart activation and publication remain design-only.** The
-[integrated MF04a logical-emptying API](graphevo-2-logical-emptying.md) remains
-available independently. No experiment/integration branch stack is introduced.
+Status: MF04c is implemented on `codex/v2-workspace-seal-recovery`, directly from
+integrated MF04b/#124 (`7c2b5a9`), pending final review/checkpoint/integration.
+Preparation, bounded PH reduction/sealing, explicit restart recovery and
+ownership-checked close/discard are package-only. **Original-store publication,
+its backup/executor journal and participant workspaces remain separate work.**
+The [MF04a logical-emptying API](graphevo-2-logical-emptying.md) remains available.
+S03, application cloud formats and shared-session format 6 are unchanged.
 
-## Implemented MF04b surface and limits
+## Implemented surface and durable boundaries
 
-`GraphContextManager.prepareMigrationWorkspace(for:at:) async throws` returns a
-package-only `GraphMigrationWorkspace` with `id`, `graph`, `directory` and a
-value-only descriptor. `close()` preserves the copy and releases owned source
-holds after draining/detaching; `discard()` additionally checks directory and
-SQLite physical identities, descriptor, owner marker and native purpose before
-removing the owned directory. Old handles/observations terminate. Concurrent
-lifecycle calls share the same operation; failed discard can be retried after
-correcting an ownership-preserving problem. Deinit only schedules close.
+- `GraphContextManager.prepareMigrationWorkspace(for:at:) async throws` prepares
+  the isolated mutable GraphStore with owned source write/cloud-data holds.
+- `GraphMigrationWorkspace.seal(limits:) async throws -> GraphMigrationChangeSet`
+  rejects new writers, drains admitted work, temporarily drains readers and
+  validates the complete graph/files in one privileged workspace transaction.
+  It reuses the normal PH primitive reconstruction with an explicit independent
+  range, then writes the identity/operation manifest into reserved root metadata
+  **in the same transaction**. The native marker is authoritative. No JSON/native
+  dual commit, whole-graph diff, original PH cursor or payload snapshot is used.
+- A successful seal retains a write fence; reads continue. The facade also checks
+  the durable marker before consumer mutation, including after interruption before
+  the runtime installed its in-memory fence/result. Repeated seal returns the
+  same result. Cancellation before save rolls back; after save returns success.
+- `GraphContextManager.openMigrationWorkspace(for:at:limits:) async throws`
+  reacquires source holds and validates the current source/store/descriptor,
+  retained baseline anchor and full working graph before exposing any handle.
+  An editable copy remains editable; a sealed copy restores the original manifest
+  and write fence. No consumer body is replayed. Unsupported/incomplete/corrupt
+  alpha workspace documents are refused unchanged.
+- `close()` drains and disables working access, releases only its owned source
+  holds and retains files. `discard()` additionally reacquires an exclusive
+  cleanup owner, detaches natively and retains registry/global gateway claims
+  through filesystem cleanup. Failed cleanup retains its owner and files for
+  retry; another opener cannot use the detach/delete gap. Old handles stay fenced.
+  Deinit only schedules close, never deletion/publication.
 
-The destination must be absent, with an existing parent; an existing empty
-directory is also refused. Preparation uses a private sibling stage, native
-complete copying, a detached-store metadata marker and one local setup save.
-The source retains its pending sync work and conflict policy. The copy retains
-identities, original timestamps, deletion evidence and all application/file
-content; it clears the copied checkpoint and transport state and has no sync
-session. Participant sources are refused, including read-write participants.
-No backup package, ledger operation, sync queue or cloud publication is created.
+The destination for preparation must be absent with an existing parent. Copying
+uses a private sibling stage and the native complete-copy path. Application
+identities, values, timestamps, deletion evidence and internal files are preserved;
+only copied operational checkpoint/transport authority is cleared. Participant
+sources (including read-write participants) remain refused. No backup, ledger
+operation or network publication is performed by preparation/sealing/recovery.
 
-Descriptor format 1 uses fixed relative resource `Graph.sqlite`, a workspace
-UUID, GraphID, schema and source/working native UUID/token boundaries. The source
-freshness boundary contains a freshly captured opaque token; its numeric
-transaction is intentionally absent. The working boundary records the one setup
-transaction number and its token, fetched **after a token captured on the working
-store before setup**. This avoids scanning old history, guessing sortable native
-fields, wall-clock ordering or treating a copied source checkpoint as a baseline.
-After successful detachment/publication/reopen the token must remain unchanged.
-Tokens are limited to 64 KiB and the encoded descriptor to 256 KiB. No original
-URL, account, cloud recovery state or engine serialization is serialized.
+Descriptor **format 2** uses fixed relative `Graph.sqlite`, workspace/GraphID,
+schema, native UUID/token boundaries and physical source/working file identities.
+Format-1 alpha workspaces are not silently upgraded. The source boundary has a
+fresh opaque token; its numeric transaction is absent. A unique setup author on
+the working store anchors the numeric baseline and secure token. Anchor retention
+is checked through supported PH author queries; opaque token serialization is
+never interpreted and dates are not used as cuts. Source history is bounded and
+must show no application effects: known metadata bookkeeping may progress, but
+its reconstructed primitive set must be empty, regardless of its author label.
+Unknown/local/import application changes, replaced stores and unavailable history
+refuse recovery. Source queues and policy are never rewound from the copy.
 
-Discard preflights at most 100,000 filesystem entries and 32 levels, refusing
-symlinks/hard links and a replacement directory/store. It checks the marker and
-bounded descriptor before deletion. These are cleanup limits, not preparation
-memory/time/attachment-size bounds. Native copy and existing full-content
-validation retain their current costs. Ordinary runtime openings refuse marked
-files both while open and after close; only exact explicit workspace admission
-is accepted. Missing markers/incorrect GraphIDs are also refused.
+Reopening supplies current URLs and supports same-volume directory/file moves
+with preserved physical identities. Copying/replacing the SQLite file is refused,
+even if its native UUID and bytes match. Cross-device or cross-volume workspace
+adoption is not implemented; portable `.geb` backups remain a separate contract.
+Every activation has a fresh process-local native owner nonce and an atomically
+rotated 36-byte `activation` file. Stale controls cannot delete a newer activation,
+even after the newer control closes. Native ownership excludes concurrent
+activations across managers/registries. No absolute sandbox path, account, pending
+cloud state or engine serialization is persisted.
 
-A pre-publication failure removes only a successfully detached, still-owned
-stage. Failed cleanup exposes `GraphMigrationWorkspaceCleanupFailure` and retains
-the stage/native claims. Failure/cancellation after atomic directory publication
-retains that directory rather than deleting uncertain work. Source holds are
-released on preparation failure. Process crashes and closed/prepared files
-cannot yet be reactivated through a supported workspace API: restart/source
-freshness validation belongs to the following sealing/recovery increment.
-Neither retained descriptors nor a successful preparation certify publication.
+`GraphMigrationWorkspaceLimits` defaults to 4096 transactions, 100,000 native
+changes, 10,000 final logical changes and 4 MiB encoded manifest. Explicit hard
+ceilings are 100,000 / 1,000,000 / 100,000 / 8 MiB; invalid limits are refused.
+Transient insert-then-delete identities are omitted; repeated touches coalesce
+without a semantic diff, including changes later restored to their original
+values. Surviving action edits and cascade/file deletions retain normal identity.
+The manifest contains workspace/graph, baseline/end evidence and sorted logical
+ID/kind/save-or-delete entries, never file bodies or raw native object IDs.
+
+Tokens are limited to 64 KiB and descriptors to 256 KiB. Discard preflights at
+most 100,000 filesystem entries and 32 levels, refusing links/replacement objects
+and checking native purpose, physical identities, activation/owner and descriptor.
+These limits are not total memory, SQL-I/O, attachment-size, time or disk bounds.
+Complete structural/file validation retains its existing costs. Native faults,
+power loss, external-process writers, hostile concurrent filesystem mutation,
+production scale and participant/source-publication acceptance remain gates.
+
+A failure before directory publication removes only a successfully detached,
+still-owned stage. Failed cleanup exposes `GraphMigrationWorkspaceCleanupFailure`
+and preserves native claims/files. Failure after atomic directory publication
+retains the directory. A complete descriptor/baseline is required for explicit
+reopen; incomplete stages are never automatically adopted. A seal is recovered
+from the native marker without depending on a separately updated descriptor.
+Its post-end PH tail must contain exactly its sealing transaction and no later
+work. Missing/pruned history is refused, never silently restarted from zero.
+
+Apple documents [author-filtered history and expired-token refusal](https://developer.apple.com/documentation/coredata/consuming-relevant-store-changes).
+No PH pruning is introduced by GraphEvo workspace operations.
 
 ## Purpose and boundary
 
@@ -234,7 +271,7 @@ replacement; the shared ledger remains coordination information for the consumer
 
 ## Sealing and change-set shape
 
-Target package-only control surface (`seal` remains unimplemented):
+Implemented package-only control surface:
 
 ```swift
 actor GraphMigrationWorkspace {

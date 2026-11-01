@@ -320,6 +320,39 @@ actor StoreResources {
         if mode == .all { invalidations.publish(.storeChange) }
     }
 
+    /// Native detachment precedes deletion; gateway claims are released only after owned cleanup.
+    func discardWorkspace(_ body: @escaping @Sendable () throws -> Void) async throws {
+        guard resolved.configuration.workspaceID != nil else { throw StoreRuntimeError.invalidConfiguration("Only a workspace can use detached workspace cleanup.") }
+        closing = true; invalidations.finish()
+        if admitted > 0 { await withCheckedContinuation { drain = $0 } }
+        do { try await detach(releasing: false) }
+        catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
+        try body()
+        for gateway in gateways { gateway.release() }
+    }
+
+    /// Only a workspace's drained exclusive reservation admits this control save.
+    func workspaceTransaction<Value: Sendable>(reservation: UUID,
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard resolved.configuration.workspaceID != nil, dataAvailable,
+              reservations[reservation] == .all, admitted == 0 else { throw StoreRuntimeError.resourceReserved }
+        try admit(reservation: reservation)
+        defer { finish() }
+        let cancellation = OperationCancellation(), container = container, configuration = resolved.configuration, hooks = hooks
+        return try await withTaskCancellationHandler {
+            try await container.performBackgroundTask { @Sendable context in
+                Self.prepare(context, configuration: configuration, container: container)
+                context.userInfo[StoreNativeContext.cancellationKey] = { @Sendable in try cancellation.check() } as StoreNativeContext.CancellationCheck
+                defer { context.rollback(); context.reset() }
+                try cancellation.check()
+                let result = try body(context)
+                try cancellation.check()
+                if context.hasChanges { try context.save(); hooks.afterCommit?() }
+                return result
+            }
+        } onCancel: { cancellation.cancel() }
+    }
+
     func copyStore(to destination: URL, reservation: UUID) async throws {
         guard dataAvailable else { throw StoreRuntimeError.dataUnavailable }
         guard let source = resolved.url, resolved.configuration.exclusiveGraphID != nil,

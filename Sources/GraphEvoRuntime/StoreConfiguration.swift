@@ -21,14 +21,16 @@ package struct StoreConfiguration: Sendable, Equatable {
     package let sharedStoreURL: URL?
     package let exclusiveGraphID: UUID?
     package let workspaceID: UUID?
+    package let workspaceSessionID: UUID?
 
-    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil, exclusiveGraphID: UUID? = nil, workspaceID: UUID? = nil) {
+    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil, exclusiveGraphID: UUID? = nil, workspaceID: UUID? = nil, workspaceSessionID: UUID? = nil) {
         self.location = location
         self.access = access
         self.cloudKitContainerIdentifier = cloudKitContainerIdentifier
         self.sharedStoreURL = sharedStoreURL
         self.exclusiveGraphID = exclusiveGraphID
         self.workspaceID = workspaceID
+        self.workspaceSessionID = workspaceSessionID
     }
 }
 
@@ -80,6 +82,9 @@ struct ResolvedStore: Sendable {
     }
 
     init(_ configuration: StoreConfiguration) throws {
+        if configuration.workspaceSessionID != nil && configuration.workspaceID == nil {
+            throw StoreRuntimeError.invalidConfiguration("A workspace session requires a workspace identity.")
+        }
         if configuration.workspaceID != nil && configuration.exclusiveGraphID == nil {
             throw StoreRuntimeError.invalidConfiguration("A workspace requires exclusive graph ownership.")
         }
@@ -132,7 +137,7 @@ struct ResolvedStore: Sendable {
                 throw StoreRuntimeError.invalidConfiguration("Private and shared stores must use distinct files.")
             }
             self.configuration = StoreConfiguration(location: .sqlite(canonical), access: configuration.access,
-                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url, exclusiveGraphID: configuration.exclusiveGraphID, workspaceID: configuration.workspaceID)
+                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url, exclusiveGraphID: configuration.exclusiveGraphID, workspaceID: configuration.workspaceID, workspaceSessionID: configuration.workspaceSessionID)
             secondaryResources = secondary.map { [$0] } ?? []
             _ = try fileIdentity()
         }
@@ -152,6 +157,7 @@ struct ResolvedStore: Sendable {
         guard configuration.access == other.configuration.access,
               configuration.exclusiveGraphID == other.configuration.exclusiveGraphID,
               configuration.workspaceID == other.configuration.workspaceID,
+              configuration.workspaceSessionID == other.configuration.workspaceSessionID,
               configuration.cloudKitContainerIdentifier == other.configuration.cloudKitContainerIdentifier else { return false }
         return try resources.map(\.key) == other.resources.map(\.key)
     }
