@@ -40,6 +40,9 @@ package actor GraphContextManager {
     struct SharingPurge { let namespace: String; let task: Task<Void, any Error> }
     var purgeTasks: [GraphID: SharingPurge] = [:]
     var lifecycleWorkers: [String: GraphSharingLifecycleWorker] = [:]
+    var ledgerActivity: [String: (session: UUID, active: Bool, revision: UInt64, clock: GraphAutomaticClock)] = [:]
+    var ledgerWorkers: [String: GraphSharingLifecycleWorker] = [:]
+    var ledgerListeners: [String: Task<Void, Never>] = [:]
     private var transportGraphs = Set<GraphID>()
     private let attachmentRefresh = GraphCloudAttachmentRefresh<Void>()
     private let attachmentFetch = GraphCloudAttachmentRefresh<Set<GraphID>>()
@@ -80,6 +83,18 @@ package actor GraphContextManager {
         guard automaticClosing[configuration.namespace] == nil else { throw GraphCloudError.stopping }
         guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { throw GraphCloudError.stopped }
         return try await opening.task.value
+    }
+
+    func ledgerSessionGeneration(_ configuration: GraphCloudConfiguration) -> UUID? {
+        guard automaticClosing[configuration.namespace] == nil,
+              cloudSessions[configuration.namespace]?.configuration == configuration else { return nil }
+        return cloudSessions[configuration.namespace]?.id
+    }
+    func ledgerCloud(_ configuration: GraphCloudConfiguration, generation: UUID) async throws -> GraphCloudSession {
+        guard ledgerSessionGeneration(configuration) == generation else { throw GraphCloudError.stopped }
+        let result = try await cloud(configuration)
+        guard ledgerSessionGeneration(configuration) == generation else { throw GraphCloudError.stopped }
+        return result
     }
 
     package func bindCloudZone(_ zone: GraphCloudZone, to graphID: GraphID,
@@ -190,6 +205,7 @@ package actor GraphContextManager {
         automaticActivityRevision[configuration.namespace] = revision
         await automatic[configuration.namespace]?.setActive(false, revision: revision)
         await stopSharingLifecycle(configuration)
+        await stopLedgerControl(configuration)
         let removing = purgeTasks.values.filter { $0.namespace == configuration.namespace }.map(\.task)
         for task in removing { _ = try? await task.value }
         try await session.stop()
@@ -508,6 +524,8 @@ package actor GraphContextManager {
     }
 
     deinit {
+        for listener in ledgerListeners.values { listener.cancel() }
+        for worker in ledgerWorkers.values { Task { await worker.shutdown() } }
         for scheduler in automatic.values { Task { await scheduler.shutdown() } }
         for control in synchronization.values {
             for waiter in control.waiters.values { waiter.resume(throwing: GraphStoreError.closed) }
@@ -595,17 +613,20 @@ package actor GraphContextManager {
         let scheduler = try await automaticScheduler(configuration, clock: clock)
         await scheduler.setActive(active, revision: revision)
         await setSharingLifecycleActive(active, revision: revision, configuration: configuration, clock: clock)
+        await setLedgerControlActive(active, revision: revision, configuration: configuration, clock: clock)
     }
     package func requestCloudSynchronization(configuration: GraphCloudConfiguration) async throws {
         let scheduler = try await automaticScheduler(configuration)
         await scheduler.changedInventory(); await scheduler.request(explicit: true)
         let ids = (try? await cloud(configuration).memberships().map { $0.binding.graphID }) ?? []
         await requestSharingLifecycle(configuration, ids: ids, explicit: true)
+        await ledgerControlSignalled(configuration, explicit: true)
     }
     package func notifyRemoteCloudChanges(in scope: GraphCloudScope, configuration: GraphCloudConfiguration) async throws {
         try await automaticScheduler(configuration).request(scope: scope)
         let ids = (try? await cloud(configuration).memberships().filter { $0.binding.zone.scope == scope }.map { $0.binding.graphID }) ?? []
         await requestSharingLifecycle(configuration, ids: ids, explicit: false)
+        await ledgerControlSignalled(configuration, scope: scope)
     }
     package func automaticCloudSynchronizationStatus(for id: GraphID, configuration: GraphCloudConfiguration) async throws -> GraphAutomaticSyncStatus {
         let scheduler = try await automaticScheduler(configuration)

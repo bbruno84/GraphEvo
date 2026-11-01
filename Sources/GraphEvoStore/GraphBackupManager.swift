@@ -52,6 +52,7 @@ struct GraphCloudBackupSnapshot: Codable, Sendable {
     let membership: GraphCloudMembership?
     let inbox: [GraphCloudInboxEntry]
     let receipts: [GraphCloudSentReceipt]
+    var ledger: GraphLedgerReplica? = nil
 }
 
 /// One service for verified immutable bundles. Restore materializes an empty local destination;

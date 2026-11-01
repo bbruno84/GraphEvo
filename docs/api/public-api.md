@@ -1697,3 +1697,33 @@ digests. Retention owners are local collection metadata, not exported migration
 locks. Independent cross-user graph activation, reference remapping, provider/UI
 coordination and in-place/cloud restoration remain separate. See
 [MF02](../design/graphevo-2-backup-packages.md) for the container and contract.
+
+### Package-only MF03 bounded shared ledger
+
+`GraphContextManager.graphLedger(for:configuration:)` reads cached control status;
+`observeGraphLedger` immediately yields current status and bounded newest updates.
+Both opt a registered cloud binding into control reconciliation. These APIs remain
+available after graph handles close, until session stop or participation removal.
+
+`updateGraphLedger(for:configuration:expectedRevision:mutation:)` persists local
+control changes. `GraphLedgerMutation` supports begin, phase progress, retry,
+interruption, resume, terminal finish and separate global/current-operation JSON.
+Operation UUIDs and optional expected revision reject stale commands. Current and
+previous operations retain complete details; a ring holds 32 significant events.
+Retry counters coalesce without appending events. JSON objects are canonical and
+bounded to 16 KiB each; the entire shared ledger is capped at 128 KiB.
+
+`reconcileGraphLedger(for:configuration:acceptCloud:)` explicitly reconciles the
+exact control record. Concurrent remote changes retain both values as a visible
+conflict. `acceptCloud: true` explicitly discards local pending control changes,
+without changing graph application data. `GraphLedgerStatus.confirmedRevision`
+refers only to this control projection, never graph convergence. An owned running
+operation recovered after restart requires explicit resume/interruption/finish.
+
+Automatic foreground control shares ContextManager lifecycle and per-scope
+admission, while graph-data pause does not suspend it. Read-only peers can observe
+control updates. Revocation removes the participation's local ledger; old callbacks
+cannot affect a new generation. Session format 6 is deliberately incompatible with
+older alpha session documents; S03 and application wire formats are unchanged.
+This is a migration foundation, not an executor, format registry or distributed
+lock. See [MF03](../design/graphevo-2-shared-ledger.md).
