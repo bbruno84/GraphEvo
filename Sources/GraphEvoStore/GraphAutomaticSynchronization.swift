@@ -315,7 +315,7 @@ actor GraphAutomaticSynchronizer {
         if error as? GraphCloudError == .graphPaused {
             // Inventory owns pause state. A pause/resume may already have crossed this failed admission.
             work.retryAt = max(work.retryAt, clock.now() + 1)
-        } else if error as? GraphCloudError == .busy || error as? GraphSyncError == .busy {
+        } else if error as? GraphCloudError == .busy || error as? GraphSyncError == .busy || GraphLocalAdmission.isReserved(error) {
             work.retryAt = max(work.retryAt, clock.now() + 1)
         } else if transient(error) {
             work.retryAt = clock.now() + retry(work.failures, advice: max(retryAfter ?? 0, advice(error) ?? 0)); work.failures += 1
@@ -324,7 +324,7 @@ actor GraphAutomaticSynchronizer {
     }
     private func laneFailed(_ scope: GraphCloudScope, _ error: any Error) {
         lanes[scope]!.lastFailure = diagnostic(error)
-        if error as? GraphCloudError == .busy { lanes[scope]!.retryAt = max(lanes[scope]!.retryAt, clock.now() + 1) }
+        if error as? GraphCloudError == .busy || GraphLocalAdmission.isReserved(error) { lanes[scope]!.retryAt = max(lanes[scope]!.retryAt, clock.now() + 1) }
         else if transient(error) {
             let count = lanes[scope]!.failures
             lanes[scope]!.retryAt = clock.now() + retry(count, advice: advice(error)); lanes[scope]!.failures += 1

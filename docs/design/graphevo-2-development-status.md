@@ -1,12 +1,60 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-10-31. This is the single entry point for **integrated work,
+Updated: 2026-11-01. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
-## Latest integrated increment
+## Current focused work
+
+The next backup increment is planned in the
+[migration foundations roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment):
+compressed local packages, filesystem/manifest discovery and async portable
+export/import. No implementation of that follow-up is included in #120.
+New work starts from `codex/graphevo-2`, not the retained T08/MF01 topic branches.
+
+## Latest integrated increment — T08 and MF01
+
+[PR #120](https://github.com/bbruno84/GraphEvo/pull/120) integrates
+[T08 sharing lifecycle](graphevo-2-sharing-lifecycle.md) and
+[MF01 local maintenance/backups](graphevo-2-local-maintenance.md) directly into
+`codex/graphevo-2` from #119 (`3260627`). MF01 extended the unmerged T08 PR at the
+maintainer's request; no dependent implementation PR or experiment parent is
+introduced. Native S03 and cloud node/asset formats are unchanged. T08 explicitly
+uses session format 5; MF01 does not change that document.
+
+Confirmed revocation/leave removes the participant replica and pending work while
+owner-private/control graphs survive. Read-only downgrade preserves pending
+uploads and permits incoming changes. Owned local reservations cover all aliases;
+verified complete native backups include attachment bodies, optional reasons,
+graph-scoped recovery evidence and durable retention. Restore materializes a new
+empty local destination and does not rewind shared engines/session state.
+Current backups are uncompressed directory bundles.
+
+The [T08 physical report](results/sharing-lifecycle-2026-10-31.md) retains its
+actual iPad/XR source pins, independent owner inventories and corrective scope.
+The [original MF01 local report](results/local-maintenance-2026-11-01.md) and
+[corrective review](results/local-maintenance-review-2026-11-01.md) remain distinct:
+MF01 adds no physical/live CloudKit claim. T08's corrective review at `70909cf`
+closed its P1/two P2 findings. MF01 review at `1e9a16d` reproduced two P2 defects;
+`c174e4a` closes them with committed direct/aliased destination preservation,
+exact recovery-hint and actual observed-query recovery regressions. Corrective
+re-review found no remaining blocker in those paths.
+
+Final local checks pass 777 macOS functions (331 legacy, 347 store, 76 runtime,
+23 model), 422 selected iOS Simulator functions/487 invocations, Release build,
+Swift 6 ModelConsumer and manifest/diff checks. The one combined
+[macOS/iOS CI checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/41286055397)
+passes on `bcac4bc`, after corrective review. It also passes ModelConsumer and
+independent-process local read-only validation. Final integration-status edits
+are documentation-only; no source/test/workflow change follows that checkpoint.
+The maintainer authorized merge after successful CI. Historical reports/branches
+remain retained. Background/APNs, cross-process maintenance, power-loss/scale,
+in-place/cloud restoration, migration ledger/executor and mandatory v1 conversion
+remain separate gates.
+
+## Earlier integrated increment — T07
 
 [T07 explicit custom zone sharing](graphevo-2-zone-sharing.md),
 [PR #119](https://github.com/bbruno84/GraphEvo/pull/119), integrates directly into

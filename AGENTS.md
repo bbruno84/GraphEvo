@@ -1068,3 +1068,54 @@ all handles, reopenings and attachments; imports bypass consumer write checks.
 Sharing uses T05 admission and the session scope gate/drain. S03 is unchanged;
 new session format 4 refuses old alpha state without modifying it. Historical
 A5 native sharing is not the replacement backend's acceptance evidence.
+
+
+## V2 T08 sharing lifecycle
+
+Read [T08](docs/design/graphevo-2-sharing-lifecycle.md) before lifecycle changes.
+Confirmed shared-access loss and explicit leave purge the participant's exclusive
+store and pending work; owner-private data remains. Inspect current membership
+before destructive interpretation of control events/errors. Joining absence,
+network/quota/authentication and read-only downgrade are not revocation evidence.
+Persist removal first, block app access, drain/invalidate every lease, and retain
+runtime claims through native destruction and exact owned-artifact cleanup.
+Retry cleanup only for unchanged post-destruction artifacts; never adopt a file
+that appeared after cleanup or belongs to a replacement store. Recover a missing
+join marker only for the same native UUID and an untouched, unaccepted joining
+generation. Keep data access fenced until explicit acceptance finishes.
+Restart registration supplies current URLs; check native UUID/purpose without app
+payload decoding. No persisted sandbox paths or silent old-alpha conversion.
+Old generations never regain access; rejoin is explicit, empty and resets only
+the shared engine through supported nil serialization. The control worker runs
+while foreground/paused but never fetches paused app bodies. Keep Debug purge
+barriers out of Release. Record exact physical pins separately from CI/review.
+An application inbox limit keeps data transport blocked but must not disable
+membership inspection, purge or foreground lifecycle control. Reserve bounded
+journal space for participant removal; account and other fatal failures remain
+sticky and must never be bypassed by control work.
+
+## V2 MF01 local maintenance
+
+Read [MF01](docs/design/graphevo-2-local-maintenance.md) before changing local
+admission or backups. Owned write reservations cover the native owner and all
+aliases, drain admitted/queued writers, allow ordinary reads and never release
+another request. Maintenance additionally drains/refuses reads. Retained leases
+span cancellation/close and late releases remain generation-bound. No cross-process
+writer fence or new writable widget route is implied.
+
+Create backups through native Core Data copying and full-content verification,
+never an inferred external-storage path or a raw live SQLite/WAL copy. Preserve
+consumer reasons, relative manifests, ownership markers and graph-owned recovery
+artifacts. Validate native stores on disposable copies; retain their files/claims
+on detachment failure. Per-graph cloud recovery evidence excludes other graphs
+and opaque engine state and is never blindly restored. Restore only into empty
+local destinations until protected activation/reconciliation is implemented.
+
+Finite root locks protect file operations; durable retention owners protect
+required backups without a migration-lifetime file lock. Unknown/corrupt ownership
+is not deletion authority. Cleanup must preserve another caller's manual cloud
+pause and local reservation. Keep the v1 backup helper unchanged unless a separately
+validated v1 route is explicitly implemented. MF01 and T08 integrate together in
+#120 after corrective review and one combined CI checkpoint. Future increments
+start from `codex/graphevo-2` and retain review/corrections before CI and authorized
+merge. Compressed local packages/export/import remain roadmap work.

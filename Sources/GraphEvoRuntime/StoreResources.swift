@@ -9,8 +9,12 @@ struct StoreLifecycleHooks: Sendable {
     var didReserveHandle: (@Sendable () async -> Void)?
     var afterCommit: (@Sendable () -> Void)?
     var didQueueWriter: (@Sendable () async -> Void)?
+    var didRestrictWrites: (@Sendable () -> Void)?
     var didBeginClose: (@Sendable () async -> Void)?
     var beforeDetach: (@Sendable () async throws -> Void)?
+    var beforeDestroy: (@Sendable () async throws -> Void)?
+    var beforeDestroyedArtifactCleanup: (@Sendable () async throws -> Void)?
+    var didDestroy: (@Sendable () async throws -> Void)?
     var didLoadStore: (@Sendable (URL?) throws -> Void)?
 }
 
@@ -27,7 +31,19 @@ actor StoreResources {
     private var writerBusy = false
     private var writers: [(UUID, CheckedContinuation<Void, any Error>)] = []
     private var closing = false
+    private var dataAvailable = true
+    private var terminalDataBlock = false
+    private var destructionIssued = false
+    private struct DestructionArtifact: Equatable {
+        let identity: FileIdentity
+        let size: UInt64
+        let modified: Date
+    }
+    private var destructionArtifacts: [URL: DestructionArtifact]?
     private var admitted = 0
+    private var admittedWriters = 0
+    private var reservations: [UUID: StoreReservationMode] = [:]
+    private var reservationWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private var drain: CheckedContinuation<Void, Never>?
 
     private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease]) {
@@ -145,9 +161,10 @@ actor StoreResources {
     }
 
     /// Trusted adapter boundary: bodies return values and must never save or escape contexts.
-    func read<Value: Sendable>(
+    func read<Value: Sendable>(control: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
+        guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
         try admit()
         defer { finish() }
         let cancellation = OperationCancellation()
@@ -179,12 +196,13 @@ actor StoreResources {
     }
 
     /// FIFO among admitted local writers; native save is the cancellation boundary.
-    func transaction<Value: Sendable>(
+    func transaction<Value: Sendable>(control: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
-        try admit()
-        defer { finish() }
+        guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
+        try admit(write: true)
+        defer { finish(write: true) }
         let cancellation = OperationCancellation()
         let request = UUID()
         return try await withTaskCancellationHandler {
@@ -215,8 +233,8 @@ actor StoreResources {
         _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
     ) async throws -> Value {
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
-        try admit()
-        defer { finish() }
+        try admit(write: true)
+        defer { finish(write: true) }
         let request = UUID(), cancellation = OperationCancellation()
         return try await withTaskCancellationHandler {
             try await acquireWriter(request, cancellation: cancellation)
@@ -241,15 +259,73 @@ actor StoreResources {
         context.transactionAuthor = "GraphEvo.v2.local"
     }
 
-    private func admit() throws {
+    private func admit(write: Bool = false, reservation: UUID? = nil) throws {
         guard !closing else { throw StoreRuntimeError.closedHandle }
         try Task.checkCancellation()
+        if let reservation {
+            guard reservations[reservation] == .all else { throw StoreRuntimeError.resourceReserved }
+        } else {
+            guard !reservations.values.contains(.all) else { throw StoreRuntimeError.resourceReserved }
+            if write, !reservations.isEmpty { throw StoreRuntimeError.writesSuspended }
+        }
         admitted += 1
+        if write { admittedWriters += 1 }
     }
 
-    private func finish() {
+    private func finish(write: Bool = false) {
         admitted -= 1
+        if write { admittedWriters -= 1 }
         if admitted == 0 { drain?.resume(); drain = nil }
+        for id in Array(reservationWaiters.keys) where reservationDrained(id) {
+            reservationWaiters.removeValue(forKey: id)?.resume()
+        }
+    }
+
+    func reserve(_ id: UUID, mode: StoreReservationMode) async throws {
+        try Task.checkCancellation()
+        guard !closing else { throw StoreRuntimeError.closedHandle }
+        if mode == .all, reservations.values.contains(.all) { throw StoreRuntimeError.resourceReserved }
+        reservations[id] = mode
+        hooks.didRestrictWrites?()
+        do {
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, any Error>) in
+                    if Task.isCancelled { c.resume(throwing: CancellationError()) }
+                    else if reservationDrained(id) { c.resume() }
+                    else { reservationWaiters[id] = c }
+                }
+                try Task.checkCancellation()
+                guard !closing else { throw StoreRuntimeError.closedHandle }
+            } onCancel: { Task { await self.cancelReservation(id) } }
+        } catch { releaseReservation(id); throw error }
+    }
+    private func reservationDrained(_ id: UUID) -> Bool {
+        reservations[id] == .all ? admitted == 0 : admittedWriters == 0
+    }
+    private func cancelReservation(_ id: UUID) {
+        releaseReservation(id)
+    }
+    func releaseReservation(_ id: UUID) {
+        let mode = reservations.removeValue(forKey: id)
+        reservationWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
+        if mode == .all { invalidations.publish(.storeChange) }
+    }
+
+    func copyStore(to destination: URL, reservation: UUID) async throws {
+        guard dataAvailable else { throw StoreRuntimeError.dataUnavailable }
+        guard let source = resolved.url, resolved.configuration.exclusiveGraphID != nil,
+              resolved.configuration.cloudKitContainerIdentifier == nil, resolved.configuration.sharedStoreURL == nil,
+              !FileManager.default.fileExists(atPath: destination.path) else {
+            throw StoreRuntimeError.invalidConfiguration("A backup requires an exclusive local graph and an empty destination.")
+        }
+        try admit(reservation: reservation)
+        defer { finish() }
+        let container = container
+        try await container.performBackgroundTask { _ in
+            let copier = NSPersistentStoreCoordinator(managedObjectModel: container.managedObjectModel)
+            try copier.replacePersistentStore(at: destination, destinationOptions: nil,
+                withPersistentStoreFrom: source, sourceOptions: nil, ofType: NSSQLiteStoreType)
+        }
     }
 
     private func acquireWriter(_ request: UUID, cancellation: OperationCancellation) async throws {
@@ -283,8 +359,84 @@ actor StoreResources {
         catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
     }
 
-    private func detach() async throws {
-        try await hooks.beforeDetach?()
+    func setDataAvailable(_ value: Bool, terminal: Bool = false) throws {
+        guard !closing else { throw StoreRuntimeError.closedHandle }
+        if terminal { terminalDataBlock = true; dataAvailable = false }
+        guard !value || !terminalDataBlock else { throw StoreRuntimeError.dataUnavailable }
+        dataAvailable = value
+    }
+
+    /// Invalidate every lease, drain admitted work, and retain claims until native destruction succeeds.
+    func destroy(graphID: UUID, storeID: String) async throws {
+        guard resolved.configuration.exclusiveGraphID == graphID,
+              resolved.configuration.access == .readWrite,
+              resolved.configuration.cloudKitContainerIdentifier == nil,
+              resolved.configuration.sharedStoreURL == nil, let url = resolved.url else {
+            throw StoreRuntimeError.invalidConfiguration("Only an exclusive coordinated graph can be destroyed.")
+        }
+        closing = true; invalidations.finish()
+        if admitted > 0 { await withCheckedContinuation { drain = $0 } }
+        if !destructionIssued, FileManager.default.fileExists(atPath: url.path) {
+            // Temporary Core Data metadata readers must release their SQLite connections before destruction.
+            try autoreleasepool {
+                let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
+                guard metadata[NSStoreUUIDKey] as? String == storeID,
+                      metadata[StoreNativeContext.historySyncGraphKey] as? String == graphID.uuidString else {
+                    throw StoreRuntimeError.storeReplaced(url)
+                }
+            }
+            try await hooks.beforeDetach?()
+            try await hooks.beforeDestroy?()
+            try autoreleasepool {
+                try container.persistentStoreCoordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
+            }
+            destructionIssued = true
+            destructionArtifacts = try destructionURLs(url).reduce(into: [:]) { result, artifact in
+                if let identity = try destructionArtifact(artifact) { result[artifact] = identity }
+            }
+            try await detach(releasing: false, runHook: false)
+        } else {
+            try await detach(releasing: false)
+        }
+        try await hooks.beforeDestroyedArtifactCleanup?()
+        // Core Data destroys the store/content first. Remove only its explicitly owned SQLite artifacts;
+        // some SDK versions retain empty SQLite/WAL/SHM placeholders after the native destruction.
+        guard destructionIssued, destructionArtifacts != nil else { throw StoreRuntimeError.storeReplaced(url) }
+        // A path that was absent, replaced, modified or already cleaned is never adopted by a retry.
+        for artifact in destructionURLs(url) {
+            if let current = try destructionArtifact(artifact), destructionArtifacts?[artifact] != current {
+                throw StoreRuntimeError.storeReplaced(artifact)
+            }
+        }
+        for artifact in destructionURLs(url) {
+            do {
+                if FileManager.default.fileExists(atPath: artifact.path) { try FileManager.default.removeItem(at: artifact) }
+            } catch let error as CocoaError where error.code == .fileNoSuchFile { }
+            destructionArtifacts?.removeValue(forKey: artifact)
+        }
+        try await hooks.didDestroy?()
+        for gateway in gateways { gateway.release() }
+    }
+
+    private func destructionURLs(_ url: URL) -> [URL] {
+        [url, URL(fileURLWithPath: url.path + "-wal"), URL(fileURLWithPath: url.path + "-shm")]
+    }
+    private func destructionArtifact(_ url: URL) throws -> DestructionArtifact? {
+        let attributes: [FileAttributeKey: Any]
+        do { attributes = try FileManager.default.attributesOfItem(atPath: url.path) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              (attributes[.referenceCount] as? NSNumber)?.intValue == 1,
+              let device = attributes[.systemNumber] as? NSNumber,
+              let inode = attributes[.systemFileNumber] as? NSNumber,
+              let size = attributes[.size] as? NSNumber,
+              let modified = attributes[.modificationDate] as? Date else { throw StoreRuntimeError.storeReplaced(url) }
+        return DestructionArtifact(identity: FileIdentity(device: device.uint64Value, inode: inode.uint64Value),
+                                   size: size.uint64Value, modified: modified)
+    }
+
+    private func detach(releasing: Bool = true, runHook: Bool = true) async throws {
+        if runHook { try await hooks.beforeDetach?() }
         for store in container.persistentStoreCoordinator.persistentStores {
             try container.persistentStoreCoordinator.remove(store)
         }
@@ -293,7 +445,7 @@ actor StoreResources {
         for observer in changeObservers { NotificationCenter.default.removeObserver(observer) }
         changeObservers.removeAll()
         invalidations.finish()
-        for gateway in gateways { gateway.release() }
+        if releasing { for gateway in gateways { gateway.release() } }
     }
 }
 

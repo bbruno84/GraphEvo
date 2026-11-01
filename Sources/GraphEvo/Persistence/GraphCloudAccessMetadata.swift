@@ -12,7 +12,7 @@ enum GraphCloudAccessMetadata {
         let value: GraphCloudParticipantAccess
         do { value = try JSONDecoder().decode(GraphCloudParticipantAccess.self, from: data) }
         catch { throw GraphCloudError.invalidState }
-        guard value.binding.zone.scope == .shared, !value.account.isEmpty,
+        guard value.format == 2, value.binding.zone.scope == .shared, !value.account.isEmpty,
               !value.binding.zone.owner.isEmpty, !value.binding.zone.name.isEmpty,
               value.accepted || value.permission == nil else { throw GraphCloudError.invalidState }
         return value
@@ -40,7 +40,9 @@ enum GraphCloudAccessMetadata {
               !value.account.isEmpty, !value.binding.zone.owner.isEmpty, !value.binding.zone.name.isEmpty,
               value.accepted || value.permission == nil else { throw GraphCloudError.invalidState }
         if let prior {
-            guard prior.binding == value.binding, prior.account == value.account else { throw GraphCloudError.ownershipConflict }
+            guard prior.binding == value.binding, prior.account == value.account,
+                  prior.identity == value.identity, prior.generation == value.generation,
+                  !prior.blocked || value.blocked else { throw GraphCloudError.ownershipConflict }
         } else {
             // An invitation can claim only an untouched, explicitly created local replica.
             let session = try GraphTypedStoreAdapter.Session(context, id, database: true)

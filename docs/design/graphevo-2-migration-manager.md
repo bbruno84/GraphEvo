@@ -1,5 +1,13 @@
 # GraphEvo 2 — migration manager renewal
 
+Current implementation direction: the
+[migration foundations roadmap](graphevo-2-migration-foundations.md) records the
+maintainer's custom-sync decisions after T08: protected local admission, central
+backups, a separate shared control ledger and working-graph/PH publication.
+Consumers own application compatibility and cross-device coordination. Native
+mirroring/import-version assumptions below retain historical scope and must not
+be implemented as current requirements. M1/M2a evidence remains unchanged.
+
 Status: M1 implements the package-only Swift 6 checkpoint foundation; M2a adds
 isolated local execution. No public migration executor, production source
 conversion, runtime admission, import compatibility pipeline or cloud cutover is

@@ -2,6 +2,7 @@ import CoreData
 import Foundation
 import GraphEvoRuntime
 import GraphEvoStore
+import GraphEvoModel
 
 /// Internal production entry point; public opening remains a later increment.
 enum GraphCoordinatorFactory {
@@ -30,6 +31,14 @@ enum GraphCoordinatorFactory {
         return GraphCoordinatorAdapter(graph: graph, sync: sync, initializePolicy: { context, id, policy in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
+        }, validateBackup: { context, id in
+            try GraphValueDecodingDiagnostics.checking {
+                let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
+                for (nodeID, node) in session.nodes {
+                    let record = try session.snapshot(node, id: nodeID)
+                    if record.type == GraphAttachmentPayload.graphType { _ = try GraphAttachmentPayload(graphRecord: record) }
+                }
+            }
         }) { context, id, creating in
             guard !(context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer),
                   context.persistentStoreCoordinator?.persistentStores.count == 1 else {

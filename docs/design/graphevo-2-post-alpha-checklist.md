@@ -344,6 +344,28 @@ API compatibility remains optional; data migration is a stable-release gate.
 
 ## PA09 — backups, restoration and retention
 
+The [current roadmap](graphevo-2-migration-foundations.md) adds a central
+BackupManager with a caller-supplied manifest reason and a reversible graph-local
+write reservation. [MF01](graphevo-2-local-maintenance.md), integrated in #120 after
+corrective review and the combined CI checkpoint, supplies their package-only
+baseline with complete local snapshot/empty-destination restoration, caller
+reasons, native content checks and durable retention. The
+[local result](results/local-maintenance-2026-11-01.md) verifies the candidate
+on macOS/iOS Simulator, without closing physical/cross-process acceptance.
+In-place/cloud restore, legacy-source integration and actual migration activation
+remain open. Validate nested reservations,
+all-handle drainage and explicit app/widget exclusion before claiming migration
+isolation. Current one-graph/store backups must preserve other graphs' shared
+engine/session state and must not roll back the cloud control ledger. Historical
+paired-store evidence below retains its original backend scope.
+
+- [ ] **B** Complete compressed local packages with manifest-based filesystem
+  discovery, async export/import and bounded extraction; select the format from
+  database/media measurements. Verify coherent copy, atomic publication and
+  interruption recovery separately. Validate transfer between devices and
+  independent cross-user import without inherited sharing/transport ownership.
+  See [backup roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment).
+
 - [ ] **B** Define consistent closed/quiescent backup prerequisites and whole-content
   inventory, including external bytes, both native resources, auxiliary files and
   operation ledgers; identify existing narrow migration backup callers to replace.
@@ -708,3 +730,19 @@ permission changes/offline/stale controls, concurrent invitations and actual
 interruption fault injection. Measure additional root access metadata and bounded
 session share-attempt markers with backup/recovery costs. Initial two-account
 sharing evidence does not close these gates or authorize native schema changes.
+
+
+## T08 sharing lifecycle follow-ups
+
+Candidate [T08](graphevo-2-sharing-lifecycle.md) introduces destructive participant
+cleanup, durable lifecycle commands/generations and whole shared-engine refetch
+on explicit rejoin. Retain **B** account/protected-data/cross-process reader,
+interruption and backup restoration coverage; **R** measure journal/tombstone
+retention, repeated subscription/refetch costs, external asset cleanup and long
+offline control retries. Do not infer distributed ordering or backup/secure-erasure
+certification from a bounded same-process purge or the initial hardware fixture.
+The [T08 report](results/sharing-lifecycle-2026-10-31.md) closes the bounded
+iPad/XR downgrade, revocation, deliberate pre-destruction interruption/restart,
+empty rejoin, leave and foreground paused-graph control scenario. Broader fault
+injection, offline hardware leave, account/cross-process policy and restoration
+remain open; do not expand the evidence beyond its tested source pins.
