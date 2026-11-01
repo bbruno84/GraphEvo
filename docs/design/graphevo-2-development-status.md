@@ -14,6 +14,8 @@ current/previous operations, 32 compact events and bounded consumer JSON outside
 Core Data. Control transport continues during graph-data pause, with explicit
 conflicts and restart recovery. Session format advances to 6; S03 and application
 record/asset formats remain unchanged. This is candidate work, not integrated.
+The [candidate result](results/shared-ledger-2026-11-01.md) records passing local
+macOS/iOS checks and six physical stages on iPad/XR, with new fixtures and no reset.
 Review/corrections precede CI and authorized merge. Migration working-copy
 publication, unmirrored local journals, independent cross-user graph activation
 and mandatory v1 conversion remain open.

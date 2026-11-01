@@ -377,7 +377,9 @@ paired-store evidence below retains its original backend scope.
   concurrent writers, interrupted control publication, permissions and lifecycle
   recovery. [MF03](graphevo-2-shared-ledger.md) supplies the candidate foundation
   with current/previous operation, 32 events, bounded consumer JSON and session
-  format 6. Retain actual physical evidence separately. Measure session rewrite
+  format 6. The [bounded iPad/XR result](results/shared-ledger-2026-11-01.md)
+  verifies read-only control updates during data pause and explicit restart
+  recovery; broad physical fault/concurrency acceptance remains open. Measure session rewrite
   costs and reserved 512-KiB headroom per enabled graph before production sizing.
   Unmirrored local journals and migration-data commit-marker recovery remain open;
   diagnostic history rotation must not delete unresolved executor evidence.

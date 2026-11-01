@@ -120,6 +120,12 @@ restoring `.geb` never reinstates a session/ledger or replays pending control wo
 
 ## Validation and workflow
 
+The [candidate result](results/shared-ledger-2026-11-01.md) records 808 macOS
+functions, 476 selected iOS functions and the six-stage iPad/XR physical protocol.
+It retains the distinction between injected recovery/concurrency tests and actual
+cross-account control transport while graph data is paused.
+
+
 Cover ring rotation, thousands of retries, complete previous state, consumer JSON
 limits/no-ops, stale commands, restart/recovery flag and durable failures. Inject
 offline/ambiguous sends, edits in flight, conflicts, duplicate notifications,
