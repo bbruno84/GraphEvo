@@ -8,13 +8,16 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF06 validates a representative consumer over the existing protected path on
-`codex/v2-consumer-migration-flow`. The [local-only laboratory](../../Experiments/ConsumerMigrationFlow/README.md)
+MF06 delivers representative consumer evidence through
+[PR #127](https://github.com/bbruno84/GraphEvo/pull/127), directly from #126.
+No next implementation branch is open. The [local-only laboratory](../../Experiments/ConsumerMigrationFlow/README.md)
 and [result](results/consumer-migration-flow-2026-11-01.md) cover consumer recovery,
 ledger visibility during data pause, complete publication and independent peer
 verification. Six local functions/ten invocations on macOS and iOS and ten real
 iPad/XR stages pass. No distributed source, schema or default CI/test target
-changes. Review/integration of the evidence is pending.
+changes. Review found no remaining blocking findings. This laboratory/evidence
+increment does not rerun full CI on unchanged shipping code; #324 remains its
+last full checkpoint. Default CI continues to exclude the laboratory.
 
 Next: define the mandatory v1 source identity/value/attachment conversion and
 coordinated cloud cutover. Public executor exposure, participant-origin workspaces,

@@ -1270,3 +1270,7 @@ expecting remote confirmation; a ledger phase is not a data barrier. Do not call
 checkpoint-saving PH collection as a read-only assertion under a source write
 hold. Preserve failed fixtures and use new physical stages/runs without replay.
 See [the scoped result](docs/design/results/consumer-migration-flow-2026-11-01.md).
+
+MF06 evidence integrates through #127 after local macOS/iOS and physical review;
+it adds no shipping code or normal CI target. Reviewed laboratory source is
+`bb97123`; full shipping checkpoint #324 remains applicable by byte equivalence.

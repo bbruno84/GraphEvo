@@ -1,7 +1,8 @@
 # MF06 — representative consumer migration result, 2026-11-01
 
 This local-only [consumer laboratory](../../../Experiments/ConsumerMigrationFlow/README.md)
-exercises the integrated MF01–MF05 path. Shipping source is
+exercises the integrated MF01–MF05 path and is delivered through
+[PR #127](https://github.com/bbruno84/GraphEvo/pull/127), directly from #126. Shipping source is
 `76515e76484f2a2052d3d5c4af3a61f3932c5647` (#126). No distributed source, normal
 test target, package manifest or workflow changes were needed. The example and
 fault suite live outside default build/CI targets; the preparation script overlays
@@ -110,3 +111,12 @@ conversion and coordinated cloud cutover, using this existing protected path.
 Consumers still own application compatibility; a new format registry is not
 introduced. As an experiment/documentation-only increment, MF06 requires no new
 full CI run; normal CI still excludes this laboratory.
+
+## Delivery review
+
+Reviewed laboratory head: `bb97123a9857015dead17bdbc7ae95ee594acec9`. No remaining
+blocking finding. A committed export reproduces the exact reviewed example/test
+files and records their checksums; shipping targets remain byte-identical to
+#126. Normal alpha CI is intentionally skipped without a checkpoint label, not
+reported as a new full test pass. Final integration notes change documentation
+only. Native runtime/schema and the remaining migration gates are unchanged.
