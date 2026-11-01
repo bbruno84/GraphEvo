@@ -104,5 +104,10 @@ the successful full checks. No production behavior was changed to bypass a test.
 Review checks identity scope, malformed serializer/decoder refusal, generic
 shared insertion, attachment compatibility and the two-file consumer. No remaining
 blocker was found. This is agent review, not independent human approval.
-A single final full CI checkpoint follows review; no physical cloud/schema
-acceptance claim is added by this mapping-only increment.
+Full checkpoint #338 passed the macOS library tests but failed ModelConsumer on
+CI's Swift 6.1: a multi-file executable named `main.swift` conflicted with `@main`.
+Renaming that file to `ModelConsumer.swift` fixes the entry-point declaration;
+its content and all shipping source/tests remain unchanged. The renamed consumer
+passes locally. This toolchain-specific failure is retained; the corrected head
+needs its final checkpoint before merge. No physical cloud/schema acceptance
+claim is added by this mapping-only increment.
