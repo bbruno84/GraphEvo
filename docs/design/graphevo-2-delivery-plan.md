@@ -250,6 +250,21 @@ Review any optional v1 API adapter separately; it cannot block or weaken the
 core design. Documentation and examples move to the actual v2 contracts while
 v1 guidance remains accessible.
 
+## Complete graph deletion — planned lifecycle work
+
+Implement an explicit ContextManager operation to permanently delete an owned
+graph locally and in the cloud. This is separate from v1 conversion and is not a
+migration prerequisite. It is also distinct from closing a handle, logical
+`removeAll()` and participant leave/revocation cleanup.
+
+The contract must coordinate open handles and admitted work, local store/files,
+cloud graph/control/share resources and retained transport work. Define durable
+intent and restart/offline retry behavior so incomplete deletion cannot silently
+recreate the graph or affect unrelated graphs. Participants must not gain owner
+powers. Decide existing-backup retention explicitly, separately from graph deletion.
+API, ordering and failure semantics remain to design; this item authorizes no
+current destructive operation. Track delivery in the post-alpha checklist.
+
 ## Migration manager renewal
 
 The current [migration foundations roadmap](graphevo-2-migration-foundations.md)

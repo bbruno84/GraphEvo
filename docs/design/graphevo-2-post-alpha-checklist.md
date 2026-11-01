@@ -114,6 +114,16 @@ Sources: [model contracts](graphevo-2-application-models.md),
 Sources: [A1](graphevo-2-store-runtime.md),
 [A2](graphevo-2-async-transactions.md), V03/V08.
 
+### Planned lifecycle follow-up — complete graph deletion
+
+- [ ] **R** Define, implement and validate explicit permanent deletion of an owned
+  graph, both local and cloud, under ContextManager. Coordinate aliases, admitted
+  work, store/internal files, cloud data/control/sharing and transport cleanup;
+  recover after interruption/offline failure without unintended recreation or
+  damage to other graphs. Preserve owner/participant authorization boundaries and
+  settle existing-backup retention separately. This is not `removeAll()`, leave,
+  or a prerequisite for migration. See [the roadmap](graphevo-2-delivery-plan.md#complete-graph-deletion--planned-lifecycle-work).
+
 ## PA03 — graph separation, accounts and native sharing
 
 M17 replaces automatic native mirroring with explicit CloudKit sync. Existing
