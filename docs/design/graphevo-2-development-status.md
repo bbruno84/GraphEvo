@@ -8,24 +8,38 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-[PR #122](https://github.com/bbruno84/GraphEvo/pull/122) on
-`codex/v2-shared-ledger` implements the package-only [MF03 bounded shared ledger](graphevo-2-shared-ledger.md)
-directly from #121 (`d17676d`) for a PR to `codex/graphevo-2`. It retains full
-current/previous operations, 32 compact events and bounded consumer JSON outside
-Core Data. Control transport continues during graph-data pause, with explicit
-conflicts and restart recovery. Session format advances to 6; S03 and application
-record/asset formats remain unchanged. This is candidate work, not integrated.
-The [candidate result](results/shared-ledger-2026-11-01.md) records passing local
-macOS/iOS checks and six physical stages on iPad/XR, with new fixtures and no reset.
-Corrective review closed two P2 findings in `7dd8ecf`: preserve hints received
-during an admitted successful turn and fence failure/retry state to the ledger
-generation. Final local checks passed 813 macOS and 481 selected iOS functions.
-The reviewed candidate is ready for one remote CI checkpoint and authorized merge.
-Migration working-copy
-publication, unmirrored local journals, independent cross-user graph activation
-and mandatory v1 conversion remain open.
+MF03 completes the shared-control metadata foundation through [PR #122](https://github.com/bbruno84/GraphEvo/pull/122).
+No next implementation branch is open. The next migration work is the working-copy
+and publication/recovery contract; consumer migration eligibility and data meaning
+remain consumer-owned. Unmirrored local journals, independent cross-user graph
+activation and mandatory v1 conversion remain open.
 
-## Latest integrated increment — MF02 compressed backup packages
+## Latest integrated increment — MF03 bounded shared ledger
+
+[PR #122](https://github.com/bbruno84/GraphEvo/pull/122) delivers
+[MF03](graphevo-2-shared-ledger.md) directly from #121 (`d17676d`) into
+`codex/graphevo-2`. It retains complete current/previous operations, 32 compact
+significant events and bounded consumer JSON outside Core Data. Control transport
+continues during graph-data pause, with explicit revision conflicts, durable
+in-flight evidence and explicit restart recovery. Session format 6 refuses older
+alpha documents unchanged; S03 and graph-node/asset formats are unchanged.
+
+Corrective review closed two P2 findings in `7dd8ecf`: preserve hints arriving
+during a successful turn and fence failure/retry state to the ledger generation.
+The final local suite passed 813 macOS functions and 481 selected iOS functions /
+566 invocations. The [scoped result](results/shared-ledger-2026-11-01.md) retains
+six physical iPad/XR stages at the original `9c6ee82` pin, separately from the
+corrective deterministic coverage.
+
+The full [CI checkpoint #303](https://github.com/bbruno84/GraphEvo/actions/runs/41295379797)
+passed both macOS and iOS jobs on reviewed head
+`a2f029a056929e7ba6e57ac80b1f80cb2ebed558`, after review and before merge.
+Subsequent integration/evidence changes are documentation-only, with unchanged
+shipping source `7dd8ecf`; they do not rerun unchanged library tests. The PR records
+the final merge and integration commit. Broad physical fault/concurrency, sizing,
+background/APNs and actual migration execution gates remain open.
+
+## Earlier integrated increment — MF02 compressed backup packages
 
 [PR #121](https://github.com/bbruno84/GraphEvo/pull/121) integrates
 [MF02](graphevo-2-backup-packages.md) directly into `codex/graphevo-2` from #120

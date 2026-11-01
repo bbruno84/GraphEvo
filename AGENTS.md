@@ -1157,3 +1157,8 @@ generation's pending control work. Backup evidence is graph-scoped and restorati
 must not rewind the shared ledger/session. An owned unfinished operation recovered
 after restart requires an explicit consumer recovery decision. Review precedes CI
 and authorized merge; disposable laboratories and physical runs remain local.
+
+MF03 integrates through #122 after corrective review and full CI #303 on
+`a2f029a`; subsequent integration/evidence updates are documentation-only. Keep
+original physical evidence (`9c6ee82`) distinct from corrective scheduler and
+generation-fence tests (`7dd8ecf`). Migration execution remains separate work.

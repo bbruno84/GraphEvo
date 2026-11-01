@@ -90,8 +90,8 @@ headroom sizing as a post-alpha check.
 An unmirrored local journal, working-copy migration executor, transactional
 application commit-marker reconciliation, independent-user restore activation
 and mandatory v1 conversion remain open. Control publication is distinct from
-application-data completion. Review/corrections precede CI; remote CI and merge
-have not been requested for this candidate.
+application-data completion. At the original candidate report, remote CI and merge had not yet been requested;
+the corrective review and eventual checkpoint are recorded below.
 
 ## Corrective review before CI
 
@@ -125,5 +125,18 @@ these corrective scheduling/generation cases are deterministic local coverage.
 Final corrected-source verification at `7dd8ecf`: full macOS suite **813 functions**
 (331 legacy, 383 store, 76 runtime, 23 model) and selected iOS 18.5 Simulator
 **481 functions / 566 invocations**, all passed. The source remains unchanged
-through the documentation-only review record. Remote CI is the next checkpoint;
+through the documentation-only review record. At that point remote CI was the next checkpoint;
 no repeated physical claim is made for the corrected source.
+
+
+## Remote checkpoint and integration
+
+After corrective review, full [CI run #303](https://github.com/bbruno84/GraphEvo/actions/runs/41295379797)
+passed the macOS and iOS jobs on reviewed head
+`a2f029a056929e7ba6e57ac80b1f80cb2ebed558`. The checkpoint label was added only
+after review/corrections and local checks. It was removed after success before the
+documentation-only integration/evidence update, avoiding another unchanged full
+run. The final PR head differs only in documentation; shipping source remains
+`7dd8ecf`. The PR records the authorized merge into `codex/graphevo-2`.
+Laboratories and physical probes were not run by CI. No release or beta gate
+closure is implied.

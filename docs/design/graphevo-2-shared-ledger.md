@@ -1,6 +1,6 @@
 # MF03 — bounded shared graph ledger
 
-Status: package-only candidate in [PR #122](https://github.com/bbruno84/GraphEvo/pull/122)
+Status: package-only baseline delivered through [PR #122](https://github.com/bbruno84/GraphEvo/pull/122)
 on `codex/v2-shared-ledger`, directly from #121
 (`d17676d`) to `codex/graphevo-2`. This implements the graph-control metadata
 foundation, not a consumer migration executor or a distributed lock.
@@ -123,7 +123,7 @@ restoring `.geb` never reinstates a session/ledger or replays pending control wo
 
 ## Validation and workflow
 
-The [candidate result](results/shared-ledger-2026-11-01.md) records 808 macOS
+The [result](results/shared-ledger-2026-11-01.md) records 808 macOS
 functions, 476 selected iOS functions and the six-stage iPad/XR physical protocol.
 It retains the distinction between injected recovery/concurrency tests and actual
 cross-account control transport while graph data is paused.
