@@ -19,12 +19,21 @@ This candidate adds a bounded manifest-first container and
 streamed raw DEFLATE through SDK zlib, retaining legacy directory reads. Graph
 holds end after coherent native copying; compression/verification run afterward.
 Package import copies into a backup collection; independent cross-user graph
-activation remains separate executor work. No CI or merge is requested yet.
+activation remains separate executor work. The maintainer subsequently authorized
+review/corrections, CI and merge if successful. The
+[review](results/backup-packages-review-2026-11-01.md) reproduced one P2: a rejected
+nested legacy import created a child in its source. Correction `8bf64b0` closes
+it through export's existing preflight, with direct/alias regressions; corrective
+re-review found no remaining blocker in the examined paths. CI follows local checks.
 The [MF02 results](results/backup-packages-2026-11-01.md) record 785 macOS and
 430 iOS Simulator functions, Release/consumer checks and successful native package
 transport/recovery in both directions between macOS and iOS Simulator. A mixed
 native fixture reduces approximately 8.85 MB to 4.26 MB; this is local synthetic
-evidence, not physical/production-scale acceptance. Review is next.
+evidence, not physical/production-scale acceptance. Original result pins remain
+historical; corrected validation is recorded with the review/checkpoint.
+Corrected source `8bf64b0` passes 786 macOS and 431 selected iOS Simulator
+functions, Release, Swift 6 consumer and manifest/diff checks. The corrective
+re-review closes the P2; one remote checkpoint follows before authorized merge.
 New work starts from `codex/graphevo-2`, not the retained T08/MF01 topic branches.
 
 ## Latest integrated increment — T08 and MF01

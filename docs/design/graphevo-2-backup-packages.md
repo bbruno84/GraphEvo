@@ -4,8 +4,10 @@ Status: package-only candidate on `codex/v2-compressed-backups`, directly from
 `codex/graphevo-2` at #120 (`2009582`). No schema, record wire format or cloud
 session change. This extends [MF01](graphevo-2-local-maintenance.md).
 Implementation source `3e509f0` is ready for review after local validation.
-Delivery: [PR #121](https://github.com/bbruno84/GraphEvo/pull/121), without a remote
-CI checkpoint or merge request at implementation time.
+Delivery: [PR #121](https://github.com/bbruno84/GraphEvo/pull/121). The
+[review/correction](results/backup-packages-review-2026-11-01.md) closes one P2
+in legacy import preflight at `8bf64b0`. The maintainer authorized continuing
+through CI and merge on success after corrective review.
 
 ## Package and discovery
 
