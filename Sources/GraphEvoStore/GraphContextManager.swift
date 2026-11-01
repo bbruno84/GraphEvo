@@ -18,6 +18,7 @@ package actor GraphContextManager {
     }
     nonisolated let migrationIdentity = UUID()
     var publishingMigrations = Set<GraphID>()
+    var convertingV1 = Set<GraphID>()
     let registry: StoreRegistry
     let schema: StoreSchema
     let adapter: GraphCoordinatorAdapter
@@ -657,7 +658,10 @@ package actor GraphContextManager {
 
     package init(registry: StoreRegistry = .shared, schema: StoreSchema, adapter: GraphCoordinatorAdapter) {
         self.registry = registry; self.schema = schema; self.adapter = adapter
-        backups = GraphBackupManager(schemaIdentifier: schema.identifier) { url, id in
+        let legacy = adapter.v1Conversion
+        let validateLegacy = legacy?.backupValidator
+        backups = GraphBackupManager(schemaIdentifier: schema.identifier, legacySchemaIdentifier: legacy?.sourceSchema.identifier,
+                                     validateLegacy: validateLegacy) { url, id in
             let validationRegistry = StoreRegistry.shared
             let handle = try await validationRegistry.open(.init(location: .sqlite(url), access: .readOnly), schema: schema)
             do {

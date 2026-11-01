@@ -8,9 +8,44 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+MF07 explicit local v1 conversion integrates through
+[PR #129](https://github.com/bbruno84/GraphEvo/pull/129), directly from #128.
+No next implementation branch is open. Next: supported opt-in bootstrap and
+production/historical source acceptance, then new-cloud activation of one
+authoritative converted graph. Old-cloud format conversion is outside this scope.
+
+## Latest integrated increment — MF07 local v1 conversion
+
+The [contract](graphevo-2-v1-local-conversion.md) supplies a stopped read-only v1
+source, complete verified legacy backup, distinct S03 destination and atomic
+identity-map/receipt commit. Source files remain v1 and are not rewritten. Repeat
+requests recover stable UUIDs/one backup without overwriting later v2 edits.
+Cancellation and cleanup outcomes preserve native commit proof and failed-detach
+ownership. Normal v2 reads remain pinned; the restricted source reader cannot
+write or mix with normal aliases. Default openers, S03 and cloud formats remain
+unchanged; no cloud session starts.
+
+[Results](results/v1-local-conversion-2026-11-01.md) retain 886 local macOS
+functions, 554 selected iOS functions/657 invocations, both consumers and four
+physical local iPad/XR conversion/restart stages on source `f72c2e3`. Review finds
+no remaining blocker in the bounded supported scope. One full
+[CI checkpoint #331](https://github.com/bbruno84/GraphEvo/actions/runs/41336556416)
+passes on reviewed head `f24029a02d7c7ea86d7400758c07236e9f28959f`: 886 macOS
+functions and both consumers; 884 iOS functions/987 passed invocations with one
+known legacy simulator-alias skip. Final integration notes change documentation
+only; shipping source/tests match that checkpoint exactly.
+
+Ambiguous legacy nulls/unknown values are refused rather than silently omitted.
+Native historical wrapper stores, production fixtures, paired sources, public
+bootstrap, physical kill/scale and new-cloud activation remain open. Large Data
+is preserved locally without an implicit attachment conversion; one authoritative
+mapping is required before activating cloud peers. No whole v1 or beta gate closes.
+
+## Earlier laboratory checkpoint — MF06 consumer integration
+
 MF06 delivers representative consumer evidence through
 [PR #127](https://github.com/bbruno84/GraphEvo/pull/127), directly from #126.
-No next implementation branch is open. The [local-only laboratory](../../Experiments/ConsumerMigrationFlow/README.md)
+The [local-only laboratory](../../Experiments/ConsumerMigrationFlow/README.md)
 and [result](results/consumer-migration-flow-2026-11-01.md) cover consumer recovery,
 ledger visibility during data pause, complete publication and independent peer
 verification. Six local functions/ten invocations on macOS and iOS and ten real
@@ -19,8 +54,9 @@ changes. Review found no remaining blocking findings. This laboratory/evidence
 increment does not rerun full CI on unchanged shipping code; #324 remains its
 last full checkpoint. Default CI continues to exclude the laboratory.
 
-Next: define the mandatory v1 source identity/value/attachment conversion and
-coordinated cloud cutover. Public executor exposure, participant-origin workspaces,
+After MF07: integrate supported opt-in bootstrap and production/historical
+source acceptance, then new-cloud activation of one authoritative converted graph.
+Old-cloud format conversion is outside this increment. Public executor exposure, participant-origin workspaces,
 fresh shared bootstrap after publication and broader interruption/scale acceptance
 remain separate work. Consumers retain semantics and cross-device policy.
 
@@ -29,7 +65,7 @@ as a separate lifecycle capability, not a prerequisite for migration. API and
 recovery/backup-retention semantics remain to design; no deletion is implemented
 or executed by this roadmap update.
 
-## Latest integrated increment — MF05 original-store publication
+## Earlier integrated increment — MF05 original-store publication
 
 [MF05](graphevo-2-migration-publication.md) publishes sealed final primitives and
 deletions through one bounded original transaction, after a complete verified

@@ -126,8 +126,10 @@ actor StoreResources {
             description = NSPersistentStoreDescription(url: url)
             description.type = NSSQLiteStoreType
             description.isReadOnly = resolved.configuration.access == .readOnly
-            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            if !resolved.configuration.legacyReadOnly {
+                description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+                description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            }
         case .inMemory:
             description = NSPersistentStoreDescription()
             description.type = NSInMemoryStoreType
@@ -192,7 +194,7 @@ actor StoreResources {
                 context.userInfo[StoreNativeContext.cancellationKey] = check
                 defer { context.rollback(); context.reset() }
                 try cancellation.check()
-                if sqlite { try context.setQueryGenerationFrom(.current) }
+                if sqlite && !configuration.legacyReadOnly { try context.setQueryGenerationFrom(.current) }
                 let value = try body(context)
                 guard !context.hasChanges else { throw StoreRuntimeError.mutationInReadScope }
                 try cancellation.check()
@@ -375,18 +377,19 @@ actor StoreResources {
 
     func copyStore(to destination: URL, reservation: UUID) async throws {
         guard dataAvailable else { throw StoreRuntimeError.dataUnavailable }
-        guard let source = resolved.url, resolved.configuration.exclusiveGraphID != nil,
+        guard let source = resolved.url,
+              (resolved.configuration.exclusiveGraphID != nil || resolved.configuration.access == .readOnly),
               resolved.configuration.cloudKitContainerIdentifier == nil, resolved.configuration.sharedStoreURL == nil,
               !FileManager.default.fileExists(atPath: destination.path) else {
-            throw StoreRuntimeError.invalidConfiguration("A backup requires an exclusive local graph and an empty destination.")
+            throw StoreRuntimeError.invalidConfiguration("A backup requires an exclusive local graph or a read-only local source and an empty destination.")
         }
         try admit(reservation: reservation)
         defer { finish() }
-        let container = container
+        let container = container, readOnly = resolved.configuration.access == .readOnly
         try await container.performBackgroundTask { _ in
             let copier = NSPersistentStoreCoordinator(managedObjectModel: container.managedObjectModel)
             try copier.replacePersistentStore(at: destination, destinationOptions: nil,
-                withPersistentStoreFrom: source, sourceOptions: nil, ofType: NSSQLiteStoreType)
+                withPersistentStoreFrom: source, sourceOptions: readOnly ? [NSReadOnlyPersistentStoreOption: true] : nil, ofType: NSSQLiteStoreType)
         }
     }
 

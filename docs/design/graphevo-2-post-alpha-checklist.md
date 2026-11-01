@@ -349,6 +349,20 @@ close O04 or mark the wider beta/stable items above complete.
   duplicate prevention, retained source data and rejection of invalid destinations.
   Test pending writes and returning old devices under the chosen cutover policy.
 
+- [ ] **B** Validate the [MF07 local v1 route](graphevo-2-v1-local-conversion.md)
+  against historical/production sources and supported bootstrap. Retain source
+  bytes/data, native detail versions, lookup mappings and complete legacy backups;
+  classify ambiguous null/native wrapper cases without silent loss. Exercise
+  interrupted conversion, failed cleanup, source replacement, bounds and scale.
+  Before new-cloud activation, settle legacy binary properties exceeding the
+  inline cloud allowance; preserving a Data value locally is not CKAsset migration.
+  Select one authoritative initial import/mapping before activating peers; separate
+  local conversions must not publish competing random IDs into the same graph.
+  #129 integrates the bounded local route after review and full CI #331;
+  [local/device results](results/v1-local-conversion-2026-11-01.md) retain the
+  exact pin and scope and do not close the whole v1 gate.
+  Old-cloud conversion/coexistence is not part of this local increment.
+
 Sources: specification S11, delivery plan migration workstream, V08, D07/M02/M09.
 API compatibility remains optional; data migration is a stable-release gate.
 

@@ -1795,3 +1795,22 @@ Only this workspace's source holds are released on commit. Failed attempts retai
 the verified backup; corruption refuses retry. Participant workspaces remain
 refused. See [MF04](../design/graphevo-2-migration-workspace.md) and
 [MF05](../design/graphevo-2-migration-publication.md).
+
+
+### Explicit local v1 conversion (package-only)
+
+`GraphContextManager.convertLocalV1Store(at:to:graphID:operationID:backupsIn:reason:limits:) async throws -> GraphV1ConversionResult`
+validates one stopped local v1 source, verifies/pins a complete legacy backup and
+commits a distinct native S03 graph plus stable legacy-ID map/receipt atomically.
+Source files/model are not rewritten; no old cloud identity or PH is imported and
+no cloud session starts. The caller persists the request IDs and supplies current
+URLs again after restart. Repeat the same request to recover its receipt without
+overwriting later v2 edits. Source changes/foreign destinations are refused.
+
+The result identifies local commit, current backup URL and any pending cleanup
+with its error. Cleanup failure does not falsify a committed conversion or release
+failed native ownership. Open with the existing awaited `openGraph(id:at:)` only
+after successful conversion/cleanup; automatic public migration is not enabled.
+Limits default to 10,000 records, 100,000 native rows and 32 MiB weighted payload,
+with explicit native-preview/PH, mapping and receipt bounds. Unknown/ambiguous
+values refuse conversion instead of dropping data. See [MF07](../design/graphevo-2-v1-local-conversion.md).

@@ -17,7 +17,10 @@ publication and backup/receipt recovery through #126 after local/device review
 and full CI #324. [MF06](../../Experiments/ConsumerMigrationFlow/README.md) then exercises a
 synthetic consumer with local recovery and real iPad/XR ledger/data verification,
 without changing shipping targets or adding another executor. Consumer semantics,
-participant-origin execution and mandatory v1 source conversion remain open. Future branches start from `codex/graphevo-2`.
+participant-origin execution and mandatory v1 acceptance remain open.
+[MF07](graphevo-2-v1-local-conversion.md) supplies the bounded local v1 conversion
+route through #129 after local/device review and full CI #331. Public bootstrap,
+historical/production source coverage and new-cloud activation are distinct gates. Future branches start from `codex/graphevo-2`.
 
 ## Responsibility boundary
 
