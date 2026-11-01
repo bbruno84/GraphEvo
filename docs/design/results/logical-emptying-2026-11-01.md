@@ -99,3 +99,22 @@ and the post-alpha gates remain open. PR #123 is ready for review; remote CI and
 merge have not been requested for this implementation. Follow review/corrections,
 then any requested full checkpoint, then authorized merge. No laboratory was
 added to CI.
+
+
+## Pre-CI review
+
+Review of `165132e` found no remaining defect in the examined implementation.
+The review checked graph-scoped preflight/destructive boundaries, hidden control
+retention, native/current adapters, cancellation and permission admission,
+deleted identity tracking, frozen-send acknowledgement and independent transport
+receipts. It preserves the distinction between local commit and remote delivery.
+
+Two additional adversarial regressions were added without changing library code:
+an externally injected cross-graph incoming Action refuses emptying while keeping
+both graphs intact; a consumer catching a record-limit refusal can commit a
+separate patch without partial emptying or pending deletes. The reviewed focused
+macOS suite passes **15 functions** (emptying and transport), and iOS 18.5 Simulator
+passes **12 emptying functions / 13 invocations**. The earlier complete suites and
+eight physical stages retain shipping-source pin `a19ae62`; they were not rerun
+merely for added regression tests. Full remote validation follows this completed
+review before authorized integration. No workspace behavior is certified.

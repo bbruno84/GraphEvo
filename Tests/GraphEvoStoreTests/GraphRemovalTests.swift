@@ -195,6 +195,52 @@ private final class RemovalCommitGate: @unchecked Sendable {
         try await view.close(); try await reader.close()
     }
 
+    @Test func crossGraphIncomingActionRefusesWithoutRemovingEitherGraph() async throws {
+        let db = try await GraphDatabase.inMemory()
+        let a = try await db.createGraph(), b = try await db.createGraph()
+        let aid = a.makeNodeID(), bid = b.makeNodeID(), actionID = b.makeNodeID(), aGraphID = a.id, bGraphID = b.id
+        _ = try await a.transaction { try $0.insert(GraphRecord(id: aid, type: "Removal.A")) }
+        try await b.transaction { scope in
+            try scope.insert(GraphRecord(id: bid, type: "Removal.B"))
+            try scope.insert(GraphRecord(id: actionID, type: "Removal.ForeignAction", endpoints: .action(subjects: [bid], objects: [])))
+        }
+        // Inject an unsupported external writer's cross-graph dependency.
+        try await db.nativeOperation { container in
+            try await container.performBackgroundTask { context in
+                context.userInfo[StoreNativeContext.containerKey] = container
+                let a = try GraphTypedStoreAdapter.Session(context, aGraphID, database: true)
+                let b = try GraphTypedStoreAdapter.Session(context, bGraphID, database: true)
+                let entity = try #require(a.nodes[aid] as? Entity), action = try #require(b.nodes[actionID] as? Action)
+                action.add(objects: entity)
+                try context.save()
+            }
+        }
+        await #expect { try await a.removeAll() } throws: { if case GraphStoreError.unresolvedReference = $0 { return true }; return false }
+        #expect(try await a.read { try $0.record(for: aid) != nil })
+        #expect(try await b.read { try $0.record(for: bid) != nil })
+        #expect(try await db.graphIDs().count == 2)
+        try await a.close(); try await b.close(); try await db.close()
+    }
+
+    @Test func caughtLimitRefusalAllowsUnrelatedEditWithoutPartialEmptying() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Graph.sqlite"))
+        let ids = try await seed(graph)
+        let before = try await graph.prepareSyncBatch(maximumRecords: 100)
+        _ = try await graph.acknowledgeSyncBatch(before.id, succeeded: Set(ids))
+        try await graph.transaction { scope in
+            do { _ = try scope.removeAll(maximumRecords: 4); throw Abort() }
+            catch GraphRemovalError.recordLimitExceeded { }
+            _ = try scope.patch(GraphRecordPatch(id: ids[0], properties: ["kept": .set(.boolean(true))]))
+        }
+        #expect(try await graph.read { try $0.record(for: ids[0])?.properties["kept"] == .boolean(true) })
+        #expect(try await graph.attachment(ids[4])?.data.count == 2 * 1024 * 1024)
+        #expect(try await graph.collectSyncChanges() == 1)
+        let after = try await graph.prepareSyncBatch(maximumRecords: 100)
+        #expect(after.items.count == 1 && after.items[0].change.id == ids[0] && after.items[0].change.operation == .save)
+        try await graph.abandonSyncBatch(after.id); try await graph.close()
+    }
+
     @Test func writeReservationsAndReadOnlyParticipantsRefuseEmptying() async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), id = GraphID(), url = root.appendingPathComponent("Graph.sqlite")

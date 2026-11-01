@@ -20,8 +20,11 @@ then creates/verifies the original backup before publication. Consumer migration
 eligibility/domain meaning remain consumer-owned. The [MF04a result](results/logical-emptying-2026-11-01.md) records candidate
 `a19ae62`: 826 macOS functions, 494 selected iOS functions / 580 invocations and
 eight fresh iPad/XR stages preserving share, ledger, store identity and a control
-graph through emptying/repopulation. This is ready for review, not integrated;
-CI follows review/corrections, not implementation.
+graph through emptying/repopulation. Pre-CI review found no remaining defect;
+two added adversarial regressions pass in a 15-function focused macOS suite and
+12-function iOS emptying suite. Library source is unchanged from `a19ae62`.
+The candidate is reviewed and awaiting its single requested remote checkpoint,
+then authorized merge. It is not integrated yet.
 
 ## Latest integrated increment — MF03 bounded shared ledger
 
