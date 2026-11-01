@@ -10,7 +10,12 @@ integration into the main v2 branch or beta readiness.
 
 MF08 internal migration structure integrates through
 [PR #130](https://github.com/bbruno84/GraphEvo/pull/130), directly from #129.
-No next implementation branch is open. Next: supported opt-in bootstrap and
+[TP01](results/typed-properties-2026-11-01.md) on
+`codex/experiment-typed-properties` adds measured native-property feasibility,
+with no shipping model/planner change. The final campaign passes 252 local process
+stages; semantic failures and indexed SUBQUERY regressions are retained. Next
+representation work is an explicit schema/planner design and integration decision.
+Migration's next step remains supported opt-in bootstrap and
 production/historical source acceptance, then new-cloud activation of one
 authoritative converted graph. Old-cloud format conversion is outside this scope.
 

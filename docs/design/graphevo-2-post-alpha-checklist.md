@@ -268,6 +268,11 @@ Sources: [A6 contract](graphevo-2-attachments.md),
   graphs, selective queries and file-heavy records. Measure decoding of unrelated
   scoped properties, native candidate amplification and index opportunities;
   choose a supported production envelope and explicit capability matrix.
+  [TP01](results/typed-properties-2026-11-01.md) supplies isolated native-property
+  evidence, not a production query engine. Before adopting typed storage, retain
+  Unicode/NUL semantics, exact numeric handling and URL identity/admission; the
+  existing envelope's relative-URL loss is an explicit open issue. Index/SUBQUERY
+  regressions require planner coverage. Full Graph/device validation remains open.
 - [ ] **B** Finalize AND composition, literal strings, null/missing, numeric
   precision, ordering, count/projection/aggregate and traversal semantics with
   application adaptation examples. Decide scope of optional grouped aggregates,
