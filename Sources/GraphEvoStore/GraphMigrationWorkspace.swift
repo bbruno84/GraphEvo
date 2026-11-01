@@ -82,9 +82,10 @@ package struct GraphMigrationWorkspaceDescriptor: Codable, Sendable, Equatable {
     package let workingFile: WorkspaceFileIdentity
 }
 
-/// An isolated editable graph. Sealing, restart activation and publication are subsequent increments.
+/// Isolated migration editing, durable sealing and bounded original-store publication.
 package actor GraphMigrationWorkspace {
     package nonisolated let id: UUID
+    package nonisolated let managerID: UUID
     package nonisolated let graph: GraphStore
     package nonisolated let descriptor: GraphMigrationWorkspaceDescriptor
     package nonisolated let directory: URL
@@ -96,6 +97,8 @@ package actor GraphMigrationWorkspace {
     private let workspaceAdapter: GraphMigrationWorkspaceAdapter?
     private var sealed: GraphMigrationChangeSet?
     private var sealHold: StoreReservation?
+    private var publishing: Task<GraphMigrationPublicationResult, any Error>?
+    private var publicationReceipt: GraphMigrationPublicationReceipt?
     private var sealing: Task<GraphMigrationChangeSet, any Error>?
     private let sourceHold: StoreReservation
     private let storeOwnership: WorkspaceFileIdentity
@@ -105,8 +108,8 @@ package actor GraphMigrationWorkspace {
 
     init(graph: GraphStore, handle: StoreHandle, descriptor: GraphMigrationWorkspaceDescriptor,
          directory: URL, sourceHold: StoreReservation, ownership: WorkspaceDirectoryIdentity, storeOwnership: WorkspaceFileIdentity,
-         adapter: GraphMigrationWorkspaceAdapter?, registry: StoreRegistry, schema: StoreSchema, activationID: UUID, sealed: GraphMigrationChangeSet? = nil, sealHold: StoreReservation? = nil) {
-        self.id = descriptor.id; self.graph = graph; self.handle = handle
+         adapter: GraphMigrationWorkspaceAdapter?, registry: StoreRegistry, schema: StoreSchema, activationID: UUID, managerID: UUID, published: GraphMigrationPublicationReceipt? = nil, sealed: GraphMigrationChangeSet? = nil, sealHold: StoreReservation? = nil) {
+        self.id = descriptor.id; self.managerID = managerID; self.publicationReceipt = published; self.graph = graph; self.handle = handle
         self.descriptor = descriptor; self.directory = directory; self.sourceHold = sourceHold
         self.ownership = ownership; self.storeOwnership = storeOwnership
         self.registry = registry; self.schema = schema; self.activationID = activationID
@@ -149,11 +152,55 @@ package actor GraphMigrationWorkspace {
         sealed = result; sealHold = hold
     }
 
+    package func publish(_ body: @escaping @Sendable (GraphMigrationChangeSet) async throws -> GraphMigrationPublicationResult) async throws -> GraphMigrationPublicationResult {
+        guard closing == nil, discarding == nil else { throw GraphMigrationWorkspaceError.closed }
+        let seal = try await self.seal()
+        guard closing == nil, discarding == nil else { throw GraphMigrationWorkspaceError.closed }
+        guard publishing == nil else { throw GraphMigrationPublicationError.busy }
+        let task = Task {
+            let result = try await body(seal)
+            self.publicationReceipt = result.receipt
+            await self.sourceHold.release()
+            return result
+        }
+        publishing = task
+        do {
+            let result = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            publishing = nil; return result
+        } catch { publishing = nil; throw error }
+    }
+    package func committedPublication() -> GraphMigrationPublicationReceipt? { publicationReceipt }
+    package func publicationItems(_ seal: GraphMigrationChangeSet, adapter: GraphMigrationPublicationAdapter,
+                                  limits: GraphMigrationPublicationLimits) async throws -> [GraphMigrationPublicationItem] {
+        let descriptor = descriptor
+        return try await handle.read { try adapter.snapshot($0, descriptor, seal, limits) }
+    }
+    package func publicationIntent(_ seal: GraphMigrationChangeSet, reason: String?) throws -> GraphMigrationPublicationIntent {
+        guard try WorkspaceFiles.activation(directory) == activationID else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+        let url = directory.appendingPathComponent("publication.json")
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try WorkspaceFileIdentity(url)
+            guard let bytes = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber,
+                  bytes.intValue <= 16 * 1024 else { throw GraphMigrationPublicationError.invalidIntent }
+            let intent = try JSONDecoder().decode(GraphMigrationPublicationIntent.self, from: Data(contentsOf: url))
+            try intent.validate(seal)
+            guard reason == nil || reason == intent.reason else { throw GraphMigrationPublicationError.invalidIntent }
+            return intent
+        }
+        let intent = try GraphMigrationPublicationIntent(seal: seal, reason: reason)
+        let temporary = directory.appendingPathComponent(".publication-" + UUID().uuidString + ".tmp")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try intent.encoded().write(to: temporary, options: .withoutOverwriting)
+        try FileManager.default.moveItem(at: temporary, to: url)
+        return intent
+    }
+
     /// End all working access and release only this migration's original-store holds; retain files.
     package func close() async throws {
         if let closing { return try await closing.value }
-        let graph = graph, handle = handle, sourceHold = sourceHold, sealing = sealing
+        let graph = graph, handle = handle, sourceHold = sourceHold, sealing = sealing, publishing = publishing
         let task = Task {
+            _ = try? await publishing?.value
             _ = try? await sealing?.value
             try await handle.setDataAvailable(false, terminal: true)
             await self.releaseSealHold()
@@ -228,7 +275,8 @@ extension GraphContextManager {
             writes = try await owner.suspendLocalWrites()
             guard try await owner.participantAccess() == nil else { throw GraphMigrationWorkspaceError.participantUnsupported }
             guard try WorkspaceFileIdentity(location.url) == descriptor.sourceFile else { throw GraphMigrationWorkspaceError.staleSource }
-            try await owner.validateMigrationSource(descriptor.source)
+            let receipt = try await owner.publicationReceipt(for: descriptor.id)
+            if receipt == nil { try await owner.validateMigrationSource(descriptor.source) }
             let url = directory.appendingPathComponent(descriptor.storePath)
             guard try WorkspaceFileIdentity(url) == descriptor.workingFile else { throw GraphMigrationWorkspaceError.invalidWorkspace }
             let sessionID = UUID()
@@ -243,6 +291,10 @@ extension GraphContextManager {
                 guard !context.hasChanges else { throw GraphMigrationWorkspaceError.invalidWorkspace }
                 return result
             }
+            if let receipt {
+                guard let sealed else { throw GraphMigrationPublicationError.receiptConflict }
+                try receipt.validate(sealed, storeID: descriptor.source.storeID)
+            }
             if sealed != nil { sealedWrites = try await handle.suspendWrites() }
             let ownership = try WorkspaceDirectoryIdentity(directory), storeOwnership = try WorkspaceFileIdentity(url)
             guard storeOwnership == descriptor.workingFile else { throw GraphMigrationWorkspaceError.invalidWorkspace }
@@ -255,9 +307,12 @@ extension GraphContextManager {
             let hold = StoreReservation(id: descriptor.id) {
                 await heldWrites.release(); await heldCloud.release(); try? await retained.close()
             }
-            return GraphMigrationWorkspace(graph: graph, handle: handle, descriptor: descriptor, directory: directory,
+            let workspace = GraphMigrationWorkspace(graph: graph, handle: handle, descriptor: descriptor, directory: directory,
                 sourceHold: hold, ownership: ownership, storeOwnership: storeOwnership, adapter: workspaceAdapter,
-                registry: registry, schema: schema, activationID: sessionID, sealed: sealed, sealHold: sealedWrites)
+                registry: registry, schema: schema, activationID: sessionID, managerID: migrationIdentity, published: receipt,
+                sealed: sealed, sealHold: sealedWrites)
+            if receipt != nil { await hold.release() }
+            return workspace
         } catch {
             let original = error
             await maintenance?.release(); await sealedWrites?.release()
@@ -347,7 +402,7 @@ extension GraphContextManager {
             }
             return GraphMigrationWorkspace(graph: graph, handle: final, descriptor: descriptor,
                 directory: destination, sourceHold: hold, ownership: ownership,
-                storeOwnership: storeOwnership, adapter: adapter.workspace, registry: registry, schema: schema, activationID: sessionID)
+                storeOwnership: storeOwnership, adapter: adapter.workspace, registry: registry, schema: schema, activationID: sessionID, managerID: migrationIdentity)
         } catch {
             let original = error
             // Never remove an attached stage, even if native cleanup itself failed.

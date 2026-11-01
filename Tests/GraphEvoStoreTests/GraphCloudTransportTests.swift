@@ -570,4 +570,33 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         #expect(try await f.graph.collectSyncChanges() == 0)
         try await finish(f)
     }
+    @Test func migrationPublicationPreservesFrozenTransportAndIndependentReplicaReceivesLatestValue() async throws {
+        let bus = TransportBus(), namespace = UUID().uuidString
+        let f = try await fixture(bus: bus, container: namespace), id = f.graph.makeNodeID()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: id, type: "Migration.Item", properties: ["value": .integer(1)])) }
+        _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        _ = try await f.graph.transaction { try $0.patch(GraphRecordPatch(id: id, properties: ["value": .set(.integer(3))])) }
+        let frozen = try await f.graph.prepareTransport(f.binding)
+        let w = try await f.manager.prepareMigrationWorkspace(for: f.graph.id, at: f.directory.appendingPathComponent("Working"))
+        _ = try await w.graph.transaction { try $0.patch(GraphRecordPatch(id: id, properties: ["value": .set(.integer(4))])) }
+        _ = try await f.manager.publishMigrationWorkspace(w, backupsIn: f.directory.appendingPathComponent("Backups"))
+        #expect(try await f.graph.prepareTransport(f.binding) == frozen)
+        _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        #expect(try await f.graph.collectSyncChanges() == 1)
+        #expect(try await f.graph.read { try $0.record(for: id)?.properties["value"] } == .integer(4))
+        _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        #expect(try await f.graph.collectSyncChanges() == 0)
+        // One engine per database/scope: release the sender's engine after confirmed sends,
+        // retaining its native writer until the independent replica has observed the result.
+        try await f.manager.stopCloudSession(f.config)
+        let peer = try await fixture(bus: bus, container: namespace, graphID: f.graph.id)
+        defer { try? FileManager.default.removeItem(at: peer.directory) }
+        try await peer.manager.fetchCloudChanges(.private, configuration: peer.config)
+        _ = try await peer.manager.applyCloudInbox(for: peer.graph.id, configuration: peer.config)
+        #expect(try await peer.graph.read { try $0.record(for: id)?.properties["value"] } == .integer(4))
+        #expect(try await peer.graph.collectSyncChanges() == 0)
+        try await w.discard(); try await finish(peer); try await finish(f)
+    }
+
 }

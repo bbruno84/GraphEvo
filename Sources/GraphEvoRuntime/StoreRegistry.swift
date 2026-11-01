@@ -113,6 +113,13 @@ package actor StoreHandle {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         try await registry.discardWorkspace(key, generation: generation, token: token, body)
     }
+    /// Explicit protected publication on the original; ordinary transactions still obey write holds.
+    package func publicationTransaction<Value: Sendable>(graphID: UUID, reservation: StoreReservation,
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.publicationTransaction(key, generation: generation, token: token,
+            graphID: graphID, reservation: reservation.id, body)
+    }
     /// The workspace control path alone may commit under its own exclusive maintenance fence.
     package func workspaceTransaction<Value: Sendable>(reservation: StoreReservation,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
@@ -315,6 +322,11 @@ package actor StoreRegistry {
             if entries[key]?.generation == generation { entries[key]?.destroying = false }
             throw error
         }
+    }
+    fileprivate func publicationTransaction<Value: Sendable>(_ key: StoreKey, generation: UUID, token: UUID,
+        graphID: UUID, reservation: UUID, _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        let value = try entry(for: key, generation: generation, token: token)
+        return try await value.opening.value.publicationTransaction(graphID: graphID, reservation: reservation, body)
     }
     fileprivate func workspaceTransaction<Value: Sendable>(_ key: StoreKey, generation: UUID, token: UUID, reservation: UUID,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {

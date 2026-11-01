@@ -331,11 +331,31 @@ actor StoreResources {
         for gateway in gateways { gateway.release() }
     }
 
-    /// Only a workspace's drained exclusive reservation admits this control save.
+    /// Workspace sealing cannot use the separate original-store publication capability.
     func workspaceTransaction<Value: Sendable>(reservation: UUID,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
-        guard resolved.configuration.workspaceID != nil, dataAvailable,
-              reservations[reservation] == .all, admitted == 0 else { throw StoreRuntimeError.resourceReserved }
+        guard resolved.configuration.workspaceID != nil else { throw StoreRuntimeError.resourceReserved }
+        return try await reservedMigrationTransaction(reservation: reservation, body)
+    }
+
+    func publicationTransaction<Value: Sendable>(graphID: UUID, reservation: UUID,
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard resolved.configuration.workspaceID == nil, resolved.configuration.exclusiveGraphID == graphID,
+              resolved.configuration.cloudKitContainerIdentifier == nil, resolved.configuration.sharedStoreURL == nil else {
+            throw StoreRuntimeError.resourceReserved
+        }
+        return try await reservedMigrationTransaction(reservation: reservation) { context in
+            guard let coordinator = context.persistentStoreCoordinator, coordinator.persistentStores.count == 1,
+                  let store = coordinator.persistentStores.first,
+                  coordinator.metadata(for: store)[StoreNativeContext.historySyncGraphKey] as? String == graphID.uuidString,
+                  coordinator.metadata(for: store)[StoreNativeContext.workspaceKey] == nil else { throw StoreRuntimeError.resourceReserved }
+            return try body(context)
+        }
+    }
+
+    private func reservedMigrationTransaction<Value: Sendable>(reservation: UUID,
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard dataAvailable, reservations[reservation] == .all, admitted == 0 else { throw StoreRuntimeError.resourceReserved }
         try admit(write: true, reservation: reservation)
         defer { finish(write: true) }
         let cancellation = OperationCancellation(), container = container, configuration = resolved.configuration, hooks = hooks
