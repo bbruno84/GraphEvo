@@ -36,7 +36,7 @@ extension GraphContextManager {
             let storeID = try await owner.storeIdentity()
             cloudHold = try await reserveCloudPause(for: id)
             localHold = try await owner.reserveMaintenance()
-            let held = localHold!
+            let held = localHold!, cloudReservation = cloudHold!
             var captured = artifacts
             for (index, configuration) in activeCloudConfigurations().sorted(by: { $0.namespace < $1.namespace }).enumerated() {
                 if let data = try await cloud(configuration).backupSnapshot(for: id) {
@@ -44,7 +44,10 @@ extension GraphContextManager {
                 }
             }
             let result = try await backups.create(for: id, storeID: storeID, schema: schema.identifier,
-                in: root, reason: reason, artifacts: captured) { url in try await owner.copyStore(to: url, reservation: held) }
+                in: root, reason: reason, artifacts: captured) { url in
+                    try await owner.copyStore(to: url, reservation: held)
+                    await held.release(); await cloudReservation.release()
+                }
             await localHold?.release(); await cloudHold?.release(); try await graph.close()
             return result
         } catch {

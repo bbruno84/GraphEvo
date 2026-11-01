@@ -25,20 +25,34 @@ private struct BackupValidationGate: Sendable {
     private func manager() -> GraphContextManager {
         GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
     }
-    @Test(arguments: [false, true]) func rejectedNestedRestorePreservesSourceBackup(throughAlias: Bool) async throws {
+    private func legacyBackup(_ m: GraphContextManager, graph: GraphStore, root: URL,
+                              artifacts: [GraphBackupArtifact] = []) async throws -> GraphBackup {
+        let package = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"), artifacts: artifacts)
+        let restored = try await m.backups.restore(at: package.url, to: root.appendingPathComponent("Legacy"))
+        return GraphBackup(url: restored.directory, manifest: restored.manifest)
+    }
+    @Test(arguments: ["direct", "symlink", "case"]) func rejectedNestedRestorePreservesSourceBackup(alias: String) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("BackupReview-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
-        let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
-        let source = throughAlias ? root.appendingPathComponent("Alias") : backup.directory
-        if throughAlias { try FileManager.default.createSymbolicLink(at: source, withDestinationURL: backup.directory) }
-        let before = try FileManager.default.contentsOfDirectory(atPath: backup.directory.path).sorted()
-        await #expect(throws: GraphBackupError.invalidDestination) {
-            try await m.backups.restore(at: backup.directory, to: source.appendingPathComponent("Nested/Restored"))
+        let backup = try await legacyBackup(m, graph: graph, root: root)
+        let source: URL
+        switch alias {
+        case "symlink":
+            source = root.appendingPathComponent("Alias")
+            try FileManager.default.createSymbolicLink(at: source, withDestinationURL: backup.url)
+        case "case":
+            source = backup.url.deletingLastPathComponent().appendingPathComponent(backup.url.lastPathComponent.lowercased())
+            if !FileManager.default.fileExists(atPath: source.path) { try await graph.close(); return }
+        default: source = backup.url
         }
-        #expect(try FileManager.default.contentsOfDirectory(atPath: backup.directory.path).sorted() == before)
-        #expect(!FileManager.default.fileExists(atPath: backup.directory.appendingPathComponent("Nested").path))
-        #expect(try await m.backups.verify(at: backup.directory).manifest == backup.manifest)
+        let before = try FileManager.default.contentsOfDirectory(atPath: backup.url.path).sorted()
+        await #expect(throws: GraphBackupError.invalidDestination) {
+            try await m.backups.restore(at: backup.url, to: source.appendingPathComponent("Nested/Restored"))
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: backup.url.path).sorted() == before)
+        #expect(!FileManager.default.fileExists(atPath: backup.url.appendingPathComponent("Nested").path))
+        #expect(try await m.backups.verify(at: backup.url).manifest == backup.manifest)
         try await graph.close()
     }
 
@@ -83,16 +97,16 @@ private struct BackupValidationGate: Sendable {
         #expect(backup.manifest.reason == "Before repair")
         #expect(backup.manifest.files.contains { $0.path == "artifacts/journal.json" })
         #expect(try await m.backups.list(in: root.appendingPathComponent("Backups")).count == 1)
-        _ = try await m.backups.verify(at: backup.directory)
+        _ = try await m.backups.verify(at: backup.url)
         _ = try await graph.transaction { try $0.patch(GraphRecordPatch(id: node, properties: ["value": .set(.integer(2))])) }
-        let restored = try await m.backups.restore(at: backup.directory, to: root.appendingPathComponent("Restored"))
+        let restored = try await m.backups.restore(at: backup.url, to: root.appendingPathComponent("Restored"))
         let peer = manager(), recovered = try await peer.openGraph(id: id, at: restored.storeURL)
         #expect(try await recovered.read { try $0.record(for: node)?.properties["value"] } == .integer(1))
         #expect(try await graph.read { try $0.record(for: node)?.properties["value"] } == .integer(2))
         #expect(try await recovered.attachment(fileID)?.data == bytes)
         #expect(try await recovered.collectSyncChanges() == 2)
         #expect(try await m.cloudSynchronizationState(for: id) == .active)
-        let encoded = try String(contentsOf: backup.directory.appendingPathComponent("manifest.json"), encoding: .utf8)
+        let encoded = String(decoding: try JSONEncoder().encode(backup.manifest), as: UTF8.self)
         #expect(!encoded.contains(root.path))
         try await recovered.close(); try await graph.close()
     }
@@ -119,18 +133,20 @@ private struct BackupValidationGate: Sendable {
         defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
         let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"), reason: "Manual")
-        let held = try await m.backups.retain(at: backup.directory)
-        await #expect(throws: (any Error).self) { try await m.backups.remove(at: backup.directory) }
+        let held = try await m.backups.retain(at: backup.url)
+        await #expect(throws: (any Error).self) { try await m.backups.remove(at: backup.url) }
         let another = manager()
-        await #expect(throws: (any Error).self) { try await another.backups.remove(at: backup.directory) }
+        await #expect(throws: (any Error).self) { try await another.backups.remove(at: backup.url) }
         let occupied = root.appendingPathComponent("Keep")
         try Data([1,2,3]).write(to: occupied)
-        await #expect(throws: (any Error).self) { try await m.backups.restore(at: backup.directory, to: occupied) }
+        await #expect(throws: (any Error).self) { try await m.backups.restore(at: backup.url, to: occupied) }
         #expect(try Data(contentsOf: occupied) == Data([1,2,3]))
-        try Data([4]).write(to: backup.storeURL)
-        await #expect(throws: (any Error).self) { try await m.backups.verify(at: backup.directory) }
-        await held.release(); try await m.backups.remove(at: backup.directory)
-        #expect(!FileManager.default.fileExists(atPath: backup.directory.path))
+        var damaged = try Data(contentsOf: backup.url)
+        damaged[damaged.count - 1] ^= 0xff
+        try damaged.write(to: backup.url)
+        await #expect(throws: (any Error).self) { try await m.backups.verify(at: backup.url) }
+        await held.release(); try await m.backups.remove(at: backup.url)
+        #expect(!FileManager.default.fileExists(atPath: backup.url.path))
         try await graph.close()
     }
 
@@ -145,10 +161,10 @@ private struct BackupValidationGate: Sendable {
         let other = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Other.sqlite"))
         let operation = Task { try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups")) }
         await gate.arrival.wait()
-        await #expect(throws: (any Error).self) { try await graph.transaction { _ in () } }
+        _ = try await graph.transaction { _ in true }
         _ = try await other.transaction { _ in true }
         try await m.pauseCloudSynchronization(for: graph.id)
-        await #expect(throws: GraphCloudError.busy) { try await m.resumeCloudSynchronization(for: graph.id) }
+        #expect(try await m.cloudSynchronizationState(for: graph.id) == .paused)
         operation.cancel(); gate.resume.signal()
         await #expect(throws: CancellationError.self) { try await operation.value }
         #expect(try await m.cloudSynchronizationState(for: graph.id) == .paused)
@@ -166,14 +182,14 @@ private struct BackupValidationGate: Sendable {
             try scope.insert(GraphRecord(id: node, type: "Owner"))
             return try scope.insert(GraphAttachmentPayload(id: file, ownerID: node, fileName: "large.bin", contentType: "public.data", data: Data(repeating: 24, count: 2 * 1024 * 1024)))
         }
-        let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
+        let backup = try await legacyBackup(m, graph: graph, root: root)
         let external = try #require(backup.manifest.files.first { $0.path != backup.manifest.storePath && $0.bytes > 1024 * 1024 })
-        try FileManager.default.removeItem(at: backup.directory.appendingPathComponent(external.path))
-        let path = backup.directory.appendingPathComponent("manifest.json")
+        try FileManager.default.removeItem(at: backup.url.appendingPathComponent(external.path))
+        let path = backup.url.appendingPathComponent("manifest.json")
         var raw = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any])
         raw["files"] = try #require(raw["files"] as? [[String: Any]]).filter { $0["path"] as? String != external.path }
         try JSONSerialization.data(withJSONObject: raw).write(to: path)
-        await #expect(throws: (any Error).self) { try await m.backups.verify(at: backup.directory) }
+        await #expect(throws: (any Error).self) { try await m.backups.verify(at: backup.url) }
         #expect(try await graph.attachment(file)?.data.count == 2 * 1024 * 1024)
         try await graph.close()
     }
@@ -184,8 +200,8 @@ private struct BackupValidationGate: Sendable {
         let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"), reason: "Before import")
         let movedRoot = root.appendingPathComponent("Moved")
         try FileManager.default.createDirectory(at: movedRoot, withIntermediateDirectories: true)
-        let moved = movedRoot.appendingPathComponent("Renamed")
-        try FileManager.default.moveItem(at: backup.directory, to: moved)
+        let moved = movedRoot.appendingPathComponent("Renamed.geb")
+        try FileManager.default.moveItem(at: backup.url, to: moved)
         #expect(try await m.backups.verify(at: moved).manifest.reason == "Before import")
         let id = UUID(), stage = movedRoot.appendingPathComponent(".stage-" + id.uuidString)
         try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
@@ -218,22 +234,22 @@ private struct BackupValidationGate: Sendable {
         let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
         let backups = root.appendingPathComponent("Backups")
         let backup = try await m.createBackup(for: graph.id, in: backups)
-        let owner = UUID(), held = try await m.backups.retain(at: backup.directory, owner: owner)
+        let owner = UUID(), held = try await m.backups.retain(at: backup.url, owner: owner)
         let other = manager()
-        #expect(try await other.backups.retentionOwners(at: backup.directory) == [owner])
+        #expect(try await other.backups.retentionOwners(at: backup.url) == [owner])
         // A retained backup does not prevent creation/verification in the same root.
         _ = try await m.createBackup(for: graph.id, in: backups)
-        _ = try await other.backups.verify(at: backup.directory)
-        await #expect(throws: (any Error).self) { try await other.backups.remove(at: backup.directory) }
+        _ = try await other.backups.verify(at: backup.url)
+        await #expect(throws: (any Error).self) { try await other.backups.remove(at: backup.url) }
         await held.release()
         let recoveredOwner = UUID()
         let persisted: [String: Any] = ["format": 1, "backupID": backup.manifest.id.uuidString, "owners": [recoveredOwner.uuidString]]
         let marker = backups.appendingPathComponent(".retention-" + backup.manifest.id.uuidString + ".json")
         try JSONSerialization.data(withJSONObject: persisted).write(to: marker, options: .atomic)
-        #expect(try await other.backups.retentionOwners(at: backup.directory) == [recoveredOwner])
-        await #expect(throws: (any Error).self) { try await other.backups.remove(at: backup.directory) }
-        try await other.backups.releaseRetention(at: backup.directory, owner: recoveredOwner)
-        try await other.backups.remove(at: backup.directory)
+        #expect(try await other.backups.retentionOwners(at: backup.url) == [recoveredOwner])
+        await #expect(throws: (any Error).self) { try await other.backups.remove(at: backup.url) }
+        try await other.backups.releaseRetention(at: backup.url, owner: recoveredOwner)
+        try await other.backups.remove(at: backup.url)
         try await graph.close()
     }
     @Test func symlinksAndTraversalArtifactsAreRefusedAndOriginalRemainsWritable() async throws {
@@ -244,11 +260,11 @@ private struct BackupValidationGate: Sendable {
         await #expect(throws: (any Error).self) {
             try await m.createBackup(for: graph.id, in: backups, artifacts: [.init(name: "../outside.json", data: Data())])
         }
-        let backup = try await m.createBackup(for: graph.id, in: backups, artifacts: [.init(name: "journal.json", data: Data([1]))])
-        let file = backup.directory.appendingPathComponent("artifacts/journal.json")
+        let backup = try await legacyBackup(m, graph: graph, root: root, artifacts: [.init(name: "journal.json", data: Data([1]))])
+        let file = backup.url.appendingPathComponent("artifacts/journal.json")
         try FileManager.default.removeItem(at: file)
         try FileManager.default.createSymbolicLink(at: file, withDestinationURL: root.appendingPathComponent("Source.sqlite"))
-        await #expect(throws: (any Error).self) { try await m.backups.verify(at: backup.directory) }
+        await #expect(throws: (any Error).self) { try await m.backups.verify(at: backup.url) }
         _ = try await graph.transaction { _ in true }
         #expect(try await m.cloudSynchronizationState(for: graph.id) == .active)
         try await graph.close()
@@ -270,13 +286,14 @@ private struct BackupValidationGate: Sendable {
         await session.receive(.incoming([.init(kind: .zoneChanged, zone: aZone), .init(kind: .zoneChanged, zone: bZone)]), scope: .private)
         let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
         let evidence = try #require(backup.manifest.files.first { $0.path.hasSuffix("__graphevo_cloud_0.json") })
-        let data = try Data(contentsOf: backup.directory.appendingPathComponent(evidence.path))
+        let materialized = try await m.backups.restore(at: backup.url, to: root.appendingPathComponent("Evidence"))
+        let data = try Data(contentsOf: materialized.directory.appendingPathComponent(evidence.path))
         let snapshot = try JSONDecoder().decode(GraphCloudBackupSnapshot.self, from: data)
         #expect(snapshot.binding?.graphID == graph.id && snapshot.inbox.count == 1)
         #expect(snapshot.inbox.allSatisfy { $0.change.zone == aZone })
         let fields = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(fields["states"] == nil)
-        _ = try await m.backups.restore(at: backup.directory, to: root.appendingPathComponent("Restored"))
+        _ = try await m.backups.restore(at: backup.url, to: root.appendingPathComponent("Restored"))
         #expect(try await m.cloudStatus(config).inboxCount == 2)
         #expect(try await m.cloudBinding(for: bZone, configuration: config)?.graphID == b.id)
         try await graph.close(); try await b.close(); try await m.stopCloudSession(config)
@@ -287,14 +304,14 @@ private struct BackupValidationGate: Sendable {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("GraphBackup-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
-        let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
-        let held = try await m.backups.retain(at: backup.directory)
-        let path = backup.directory.appendingPathComponent("manifest.json"), saved = try Data(contentsOf: path)
+        let backup = try await legacyBackup(m, graph: graph, root: root)
+        let held = try await m.backups.retain(at: backup.url)
+        let path = backup.url.appendingPathComponent("manifest.json"), saved = try Data(contentsOf: path)
         var raw = try #require(JSONSerialization.jsonObject(with: saved) as? [String: Any])
         raw["id"] = UUID().uuidString
         try JSONSerialization.data(withJSONObject: raw).write(to: path)
-        await #expect(throws: (any Error).self) { try await m.backups.remove(at: backup.directory) }
-        #expect(FileManager.default.fileExists(atPath: backup.storeURL.path))
+        await #expect(throws: (any Error).self) { try await m.backups.remove(at: backup.url) }
+        #expect(FileManager.default.fileExists(atPath: backup.url.appendingPathComponent(backup.manifest.storePath).path))
         try saved.write(to: path)
         await held.release(); try await graph.close()
     }
