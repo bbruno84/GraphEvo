@@ -15,6 +15,8 @@ enum GraphCoordinatorFactory {
         var graph = native.graph
         graph.beginMutation = { context, id in
             try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
+            let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+            guard !GraphMigrationNativeWorkspace.hasSeal(root) else { throw GraphMigrationWorkspaceError.sealed }
             GraphMutationMetadata.begin(context)
         }
         graph.participantAccess = GraphCloudAccessMetadata.access
@@ -31,7 +33,7 @@ enum GraphCoordinatorFactory {
         return GraphCoordinatorAdapter(graph: graph, sync: sync, initializePolicy: { context, id, policy in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
-        }, prepareWorkspace: { context, id in
+        }, workspace: GraphMigrationNativeWorkspace.adapter, prepareWorkspace: { context, id in
             try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             guard try GraphCloudAccessMetadata.read(root) == nil else { throw GraphMigrationWorkspaceError.participantUnsupported }
@@ -42,15 +44,9 @@ enum GraphCoordinatorFactory {
             root[dynamicMember: GraphTypedStoreAdapter.prefix + "workspaceBoundary"] = workspaceID
             root[dynamicMember: GraphSyncCheckpointAdapter.stateKey] = nil
             root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] = nil
-            context.transactionAuthor = GraphSyncCheckpointAdapter.metadataAuthor
+            context.transactionAuthor = GraphMigrationNativeWorkspace.baselineAuthor(UUID(uuidString: workspaceID)!)
         }, validateBackup: { context, id in
-            try GraphValueDecodingDiagnostics.checking {
-                let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
-                for (nodeID, node) in session.nodes {
-                    let record = try session.snapshot(node, id: nodeID)
-                    if record.type == GraphAttachmentPayload.graphType { _ = try GraphAttachmentPayload(graphRecord: record) }
-                }
-            }
+            try validateGraph(context, id: id)
         }) { context, id, creating in
             guard !(context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer),
                   context.persistentStoreCoordinator?.persistentStores.count == 1 else {
@@ -78,4 +74,17 @@ enum GraphCoordinatorFactory {
             else { try GraphSyncCheckpointAdapter.requirePurpose(context, graphID: id) }
         }
     }
+    static func validateGraph(_ context: NSManagedObjectContext, id: GraphID) throws {
+        try GraphValueDecodingDiagnostics.checking {
+            let facade = GraphTypedStoreAdapter.facade(context)
+            for node in try GraphTypedStoreAdapter.allNodes(facade) {
+                try StoreNativeContext.cancellationCheck(in: context)()
+                guard node.node.value(forKey: GraphNativeIdentityColumns.graphAttribute) as? String == id.rawValue.uuidString else {
+                    throw GraphStoreError.foreignGraph
+                }
+            }
+            _ = try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: id)
+        }
+    }
+
 }

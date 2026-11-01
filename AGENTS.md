@@ -377,7 +377,11 @@ on shared or release branches unless explicitly requested.
    request the required remote CI checkpoint on the reviewed head. Do not start
    expensive alpha CI before review or while review fixes are still being prepared.
    V2 alpha PRs use the explicit [CI checkpoint policy](docs/design/graphevo-2-ci-checkpoints.md):
-   full remote CI is not required on every alpha PR. A skipped job is not a tested
+   full remote CI is not required on every alpha PR. The maintainer delegates
+   alpha delivery/checkpoint selection: group related implementation and corrections
+   into one functional increment/PR, use focused local checks while developing,
+   and retain one full reviewed checkpoint for persistence/sync/migration/lifecycle
+   increments and before tags. Do not split each small step into its own PR/CI. A skipped job is not a tested
    checkpoint. Run full remote CI at agreed delivery checkpoints and before
    alpha/beta tags. A source change after review requires focused re-review before
    another required checkpoint; remove the label before intermediate pushes.
@@ -1206,3 +1210,30 @@ MF04b integrates through #124 after review and one full macOS/iOS CI checkpoint
 admission checks. Integration notes are documentation-only. Future work starts
 from `codex/graphevo-2`; keep seal/reduction, restart/source freshness, participant
 activation and publication gates open until separately implemented and validated.
+
+
+## V2 MF04c sealing and workspace recovery
+
+Read [MF04](docs/design/graphevo-2-migration-workspace.md). The native root seal
+is authoritative and commits with coherent full validation/PH reduction. A JSON
+mirror is not needed. Reuse the PH primitive reducer with a separate baseline;
+never update source cursors or create another queue/diff. Preserve insert/delete
+origin, cascades and surviving actions, unknown-author/expired-history refusal and
+explicit limits. Source recovery must reject application effects even if authored
+as bookkeeping; metadata labels alone are not freshness proof. Format-2 workspace
+descriptors bind physical files and native/token lineage, with no URLs. Refuse old
+alpha descriptors unchanged. Reopen rotates activation/cleanup authority before
+exposing editable/sealed handles; old controls cannot delete newer activations.
+Only exact workspace maintenance permits privileged sealing. Ordinary sources
+cannot use that control path. Cleanup detaches while retaining runtime/global
+claims through removal and failure/retry. Seal/close release only owned holds;
+committed seals survive cancellation and restart. Participant activation and
+original-store publication/backup/executor recovery remain separate gates.
+
+
+MF04c integrates through #125 after corrective review and one full macOS/iOS
+checkpoint #320 on `75b95b1`. Keep the two-process native-fault/recovery evidence
+at `a1334e2` distinct from final corruption/admission corrections. Subsequent
+integration notes are documentation-only. Next publication work must acquire its
+own protected original-store commit path and verified pre-publication backup;
+workspace maintenance privilege explicitly refuses ordinary source stores.

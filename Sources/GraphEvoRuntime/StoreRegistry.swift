@@ -108,6 +108,17 @@ package actor StoreHandle {
     private func releaseReservation(_ id: UUID) async {
         await registry.releaseReservation(key, generation: generation, id: id)
     }
+    /// Retain native and registry claims through detached owned-workspace filesystem cleanup.
+    package func discardWorkspace(_ body: @escaping @Sendable () throws -> Void) async throws {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        try await registry.discardWorkspace(key, generation: generation, token: token, body)
+    }
+    /// The workspace control path alone may commit under its own exclusive maintenance fence.
+    package func workspaceTransaction<Value: Sendable>(reservation: StoreReservation,
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.workspaceTransaction(key, generation: generation, token: token, reservation: reservation.id, body)
+    }
     package func copyStore(to url: URL, reservation: StoreReservation) async throws {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         try await registry.copyStore(key, generation: generation, token: token, to: url, reservation: reservation.id)
@@ -285,6 +296,30 @@ package actor StoreRegistry {
     fileprivate func releaseReservation(_ key: StoreKey, generation: UUID, id: UUID) async {
         guard let value = entries[key], value.generation == generation else { return }
         if let resources = try? await value.opening.value { await resources.releaseReservation(id) }
+    }
+    fileprivate func discardWorkspace(_ key: StoreKey, generation: UUID, token: UUID,
+                                     _ body: @escaping @Sendable () throws -> Void) async throws {
+        guard var value = entries[key], value.generation == generation, value.resolved.configuration.workspaceID != nil,
+              value.destroyToken == token || (value.destroyToken == nil && value.tokens == [token] && value.shutdown == nil) else {
+            throw StoreRuntimeError.configurationConflict(nil)
+        }
+        if value.destroying, let task = value.shutdown { return try await task.value }
+        let opening = value.opening
+        value.destroyToken = token; value.destroying = true; value.tokens.removeAll()
+        let task = Task { try await opening.value.discardWorkspace(body) }
+        value.shutdown = task; entries[key] = value
+        do {
+            try await task.value
+            if entries[key]?.generation == generation { entries.removeValue(forKey: key) }
+        } catch {
+            if entries[key]?.generation == generation { entries[key]?.destroying = false }
+            throw error
+        }
+    }
+    fileprivate func workspaceTransaction<Value: Sendable>(_ key: StoreKey, generation: UUID, token: UUID, reservation: UUID,
+        _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        let value = try entry(for: key, generation: generation, token: token)
+        return try await value.opening.value.workspaceTransaction(reservation: reservation, body)
     }
     fileprivate func copyStore(_ key: StoreKey, generation: UUID, token: UUID, to url: URL, reservation: UUID) async throws {
         let value = try entry(for: key, generation: generation, token: token)

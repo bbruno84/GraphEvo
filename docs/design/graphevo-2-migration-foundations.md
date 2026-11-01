@@ -10,8 +10,9 @@ CI. [MF03](graphevo-2-shared-ledger.md) delivers the bounded shared-control ledg
 in #122 after corrective review and full CI checkpoint #303. Independent cross-user
 graph activation and remaining executor steps stay
 open. MF04b's protected working-copy preparation integrates through
-#124 after review and full CI checkpoint #317; bounded sealing,
-restart activation and publication remain open. Future branches start from `codex/graphevo-2`.
+#124 after review and full CI checkpoint #317; MF04c groups bounded sealing,
+restart/source-freshness recovery and safe cleanup through #125 after corrective
+review and full CI #320. Original-store publication remains open. Future branches start from `codex/graphevo-2`.
 
 ## Responsibility boundary
 
