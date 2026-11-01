@@ -200,4 +200,20 @@ private actor ExportValidationGate {
         _ = try await m.backups.verify(at: backup.url)
         await retention.release(); try await graph.close()
     }
+
+    @Test(arguments: [false, true]) func rejectedLegacyImportCollectionPreservesSource(throughAlias: Bool) async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
+        let package = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
+        let legacy = try await m.backups.restore(at: package.url, to: root.appendingPathComponent("Legacy"))
+        let alias = root.appendingPathComponent("Alias")
+        if throughAlias { try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: legacy.directory) }
+        let collection = (throughAlias ? alias : legacy.directory).appendingPathComponent("Nested/Collection")
+        let before = try FileManager.default.contentsOfDirectory(atPath: legacy.directory.path).sorted()
+        await #expect(throws: GraphBackupError.invalidDestination) { try await m.backups.importBackup(at: legacy.directory, in: collection) }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: legacy.directory.path).sorted() == before)
+        #expect(!FileManager.default.fileExists(atPath: legacy.directory.appendingPathComponent("Nested").path))
+        _ = try await m.backups.verify(at: legacy.directory)
+        try await graph.close()
+    }
 }

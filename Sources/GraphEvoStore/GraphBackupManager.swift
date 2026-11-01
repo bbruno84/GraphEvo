@@ -199,7 +199,8 @@ package actor GraphBackupManager {
 
     /// Import a package into the local backup collection, without activating any graph/cloud state.
     package func importBackup(at source: URL, in root: URL) async throws -> GraphBackup {
-        let manifest = try readManifest(source), root = try Self.directory(root)
+        let manifest = try readManifest(source)
+        // Export validates the complete destination before creating its parent collection.
         return try await export(at: source, to: root.appendingPathComponent(manifest.id.uuidString).appendingPathExtension(GraphBackupPackage.fileExtension))
     }
 
