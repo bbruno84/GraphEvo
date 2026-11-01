@@ -63,7 +63,11 @@ The 11 workspace test functions (12 parameterized invocations) cover:
   claim physical native-detachment fault recovery.
 
 No physical/cloud protocol ran: isolation/preparation does not start network
-transport. No CI checkpoint has been requested; review and corrections precede CI.
+transport. Review completed without remaining blocking findings. It added negative admission
+checks for an exact workspace UUID with the wrong GraphID and for an existing
+unmarked store; the 11-function workspace suite passed again on macOS. Shipping
+source is unchanged from `168eb0a`; the CI checkpoint will include these final
+test additions. The authorized workflow is review, one full CI, then merge on green.
 No generated stores, tokens, logs or device artifacts are committed.
 
 ## Remaining gates

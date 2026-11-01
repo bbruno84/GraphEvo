@@ -108,11 +108,18 @@ private actor WorkspaceOpenFailure {
             try await StoreRegistry().open(.init(location: .sqlite(url), exclusiveGraphID: source.id.rawValue, workspaceID: UUID()), schema: GraphRuntimeSchema.nativeIdentity)
         }
         await #expect(throws: (any Error).self) {
+            try await StoreRegistry().open(.init(location: .sqlite(url), exclusiveGraphID: UUID(), workspaceID: workspace.id), schema: GraphRuntimeSchema.nativeIdentity)
+        }
+        await #expect(throws: (any Error).self) {
             try await StoreRegistry().open(.init(location: .sqlite(root.appendingPathComponent("Missing.sqlite")), exclusiveGraphID: source.id.rawValue, workspaceID: UUID()), schema: GraphRuntimeSchema.nativeIdentity)
         }
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("Missing.sqlite").path))
         await #expect(throws: (any Error).self) { try await workspace.graph.read { _ in true } }
         try await workspace.discard(); try await source.close()
+        await #expect(throws: (any Error).self) {
+            try await StoreRegistry().open(.init(location: .sqlite(root.appendingPathComponent("A.sqlite")),
+                exclusiveGraphID: source.id.rawValue, workspaceID: workspace.id), schema: GraphRuntimeSchema.nativeIdentity)
+        }
     }
 
     @Test func overlappingMigrationsAndCallerHoldsRemainIndependent() async throws {

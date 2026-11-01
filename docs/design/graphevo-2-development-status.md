@@ -8,7 +8,7 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-[MF04b PR #124](https://github.com/bbruno84/GraphEvo/pull/124) is ready for review
+[MF04b PR #124](https://github.com/bbruno84/GraphEvo/pull/124) has completed local review
 on `codex/v2-working-graph`, directly from integrated
 MF04a/#123 (`3b0c326`). The [workspace contract](graphevo-2-migration-workspace.md)
 now has protected complete-copy preparation, working-purpose runtime admission,
@@ -18,7 +18,9 @@ participant workspaces gated on T08 integration. No backup is created before
 final working-copy validation; no new schema, cloud format or session format.
 The [local result](results/migration-workspace-preparation-2026-11-01.md) records
 broad macOS/iOS checks and final focused cleanup regression coverage. Review and
-corrections precede the one requested CI checkpoint and authorized merge. The current branch does not change the integrated baseline below.
+corrections precede the single full CI checkpoint now authorized before merge.
+The two additional admission regressions passed locally; source remains unchanged
+from `168eb0a`. The current branch does not change the integrated baseline below.
 
 ## Latest integrated increment — MF04a logical emptying
 
