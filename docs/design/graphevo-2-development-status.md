@@ -8,13 +8,21 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF05 completes protected owner/local original-store publication through
-[PR #126](https://github.com/bbruno84/GraphEvo/pull/126). No next implementation
-branch is open. Next: exercise the protected workflow with a representative
-consumer and define the mandatory v1 source-conversion/cutover route. Public
-executor exposure, participant-origin workspaces, fresh shared bootstrap after
-publication and broader interruption/scale acceptance remain separate work.
-Consumers retain application semantics and cross-device coordination.
+MF06 delivers representative consumer evidence through
+[PR #127](https://github.com/bbruno84/GraphEvo/pull/127), directly from #126.
+No next implementation branch is open. The [local-only laboratory](../../Experiments/ConsumerMigrationFlow/README.md)
+and [result](results/consumer-migration-flow-2026-11-01.md) cover consumer recovery,
+ledger visibility during data pause, complete publication and independent peer
+verification. Six local functions/ten invocations on macOS and iOS and ten real
+iPad/XR stages pass. No distributed source, schema or default CI/test target
+changes. Review found no remaining blocking findings. This laboratory/evidence
+increment does not rerun full CI on unchanged shipping code; #324 remains its
+last full checkpoint. Default CI continues to exclude the laboratory.
+
+Next: define the mandatory v1 source identity/value/attachment conversion and
+coordinated cloud cutover. Public executor exposure, participant-origin workspaces,
+fresh shared bootstrap after publication and broader interruption/scale acceptance
+remain separate work. Consumers retain semantics and cross-device policy.
 
 ## Latest integrated increment — MF05 original-store publication
 

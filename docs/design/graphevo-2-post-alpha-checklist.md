@@ -421,6 +421,13 @@ paired-store evidence below retains its original backend scope.
   The latest-only receipt can refuse old workspace recovery after a subsequent
   migration. Review retained orphan backups after abandoned failures and explicit
   retention release. Neither receipt nor queue emptiness proves global migration.
+- [x] Exercise one representative synthetic consumer through ledger, isolated
+  transformation, validation, backup and publication. The [MF06 result](results/consumer-migration-flow-2026-11-01.md)
+  records six local functions/ten invocations on macOS/iOS and ten iPad/XR stages.
+  Original A remains unchanged while its ledger and unrelated B progress; restart
+  recovers native commit evidence without body replay or duplicate backup. This
+  local-only laboratory does not close production adoption, participant-origin,
+  fresh-after-publication shared bootstrap, physical interruption/scale or v1 gates.
 - [ ] **R** Wire complete backups into actual conversion/recovery paths and verify
   bytes/checksums and successful reopen, interrupted copies/restores and protected
   source preservation. SQLite/WAL/SHM copying alone is insufficient for files.

@@ -1257,3 +1257,20 @@ MF05 integrates through #126 after local/device review and one full macOS/iOS
 CI checkpoint #324 on `2c37e58` (shipping source `a143f32`). Retain the bounded
 [result](docs/design/results/migration-publication-2026-11-01.md); seven physical
 stages do not close participant-origin, physical interruption, scale or v1 gates.
+
+
+## V2 MF06 representative consumer laboratory
+
+[MF06](Experiments/ConsumerMigrationFlow/README.md) overlays a local-only example
+and fault suite onto an external pinned package export. Keep it outside default
+shipping/CI targets. Its consumer request/journal, application operation marker,
+semantic validation and peer policy are examples, not library format metadata or
+a registry/executor to integrate. Recover local ledger intent explicitly before
+expecting remote confirmation; a ledger phase is not a data barrier. Do not call
+checkpoint-saving PH collection as a read-only assertion under a source write
+hold. Preserve failed fixtures and use new physical stages/runs without replay.
+See [the scoped result](docs/design/results/consumer-migration-flow-2026-11-01.md).
+
+MF06 evidence integrates through #127 after local macOS/iOS and physical review;
+it adds no shipping code or normal CI target. Reviewed laboratory source is
+`bb97123`; full shipping checkpoint #324 remains applicable by byte equivalence.
