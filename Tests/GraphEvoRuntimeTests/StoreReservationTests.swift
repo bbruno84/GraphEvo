@@ -12,6 +12,30 @@ private struct ReservationWriterGate: Sendable {
     }
 }
 @Suite(.timeLimit(.minutes(1))) struct StoreReservationTests {
+    @Test func cancelledMaintenancePublishesRecoveryHint() async throws {
+        let root = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: root) }
+        let restricted = AsyncStream<Void>.makeStream(), gate = ReservationWriterGate()
+        await gate.entered.release()
+        let registry = StoreRegistry(hooks: .init(didRestrictWrites: { restricted.continuation.yield(()) }))
+        let handle = try await registry.open(.init(location: .sqlite(root.appendingPathComponent("Graph.sqlite"))), schema: fixtureSchema())
+        let feed = try await handle.invalidationFeed()
+        var hints = feed.stream.makeAsyncIterator()
+        #expect(await hints.next()?.reason == .initial)
+        let reader = Task { try await handle.read { _ in try gate.block() } }
+        await gate.entered.waitForArrivals()
+        let maintenance = Task { try await handle.reserveMaintenance() }
+        var entered = restricted.stream.makeAsyncIterator(); _ = await entered.next()
+        await #expect(throws: (any Error).self) { try await handle.read { _ in true } }
+        maintenance.cancel()
+        await #expect(throws: CancellationError.self) { try await maintenance.value }
+        _ = try await handle.read { _ in true }
+        feed.cancel()
+        #expect(await hints.next()?.reason == .storeChange)
+        #expect(await hints.next() == nil)
+        gate.resume.signal(); try await reader.value
+        try await handle.close(); restricted.continuation.finish()
+    }
+
     @Test func reservationDrainsAlreadyQueuedWritersAndRefusesNewBodies() async throws {
         let root = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: root) }
         let restricted = AsyncStream<Void>.makeStream(), queued = LifecycleGate(), gate = ReservationWriterGate()

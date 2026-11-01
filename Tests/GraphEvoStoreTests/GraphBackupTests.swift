@@ -25,6 +25,50 @@ private struct BackupValidationGate: Sendable {
     private func manager() -> GraphContextManager {
         GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
     }
+    @Test(arguments: [false, true]) func rejectedNestedRestorePreservesSourceBackup(throughAlias: Bool) async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("BackupReview-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
+        let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
+        let source = throughAlias ? root.appendingPathComponent("Alias") : backup.directory
+        if throughAlias { try FileManager.default.createSymbolicLink(at: source, withDestinationURL: backup.directory) }
+        let before = try FileManager.default.contentsOfDirectory(atPath: backup.directory.path).sorted()
+        await #expect(throws: GraphBackupError.invalidDestination) {
+            try await m.backups.restore(at: backup.directory, to: source.appendingPathComponent("Nested/Restored"))
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: backup.directory.path).sorted() == before)
+        #expect(!FileManager.default.fileExists(atPath: backup.directory.appendingPathComponent("Nested").path))
+        #expect(try await m.backups.verify(at: backup.directory).manifest == backup.manifest)
+        try await graph.close()
+    }
+
+    @Test func observedQueryRecoversAfterCancelledMaintenanceWithoutRefreshOrWrite() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("BackupObservation-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let restricted = AsyncStream<Void>.makeStream(), gate = BackupValidationGate()
+        let registry = StoreRegistry(hooks: .init(didRestrictWrites: { restricted.continuation.yield(()) }))
+        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
+        let observation = try await graph.observe(observationQuery())
+        var values = observation.makeAsyncIterator()
+        if case .value = await values.next() {} else { Issue.record("Expected initial query snapshot") }
+        let reader = Task { try await graph.read { _ in try gate.block() } }
+        await gate.arrival.wait()
+        let operation = Task { try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups")) }
+        var restrictions = restricted.stream.makeAsyncIterator(); _ = await restrictions.next()
+        // Force a rescan while admission is restricted; recovery must need no subsequent refresh.
+        observation.refresh()
+        if case .failure(let error) = await values.next() {
+            if case GraphStoreError.resourceReserved = error {} else { Issue.record("Expected maintenance admission error") }
+        } else { Issue.record("Expected failed read during maintenance") }
+        operation.cancel()
+        await #expect(throws: CancellationError.self) { try await operation.value }
+        if case .value(let result) = await values.next() { #expect(result.items.isEmpty) }
+        else { Issue.record("Expected automatic recovery after maintenance cancellation") }
+        observation.cancel(); gate.resume.signal(); try await reader.value
+        try await graph.close(); restricted.continuation.finish()
+    }
+
     @Test func completeBackupReasonAndRestorePreserveFilesHistoryAndIndependentContent() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("GraphBackup-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

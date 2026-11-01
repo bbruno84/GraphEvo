@@ -129,7 +129,10 @@ package actor GraphBackupManager {
         let destination = destination.standardizedFileURL
         guard destination.isFileURL, !FileManager.default.fileExists(atPath: destination.path),
               (try? FileManager.default.destinationOfSymbolicLink(atPath: destination.path)) == nil else { throw GraphBackupError.invalidDestination }
-        let parent = try Self.directory(destination.deletingLastPathComponent())
+        // Validate containment before directory creation can alter the immutable source.
+        let candidate = try Self.creationLocation(destination.deletingLastPathComponent())
+        guard candidate.path != backup.path, !candidate.path.hasPrefix(backup.path + "/") else { throw GraphBackupError.invalidDestination }
+        let parent = try Self.directory(candidate)
         guard parent != backup, !parent.path.hasPrefix(backup.path + "/") else { throw GraphBackupError.invalidDestination }
         let sourceRoot = backup.deletingLastPathComponent(), first = try BackupRootLease(sourceRoot)
         defer { first.release() }
@@ -287,6 +290,23 @@ package actor GraphBackupManager {
         let result = url.standardizedFileURL.resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: result, withIntermediateDirectories: true)
         guard try attributes(result)[.type] as? FileAttributeType == .typeDirectory else { throw GraphBackupError.invalidDestination }
+        return result
+    }
+    /// Resolve the existing ancestor before appending missing components: Foundation cannot
+    /// resolve an intermediate symlink when the complete requested path does not exist.
+    private static func creationLocation(_ url: URL) throws -> URL {
+        var ancestor = url.standardizedFileURL
+        var missing: [String] = []
+        while !FileManager.default.fileExists(atPath: ancestor.path) {
+            guard ancestor.path != "/",
+                  (try? FileManager.default.destinationOfSymbolicLink(atPath: ancestor.path)) == nil else {
+                throw GraphBackupError.invalidDestination
+            }
+            missing.append(ancestor.lastPathComponent)
+            ancestor.deleteLastPathComponent()
+        }
+        var result = ancestor.resolvingSymlinksInPath()
+        for name in missing.reversed() { result.appendPathComponent(name) }
         return result
     }
     private static func component(_ value: String) -> Bool {

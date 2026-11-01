@@ -303,8 +303,7 @@ actor StoreResources {
         reservations[id] == .all ? admitted == 0 : admittedWriters == 0
     }
     private func cancelReservation(_ id: UUID) {
-        reservationWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
-        reservations.removeValue(forKey: id)
+        releaseReservation(id)
     }
     func releaseReservation(_ id: UUID) {
         let mode = reservations.removeValue(forKey: id)
