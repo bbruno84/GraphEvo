@@ -79,6 +79,11 @@ No new queue, engine, persistent format or migration registry is introduced.
 
 ## Validation and workflow
 
+The [candidate result](results/logical-emptying-2026-11-01.md) records passing local
+macOS/iOS checks and the eight-stage iPad/XR protocol at `a19ae62`. It separates
+injected partial/late-receipt coverage from actual sharing/asset/deletion delivery.
+
+
 Cover all primitive kinds and a 2-MiB file, root/catalog/control preservation,
 standalone and multi-graph current/native layouts, fresh-ID repopulation, raw PH
 delete discovery, rollback, pre-save cancellation, limits, corruption, local

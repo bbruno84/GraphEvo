@@ -17,8 +17,11 @@ transport; it is not a native CloudKit zone purge. The
 No working-copy activation, seal/recovery or migration publication is claimed.
 The agreed executor flow keeps the original protected, validates the working copy,
 then creates/verifies the original backup before publication. Consumer migration
-eligibility/domain meaning remain consumer-owned. Source and physical evidence
-will be recorded before review; CI follows review/corrections, not implementation.
+eligibility/domain meaning remain consumer-owned. The [MF04a result](results/logical-emptying-2026-11-01.md) records candidate
+`a19ae62`: 826 macOS functions, 494 selected iOS functions / 580 invocations and
+eight fresh iPad/XR stages preserving share, ledger, store identity and a control
+graph through emptying/repopulation. This is ready for review, not integrated;
+CI follows review/corrections, not implementation.
 
 ## Latest integrated increment — MF03 bounded shared ledger
 
