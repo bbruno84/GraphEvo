@@ -58,5 +58,17 @@ physical interruption, large-property cloud readiness and one authoritative
 new-cloud mapping remain open. The synthetic second definition is test coverage,
 not production support for another model. No beta/stable migration gate closes.
 
-Final full CI is requested only after local/device checks and review; its result
-will be recorded before merge.
+## Final checkpoint and integration
+
+One full [CI #335](https://github.com/bbruno84/GraphEvo/actions/runs/41343266347)
+passes after review on `3505fd5ac487a56e968be2c90bf772e11f907095`:
+890 macOS functions plus ModelConsumer and ProcessConsumer; iOS 18.5 has 888
+passed functions and 994 passed expanded invocations, zero failures and one
+known legacy temporary-directory `/private` alias skip. The separate master-only
+PackageConsumer job is intentionally skipped on this v2 PR.
+
+Final integration notes are documentation-only, reviewed separately. Source,
+tests, manifest, independent consumers and workflow remain byte-identical to the
+reviewed/device-tested/full-CI source. No second unchanged-library checkpoint is
+requested. PR #130 returns directly to `codex/graphevo-2` under the maintainer's
+authorized local/device → review → CI → merge workflow.

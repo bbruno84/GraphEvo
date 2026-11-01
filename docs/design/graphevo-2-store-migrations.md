@@ -1,8 +1,8 @@
 # MF08 — repeatable internal store migrations
 
-Status: package-only implementation in [PR #130](https://github.com/bbruno84/GraphEvo/pull/130),
-based directly on integrated #129. Local/device checks and review pass; the final
-CI checkpoint precedes integration. This structures the existing MF07 conversion without introducing
+Status: package-only implementation integrates through
+[PR #130](https://github.com/bbruno84/GraphEvo/pull/130), based directly on #129,
+after local/device checks, review and full CI #335 on `3505fd5`. This structures the existing MF07 conversion without introducing
 another manager, registry or automatic opening path.
 
 ## One definition per supported transition

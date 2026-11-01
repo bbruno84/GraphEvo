@@ -1308,3 +1308,8 @@ formats, backup pin ownership and post-commit cleanup semantics. Definitions
 cannot save independently or escape contexts. The current sequence converts a
 stopped source into a distinct store; it does not implicitly rebind registrations,
 preserve another layout's cloud state or authorize in-place/staged migrations.
+
+MF08 integrates through #130 after review and full checkpoint #335 on `3505fd5`.
+Retain the [scoped result](docs/design/results/store-migration-structure-2026-11-01.md):
+two physical old-receipt recovery stages establish compatibility, not new cloud
+activation, production-source acceptance or another physical restore certificate.
