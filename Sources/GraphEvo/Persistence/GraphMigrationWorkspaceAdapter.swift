@@ -7,6 +7,9 @@ import GraphEvoStore
 /// Reuses PH primitive reconstruction without publishing a checkpoint or touching the source queue.
 enum GraphMigrationNativeWorkspace {
     static let sealKey = GraphTypedStoreAdapter.prefix + "workspaceSeal"
+    static func hasSeal(_ root: Entity) -> Bool {
+        root.node.propertySet.contains { $0.name == sealKey }
+    }
     static func baselineAuthor(_ id: UUID) -> String { "GraphEvo.v2.workspace.\(id.uuidString).baseline" }
     static func sealAuthor(_ id: UUID) -> String { "GraphEvo.v2.workspace.\(id.uuidString).seal" }
 
@@ -23,8 +26,9 @@ enum GraphMigrationNativeWorkspace {
         try validateAnchor(context, descriptor)
         try GraphCoordinatorFactory.validateGraph(context, id: descriptor.graphID)
         let root = try GraphTypedStoreAdapter.controlRoot(context, id: descriptor.graphID)
-        if let raw = root[dynamicMember: sealKey] {
-            guard let bytes = raw as? Data, bytes.count <= limits.maximumEncodedBytes else { throw GraphMigrationWorkspaceError.encodedLimit }
+        if hasSeal(root) {
+            guard let bytes = root[dynamicMember: sealKey] as? Data else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+            guard bytes.count <= limits.maximumEncodedBytes else { throw GraphMigrationWorkspaceError.encodedLimit }
             let seal = try JSONDecoder().decode(GraphMigrationChangeSet.self, from: bytes)
             guard seal.format == 1, seal.workspaceID == descriptor.id, seal.graphID == descriptor.graphID,
                   seal.baseline == descriptor.baseline else { throw GraphMigrationWorkspaceError.invalidWorkspace }
@@ -39,7 +43,7 @@ enum GraphMigrationNativeWorkspace {
         try validateAnchor(context, descriptor)
         try GraphCoordinatorFactory.validateGraph(context, id: descriptor.graphID)
         let root = try GraphTypedStoreAdapter.controlRoot(context, id: descriptor.graphID)
-        guard root[dynamicMember: sealKey] == nil else { throw GraphMigrationWorkspaceError.sealed }
+        guard !hasSeal(root) else { throw GraphMigrationWorkspaceError.sealed }
         let result = try reduce(context, descriptor, limits: limits, sealed: false)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(result)

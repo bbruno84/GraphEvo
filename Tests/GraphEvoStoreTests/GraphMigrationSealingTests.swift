@@ -452,4 +452,24 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         try await w.discard(); try await source.close()
     }
 
+    @Test func aSealRowWithMissingValueStillBlocksMutationAndRecovery() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let m = manager(), source = try await create(m, root)
+        let w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
+        _ = try await w.seal(); try await w.close()
+        let raw = try await m.registry.open(.init(location: .sqlite(w.directory.appendingPathComponent("Graph.sqlite")),
+            exclusiveGraphID: source.id.rawValue, workspaceID: w.id, workspaceSessionID: UUID()), schema: GraphRuntimeSchema.nativeIdentity)
+        try await raw.controlTransaction { context in
+            let root = try GraphTypedStoreAdapter.controlRoot(context, id: source.id)
+            // Deliberate native corruption fixture: retain the marker row, remove only its value.
+            let row = try #require(root.node.propertySet.first { $0.name == GraphMigrationNativeWorkspace.sealKey })
+            row.setValue(nil, forKey: "object")
+        }
+        let alias = GraphStore.attached(id: source.id, handle: raw, adapter: GraphCoordinatorFactory.adapter.graph)
+        await #expect(throws: GraphMigrationWorkspaceError.sealed) { try await alias.transaction { _ in () } }
+        try await alias.close()
+        await #expect(throws: GraphMigrationWorkspaceError.invalidWorkspace) { try await m.openMigrationWorkspace(for: source.id, at: w.directory) }
+        try await w.discard(); try await source.close()
+    }
+
 }

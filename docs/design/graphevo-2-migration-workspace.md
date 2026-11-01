@@ -20,7 +20,8 @@ S03, application cloud formats and shared-session format 6 are unchanged.
   **in the same transaction**. The native marker is authoritative. No JSON/native
   dual commit, whole-graph diff, original PH cursor or payload snapshot is used.
 - A successful seal retains a write fence; reads continue. The facade also checks
-  the durable marker before consumer mutation, including after interruption before
+  the marker row's presence even if its value is corrupt/missing, then validates
+  its value during recovery. It checks the durable marker before consumer mutation, including after interruption before
   the runtime installed its in-memory fence/result. Repeated seal returns the
   same result. Cancellation before save rolls back; after save returns success.
 - `GraphContextManager.openMigrationWorkspace(for:at:limits:) async throws`
@@ -53,7 +54,9 @@ never interpreted and dates are not used as cuts. Source history is bounded and
 must show no application effects: known metadata bookkeeping may progress, but
 its reconstructed primitive set must be empty, regardless of its author label.
 Unknown/local/import application changes, replaced stores and unavailable history
-refuse recovery. Source queues and policy are never rewound from the copy.
+refuse recovery. Source verification has fixed protective limits of 4096
+transactions and 100,000 native changes; the configurable workspace limits apply
+to the working range, not an unlimited source bookkeeping backlog. Source queues and policy are never rewound from the copy.
 
 Reopening supplies current URLs and supports same-volume directory/file moves
 with preserved physical identities. Copying/replacing the SQLite file is refused,

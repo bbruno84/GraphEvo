@@ -16,7 +16,7 @@ enum GraphCoordinatorFactory {
         graph.beginMutation = { context, id in
             try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
-            guard root[dynamicMember: GraphMigrationNativeWorkspace.sealKey] == nil else { throw GraphMigrationWorkspaceError.sealed }
+            guard !GraphMigrationNativeWorkspace.hasSeal(root) else { throw GraphMigrationWorkspaceError.sealed }
             GraphMutationMetadata.begin(context)
         }
         graph.participantAccess = GraphCloudAccessMetadata.access

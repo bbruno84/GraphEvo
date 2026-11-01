@@ -336,8 +336,8 @@ actor StoreResources {
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
         guard resolved.configuration.workspaceID != nil, dataAvailable,
               reservations[reservation] == .all, admitted == 0 else { throw StoreRuntimeError.resourceReserved }
-        try admit(reservation: reservation)
-        defer { finish() }
+        try admit(write: true, reservation: reservation)
+        defer { finish(write: true) }
         let cancellation = OperationCancellation(), container = container, configuration = resolved.configuration, hooks = hooks
         return try await withTaskCancellationHandler {
             try await container.performBackgroundTask { @Sendable context in

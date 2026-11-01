@@ -13,6 +13,8 @@ integrated MF04b/#124 (`7c2b5a9`). This groups bounded PH reconstruction, native
 sealing, explicit restart/source-freshness recovery and stale-control/cleanup
 ownership into one functional increment and one final review/CI checkpoint.
 See the [implemented MF04 contract](graphevo-2-migration-workspace.md).
+The [scoped result](results/migration-workspace-sealing-recovery-2026-11-01.md)
+records local suite and independent-process fault/recovery evidence.
 Original-store publication, pre-publication backup/executor recovery and mandatory
 v1 conversion remain separate. Participant workspace activation stays gated on
 T08 lifecycle integration. S03 and cloud/session formats are unchanged; new
