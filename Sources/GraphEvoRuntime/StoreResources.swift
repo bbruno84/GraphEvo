@@ -102,6 +102,15 @@ actor StoreResources {
                 let metadata: [String: Any]
                 do { metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url) }
                 catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
+                if let marker = metadata[StoreNativeContext.workspaceKey] {
+                    guard let expected = resolved.configuration.workspaceID,
+                          marker as? String == expected.uuidString,
+                          metadata[StoreNativeContext.historySyncGraphKey] as? String == resolved.configuration.exclusiveGraphID?.uuidString else {
+                        throw StoreRuntimeError.invalidConfiguration("An isolated migration workspace requires its exact admission identity.")
+                    }
+                } else if resolved.configuration.workspaceID != nil {
+                    throw StoreRuntimeError.invalidConfiguration("The migration workspace marker is missing.")
+                }
                 if nativeMirroring && metadata[StoreNativeContext.historySyncGraphKey] != nil {
                     throw StoreRuntimeError.invalidConfiguration("A history-sync store cannot be opened by native CloudKit mirroring.")
                 }
@@ -109,7 +118,7 @@ actor StoreResources {
                       requiredModelVersionIdentifier.map({ metadata[NSStoreModelVersionIdentifiersKey] as? [String] == [$0] }) ?? true else {
                     throw StoreRuntimeError.incompatibleStore(url)
                 }
-            } else if resolved.configuration.access == .readOnly {
+            } else if resolved.configuration.workspaceID != nil || resolved.configuration.access == .readOnly {
                 throw StoreRuntimeError.missingStore(url)
             }
             do { try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true) }

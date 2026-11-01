@@ -5,6 +5,7 @@ import GraphEvoRuntime
 
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
+    package let prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package let initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)?
     package let validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
     package let graph: GraphStoreAdapter
@@ -13,9 +14,10 @@ package struct GraphCoordinatorAdapter: Sendable {
 
     package init(graph: GraphStoreAdapter, sync: GraphSyncAdapter? = nil,
                  initializePolicy: (@Sendable (NSManagedObjectContext, GraphID, GraphConflictPolicy) throws -> Void)? = nil,
+                 prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
-        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup
+        self.graph = graph; self.sync = sync; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace
     }
 }
 
@@ -69,6 +71,9 @@ package actor GraphCoordinator {
         let handle = try await registry.open(configuration, schema: schema)
         try await handle.setDataAvailable(false, terminal: true)
         return GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync)
+    }
+    func migrationBoundary() async throws -> GraphMigrationBoundary {
+        try await handle.controlRead { try GraphMigrationBoundary.capture($0) }
     }
     func storeIdentity() async throws -> String {
         let id = id

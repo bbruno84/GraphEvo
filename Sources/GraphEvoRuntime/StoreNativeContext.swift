@@ -12,6 +12,7 @@ package enum StoreNativeContext {
     }
     package static let containerKey = "GraphEvo.v2.container"
     /// Persistent store purpose, not an application format or a synchronization certificate.
+    package static let workspaceKey = "GraphEvo.v2.migrationWorkspace"
     package static let historySyncGraphKey = "GraphEvo.v2.historySyncGraphID"
 
     package static func privateStore(in context: NSManagedObjectContext) -> NSPersistentStore? {

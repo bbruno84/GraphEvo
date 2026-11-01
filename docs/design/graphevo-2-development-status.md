@@ -8,17 +8,37 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF04a completes logical emptying through [PR #123](https://github.com/bbruno84/GraphEvo/pull/123).
-No next implementation branch is open. The next increment implements the
-[MF04 workspace contract](graphevo-2-migration-workspace.md): protected coherent
-copy, working-purpose admission and a fresh working-store PH boundary, then
-bounded sealing/recovery. The temporary graph remains isolated from cloud until
-later publication. Validate the working graph before creating/verifying the
-original backup and before publication. The consumer owns migration eligibility
-and data meaning; workspace activation/publication and mandatory v1 conversion
-remain open.
+MF04b completes preparation through [PR #124](https://github.com/bbruno84/GraphEvo/pull/124).
+No next implementation branch is open. Next: bounded PH reduction/sealing and
+explicit restart/source-freshness recovery under the
+[MF04 contract](graphevo-2-migration-workspace.md), followed by protected
+original-store publication. Participant workspaces remain gated on T08 lifecycle
+integration. Create/verify the original backup after final working-copy validation
+and before publication. Mandatory v1 conversion remains separate acceptance work.
 
-## Latest integrated increment — MF04a logical emptying
+## Latest integrated increment — MF04b isolated working-copy preparation
+
+[PR #124](https://github.com/bbruno84/GraphEvo/pull/124) delivers protected complete
+copying, native working-purpose admission, a fresh working PH baseline and
+close/ownership-checked discard directly from MF04a/#123 (`3b0c326`) into
+`codex/graphevo-2`. The ordinary editable GraphStore has no sync session. Copied
+transport/checkpoint authority is cleared without altering the original's pending
+work, identities, files or policy. Preparation creates no backup. S03, cloud
+record/asset formats and session format 6 are unchanged. Seal, restart activation
+and publication are not implemented by this increment.
+
+Review found no remaining blocking defect and added two negative admission
+regressions. The single full [CI checkpoint #317](https://github.com/bbruno84/GraphEvo/actions/runs/41306827139)
+passed on reviewed head `181b80cbb3321878e801f4cf380c8a810086c425`: 839 macOS
+functions, Swift 6 and independent-process consumers; 837 iOS functions passed
+with one pre-existing simulator alias skip. Subsequent integration/evidence notes
+change only documentation and do not rerun unchanged code/tests. The
+[local/CI result](results/migration-workspace-preparation-2026-11-01.md) preserves
+original broad checks, corrective focused checks and the exact CI pin separately.
+Native faults/power loss, external-process writers, filesystem races, scale and
+participant/publication gates remain open. No physical/cloud protocol is claimed.
+
+## Earlier integrated increment — MF04a logical emptying
 
 [PR #123](https://github.com/bbruno84/GraphEvo/pull/123) delivers the
 [MF04a GraphStore/GraphMutation.removeAll API](graphevo-2-logical-emptying.md)

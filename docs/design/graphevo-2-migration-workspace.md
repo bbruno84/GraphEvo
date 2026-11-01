@@ -1,12 +1,61 @@
 # MF04 — isolated migration workspace and PH change set
 
-Status: design and implementation plan, based on integrated MF03/#122
-(`5b22750`). This contract precedes the implementation of migration-roadmap step 4.
-The workspace APIs below remain design-only. The
-[integrated MF04a logical-emptying API](graphevo-2-logical-emptying.md) implements
-`GraphStore.removeAll` / `GraphMutation.removeAll` independently of workspace
-activation. A focused MF04 branch returns
-directly to `codex/graphevo-2`; no experiment/integration branch stack is needed.
+Status: MF04b preparation integrates through [PR #124](https://github.com/bbruno84/GraphEvo/pull/124),
+directly from MF04a/#123 (`3b0c326`) after review and full CI checkpoint #317 on
+`181b80c`. The package-only
+preparer, ordinary working GraphStore, native purpose fence, fresh PH baseline,
+close and ownership-checked discard are implemented. **Seal, PH reduction,
+restart activation and publication remain design-only.** The
+[integrated MF04a logical-emptying API](graphevo-2-logical-emptying.md) remains
+available independently. No experiment/integration branch stack is introduced.
+
+## Implemented MF04b surface and limits
+
+`GraphContextManager.prepareMigrationWorkspace(for:at:) async throws` returns a
+package-only `GraphMigrationWorkspace` with `id`, `graph`, `directory` and a
+value-only descriptor. `close()` preserves the copy and releases owned source
+holds after draining/detaching; `discard()` additionally checks directory and
+SQLite physical identities, descriptor, owner marker and native purpose before
+removing the owned directory. Old handles/observations terminate. Concurrent
+lifecycle calls share the same operation; failed discard can be retried after
+correcting an ownership-preserving problem. Deinit only schedules close.
+
+The destination must be absent, with an existing parent; an existing empty
+directory is also refused. Preparation uses a private sibling stage, native
+complete copying, a detached-store metadata marker and one local setup save.
+The source retains its pending sync work and conflict policy. The copy retains
+identities, original timestamps, deletion evidence and all application/file
+content; it clears the copied checkpoint and transport state and has no sync
+session. Participant sources are refused, including read-write participants.
+No backup package, ledger operation, sync queue or cloud publication is created.
+
+Descriptor format 1 uses fixed relative resource `Graph.sqlite`, a workspace
+UUID, GraphID, schema and source/working native UUID/token boundaries. The source
+freshness boundary contains a freshly captured opaque token; its numeric
+transaction is intentionally absent. The working boundary records the one setup
+transaction number and its token, fetched **after a token captured on the working
+store before setup**. This avoids scanning old history, guessing sortable native
+fields, wall-clock ordering or treating a copied source checkpoint as a baseline.
+After successful detachment/publication/reopen the token must remain unchanged.
+Tokens are limited to 64 KiB and the encoded descriptor to 256 KiB. No original
+URL, account, cloud recovery state or engine serialization is serialized.
+
+Discard preflights at most 100,000 filesystem entries and 32 levels, refusing
+symlinks/hard links and a replacement directory/store. It checks the marker and
+bounded descriptor before deletion. These are cleanup limits, not preparation
+memory/time/attachment-size bounds. Native copy and existing full-content
+validation retain their current costs. Ordinary runtime openings refuse marked
+files both while open and after close; only exact explicit workspace admission
+is accepted. Missing markers/incorrect GraphIDs are also refused.
+
+A pre-publication failure removes only a successfully detached, still-owned
+stage. Failed cleanup exposes `GraphMigrationWorkspaceCleanupFailure` and retains
+the stage/native claims. Failure/cancellation after atomic directory publication
+retains that directory rather than deleting uncertain work. Source holds are
+released on preparation failure. Process crashes and closed/prepared files
+cannot yet be reactivated through a supported workspace API: restart/source
+freshness validation belongs to the following sealing/recovery increment.
+Neither retained descriptors nor a successful preparation certify publication.
 
 ## Purpose and boundary
 
@@ -73,7 +122,7 @@ Native objects and contexts remain confined to the adapter/runtime.
 
 ## Preparation and ownership
 
-Proposed package-only entry point under ContextManager:
+Implemented package-only preparation entry point under ContextManager:
 
 ```swift
 func prepareMigrationWorkspace(
@@ -185,7 +234,7 @@ replacement; the shared ledger remains coordination information for the consumer
 
 ## Sealing and change-set shape
 
-Proposed package-only control surface:
+Target package-only control surface (`seal` remains unimplemented):
 
 ```swift
 actor GraphMigrationWorkspace {
