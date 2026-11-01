@@ -11,11 +11,18 @@ Give the consumer an ordinary mutable `GraphStore` containing a complete local
 working copy. Use Persistent History to discover the logical primitives touched
 since preparation. Seal that copy before returning a bounded change set.
 
-MF04 starts from an explicit, verified backup. It neither transforms the original
-nor publishes changes. The later executor owns source reservations, backup
-retention across the complete migration, ledger transitions and the final
-publication/recovery protocol. A prepared workspace alone does not certify that
-the original is still unchanged or that a migration has completed.
+MF04 starts from a coherent copy of the protected original. It neither transforms
+the original nor publishes changes. Acquire owned local-write and graph-data-sync
+holds before copying and retain them during consumer editing and validation.
+Ordinary source reads and the independent shared ledger remain available.
+
+The agreed full flow is request, drain local/cloud work, copy and capture the
+working PH baseline, consumer editing, seal/validate, create and verify a backup
+of the original, then publish. Do not create/compress a backup merely to prepare
+a working copy that may be discarded. The complete coherent copy remains necessary.
+The later executor owns ledger transitions, the pre-publication backup/retention
+and original-store publication/recovery. Backup failure forbids publication.
+A prepared workspace alone does not certify migration completion.
 
 The consumer owns the transformation, its eligibility and domain correctness.
 Graph owns structural validity, file/resource ownership, PH boundaries and truthful
@@ -26,9 +33,9 @@ replay of an arbitrary consumer body.
 
 Keep GraphID, logical node IDs, relationships/actions and attachment ownership.
 The copy belongs to the same logical graph, not a new independent-user import.
-The original, immutable backup and editable working files are physically distinct,
-including all native external content. Do not modify, hard-link or write into the
-backup/original as an optimization.
+The original and editable working files are physically distinct, including all
+native external content. A later pre-publication backup is also independent and
+immutable. Do not modify, hard-link or write into the original as an optimization.
 
 Assign a new workspace UUID and record a native working-purpose marker. A copied
 store can retain the original native store UUID and historical tokens: neither
@@ -51,9 +58,8 @@ identity; retain original recovery evidence only as inert provenance when needed
 A copied participant marker must not silently grant the original new permissions.
 Opening a workspace never changes permission or availability on the original.
 
-For the first MF04 activation, support local/owner sources. Refuse a copied
-participant-access marker before exposing a writable graph, preserving the backup
-and source. Participant workspaces need explicit live participation-generation
+For the first MF04 activation, support local/owner sources. Refuse a
+participant source before exposing a writable graph, preserving the source. Participant workspaces need explicit live participation-generation
 tracking, permission reduction and T08 revocation/purge integration before they
 can be enabled. Removing an access marker must not become a workaround for that
 missing lifecycle. This gate is separate from the ability to export a backup.
@@ -68,38 +74,42 @@ Proposed package-only entry point under ContextManager:
 
 ```swift
 func prepareMigrationWorkspace(
-    from backup: URL,
+    for graphID: GraphID,
     at destination: URL
 ) async throws -> GraphMigrationWorkspace
 ```
 
-1. Validate the complete backup through the central backup service, including
-   native reopen, schema/identity and attachment bytes. Refuse an occupied or
-   unsafe destination before changing it; never replace a live store.
-2. Allocate a workspace UUID and durable retention ownership on that backup.
-   Materialize the complete store into an owned hidden staging directory outside
-   the backup. The source backup and other retention owners remain untouched.
+1. Validate source eligibility and an empty safe destination. Retain the exact
+   source coordinator generation and acquire owned cloud-pause/local-write holds;
+   await already admitted synchronization and local writers. Other graphs progress.
+2. Allocate a workspace UUID and an owned hidden staging directory outside the
+   source. Reuse the native coherent-copy mechanism from MF01, including complete
+   external content, under temporary exclusive maintenance admission. Release
+   only that snapshot's exclusive read fence after copying; keep the migration's
+   source write/cloud holds. No backup package is created at this stage.
 3. Validate the copied graph, mark its working purpose and strip operational
    authority in the copy only. Preserve all application primitives and files.
-4. Capture a fresh PH boundary on the prepared working store after setup.
-   Persist a bounded descriptor before making a consumer handle available.
+4. Capture a fresh PH boundary on the prepared working store after setup. Bind
+   source native identity and an explicit freshness boundary as well. Persist a
+   bounded descriptor before making a consumer handle available.
 5. Detach staging stores successfully, publish the whole prepared directory to
    the empty destination, then open through the explicit workspace admission.
    Never move or remove a store while it remains attached.
-6. Return the ordinary graph handle and workspace control object. Failure or
-   cancellation never replays transformation code; no consumer body has run yet.
+6. Return the ordinary graph handle and workspace control object. Preparation
+   failure/cancellation releases only its own source holds and preserves the
+   original; no consumer body has run or been replayed.
 
-Use relative resource names. The descriptor contains format/workspace/backup/graph
-identities, schema, preparation state and working PH boundary, never sandbox URLs,
-CloudKit accounts or engine serialization. Caller bootstrap supplies current URLs
-when reopening a workspace. A moved workspace must validate its complete identity
-and resource ownership again; an existing replacement file is not adopted.
+Use relative resource names. The descriptor contains format/workspace/graph and
+source/working store identities, schema, preparation state and PH boundaries,
+never sandbox URLs, CloudKit accounts or engine serialization. Caller bootstrap
+supplies current URLs when reopening. A moved workspace must validate its complete
+identity and resource ownership again; an existing replacement is not adopted.
 
 Failed detachment retains native ownership and the owned stage, with a visible
-cleanup failure. Do not delete attached files or release backup retention as if
-cleanup succeeded. Unknown/corrupt ownership markers are refused. Backup retention
-is released only by a completed explicit discard or by the later executor after
-its recovery obligations finish. Consumer-made exports remain consumer-owned.
+cleanup failure. Do not delete attached files or report cleanup success. Unknown
+or corrupt ownership markers are refused. A caller-created backup/export remains
+outside workspace cleanup. Once later publication begins, its backup retention
+must follow that executor's recovery obligations, not workspace deinitialization.
 
 ## Persistent History boundary and reduction
 
@@ -132,6 +142,44 @@ not semantic equivalence. Do not add a full-graph diff to eliminate such entries
 For a newly inserted then deleted identity, retain enough PH origin evidence to
 avoid treating it as deletion of a baseline record. No ID reuse is authorized.
 
+## Supported logical emptying
+
+Provide an explicit package-only `GraphMigrationWorkspace.removeAll(limits:)`
+operation for the editable working copy. With default explicit workspace limits,
+the intended consumer call is:
+
+```swift
+try await workspace.removeAll()
+// Repopulate workspace.graph with ordinary Graph transactions and fresh node IDs.
+```
+
+This removes every application Entity, Relationship, Action, property/tag/group
+and owned attachment. It preserves GraphID, hidden catalog/control structure,
+workspace identity, PH baseline/history, deletion identities and lifecycle state.
+It does not destroy/recreate SQLite, prune history, reset a cursor, delete a
+CloudKit zone or recreate a share. Arbitrary physical store replacement is refused.
+
+Use Graph's supported mutation/deletion path, including ownership, dependency,
+cascade and attachment checks. Complete preflight and apply within one native
+transaction under the normal writer gate; no independent saves or raw batch-delete
+shortcut bypassing graph metadata are selected. Cancellation/failure before commit
+rolls back the entire emptying operation. After commit it reports the committed
+outcome. Refuse explicit work/identity/history limits without partial emptying or
+silently raising budgets. Emptying an already empty graph is a no-op.
+
+Serialize emptying against seal/close/discard and reject it on sealed or closed
+workspaces. It affects only the working copy; source holds remain in force and
+no network transfer starts. Query observations follow normal committed changes.
+
+PH reduction retains deletions of baseline records and final inserts made after
+emptying, including attachment/edge identities. An inserted-then-deleted identity
+within the working range must not become a deletion of a baseline record. Deleted
+identities cannot be reused, consistently with delete-wins; preserving an existing
+identity requires updating that record instead of deleting and reinserting it.
+The later publisher applies these logical deletes/saves to the original. Its PH
+feeds normal cloud batches. Other devices are not promised an atomic whole-graph
+replacement; the shared ledger remains coordination information for the consumer.
+
 ## Sealing and change-set shape
 
 Proposed package-only control surface:
@@ -140,6 +188,7 @@ Proposed package-only control surface:
 actor GraphMigrationWorkspace {
     nonisolated let id: UUID
     nonisolated let graph: GraphStore
+    func removeAll(limits: GraphMigrationWorkspaceLimits = .init()) async throws
     func seal(limits: GraphMigrationWorkspaceLimits) async throws -> GraphMigrationChangeSet
     func close() async throws
     func discard() async throws
@@ -165,21 +214,22 @@ Use explicit transaction/native-change/logical-change limits, initially aligned
 with the existing PH discovery defaults (4096 / 100,000 / 10,000), plus a bounded
 encoded descriptor/change-set size. Refuse limits atomically without partial
 success or implicit budget increases. A failed seal preserves the working data
-and backup; release only the failed seal's own temporary reservation. The consumer
+and original; release only the failed seal's own temporary reservation. The consumer
 may inspect/correct data or explicitly retry with suitable limits. Missing history
 is not repairable by replaying its body.
 
 Close drains the workspace and invalidates its handles/observations through the
-existing lifecycle. It preserves files, backup retention and successful seal
-information for explicit reopen/recovery or later publication. Deinitialization
-may arrange best-effort close, never successful publication or automatic discard.
-Discard first completes detachment, then removes only the verified workspace's
-owned files and releases its backup retention. Failed cleanup remains repeatable
-and visible. Stale releases/callbacks cannot affect a replacement workspace.
+existing lifecycle. It preserves files and successful seal information, and ends
+only its own in-process source reservations. Explicit reopen must reacquire source
+holds and validate source freshness before continuing. Deinitialization may arrange
+best-effort close, never publication or automatic discard. Discard first completes
+detachment, then removes only the verified workspace's owned files and releases
+its source holds. Failed cleanup remains repeatable and visible. Stale releases
+or callbacks cannot affect a replacement workspace or another caller's holds.
 
 ## Restart and later publication
 
-Reopen is explicit with current workspace and backup locations. Validate marker,
+Reopen is explicit with current workspace and source locations. Validate marker,
 descriptor, GraphID, schema, native ownership and retained PH before permitting
 writes or reporting a successful seal. An interrupted preparation remains an
 owned incomplete stage, not an editable graph. Recover completed sealed state
@@ -187,11 +237,18 @@ without replay; an incomplete seal must be validated/retried under the write
 fence. Define the durable seal marker/descriptor commit recovery before activation
 rather than assuming SQLite and JSON commit together.
 
-The original can have changed after backup creation. MF04 makes no promise of a
-migration-long freeze. The later executor must acquire source local/cloud holds
-before its baseline/backup and keep the appropriate fences through publication,
-or explicitly reject a stale source on recovery. A crash releases in-process
-reservations; reopening a source does not magically restore that guarantee.
+During an active migration, the original remains protected by owned local/cloud
+holds. Closing/crashing releases in-process reservations; reopening the source
+does not magically restore that guarantee. Recovery must reacquire holds and
+reject a changed source using its bound native identity and retained application
+history boundary. Do not compare only dates or silently accept a replaced store.
+
+Only after final working-copy validation, create and verify the complete backup
+of the still-protected original, retaining it for publication/recovery. A failed
+validation or abandoned workspace requires no backup. The later executor must
+retain the appropriate source fences through publication, preserving manual and
+other callers' holds. It must refuse stale-source recovery instead of overwriting
+new application changes.
 
 Publication must apply final changed primitives/deletions through the original
 store's normal native transaction/PH path, not replace its SQLite file or transplant
@@ -206,10 +263,10 @@ unsafe provisional publication route.
 | Step | Deliverable | Evidence before the next step |
 |---|---|---|
 | 1 | Workspace identity/descriptor and native opening fence | Normal manager/database openings refuse marked copies; wrong workspace UUID and replacement store refused; S03 unchanged. |
-| 2 | Verified backup materialization, retention and owned preparation | Source checksums unchanged, complete attachment recovery, cancellation/failure cleanup and failed-detachment preservation. |
-| 3 | Working GraphStore activation and fresh PH boundary | Normal transactions/queries/files work locally; no cloud binding/queue; pre-backup history and pending original changes excluded. |
+| 2 | Protected original and owned coherent copy | Source write/cloud holds compose correctly, complete native attachment copy, no backup before validation, cancellation/cleanup and failed-detachment preservation. |
+| 3 | Working GraphStore activation, logical emptying and fresh PH boundary | Normal transactions/queries/files and removeAll work locally; no cloud binding/queue; pre-copy history and pending original changes excluded. |
 | 4 | Bounded PH reduction and seal | Entity/edge/action/file changes, cascades, implicit action edits, no-op and repeated edits, full rejection on missing history/unknown authors/limits. |
-| 5 | Explicit close/reopen/discard and interrupted seal recovery | Old handles closed, moved locations, process restart at durable boundaries, retention preserved/released by the correct owner. |
+| 5 | Explicit close/reopen/discard and interrupted seal recovery | Old handles closed, moved locations, process restart at durable boundaries, source holds released by the correct owner and stale-source recovery refused. |
 | 6 | Review and direct PR delivery | Contract/API/status/checklist match actual scope; local macOS/iOS validation passes; corrections precede any requested CI checkpoint and authorized merge. |
 
 Keep the preparer and reducer under the existing ContextManager/runtime ownership
@@ -221,18 +278,24 @@ per-graph CloudKit engine or application resolver.
 - Start from an empty graph and a populated graph with Entity, Relationship,
   Action, tags/groups, null/UUID/binary/encoded values and an external-size file.
   Include a source with pending sync metadata and retained recovery evidence.
-- Validate source/backup preservation; the same logical IDs in physically separate
+- Validate source preservation; the same logical IDs in physically separate
   files; isolation of attachment replacement/deletion and native sidecars.
 - Confirm workspace write/read/observation behavior and cloud-admission refusal,
-  including another manager and aliases. A participant-origin backup must be
+  including another manager and aliases. A participant source must be
   refused before writable activation until its revocation-aware lifecycle exists.
+- Verify emptying plus repopulation, duplicate emptying/no-op, cancellation and
+  rollback, attachments/cascades, rejected ID reuse, retained baseline/tombstones,
+  sealed/closed refusal and exact logical delete/save output. Include bounded
+  refusal before partial changes and unchanged original/pending sync work.
 - Verify fresh baseline, no-op transformation, repeated edits, insert→delete,
   detail-only edits, cascades, surviving actions, complete file ownership and
   stable repeated seals. Validate frozen final state without a snapshot diff.
 - Reject foreign/reused tokens, replaced stores, purged history, unknown authors,
   corrupt descriptors, wrong working purpose and every explicit limit without
-  damaging original, backup or prior seal evidence.
-- Exercise cancellation, concurrent seal/close/discard, readers and admitted writers,
+  damaging original or prior seal evidence.
+- Verify copy preparation and failed validation create no backup package. For the
+  later executor, require a verified original backup before any publication.
+- Exercise cancellation, concurrent emptying/seal/close/discard, readers and admitted writers,
   cancellation/close during attachment I/O, failed native cleanup and replacement
   generation safety. Resume from each durable preparation/seal boundary.
 - Verify new local fixtures on macOS and iOS Simulator. Any physical CloudKit test

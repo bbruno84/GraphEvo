@@ -13,9 +13,9 @@ The focused branch `codex/v2-migration-workspace`, in draft
 [MF04 workspace contract and implementation plan](graphevo-2-migration-workspace.md),
 directly from integrated MF03/#122 (`5b22750`). This is documentation-only
 preparation for migration-roadmap step 4, not implemented APIs or a completed
-migration executor. It fixes backup-derived local working copies, native opening
-isolation, fresh working-store PH boundaries and bounded sealing before later
-publication on the original. The plan deliberately keeps original-store
+migration executor. It fixes protected-source coherent working copies, supported logical emptying,
+native opening isolation, fresh working-store PH boundaries and bounded sealing.
+The original backup is deferred until after validation and before publication. The plan deliberately keeps original-store
 publication/recovery as the following contract. Consumer migration eligibility
 and domain meaning remain consumer-owned. Independent-user restore activation,
 unmirrored local journals and mandatory v1 conversion remain open.
