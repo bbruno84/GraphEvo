@@ -17,7 +17,11 @@ conflicts and restart recovery. Session format advances to 6; S03 and applicatio
 record/asset formats remain unchanged. This is candidate work, not integrated.
 The [candidate result](results/shared-ledger-2026-11-01.md) records passing local
 macOS/iOS checks and six physical stages on iPad/XR, with new fixtures and no reset.
-Review/corrections precede CI and authorized merge. Migration working-copy
+Corrective review closed two P2 findings in `7dd8ecf`: preserve hints received
+during an admitted successful turn and fence failure/retry state to the ledger
+generation. Final local checks passed 813 macOS and 481 selected iOS functions.
+The reviewed candidate is ready for one remote CI checkpoint and authorized merge.
+Migration working-copy
 publication, unmirrored local journals, independent cross-user graph activation
 and mandatory v1 conversion remain open.
 

@@ -98,7 +98,9 @@ events but never resolve concurrency or establish global ordering.
 
 The existing finite control worker supplies per-scope turn-taking, 60-second
 reconciliation and bounded busy/network backoff. Consumer changes/remote hints
-request an earlier turn; coalesced hints do not enqueue snapshots. Control work
+request an earlier turn; hints received during a successful admitted turn schedule
+the next turn immediately, while failures preserve their backoff. Retry/block
+state and late error diagnostics are fenced to the ledger generation; coalesced hints do not enqueue snapshots. Control work
 continues during graph-data pause and does not read PH or import application
 payloads. Manual activation/reconciliation remains explicit; background/APNs
 delivery is not certified. Inactivity suspends new automatic work; stop drains

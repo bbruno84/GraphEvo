@@ -3,8 +3,8 @@
 ## Source and scope
 
 Candidate runtime: `9c6ee82e19bfcb8973db50bd1b899f809984e600`, directly from
-`d17676d` (#121), on `codex/v2-shared-ledger`. Documentation-only follow-ups do
-not alter that runtime pin. This implements the
+`d17676d` (#121), on `codex/v2-shared-ledger`. This is the original physical validation pin; the corrective
+review section below records the later runtime changes. This implements the
 [MF03 contract](../graphevo-2-shared-ledger.md), not a migration executor,
 distributed lock, public activation or beta acceptance.
 
@@ -92,3 +92,38 @@ application commit-marker reconciliation, independent-user restore activation
 and mandatory v1 conversion remain open. Control publication is distinct from
 application-data completion. Review/corrections precede CI; remote CI and merge
 have not been requested for this candidate.
+
+## Corrective review before CI
+
+Review of `77288fd` identified two P2 findings, corrected in
+`7dd8ecf9b605d49cdbfaffb8f1d4c5f6f2a0d9c7`:
+
+1. A hint arriving during a successful control turn could be deferred until the
+   60-second timer. The new virtual-clock regression failed against the reviewed
+   source. Success now retains that hint for the next turn immediately; failed
+   turns still consume it into their existing backoff. A manager-level 3→4 send
+   test confirms the newest revision reaches the fake server without advancing
+   virtual time or calling manual reconciliation.
+2. Error annotation looked up the latest ledger by GraphID after an await. A
+   late result could therefore annotate a replacement participation. Failure
+   persistence now requires the exact admitted ledger generation, captured inside
+   the session. The control worker also fences results and resets old retry/block
+   state when that generation changes. Removed graph state is pruned. A replacement
+   read-only participation does not need a local write to escape an old block.
+
+A generation lookup adds an actor suspension; inactivity is rechecked after it
+before admitting work. Regression coverage includes inactivity at that boundary,
+replacement during a held failure, replacement after a permanent failure and
+refusal to annotate a replacement ledger. The first generation-worker test used
+an unrelated ID that the fixture intentionally treated as successful; the fixture
+was corrected to its designated failing ID. The final focused re-review suite
+passed **52 functions** across ledger, control worker, sharing lifecycle and
+automatic integration. No remaining finding was identified in the corrected
+source. The physical six-stage evidence above retains its original source pin;
+these corrective scheduling/generation cases are deterministic local coverage.
+
+Final corrected-source verification at `7dd8ecf`: full macOS suite **813 functions**
+(331 legacy, 383 store, 76 runtime, 23 model) and selected iOS 18.5 Simulator
+**481 functions / 566 invocations**, all passed. The source remains unchanged
+through the documentation-only review record. Remote CI is the next checkpoint;
+no repeated physical claim is made for the corrected source.
