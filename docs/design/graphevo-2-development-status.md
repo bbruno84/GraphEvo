@@ -8,18 +8,37 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF08 internal migration structure integrates through
-[PR #130](https://github.com/bbruno84/GraphEvo/pull/130), directly from #129.
-The focused `codex/v2-extension-model-mapping` correction separates application
-UUIDs from graph references, supporting Foundation-only model files and separate
-mapping extensions. See [the contract](graphevo-2-extension-model-mapping.md).
-TP01 remains a retained experiment on `codex/experiment-typed-properties`, not an
-adopted native schema/planner. After the mapping correction, native-property
-schema/planner design can resume. Migration work remains supported opt-in bootstrap and
-production/historical source acceptance, then new-cloud activation of one
-authoritative converted graph. Old-cloud format conversion is outside this scope.
+Extension-only model mapping integrates through
+[PR #131](https://github.com/bbruno84/GraphEvo/pull/131), directly from #130.
+No next implementation branch is open. Next: return to native-property
+schema/planner design, using TP01 retained on `codex/experiment-typed-properties`.
+The experiment is not an adopted schema or production query engine. Migration's
+remaining route is supported opt-in bootstrap, production/historical source
+acceptance and new-cloud activation of one authoritative converted graph.
 
-## Latest integrated increment — MF08 internal migration structure
+## Latest integrated correction — extension-only model mapping
+
+[The contract](graphevo-2-extension-model-mapping.md) permits a Foundation-only
+Sendable domain model with UUID identity and a separate GraphEvo conformance file.
+GraphModel refines Identifiable; serialization receives an explicit GraphID.
+UUID identity is retained, graph references remain scoped, and no lookup registry
+or generated-on-read identity is added. Typed UUID fetch/delete are graph-local.
+Existing graph-aware models retain ownership checks and limited conveniences.
+The independent ModelConsumer exercises the actual two-file mapping. S03 and
+native/property/cloud/session/backup formats remain unchanged.
+
+Local checks pass 892 macOS functions, 560 selected iOS functions/666 invocations,
+both consumers and manifest/diff checks. Review finds no remaining blockers.
+[CI #338](https://github.com/bbruno84/GraphEvo/actions/runs/41355023467) passed both
+library suites but caught Swift 6.1's entry-point conflict after adding consumer
+files. Renaming `main.swift` to `ModelConsumer.swift` preserves its exact content.
+Corrected full [checkpoint #340](https://github.com/bbruno84/GraphEvo/actions/runs/41355963232)
+passes on `b665706da5a12b0e3784a2442346ca193b9390ea`: 892 macOS functions and both
+consumers; 890 passed iOS functions/996 invocations with one known legacy alias
+skip. Final integration notes are documentation-only; shipping code/tests/consumers
+match the reviewed checkpoint. No physical CloudKit/schema adoption gate closes.
+
+## Earlier integrated increment — MF08 internal migration structure
 
 The [contract](graphevo-2-store-migrations.md) separates concrete typed transition
 definitions from ContextManager's shared protected conversion sequence. There is

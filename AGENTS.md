@@ -1326,3 +1326,8 @@ are graph-local; GraphNodeID references and endpoints retain cross-graph checks.
 Keep checked Sendable on the original type's file as required by Swift. Small
 GraphNodeID conveniences do not authorize API/source compatibility promises or
 native/wire changes. Keep the TP01 experiment separate from production adoption.
+
+The extension mapping correction integrates through #131. Corrected full CI #340
+passes on `b665706`, after #338 caught the multi-file consumer's `main.swift` /
+`@main` conflict on Swift 6.1. Keep the consumer entry point named
+`ModelConsumer.swift`; no runtime/schema change was needed for that correction.

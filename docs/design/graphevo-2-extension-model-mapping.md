@@ -1,7 +1,8 @@
 # Application models mapped in extensions
 
-Status: focused alpha correction on `codex/v2-extension-model-mapping`, directly
-from integrated MF08/#130. Source API changes are intentional; native S03, values,
+Status: focused alpha correction integrates through
+[PR #131](https://github.com/bbruno84/GraphEvo/pull/131), directly from MF08/#130,
+after local checks, review and corrected full checkpoint #340. Source API changes are intentional; native S03, values,
 cloud/session/backup formats and persistent identities are unchanged.
 
 ## Domain identity and graph reference
@@ -108,6 +109,20 @@ Full checkpoint #338 passed the macOS library tests but failed ModelConsumer on
 CI's Swift 6.1: a multi-file executable named `main.swift` conflicted with `@main`.
 Renaming that file to `ModelConsumer.swift` fixes the entry-point declaration;
 its content and all shipping source/tests remain unchanged. The renamed consumer
-passes locally. This toolchain-specific failure is retained; the corrected head
-needs its final checkpoint before merge. No physical cloud/schema acceptance
-claim is added by this mapping-only increment.
+passes locally and in the corrected full checkpoint. This toolchain-specific
+failure is retained. No physical cloud/schema acceptance claim is added by this
+mapping-only increment.
+
+## Corrected final checkpoint
+
+Full [CI #340](https://github.com/bbruno84/GraphEvo/actions/runs/41355963232)
+passes on reviewed `b665706da5a12b0e3784a2442346ca193b9390ea`: 892 macOS functions,
+ModelConsumer and ProcessConsumer; 890 passed iOS functions/996 passed invocations,
+zero failures and one known legacy temporary-directory alias skip. The master-only
+PackageConsumer job is intentionally skipped on this v2 PR. No laboratory or
+physical protocol is added to CI.
+
+Final status/checklist notes change documentation only. Sources, tests, manifest,
+independent consumer inputs and workflow match the reviewed checkpoint exactly;
+no additional unchanged-code CI run is requested for those notes. The experiment
+branch remains separate and no native-property schema is adopted by this merge.
