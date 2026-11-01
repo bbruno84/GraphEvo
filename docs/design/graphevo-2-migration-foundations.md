@@ -166,6 +166,8 @@ coverage; do not replay consumed probe mutations or reset cloud implicitly.
 
 The [historical manager plan](graphevo-2-migration-manager.md) retains M1/M2a
 evidence. Its native-mirroring/import-version assumptions do not define this new
-custom-sync implementation. Update the execution contract before implementing
-steps 4–5. Beta/stable gates stay in the
+custom-sync implementation. [MF04](graphevo-2-migration-workspace.md) defines the proposed working-copy/PH
+execution contract and ordered implementation/test plan for step 4. It remains
+documentation-only; step-5 original-store publication/recovery needs its own
+concrete contract before activation. Beta/stable gates stay in the
 [post-alpha checklist](graphevo-2-post-alpha-checklist.md).

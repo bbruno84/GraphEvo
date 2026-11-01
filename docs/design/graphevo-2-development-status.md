@@ -8,11 +8,16 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF03 completes the shared-control metadata foundation through [PR #122](https://github.com/bbruno84/GraphEvo/pull/122).
-No next implementation branch is open. The next migration work is the working-copy
-and publication/recovery contract; consumer migration eligibility and data meaning
-remain consumer-owned. Unmirrored local journals, independent cross-user graph
-activation and mandatory v1 conversion remain open.
+The focused branch `codex/v2-migration-workspace` defines the
+[MF04 workspace contract and implementation plan](graphevo-2-migration-workspace.md),
+directly from integrated MF03/#122 (`5b22750`). This is documentation-only
+preparation for migration-roadmap step 4, not implemented APIs or a completed
+migration executor. It fixes backup-derived local working copies, native opening
+isolation, fresh working-store PH boundaries and bounded sealing before later
+publication on the original. The plan deliberately keeps original-store
+publication/recovery as the following contract. Consumer migration eligibility
+and domain meaning remain consumer-owned. Independent-user restore activation,
+unmirrored local journals and mandatory v1 conversion remain open.
 
 ## Latest integrated increment — MF03 bounded shared ledger
 

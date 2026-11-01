@@ -383,6 +383,13 @@ paired-store evidence below retains its original backend scope.
   costs and reserved 512-KiB headroom per enabled graph before production sizing.
   Unmirrored local journals and migration-data commit-marker recovery remain open;
   diagnostic history rotation must not delete unresolved executor evidence.
+- [ ] **B** Implement and validate the isolated working graph and explicit PH
+  range/seal contract. [MF04](graphevo-2-migration-workspace.md) is design-only:
+  preparation must preserve the original/backup, reject ordinary cloud activation,
+  bind history to the exact working instance and survive interrupted sealing.
+  Participant-origin workspace activation also requires permission and T08
+  revocation/purge integration before enabling that route. A change manifest
+  alone does not establish safe original-store publication.
 - [ ] **R** Wire complete backups into actual conversion/recovery paths and verify
   bytes/checksums and successful reopen, interrupted copies/restores and protected
   source preservation. SQLite/WAL/SHM copying alone is insufficient for files.
