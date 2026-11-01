@@ -28,6 +28,7 @@ struct GraphCloudSendOutcome: Sendable {
 
 struct GraphCloudAdapter: Sendable {
     var sharing: GraphCloudSharingService? = nil
+    var ledger: GraphLedgerService? = nil
     let account: @Sendable (String) async throws -> String
     let make: @Sendable (GraphCloudConfiguration, GraphCloudScope, Data?, @escaping @Sendable (GraphCloudEvent) async -> Void) throws -> GraphCloudDriver
 }
@@ -47,6 +48,8 @@ actor GraphCloudSession {
     private var directoryLease: GraphCloudDirectoryLease?
     private var document: GraphCloudDocument
     private var sharingObservers: [GraphID: [UUID: AsyncStream<GraphCloudSharingStatus>.Continuation]] = [:]
+    private var ledgerObservers: [GraphID: [UUID: AsyncStream<GraphLedgerStatus>.Continuation]] = [:]
+    private var ledgerSignals: [UUID: AsyncStream<Void>.Continuation] = [:]
     private var driverGenerations: [GraphCloudScope: UUID] = [:]
     private var drivers: [GraphCloudScope: GraphCloudDriver] = [:]
     private var failure: GraphCloudError?
@@ -77,12 +80,12 @@ actor GraphCloudSession {
             guard !account.isEmpty else { throw GraphCloudError.accountUnavailable }
             let lease = try GraphCloudDirectoryLease(directory: config.directory)
             let url = config.directory.appendingPathComponent("session.json")
-            let doc: GraphCloudDocument
+            var doc: GraphCloudDocument
             if let data = try disk.read(url) {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 5, doc.container == config.containerIdentifier, doc.environment == config.environment,
+                guard doc.format == 6, doc.container == config.containerIdentifier, doc.environment == config.environment,
                       doc.account == account else { throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -115,6 +118,16 @@ actor GraphCloudSession {
                 for receipt in doc.sent {
                     if let member = doc.memberships.first(where: { $0.role == .participant && $0.binding.graphID == receipt.graphID }) {
                         guard receipt.membershipGeneration == member.generation else { throw GraphCloudError.invalidState }
+                    }
+                }
+                guard Set(doc.ledgers.map { $0.binding.graphID }).count == doc.ledgers.count else { throw GraphCloudError.invalidState }
+                for index in doc.ledgers.indices {
+                    let entry = doc.ledgers[index]
+                    guard doc.bindings.contains(entry.binding),
+                          entry.membershipGeneration == doc.memberships.first(where: { $0.role == .participant && $0.binding == entry.binding })?.generation else { throw GraphCloudError.invalidState }
+                    try entry.validate()
+                    if let operation = entry.value.current, operation.origin == doc.clientID, !operation.state.terminal {
+                        doc.ledgers[index].recoveryRequired = true
                     }
                 }
             } else {
@@ -176,9 +189,16 @@ actor GraphCloudSession {
             let participants = candidate.memberships.filter { $0.role == .participant && $0.phase != .removed }.count
             let headroom = participants.multipliedReportingOverflow(by: 1024)
             guard !headroom.overflow, headroom.partialValue <= configuration.maximumBytes - data.count else { throw GraphCloudError.inboxLimit }
+            var remaining = configuration.maximumBytes - data.count - headroom.partialValue
+            for ledger in candidate.ledgers {
+                let allowance = GraphLedgerReplica.maximumBytes - (try JSONEncoder().encode(ledger).count)
+                guard allowance >= 0, allowance <= remaining else { throw GraphCloudError.inboxLimit }
+                remaining -= allowance
+            }
         }
         do { try disk.write(url, data) } catch { throw GraphCloudError.persistence }
         document = candidate
+        publishLedgerObservers()
         for member in candidate.memberships {
             for observer in sharingObservers[member.binding.graphID]?.values ?? [:].values { observer.yield(member.status) }
         }
@@ -199,9 +219,17 @@ actor GraphCloudSession {
         } catch { block(error as? GraphCloudError ?? .persistence); throw error }
     }
 
-    func receive(_ event: GraphCloudEvent, scope: GraphCloudScope, driverGeneration: UUID? = nil) {
+    func receive(_ received: GraphCloudEvent, scope: GraphCloudScope, driverGeneration: UUID? = nil) {
         if let driverGeneration, driverGenerations[scope] != driverGeneration { return }
         guard !stopped else { return }
+        var event = received
+        if case .incoming(let changes) = event {
+            if changes.contains(where: { change in
+                GraphLedgerCodec.isControl(change) && change.valid && change.zone.scope == scope &&
+                document.ledgers.contains(where: { $0.binding.zone == change.zone })
+            }) { signalLedgerControl() }
+            event = .incoming(changes.filter { !GraphLedgerCodec.isControl($0) })
+        }
         if failure != nil {
             guard failure == .inboxLimit else { return }
             // Saturated application transport must not hide a later account/session failure.
@@ -263,6 +291,16 @@ actor GraphCloudSession {
     private func block(_ error: GraphCloudError) {
         guard failure == nil || (failure == .inboxLimit && error != .inboxLimit) else { return }
         failure = error
+        if error != .inboxLimit {
+            for values in ledgerObservers.values {
+                for value in values.values {
+                    value.yield(.init(ledger: nil, remote: nil, state: .unavailable,
+                        failure: "The cloud session is unavailable.", confirmedRevision: nil))
+                    value.finish()
+                }
+            }
+            ledgerObservers.removeAll()
+        }
         let values = Array(drivers.values)
         // Never await cancellation from the serial native delegate callback.
         if cancellation == nil { cancellation = Task { try await Self.cancelAll(values) } }
@@ -293,15 +331,22 @@ actor GraphCloudSession {
     /// Control operations share the engine scope gate and participate in session stop draining.
     private func control<Value: Sendable>(_ scope: GraphCloudScope, allowingDataLimit: Bool = false,
         body: @Sendable (GraphCloudSharingService, String) async throws -> Value) async throws -> Value {
-        try check(control: allowingDataLimit)
         guard let sharing = adapter.sharing else { throw GraphCloudSharingError.unavailable }
+        return try await withScopeControl(scope, allowingDataLimit: allowingDataLimit) { session in
+            try await body(sharing, session.document.account)
+        }
+    }
+
+    func withScopeControl<Value: Sendable>(_ scope: GraphCloudScope, allowingDataLimit: Bool = false,
+        body: @Sendable (isolated GraphCloudSession) async throws -> Value) async throws -> Value {
+        try check(control: allowingDataLimit)
         guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }
         fetches += 1
         defer {
             activeFetches.remove(scope); fetches -= 1
             if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
         }
-        let result = try await body(sharing, document.account)
+        let result = try await body(self)
         if let failure, !(allowingDataLimit && failure == .inboxLimit) { throw failure }
         return result
     }
@@ -439,6 +484,8 @@ actor GraphCloudSession {
         stopped = true
         drivers.removeAll(); driverGenerations.removeAll(); directoryLease = nil
         for values in sharingObservers.values { for value in values.values { value.finish() } }; sharingObservers.removeAll()
+        for values in ledgerObservers.values { for value in values.values { value.finish() } }; ledgerObservers.removeAll()
+        for value in ledgerSignals.values { value.finish() }; ledgerSignals.removeAll()
         await GraphCloudOwnership.shared.release(configuration.containerIdentifier, owner: owner)
     }
 }
@@ -477,6 +524,7 @@ extension GraphCloudSession {
         var next = document; next.memberships.removeAll { $0.binding.graphID == binding.graphID }; next.memberships.append(member)
         next.inbox.removeAll { $0.change.zone == binding.zone }
         next.sent.removeAll { $0.graphID == binding.graphID }
+        next.ledgers.removeAll { $0.binding.graphID == binding.graphID }
         try publish(next); return member
     }
     func inspectSharing(_ binding: GraphCloudBinding) async throws -> GraphCloudShareSnapshot? {
@@ -495,7 +543,7 @@ extension GraphCloudSession {
         guard let zone = binding?.zone ?? membership?.binding.zone else { return nil }
         try check(control: true)
         let value = GraphCloudBackupSnapshot(format: 1, capturedAt: Date(), identity: try identity(control: true), binding: binding,
-            membership: membership, inbox: document.inbox.filter { $0.change.zone == zone }, receipts: document.sent.filter { $0.graphID == id })
+            membership: membership, inbox: document.inbox.filter { $0.change.zone == zone }, receipts: document.sent.filter { $0.graphID == id }, ledger: document.ledgers.first { $0.binding.graphID == id })
         return try JSONEncoder().encode(value)
     }
 
@@ -526,6 +574,7 @@ extension GraphCloudSession {
         var next = document
         next.inbox.removeAll { $0.change.zone == member.binding.zone }
         next.sent.removeAll { $0.graphID == id }
+        next.ledgers.removeAll { $0.binding.graphID == id }
         next.bindings.removeAll { $0.graphID == id }
         next.memberships.removeAll { $0.binding.graphID == id }; next.memberships.append(member)
         try publish(next)
@@ -556,4 +605,107 @@ extension GraphCloudSession {
         try publish(next)
         try enable(.shared)
     }
+}
+
+extension GraphCloudSession {
+    var ledgerClientID: UUID { document.clientID }
+    func ledgerService() throws -> GraphLedgerService {
+        guard let service = adapter.ledger else { throw GraphLedgerError.unavailable }
+        return service
+    }
+    func verifyLedgerAccount() async throws { try await verifySharingAccount(document.account) }
+    private func ledgerBinding(_ id: GraphID, writing: Bool) throws -> GraphCloudBinding {
+        try check(control: true)
+        guard let binding = document.bindings.first(where: { $0.graphID == id }) else { throw GraphLedgerError.unavailable }
+        if binding.zone.scope == .shared {
+            guard document.memberships.contains(where: { $0.role == .participant && $0.binding == binding }) else { throw GraphLedgerError.unavailable }
+        }
+        if let member = document.memberships.first(where: { $0.binding.graphID == id && $0.role == .participant }) {
+            guard !member.terminal, member.hadAccess else { throw GraphLedgerError.unavailable }
+            if writing, member.permission != .readWrite { throw GraphLedgerError.readOnly }
+        }
+        return binding
+    }
+    func ensureLedger(_ id: GraphID, writing: Bool) throws -> GraphLedgerReplica {
+        let binding = try ledgerBinding(id, writing: writing)
+        if let existing = document.ledgers.first(where: { $0.binding.graphID == id }) { return existing }
+        let member = document.memberships.first { $0.role == .participant && $0.binding == binding }
+        let entry = GraphLedgerReplica(generation: UUID(), binding: binding, membershipGeneration: member?.generation, value: .empty(id))
+        var next = document; next.ledgers.append(entry)
+        try entry.validate(); try publish(next, reservingControl: true)
+        signalLedgerControl(); return entry
+    }
+    func checkedLedger(_ id: GraphID, generation: UUID) throws -> GraphLedgerReplica {
+        let binding = try ledgerBinding(id, writing: false)
+        guard let entry = document.ledgers.first(where: { $0.binding == binding && $0.generation == generation }),
+              entry.membershipGeneration == document.memberships.first(where: { $0.role == .participant && $0.binding == binding })?.generation else {
+            throw GraphLedgerError.unavailable
+        }
+        return entry
+    }
+    func saveLedger(_ entry: GraphLedgerReplica, signal: Bool) throws {
+        _ = try checkedLedger(entry.binding.graphID, generation: entry.generation)
+        try entry.validate()
+        var next = document
+        next.ledgers.removeAll { $0.binding.graphID == entry.binding.graphID }; next.ledgers.append(entry)
+        try publish(next, reservingControl: true)
+        if signal { signalLedgerControl() }
+    }
+    func requireLedgerUpload(_ id: GraphID) throws {
+        _ = try ledgerBinding(id, writing: true)
+        if let member = document.memberships.first(where: { $0.binding.graphID == id && $0.role == .participant }) {
+            guard member.phase == .active else { throw GraphLedgerError.unavailable }
+        }
+    }
+    func ledgerStatus(_ id: GraphID) throws -> GraphLedgerStatus {
+        try ensureLedger(id, writing: false).status
+    }
+    func enabledLedgerIDs(in scope: GraphCloudScope? = nil) throws -> [GraphID] {
+        try check(control: true)
+        return document.ledgers.filter { entry in
+            (scope == nil || entry.binding.zone.scope == scope) &&
+            !document.memberships.contains(where: { $0.binding.graphID == entry.binding.graphID && $0.terminal })
+        }.map { $0.binding.graphID }
+    }
+    func recordLedgerFailure(_ id: GraphID, error: any Error) throws {
+        guard let entry = document.ledgers.first(where: { $0.binding.graphID == id }) else { return }
+        var next = try checkedLedger(id, generation: entry.generation)
+        let native = error as NSError
+        next.failure = native.domain == "CKErrorDomain" ? "Cloud control request failed (code \(native.code))." : "Graph control request failed: \(String(describing: error as? GraphLedgerError ?? .unavailable))."
+        try saveLedger(next, signal: false)
+    }
+    func observeLedger(_ id: GraphID) throws -> AsyncStream<GraphLedgerStatus> {
+        let status = try ledgerStatus(id), token = UUID()
+        let pair = AsyncStream<GraphLedgerStatus>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        ledgerObservers[id, default: [:]][token] = pair.continuation
+        pair.continuation.yield(status)
+        pair.continuation.onTermination = { [weak self] _ in Task { await self?.removeLedgerObserver(id, token: token) } }
+        return pair.stream
+    }
+    private func removeLedgerObserver(_ id: GraphID, token: UUID) { ledgerObservers[id]?.removeValue(forKey: token) }
+    private func publishLedgerObservers() {
+        for id in Array(ledgerObservers.keys) {
+            let unavailable = document.memberships.contains { $0.binding.graphID == id && $0.terminal }
+            if unavailable {
+                let values = ledgerObservers.removeValue(forKey: id) ?? [:]
+                for value in values.values {
+                    value.yield(.init(ledger: nil, remote: nil, state: .unavailable, failure: nil, confirmedRevision: nil)); value.finish()
+                }
+            } else if let entry = document.ledgers.first(where: { $0.binding.graphID == id }) {
+                for value in ledgerObservers[id]?.values ?? [:].values { value.yield(entry.status) }
+            }
+        }
+    }
+    func ledgerSignalFeed() throws -> GraphLedgerSignalFeed {
+        try check(control: true)
+        let token = UUID(), pair = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        ledgerSignals[token] = pair.continuation; pair.continuation.yield(())
+        pair.continuation.onTermination = { [weak self] _ in Task { await self?.removeLedgerSignal(token) } }
+        return GraphLedgerSignalFeed(stream: pair.stream, cancel: { [weak self] in
+            pair.continuation.finish()
+            Task { await self?.removeLedgerSignal(token) }
+        })
+    }
+    private func removeLedgerSignal(_ token: UUID) { ledgerSignals.removeValue(forKey: token) }
+    private func signalLedgerControl() { for value in ledgerSignals.values { value.yield(()) } }
 }

@@ -8,12 +8,15 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-No active implementation branch follows #121 yet. The next migration foundation
-is [independent graph control metadata/shared ledger](graphevo-2-migration-foundations.md#graph-control-metadata-and-shared-ledger),
-with contract/concurrency/access details to settle before implementation. New
-focused work starts from `codex/graphevo-2`. Independent cross-user graph
-activation, migration working-copy publication and v1 conversion remain open;
-package collection import does not silently activate them.
+`codex/v2-shared-ledger` implements the package-only [MF03 bounded shared ledger](graphevo-2-shared-ledger.md)
+directly from #121 (`d17676d`) for a PR to `codex/graphevo-2`. It retains full
+current/previous operations, 32 compact events and bounded consumer JSON outside
+Core Data. Control transport continues during graph-data pause, with explicit
+conflicts and restart recovery. Session format advances to 6; S03 and application
+record/asset formats remain unchanged. This is candidate work, not integrated.
+Review/corrections precede CI and authorized merge. Migration working-copy
+publication, unmirrored local journals, independent cross-user graph activation
+and mandatory v1 conversion remain open.
 
 ## Latest integrated increment — MF02 compressed backup packages
 

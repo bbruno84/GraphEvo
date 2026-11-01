@@ -373,6 +373,14 @@ paired-store evidence below retains its original backend scope.
 - [ ] **B** Define consistent closed/quiescent backup prerequisites and whole-content
   inventory, including external bytes, both native resources, auxiliary files and
   operation ledgers; identify existing narrow migration backup callers to replace.
+- [ ] **B** Validate bounded shared graph control metadata at scale, including
+  concurrent writers, interrupted control publication, permissions and lifecycle
+  recovery. [MF03](graphevo-2-shared-ledger.md) supplies the candidate foundation
+  with current/previous operation, 32 events, bounded consumer JSON and session
+  format 6. Retain actual physical evidence separately. Measure session rewrite
+  costs and reserved 512-KiB headroom per enabled graph before production sizing.
+  Unmirrored local journals and migration-data commit-marker recovery remain open;
+  diagnostic history rotation must not delete unresolved executor evidence.
 - [ ] **R** Wire complete backups into actual conversion/recovery paths and verify
   bytes/checksums and successful reopen, interrupted copies/restores and protected
   source preservation. SQLite/WAL/SHM copying alone is insufficient for files.

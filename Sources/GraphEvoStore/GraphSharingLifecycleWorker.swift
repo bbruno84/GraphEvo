@@ -8,6 +8,7 @@ actor GraphSharingLifecycleWorker {
     private let inventory: @Sendable () async -> [GraphID]
     private let step: @Sendable (GraphID) async -> (any Error)?
     private let clock: GraphAutomaticClock
+    private let retryPermission: Bool
     private var active = false
     private var revision: UInt64 = 0
     private var job: Task<Void, Never>?
@@ -17,9 +18,9 @@ actor GraphSharingLifecycleWorker {
     private var blocked = Set<GraphID>()
     private var failures: [GraphID: Int] = [:]
     private var explicit: Set<GraphID> = []
-    init(clock: GraphAutomaticClock, inventory: @escaping @Sendable () async -> [GraphID],
+    init(clock: GraphAutomaticClock, retryPermission: Bool = false, inventory: @escaping @Sendable () async -> [GraphID],
          step: @escaping @Sendable (GraphID) async -> (any Error)?) {
-        self.clock = clock; self.inventory = inventory; self.step = step
+        self.clock = clock; self.retryPermission = retryPermission; self.inventory = inventory; self.step = step
     }
     func setActive(_ value: Bool, revision: UInt64) {
         guard revision >= self.revision else { return }
@@ -79,7 +80,7 @@ actor GraphSharingLifecycleWorker {
             deadlines[id] = clock.now() + 1
         } else {
             let native = error as NSError
-            let retryable = (native.domain == "CKErrorDomain" && [3,4,6,7,23].contains(native.code)) ||
+            let retryable = (native.domain == "CKErrorDomain" && ([3,4,6,7,23].contains(native.code) || retryPermission && native.code == 10)) ||
                 native.domain == NSURLErrorDomain || error as? GraphCloudSharingError == .metadataPending || error as? GraphCloudError == .zoneUnavailable
             if retryable {
                 let n = failures[id, default: 0], delays: [Double] = [5,15,30,60,120,300]

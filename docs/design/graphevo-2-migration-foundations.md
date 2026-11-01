@@ -25,7 +25,7 @@ and its agreed coordinated cutover remain separate acceptance work.
 | 1 | Local write admission | Reversibly refuse new consumer writes on the original graph, then await already admitted writes. All handles of that resource share the gate; unrelated graphs progress. Use owned reservations so one caller cannot release another's restriction. |
 | 2 | Central BackupManager | ContextManager obtains the appropriate cloud/local reservations; the backup service creates, inventories, verifies and restores complete graph backups. A verified backup is a prerequisite for migration. |
 | 2a | Compressed portable backup packages | MF02/#121 supplies compressed `.geb` files, manifest listing and async package export/import, with retained legacy directory reads. Physical/production-scale and independent cross-user graph activation gates remain open. |
-| 3 | Independent graph control metadata | A durable local JSON journal and dedicated CloudKit control records accompany the graph outside its application primitives/Core Data schema. The migration ledger is the first use; allow future graph-related control information. |
+| 3 | Independent graph control metadata | MF03 candidate supplies bounded shared ledger/control transport. A durable local JSON journal and dedicated CloudKit control records accompany the graph outside its application primitives/Core Data schema. The migration ledger is the first use; allow future graph-related control information. |
 | 4 | Isolated working graph and PH range | Give the consumer an ordinary mutable working Graph, isolated from live cloud transport. Use an explicit PH baseline to discover its changes; do not introduce a library-wide snapshot diff or domain reconciliation. |
 | 5 | Publication and recovery | Apply the changed final primitives/deletions to the protected original, with durable commit evidence, truthful outcomes and restart recovery. Do not replace an original SQLite file as a shortcut to cloud publication. |
 | 6 | Representative v1 conversion | Use the protected executor and backup service to implement and validate the required v1 data/source conversion and cloud cutover. API compatibility remains optional. |
@@ -124,8 +124,13 @@ CloudKit latency. Consumers decide how to respond. This is synchronized control
 information, not a distributed lock or evidence that all application data has
 arrived. Keep graph control information extensible for later uses such as sharing
 descriptions; actual permissions/participants remain verified by native sharing
-operations. Record layout, concurrency/merge rules, access scope and delivery
-mechanism still need a concrete design before implementation.
+operations. [MF03](graphevo-2-shared-ledger.md) implements the package-only candidate: full
+current and previous operation, 32 compact significant events, bounded consumer
+JSON, explicit revision conflicts and a dedicated zone control record. Retries
+update the current attempt counter without growing history. Session format 6
+refuses incompatible alpha documents; native S03 is unchanged. Foreground control
+reconciliation continues during data pause. A local-only unmirrored journal and
+actual migration executor remain separate work.
 
 JSON and graph data cannot commit in one transaction. Write an operation commit
 marker with the application effects in the original graph transaction, using

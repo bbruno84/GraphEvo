@@ -1137,3 +1137,23 @@ Measurements and cross-platform probes stay local; review precedes CI and merge.
 MF02 integrates through #121 after corrective review and one combined macOS/iOS
 checkpoint. Future increments start from `codex/graphevo-2`; retain package import
 versus independent graph activation as separate contracts and acceptance evidence.
+
+
+## V2 MF03 shared graph ledger
+
+Read [MF03](docs/design/graphevo-2-shared-ledger.md) before control-metadata work.
+The package-only ledger is outside Core Data/application nodes: full current and
+previous operations, 32 compact events and bounded consumer-owned JSON. Retries
+coalesce; history is diagnostic, not migration eligibility or a distributed lock.
+Session format 6 rejects older alpha documents without alteration. S03 and graph
+record/asset formats remain unchanged. Only registered cloud bindings are enabled.
+Control records bypass the application inbox/PH but retain account, permission,
+generation and stop fences. Reuse ContextManager's scope gate/engine ownership;
+continue control reconciliation during graph-data pause. Persist the exact
+in-flight projection before sending, acknowledge only that revision and retain
+newer local work. Foreign revisions require explicit resolution; never replay
+consumer bodies or use wall clocks to choose a winner. Revocation discards that
+generation's pending control work. Backup evidence is graph-scoped and restoration
+must not rewind the shared ledger/session. An owned unfinished operation recovered
+after restart requires an explicit consumer recovery decision. Review precedes CI
+and authorized merge; disposable laboratories and physical runs remain local.
