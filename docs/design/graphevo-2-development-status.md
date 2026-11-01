@@ -8,10 +8,22 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-The next backup increment is planned in the
-[migration foundations roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment):
-compressed local packages, filesystem/manifest discovery and async portable
-export/import. No implementation of that follow-up is included in #120.
+The [MF02 compressed backup package candidate](graphevo-2-backup-packages.md)
+is in progress on `codex/v2-compressed-backups`, directly from #120 (`2009582`).
+The maintainer selected `.geb` for local and exported single-file packages.
+It follows the
+[migration foundations roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment)
+for compressed local packages, manifest discovery and async portable export/import.
+This candidate adds a bounded manifest-first container and
+streamed raw DEFLATE through SDK zlib, retaining legacy directory reads. Graph
+holds end after coherent native copying; compression/verification run afterward.
+Package import copies into a backup collection; independent cross-user graph
+activation remains separate executor work. No CI or merge is requested yet.
+The [MF02 results](results/backup-packages-2026-11-01.md) record 785 macOS and
+430 iOS Simulator functions, Release/consumer checks and successful native package
+transport/recovery in both directions between macOS and iOS Simulator. A mixed
+native fixture reduces approximately 8.85 MB to 4.26 MB; this is local synthetic
+evidence, not physical/production-scale acceptance. Review is next.
 New work starts from `codex/graphevo-2`, not the retained T08/MF01 topic branches.
 
 ## Latest integrated increment — T08 and MF01

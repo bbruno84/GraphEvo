@@ -1675,3 +1675,25 @@ Restoration never activates CloudKit or overwrites a live destination. Full
 native reopen and attachment checks run on a disposable copy. No v1 backup helper,
 native model or cloud record/session format is silently changed. See
 [MF01](../design/graphevo-2-local-maintenance.md) for limits and remaining gates.
+
+### Package-only MF02 compressed backup packages
+
+New local backups are single **`.geb`** files. `GraphBackup.url` identifies an
+immutable package (or a readable legacy directory), with `manifest` available
+without payload extraction. `GraphRestoredBackup.directory` and `.storeURL`
+identify a separately materialized local copy; packages expose no fake SQLite URL.
+
+`backups.export(at:to:) async` verifies and copies the existing compressed package;
+it never resnapshots a live graph. `backups.importBackup(at:in:) async` verifies
+and adds it to a local collection without activating a graph or sync. Existing
+destinations/duplicate IDs are refused. Legacy directory export creates a `.geb`.
+The filesystem and manifest define listings, with no authoritative central index.
+
+Graph snapshot reservations end after native copying. Compression, verification
+and export/import continue asynchronously with owned cancellation and staged
+publication. Manifest/header and compressed/expanded file limits apply; full
+verification still includes native reopen, PH-preserving copy and attachment
+digests. Retention owners are local collection metadata, not exported migration
+locks. Independent cross-user graph activation, reference remapping, provider/UI
+coordination and in-place/cloud restoration remain separate. See
+[MF02](../design/graphevo-2-backup-packages.md) for the container and contract.

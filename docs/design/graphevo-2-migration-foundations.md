@@ -74,6 +74,13 @@ central registration database: a copied/imported package must be discoverable.
 An optional future index is disposable and rebuildable from manifests. Listing
 reads bounded manifests without extracting payloads; it is not full verification.
 
+The maintainer selected **`.geb`** (GraphEvo Backup). The
+[MF02 candidate](graphevo-2-backup-packages.md) implements compressed local files,
+manifest-first listing and async package export/import using a versioned container
+and SDK zlib. MF01 directory backups remain readable. Package import and
+independent cross-user graph activation are distinct: the latter still needs
+identity/reference and activation design, rather than blindly reusing a raw store.
+
 Completed local backups should contain a compressed payload, with their manifest
 readable without full extraction. Stage the coherent native snapshot, release
 graph-local/cloud snapshot reservations once that immutable copy and required
@@ -86,7 +93,8 @@ coherent source copying, atomic package visibility and power-loss durability.
 Export produces one transportable package from the completed local backup,
 reusing the compressed payload rather than repeating snapshot/compression work.
 Choose the archive/container layout with manifest consistency and retention in
-mind; the exact format and compression algorithm are not yet selected. Benchmark
+mind; the MF02 candidate selects the versioned manifest-first container and raw
+DEFLATE after local comparisons. Continue measuring
 database-heavy and already-compressed media fixtures for size, latency, memory
 and temporary disk usage. Keep compression/decompression streaming and bounded;
 validate cancellation, truncated archives, unsafe paths, expansion limits and

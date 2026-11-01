@@ -1118,4 +1118,19 @@ pause and local reservation. Keep the v1 backup helper unchanged unless a separa
 validated v1 route is explicitly implemented. MF01 and T08 integrate together in
 #120 after corrective review and one combined CI checkpoint. Future increments
 start from `codex/graphevo-2` and retain review/corrections before CI and authorized
-merge. Compressed local packages/export/import remain roadmap work.
+merge. MF02's compressed package candidate extends this baseline separately.
+
+## V2 MF02 backup package candidate
+
+Read [MF02](docs/design/graphevo-2-backup-packages.md) before package changes.
+The selected extension is `.geb`. Keep manifest-first discovery independent of
+payload extraction and preserve bounded byte/file/depth checks, strict DEFLATE
+end/input accounting and exclusive regular-file extraction. SDK zlib is linked;
+no vendored implementation/dependency is introduced. No compression/file I/O runs
+on the main actor. Cancellation forwards to owned I/O workers and awaits cleanup.
+Release snapshot-owned local/cloud holds after native copying, preserving manual
+pauses and other reservations. Verify before atomic package publication.
+Keep legacy directory reads/export, durable retention and native attachment/PH
+verification. Package import does not activate a graph or restore account/share/
+engine state. Independent cross-user graph adoption remains executor work.
+Measurements and cross-platform probes stay local; review precedes CI and merge.
