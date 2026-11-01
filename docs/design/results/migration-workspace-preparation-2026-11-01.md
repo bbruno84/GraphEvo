@@ -1,7 +1,9 @@
 # MF04b — isolated working-copy preparation
 
 Date: 2026-11-01. Base: integrated MF04a/#123 (`3b0c326`). Implementation:
-`codex/v2-working-graph`, direct PR to `codex/graphevo-2`, pending review and CI.
+`codex/v2-working-graph`, source/test pin `168eb0a67f198d865f772f25cc6c0c2ceca2827f`,
+[PR #124](https://github.com/bbruno84/GraphEvo/pull/124) directly to
+`codex/graphevo-2`, pending review and CI.
 This is local preparation evidence, not publication/cloud-convergence acceptance.
 
 ## Delivered boundary

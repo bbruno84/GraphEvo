@@ -8,7 +8,8 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-MF04b is in progress on `codex/v2-working-graph`, directly from integrated
+[MF04b PR #124](https://github.com/bbruno84/GraphEvo/pull/124) is ready for review
+on `codex/v2-working-graph`, directly from integrated
 MF04a/#123 (`3b0c326`). The [workspace contract](graphevo-2-migration-workspace.md)
 now has protected complete-copy preparation, working-purpose runtime admission,
 a fresh working PH baseline and close/discard. Sealing/reduction, restart
