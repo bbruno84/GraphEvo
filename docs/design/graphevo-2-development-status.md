@@ -17,9 +17,16 @@ validation. P02 integrates through [PR #134](https://github.com/bbruno84/GraphEv
 P03's [runtime/physical evidence](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md)
 records the completed validation checkpoint, with no source/test changes. MF09 integrates through [PR #136](https://github.com/bbruno84/GraphEvo/pull/136):
 [explicit local conversion/opening](graphevo-2-local-v1-bootstrap.md) is complete
-within its package-only scope. No next implementation branch is selected. The
-measured sort-capacity follow-up and public/historical/cloud migration gates
-remain open. TP01 remains retained on
+within its package-only scope. The focused branch
+`codex/v2-query-sort-capacity` addresses the measured 2,000-record native-sort
+budget refusal with a heap merge, without changing schema, budgets or query
+semantics. It is not integrated. Local checks pass 925 macOS functions, all three
+independent consumers and manifest/diff validation. The
+[capacity report](results/s04-sort-capacity-2026-11-02.md) retains baseline and
+heap-only refusals, followed by five successful Release sorted pages at the
+unchanged allowance. Review finds no remaining blockers; the single full CI
+checkpoint is pending. Broader device/production capacity acceptance remains open.
+Public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is production/historical source acceptance, public facade/bootstrap integration
 and new-cloud activation of one authoritative converted graph.

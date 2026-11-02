@@ -117,6 +117,41 @@ private struct TypedQueryItem: GraphModel {
         await #expect(throws: GraphQueryError.self) { try await f.graph.query(self.query(steps: 5)) }
         try await f.close()
     }
+    @Test(.timeLimit(.minutes(5))) func twoThousandRecordNativeSortFitsTheUnchangedStepBudget() async throws {
+        let f = try await fixture()
+        let records: [GraphRecord] = try (0..<2_000).map { index in
+            let values: [String: GraphValue] = [
+                "rank": .integer(Int64(index % 37)), "group": .integer(Int64(index % 10)),
+                "title": .string("Item \(index)"), "active": .boolean(index % 2 == 0),
+                "unsigned": .unsignedInteger(UInt64.max - UInt64(index)),
+                "date": .date(Date(timeIntervalSince1970: Double(index))),
+                "payload": .data(Data(repeating: 42, count: 4_096)), "decimal": .decimal(Decimal(index)),
+                "object": .object(["n": .integer(Int64(index))]),
+                "url": .url(URL(string: "child", relativeTo: URL(string: "https://example.invalid/base/")!)!),
+                "uuid": .uuid(UUID())]
+            return try GraphRecord(id: GraphNodeID(graphID: f.graph.id), type: TypedQueryItem.graphType,
+                properties: values, createdDate: Date(timeIntervalSince1970: 10))
+        }
+        try await f.graph.transaction { scope in for record in records { try scope.insert(record) } }
+        let budget = try GraphQueryBudget(maximumCandidates: 2_010, maximumPropertyBytes: 32 * 1024 * 1024, maximumSteps: 100_000)
+        for direction in [GraphQuerySortDirection.ascending, .descending] {
+            let expected = records.sorted {
+                if $0.properties["rank"] == $1.properties["rank"] { return $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
+                guard case .integer(let a) = $0.properties["rank"], case .integer(let b) = $1.properties["rank"] else { return false }
+                return direction == .ascending ? a < b : a > b
+            }
+            let q = GraphQuery<TypedQueryItem>(budget: budget).sorted(by: [.init(.property("rank"), direction: direction)]).limit(1_001)
+            let first = try await f.graph.query(q)
+            let second = try await f.graph.query(q.after(#require(first.nextCursor)))
+            #expect(first.items.map(\.record) + second.items.map(\.record) == expected)
+            #expect(second.nextCursor == nil)
+            #expect(first.diagnostics.nativeSortApplied && second.diagnostics.nativeSortApplied)
+        }
+        let tooSmall = GraphQuery<TypedQueryItem>(budget: try GraphQueryBudget(maximumCandidates: 2_010, maximumSteps: 30_000))
+            .sorted(by: [.init(.property("rank"))]).limit(1)
+        await #expect(throws: GraphQueryError.budgetExceeded(.steps)) { try await f.graph.query(tooSmall) }
+        try await f.close()
+    }
     @Test func discardedBodiesAreNotMaterializedButReturnedCorruptionIsVisible() async throws {
         let f = try await fixture(), first = f.graph.makeNodeID(), second = f.graph.makeNodeID()
         try await f.graph.transaction {

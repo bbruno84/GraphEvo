@@ -875,6 +875,10 @@ fourteen physical stages and complete runtime measurements, without a cloud rese
   refusal at 100,000 steps (S03 succeeds with the same allowance). Preserve the
   refusal and shared work accounting; evaluate preparation/merge/order costs
   rather than silently raising budgets or falling back without diagnostics.
+  The [focused follow-up](results/s04-sort-capacity-2026-11-02.md) reproduces the
+  refusal, retains an insufficient heap-only trial and passes the unchanged
+  Release allowance with heap merge plus direct order reuse. Integration/review
+  is pending; broader device/production capacity acceptance remains open.
 - [ ] Retain the measured +6.9% fixture disk/index cost and simple-count cost at
   400 records in the end-of-alpha cost review. The approximately 3x selected-row/
   page gain does not establish every supported production envelope.

@@ -1885,7 +1885,9 @@ Actual `GraphQueryDiagnostics` adds `strategy` (`memory`, `hybrid`, `native`),
 Current/S03 stores retain bounded memory execution and report `legacyStorage`.
 
 S04 pushes safe source-order predicate prefixes and homogeneous complete single
-property sorts through NSPredicate/NSFetchRequest. Unsupported comparisons stay
+property sorts through NSPredicate/NSFetchRequest. Sorted fetch chunks merge
+through a bounded heap before paging, with comparisons and emitted rows charged
+to the existing step budget. Unsupported comparisons stay
 in Swift; mixed-type errors, null/missing, exact numeric categories, UUID ties,
 cursors, pending mutations and explicit budgets retain their semantics. No limit
 is applied before residual evaluation. Package-only `GraphStore.validateIntegrity()`

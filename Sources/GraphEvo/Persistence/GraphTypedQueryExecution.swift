@@ -205,7 +205,7 @@ final class GraphTypedQueryExecution {
         nativePredicates += 1
         return op == .notEqual ? Set(rows.map { $0.0 }).subtracting(matching) : matching
     }
-    private func sortOrder(_ ids: Set<GraphNodeID>) throws -> [GraphNodeID: Int]? {
+    private func sortOrder(_ ids: Set<GraphNodeID>) throws -> [GraphNodeID]? {
         guard request.definition.sorts.count == 1, case .property(let key) = request.definition.sorts[0].key else {
             if !request.definition.sorts.isEmpty { note(.unsupportedSort) }; return nil
         }
@@ -218,25 +218,47 @@ final class GraphTypedQueryExecution {
             if case .string(let text) = value, !text.utf8.allSatisfy({ $0 < 128 }) { note(.nonASCIIString); return nil }
             prepared = next
         }
-        guard let field = prepared?.field else { return [:] }
+        guard let field = prepared?.field else { return [] }
         let ascending = request.definition.sorts[0].direction == .ascending
         let groups = try select(NSPredicate(value: true), key: key, ids: ids, sort: [NSSortDescriptor(key: field, ascending: ascending), NSSortDescriptor(key: "node." + GraphNativeIdentityColumns.nodeAttribute, ascending: true)])
         var positions = Array(repeating: 0, count: groups.count), ordered: [GraphNodeID] = []
-        while ordered.count < ids.count {
-            var winner: Int?
-            for index in groups.indices where positions[index] < groups[index].count {
-                guard let previous = winner else { winner = index; continue }
-                try work.consume()
-                let a = groups[index][positions[index]], b = groups[previous][positions[previous]]
-                guard let first = try value(a, key), let second = try value(b, key) else { throw GraphStoreError.corruptIdentity }
-                let comparison = try GraphQueryScalar.compare(first, second)
-                if comparison == 0 ? a.rawValue.uuidString < b.rawValue.uuidString : (ascending ? comparison < 0 : comparison > 0) { winner = index }
-            }
-            guard let winner else { throw GraphStoreError.corruptIdentity }
-            ordered.append(groups[winner][positions[winner]]); positions[winner] += 1
+        // Retain one head per sorted fetch, rather than scan every fetch for each row.
+        // All comparisons and emitted rows share the query's work/cancellation budget.
+        func precedes(_ left: Int, _ right: Int) throws -> Bool {
+            try work.consume()
+            let a = groups[left][positions[left]], b = groups[right][positions[right]]
+            guard let first = try value(a, key), let second = try value(b, key) else { throw GraphStoreError.corruptIdentity }
+            let comparison = try GraphQueryScalar.compare(first, second)
+            return comparison == 0 ? a.rawValue.uuidString < b.rawValue.uuidString : (ascending ? comparison < 0 : comparison > 0)
         }
+        var heap: [Int] = []
+        for index in groups.indices where !groups[index].isEmpty {
+            heap.append(index)
+            var child = heap.count - 1
+            while child > 0 {
+                let parent = (child - 1) / 2
+                guard try precedes(heap[child], heap[parent]) else { break }
+                heap.swapAt(child, parent); child = parent
+            }
+        }
+        while let winner = heap.first {
+            try work.consume()
+            ordered.append(groups[winner][positions[winner]]); positions[winner] += 1
+            if positions[winner] == groups[winner].count {
+                let last = heap.removeLast()
+                if !heap.isEmpty { heap[0] = last }
+            }
+            var parent = 0
+            while parent * 2 + 1 < heap.count {
+                var child = parent * 2 + 1
+                if child + 1 < heap.count, try precedes(heap[child + 1], heap[child]) { child += 1 }
+                guard try precedes(heap[child], heap[parent]) else { break }
+                heap.swapAt(parent, child); parent = child
+            }
+        }
+        guard ordered.count == ids.count else { throw GraphStoreError.corruptIdentity }
         nativeSort = true
-        return Dictionary(uniqueKeysWithValues: ordered.enumerated().map { ($0.element, $0.offset) })
+        return ordered
     }
     private func count(_ ids: Set<GraphNodeID>, key: String) throws -> Int {
         var result = 0
@@ -271,7 +293,7 @@ final class GraphTypedQueryExecution {
         }
         try indexHeaders()
         if request.isTraversal { note(.unsupportedPredicate) }
-        var eligible: Set<GraphNodeID>?, order: [GraphNodeID: Int]?
+        var eligible: Set<GraphNodeID>?, order: [GraphNodeID]?
         if canUseNative, !request.isTraversal {
             var current = Set(records.filter { $0.type == request.definition.type && $0.endpoints.kind == request.definition.kind }.map(\.id))
             let byID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
