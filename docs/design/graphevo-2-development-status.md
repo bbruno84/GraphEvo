@@ -1,6 +1,6 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-01. This is the single entry point for **integrated work,
+Updated: 2026-11-02. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
@@ -10,7 +10,10 @@ integration into the main v2 branch or beta readiness.
 
 Extension-only model mapping integrates through
 [PR #131](https://github.com/bbruno84/GraphEvo/pull/131), directly from #130.
-No next implementation branch is open. Next: return to native-property
+[Numeric property mapping](graphevo-2-numeric-properties.md) is in progress on
+`codex/v2-numeric-property-values`: eight additional Swift types, existing logical
+scalar cases, exact narrowing and no native/wire change. After integration,
+return to native-property
 schema/planner design, using TP01 retained on `codex/experiment-typed-properties`.
 The experiment is not an adopted schema or production query engine. Migration's
 remaining route is supported opt-in bootstrap, production/historical source
