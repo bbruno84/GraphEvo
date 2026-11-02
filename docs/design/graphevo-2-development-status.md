@@ -17,31 +17,41 @@ validation. P02 integrates through [PR #134](https://github.com/bbruno84/GraphEv
 P03's [runtime/physical evidence](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md)
 records the completed validation checkpoint, with no source/test changes. MF09 integrates through [PR #136](https://github.com/bbruno84/GraphEvo/pull/136):
 [explicit local conversion/opening](graphevo-2-local-v1-bootstrap.md) is complete
-within its package-only scope. The focused branch
-`codex/v2-query-sort-capacity` addresses the measured 2,000-record native-sort
-budget refusal with a heap merge, without changing schema, budgets or query
-semantics. It is not integrated. Local checks pass 925 macOS functions, all three
-independent consumers and manifest/diff validation. The
-[capacity report](results/s04-sort-capacity-2026-11-02.md) retains baseline and
-heap-only refusals, followed by five successful Release sorted pages at the
-unchanged allowance. Full checkpoint #358 exposed the enclosing suite's inherited
-120-second test limit on the slower macOS runner. The test's five-minute limit
-did not override that shorter suite cap; the suite now allows the intended five
-minutes. Query budgets and shipping source remain unchanged. Checkpoint #360
-passes macOS and both Swift 6 consumers, but the slow repeated-inventory fixture
-seed causes existing one-minute iOS suites to time out. Final test preparation
-reuses one confined adapter Session, as conversion does, followed by complete
-integrity validation. All query assertions remain and the original two-minute
-suite limit is restored. Corrected local checks pass all 925 macOS functions and
-517 iOS store/model functions; corrective review finds no remaining blocker.
-The replacement checkpoint is pending. Broader device/production
-capacity acceptance remains open.
-Public/historical/cloud migration gates remain open. TP01 remains retained on
+within its package-only scope. The S04 sort-capacity follow-up integrates through
+[PR #137](https://github.com/bbruno84/GraphEvo/pull/137), directly into
+`codex/graphevo-2`. No next implementation branch is selected. Broader
+capacity and public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is production/historical source acceptance, public facade/bootstrap integration
 and new-cloud activation of one authoritative converted graph.
 
-## Latest integrated increment — MF09 local v1 bootstrap
+## Latest integrated increment — S04 sort capacity
+
+A budgeted heap merges native sort chunks and passes ordered IDs directly through
+residual filtering, avoiding a second comparison sort. Full validation of consulted
+sort values, UUID ties, cursor paging, cancellation and explicit refusals remain.
+No schema, cloud/persistent format, public signature or default budget changes.
+
+The [report](results/s04-sort-capacity-2026-11-02.md) retains the original and
+heap-only refusals, followed by five successful Release pages at the unchanged
+100,000-step allowance. Final whole-source confirmation has a 384.95-ms median
+on one synthetic desktop fixture; this is capacity evidence, not a production
+latency guarantee. Broader device/production envelopes and ordinary bulk-insertion
+cost remain open.
+
+Final local checks pass 925 macOS functions, 517 iOS store/model functions and all
+three independent consumers. Corrected full
+[checkpoint #362](https://github.com/bbruno84/GraphEvo/actions/runs/41442873990)
+passes on `b9fcd03501cc8d49f7929c055ccbc093fda6c8f4`: macOS suites and both
+Swift 6 consumers; 923 passed iOS functions/1036 invocations, zero failures and one
+known legacy alias skip. Earlier #358/#360 expose fixture timeout/contention,
+retained in the report. One confined fixture session plus complete integrity
+validation resolves setup cost without dropping records/assertions or increasing
+suite/query budgets. Shipping source remains `b4e6604`; later changes are tests
+and documentation. Final integration notes are docs-only and shipping/test/
+consumer/workflow inputs match the checkpoint.
+
+## Earlier integrated increment — MF09 local v1 bootstrap
 
 The existing converter is connected to ordinary S04 opening under one admission
 through consumer read availability. Successful conversion and failed opening are

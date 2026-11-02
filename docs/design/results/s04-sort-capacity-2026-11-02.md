@@ -87,6 +87,20 @@ the faster test seeding to claim improved product insertion performance.
 Final local verification passes all 925 macOS functions and 517 iOS store/model
 functions; the complete iOS regression takes 20.41 seconds on the local simulator.
 
+## Reviewed checkpoint and integration
+
+Corrected full [checkpoint #362](https://github.com/bbruno84/GraphEvo/actions/runs/41442873990)
+passes on `b9fcd03501cc8d49f7929c055ccbc093fda6c8f4`: macOS suites and both Swift 6
+consumers; 923 passed iOS functions/1036 invocations, zero failures and one known
+legacy alias skip. The large regression passes in 71.50 seconds on the macOS
+runner and 48.51 seconds on the iOS runner with the original two-minute suite
+limit. These are whole functional-test/setup times, not query latency samples.
+
+Integration is direct through [PR #137](https://github.com/bbruno84/GraphEvo/pull/137).
+Shipping source remains `b4e6604`; subsequent corrections affect fixture setup
+and evidence only. Final integration notes are documentation-only, with shipping,
+tests, consumer and workflow inputs byte-identical to the reviewed checkpoint.
+
 No physical CloudKit protocol is repeated for this local query-only change.
 P03's separate S04 sharing/asset/recovery evidence retains its original scope;
 this result does not certify cloud migration, source acceptance or beta readiness.
