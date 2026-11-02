@@ -1,7 +1,10 @@
 # MF11 — native staged v1 migration validation
 
 Date: 2026-11-02. Scope: package-only stopped local v1 conversion to the
-existing S04 schema. Review and remote checkpoint pending.
+existing S04 schema. Local review is complete on
+`814a64d24a9bbb6448c74da46922de4dd6a17e03`. Required full remote checkpoint and
+integration through [PR #141](https://github.com/bbruno84/GraphEvo/pull/141) remain
+pending; final status notes change documentation only.
 
 ## Selected route
 
@@ -22,8 +25,9 @@ history baseline, pending saves and conversion receipt are complete.
 
 - Full macOS package run: 959 functions passed (331 legacy, 520 store, 78 runtime,
   30 model).
-- iOS 18.5 Simulator: 60 functions passed in native migration, retained v1
-  bootstrap/conversion and cloud activation suites.
+- Full local iOS 18.5 Simulator run: 957 functions passed, zero failures and one
+  known skip. Focused native/bootstrap/conversion/activation checks pass 60
+  functions; focused adoption/native/activation checks pass 38 functions.
 - All three independent consumers passed: legacy package consumer, Swift 6 model
   consumer and separate-process consumer.
 - Manifest inspection and `git diff --check` passed.
@@ -41,6 +45,21 @@ private-source acceptance also passed fresh conversion, exact semantic compariso
 independent raw-archive/hash comparison, verified backup restoration and a new
 process recovering the same receipt. Private stores, maps, reports and logs stay
 outside the repository and are excluded from CI.
+
+## Remote checkpoint attempts
+
+[Full checkpoint #374](https://github.com/bbruno84/GraphEvo/actions/runs/41506964943)
+did not pass. macOS never acquired a hosted runner. The iOS run reports one
+failure: `GraphAdoptionTests.explicitAdoptionBacksUpAndPreservesV1DataReferencesAndIDMapping`
+exceeded its existing one-minute execution allowance. That unchanged test passes
+in the focused adoption/native/activation run and the complete local iOS run.
+No source or test allowances were changed to suppress the failure.
+
+[Full checkpoint #375](https://github.com/bbruno84/GraphEvo/actions/runs/41510703190)
+retries the same source head. Both jobs were cancelled without executing after
+15-minute waits. GitHub reports that hosted macOS arm64 capacity prevented runner
+acquisition. Neither cancelled nor skipped jobs establish a tested checkpoint.
+The PR remains unmerged until a complete reviewed full checkpoint succeeds.
 
 ## Limits and remaining gates
 

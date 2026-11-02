@@ -938,9 +938,13 @@ physical interruption, cross-process writers, scale or new-cloud activation.
 
 ## MF11 native staged conversion
 
-- [ ] Review/integrate native staged conversion without a graph-sized payload
+- [x] Implement and locally review native staged conversion without a graph-sized payload
   snapshot or whole-database property-byte budget; preserve source, backups,
   identity allocation, row checkpoints and atomic readiness/sync sealing.
+- [ ] Obtain the required full reviewed remote checkpoint and integrate #141.
+  #374 retains an existing iOS adoption-test timeout and unassigned macOS runner;
+  #375 retains two unassigned hosted arm64 runners. Local full suites pass, but
+  unexecuted/skipped jobs are not passing checkpoints.
 - [ ] Retain larger identity-map/receipt formats, platform memory/disk capacity,
   historical model/codec coverage, physical interruption and public/production
   cutover as separate acceptance gates. Synthetic payload/page tests do not

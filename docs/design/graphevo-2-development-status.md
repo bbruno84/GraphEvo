@@ -8,15 +8,27 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-[MF11 native staged v1 conversion](graphevo-2-native-v1-migration.md) is under
-implementation on `codex/v2-native-v1-migration`, directly from integrated #140.
+[MF11 native staged v1 conversion](graphevo-2-native-v1-migration.md) is implemented and locally reviewed in
+[PR #141](https://github.com/bbruno84/GraphEvo/pull/141) on
+`codex/v2-native-v1-migration`, directly from integrated #140.
 Core Data owns the native schema hop. A writable isolated v1 copy retains lookup
 identities before migration; native handlers convert property rows in batches.
 The default package-only bootstrap selects this route on iOS 17/macOS 14, while
 the explicit-limits atomic recipe stays available. This removes the total
 property-byte allowance for the new route, not the existing identity-map/native
-format constraints or remaining production/public/cloud gates. Integration,
-review and final checkpoint are pending.
+format constraints or remaining production/public/cloud gates. Local validation
+passes 959 macOS functions, 957 iOS functions with one known skip, and all three
+consumers. Private local acceptance remains outside Git/CI/cloud. Source review
+covers `814a64d24a9bbb6448c74da46922de4dd6a17e03`.
+
+Integration and the required full remote checkpoint remain pending. In #374,
+macOS never acquired a hosted arm64 runner and an existing iOS adoption test hit
+its one-minute allowance; the same test then passed in focused and full local
+iOS runs without source or allowance changes. Both #375 jobs were cancelled
+without execution after 15-minute runner-capacity waits. These attempts are not
+passing checkpoints. Final status notes change documentation only; #141 remains
+unmerged until full remote validation succeeds. See the
+[MF11 evidence](results/native-v1-staged-migration-2026-11-02.md).
 
 Expanded numeric property mapping integrates through
 [PR #132](https://github.com/bbruno84/GraphEvo/pull/132), directly from #131.

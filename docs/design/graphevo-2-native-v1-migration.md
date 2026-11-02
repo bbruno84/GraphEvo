@@ -1,6 +1,7 @@
 # MF11 — native staged v1 conversion
 
-Status: focused implementation from `codex/graphevo-2`, 2026-11-02.
+Status: implemented and locally reviewed in [PR #141](https://github.com/bbruno84/GraphEvo/pull/141),
+2026-11-02. Full remote checkpoint and integration remain pending.
 
 Use Core Data staged migration for the known v1-to-S04 physical transition and
 library-owned custom handlers for identities and property conversion. The original
