@@ -29,6 +29,7 @@ struct GraphCloudSendOutcome: Sendable {
 struct GraphCloudAdapter: Sendable {
     var sharing: GraphCloudSharingService? = nil
     var ledger: GraphLedgerService? = nil
+    var activation: GraphCloudActivationService? = nil
     let account: @Sendable (String) async throws -> String
     let make: @Sendable (GraphCloudConfiguration, GraphCloudScope, Data?, @escaping @Sendable (GraphCloudEvent) async -> Void) throws -> GraphCloudDriver
 }
@@ -47,6 +48,7 @@ actor GraphCloudSession {
     private let url: URL
     private var directoryLease: GraphCloudDirectoryLease?
     private var document: GraphCloudDocument
+    var activationService: GraphCloudActivationService? { adapter.activation }
     private var sharingObservers: [GraphID: [UUID: AsyncStream<GraphCloudSharingStatus>.Continuation]] = [:]
     private var ledgerObservers: [GraphID: [UUID: AsyncStream<GraphLedgerStatus>.Continuation]] = [:]
     private var ledgerSignals: [UUID: AsyncStream<Void>.Continuation] = [:]
@@ -85,7 +87,7 @@ actor GraphCloudSession {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 6, doc.container == config.containerIdentifier, doc.environment == config.environment,
+                guard doc.format == 7, doc.container == config.containerIdentifier, doc.environment == config.environment,
                       doc.account == account else { throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -119,6 +121,10 @@ actor GraphCloudSession {
                     if let member = doc.memberships.first(where: { $0.role == .participant && $0.binding.graphID == receipt.graphID }) {
                         guard receipt.membershipGeneration == member.generation else { throw GraphCloudError.invalidState }
                     }
+                }
+                guard Set(doc.activations.map { $0.binding.graphID }).count == doc.activations.count else { throw GraphCloudError.invalidState }
+                for activation in doc.activations {
+                    guard doc.bindings.contains(activation.binding), activation.binding.zone.scope == .private else { throw GraphCloudError.invalidState }
                 }
                 guard Set(doc.ledgers.map { $0.binding.graphID }).count == doc.ledgers.count else { throw GraphCloudError.invalidState }
                 for index in doc.ledgers.indices {
@@ -204,6 +210,37 @@ actor GraphCloudSession {
         }
     }
 
+    func bindActivation(_ binding: GraphCloudBinding, activationID: UUID, published: Bool, peer: Bool) throws {
+        try check()
+        if let prior = document.activations.first(where: { $0.binding.graphID == binding.graphID || $0.binding.zone == binding.zone }) {
+            guard prior.binding == binding, prior.activationID == activationID, prior.peer == peer else { throw GraphCloudActivationError.authorityConflict }
+        } else if document.bindings.contains(where: { $0.graphID == binding.graphID || $0.zone == binding.zone }) {
+            throw GraphCloudActivationError.invalidRequest
+        }
+        var next = document
+        if !next.bindings.contains(binding) { next.bindings.append(binding) }
+        next.activations.removeAll { $0.binding == binding }
+        next.activations.append(.init(binding: binding, activationID: activationID, published: published, peer: peer))
+        try publish(next); try enable(.private)
+    }
+    func activationRoute(for id: GraphID) -> GraphCloudActivationRoute? { document.activations.first { $0.binding.graphID == id } }
+    var pendingActivationIDs: Set<GraphID> { Set(document.activations.filter { !$0.published }.map { $0.binding.graphID }) }
+    func stageActivationSnapshot(_ events: [GraphCloudIncoming], for binding: GraphCloudBinding, activationID: UUID) throws {
+        try check()
+        guard let route = activationRoute(for: binding.graphID), route.binding == binding,
+              route.activationID == activationID, route.peer, !route.published,
+              !document.inbox.contains(where: { $0.change.zone == binding.zone }),
+              events.allSatisfy({ $0.valid && $0.zone == binding.zone && ($0.kind == .recordChanged || $0.kind == .recordDeleted) && $0.recordType == GraphCloudNodeCodec.recordType }) else {
+            throw GraphCloudActivationError.busy
+        }
+        var next = document
+        for event in events {
+            try GraphCloudRecordCodec.validate(event)
+            next.inbox.append(.init(id: UUID(), change: event))
+        }
+        try publish(next)
+    }
+
     func bind(_ binding: GraphCloudBinding) throws {
         try check()
         guard !binding.zone.owner.isEmpty, !binding.zone.name.isEmpty else { throw GraphCloudError.invalidConfiguration }
@@ -224,11 +261,25 @@ actor GraphCloudSession {
         guard !stopped else { return }
         var event = received
         if case .incoming(let changes) = event {
+            if let failure, failure != .inboxLimit { return }
+            let lost = Set(changes.filter {
+                $0.valid && $0.zone.scope == scope &&
+                ($0.kind == .zoneDeleted || ($0.kind == .recordDeleted && GraphCloudAuthorityCodec.isControl($0)))
+            }.map(\.zone))
+            if document.activations.contains(where: { lost.contains($0.binding.zone) }) {
+                var next = document
+                next.activations = next.activations.map { entry in
+                    guard lost.contains(entry.binding.zone) else { return entry }
+                    return .init(binding: entry.binding, activationID: entry.activationID, published: false, peer: entry.peer)
+                }
+                do { try publish(next) }
+                catch { block(.persistence); return }
+            }
             if changes.contains(where: { change in
                 GraphLedgerCodec.isControl(change) && change.valid && change.zone.scope == scope &&
                 document.ledgers.contains(where: { $0.binding.zone == change.zone })
             }) { signalLedgerControl() }
-            event = .incoming(changes.filter { !GraphLedgerCodec.isControl($0) })
+            event = .incoming(changes.filter { !GraphLedgerCodec.isControl($0) && !GraphCloudAuthorityCodec.isControl($0) })
         }
         if failure != nil {
             guard failure == .inboxLimit else { return }
@@ -324,7 +375,10 @@ actor GraphCloudSession {
         }
         let zones = document.bindings.filter { $0.zone.scope == scope }.map(\.zone)
         if let selected { guard selected.isSubset(of: Set(zones)) else { throw GraphCloudError.invalidConfiguration } }
-        try await driver.fetch(zones.filter { selected?.contains($0) ?? true })
+        let blocked = Set(document.activations.filter { !$0.published }.map { $0.binding.zone })
+        let permitted = zones.filter { !blocked.contains($0) && (selected?.contains($0) ?? true) }
+        if permitted.isEmpty && !zones.isEmpty { return }
+        try await driver.fetch(permitted)
         if let failure { throw failure }
     }
 
@@ -403,9 +457,12 @@ actor GraphCloudSession {
         if let error = result.transportError { throw error }
     }
 
-    func sendWithAdvice(_ batch: GraphCloudOutgoingBatch) async throws -> GraphCloudSendOutcome {
+    func sendWithAdvice(_ batch: GraphCloudOutgoingBatch, activationPermit: UUID? = nil) async throws -> GraphCloudSendOutcome {
         try check()
         let scope = batch.zone.scope
+        if let activation = activationRoute(for: batch.graphID), !activation.published {
+            guard !activation.peer, activation.activationID == activationPermit else { throw GraphCloudActivationError.recoveryRequired }
+        }
         guard let send = drivers[scope]?.send else { throw GraphCloudError.transportUnavailable }
         guard document.bindings.contains(where: { $0.zone == batch.zone && $0.graphID == batch.graphID }) else { throw GraphCloudError.invalidState }
         guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }

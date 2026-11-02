@@ -894,16 +894,29 @@ fourteen physical stages and complete runtime measurements, without a cloud rese
 - [x] Record fresh physical local bootstrap/restart evidence separately from
   historical MF07 S03 and P03 S04 cloud fixtures.
 - [ ] Retain production/historical source acceptance, public facade/bootstrap,
-  physical interruption, external-process exclusion, scale and authoritative
-  cloud activation as open gates; local readiness does not close them.
+  physical interruption, external-process exclusion, scale and production cloud
+  cutover as open gates; local readiness does not close them.
 
 See [MF09](graphevo-2-local-v1-bootstrap.md).
 
-[MF10](graphevo-2-authoritative-cloud-bootstrap.md) proposes the next bounded
-new-cloud activation contract: one durable authority, immutable seed validation,
-recoverable publication and empty-peer imports. It is design-only. Implementation,
-first-claim concurrency evidence, host v1 writer/completeness policy, binary
-publishability and independent physical recovery remain unchecked gates above.
+[MF10](graphevo-2-authoritative-cloud-bootstrap.md) has its contract integrated
+through #139 and package-only implementation integrated through #140 after review
+and full macOS/iOS checkpoint #371.
+The [bounded result](results/authoritative-cloud-bootstrap-2026-11-02.md) distinguishes
+physical first-claim exclusion and the twelve-stage same-account iPad/iPhone
+protocol from broader production acceptance. Empty-peer/current-state recovery,
+ordinary edits and competing-conversion refusal pass within that synthetic scope.
+Host v1 writer/completeness policy, historical sources, production binary
+acceptance and deployment remain unchecked gates above.
+
+- [x] Review/integrate the bounded package-only authoritative conversion seed and
+  initial-peer recovery, including interrupted-import reconciliation, after full
+  macOS/iOS checkpoint #371. This closes that implementation checkpoint only.
+
+- [ ] Measure MF10's per-transport authority reads, native receipt/manifest
+  validation, seed verification latency and process memory on representative
+  workloads before establishing production capacity. Count/byte refusals do not
+  certify total memory, SQL I/O, network cost or latency.
 
 MF09 closes its bounded package-only local opening gate through
 [PR #136](https://github.com/bbruno84/GraphEvo/pull/136),

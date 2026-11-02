@@ -1394,12 +1394,23 @@ refuses promptly rather than blocking local conversion on network work. Public
 facade, historical sources, physical interruption/scale and new-cloud authority
 remain separate gates.
 
-## V2 MF10 proposed cloud activation
+## V2 MF10 authoritative cloud activation
 
-[MF10](docs/design/graphevo-2-authoritative-cloud-bootstrap.md) is a proposed
-contract only. Review it before implementing v1 new-cloud activation. Require one
+[MF10](docs/design/graphevo-2-authoritative-cloud-bootstrap.md) has its contract
+integrated through #139 and package-only implementation through #140 after review
+and full macOS/iOS checkpoint #371 on `ccd0d07`.
+Read it before changing v1 new-cloud activation. Require one
 selected conversion/route, durable remote authority before uploads, immutable seed
-preflight and empty-peer recovery. Existing bind/transport does not implement this
-admission. Host v1 writer/completeness prerequisites remain explicit; no diagnostic
+preflight and empty-peer recovery. Converted stores cannot bypass this admission
+through ordinary binding; preserve native restart gates and session send guards.
+An unexposed recovering peer reconciles prior imports against a complete validated
+zone cut through normal import/deletion receipts; generic missing lookups are
+unchanged. Preserve native limits, closed consumer admission and no upload feedback.
+Native activation format is 2, control/manifest formats are 1 and session format
+is 7, refusing old alpha state
+unchanged. S04/primitive/asset formats remain unchanged. Retain the bounded
+same-account owner/peer result separately from production cutover acceptance;
+the synthetic protocol does not certify historical sources or old-client fences.
+Host v1 writer/completeness prerequisites remain explicit; no diagnostic
 ledger, local flag or KVS value is a distributed cutover fence. Keep private support
 fixtures outside Git/CI/device/cloud. No public bootstrap or beta gate closes here.

@@ -80,6 +80,11 @@ starting it later is an explicit separate action, not certified cloud cutover.
 This local increment does not decide which converted graph/mapping becomes the
 single authoritative cloud writer.
 
+[MF10](graphevo-2-authoritative-cloud-bootstrap.md) now supplies the explicit
+package-only activation path on its focused implementation branch. Ordinary
+binding refuses a converted store until its MF10 authority is published; starting
+a cloud session alone does not activate or certify the conversion.
+
 ## Source and data validation
 
 Support remains the exact known twelve-entity v1 physical model. Source and

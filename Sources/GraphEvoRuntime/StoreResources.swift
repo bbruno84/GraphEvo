@@ -32,6 +32,7 @@ actor StoreResources {
     private var writers: [(UUID, CheckedContinuation<Void, any Error>)] = []
     private var closing = false
     private var dataAvailable = true
+    private var activationRestriction: (id: UUID, reads: Bool)?
     private var terminalDataBlock = false
     private var destructionIssued = false
     private struct DestructionArtifact: Equatable {
@@ -176,7 +177,7 @@ actor StoreResources {
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
-        try admit()
+        try admit(control: control)
         defer { finish() }
         let cancellation = OperationCancellation()
         let sqlite = resolved.url != nil
@@ -212,7 +213,7 @@ actor StoreResources {
     ) async throws -> Value {
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
         guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
-        try admit(write: true)
+        try admit(write: true, control: control)
         defer { finish(write: true) }
         let cancellation = OperationCancellation()
         let request = UUID()
@@ -270,9 +271,13 @@ actor StoreResources {
         context.transactionAuthor = "GraphEvo.v2.local"
     }
 
-    private func admit(write: Bool = false, reservation: UUID? = nil) throws {
+    private func admit(write: Bool = false, reservation: UUID? = nil, control: Bool = false) throws {
         guard !closing else { throw StoreRuntimeError.closedHandle }
         try Task.checkCancellation()
+        if !control, let restriction = activationRestriction {
+            if write { throw StoreRuntimeError.writesSuspended }
+            if restriction.reads { throw StoreRuntimeError.dataUnavailable }
+        }
         if let reservation {
             guard reservations[reservation] == .all else { throw StoreRuntimeError.resourceReserved }
         } else {
@@ -320,6 +325,15 @@ actor StoreResources {
         let mode = reservations.removeValue(forKey: id)
         reservationWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
         if mode == .all { invalidations.publish(.storeChange) }
+    }
+
+    /// Independent of sharing availability and caller-owned maintenance reservations.
+    func restrictActivation(_ id: UUID, reads: Bool, release: Bool) throws {
+        guard !closing else { throw StoreRuntimeError.closedHandle }
+        guard activationRestriction == nil || activationRestriction?.id == id else { throw StoreRuntimeError.resourceReserved }
+        if release {
+            if activationRestriction?.id == id { activationRestriction = nil; invalidations.publish(.storeChange) }
+        } else { activationRestriction = (id, reads) }
     }
 
     /// Native detachment precedes deletion; gateway claims are released only after owned cleanup.

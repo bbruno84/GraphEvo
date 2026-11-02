@@ -1,8 +1,11 @@
 # MF10 — authoritative new-cloud activation after local v1 conversion
 
-Status: proposed implementation contract, 2026-11-02. No implementation,
-physical acceptance or public API activation is claimed. This follows
-[MF09](graphevo-2-local-v1-bootstrap.md) on the S04 custom-sync runtime.
+Status: contract integrated through #139; package-only implementation integrates
+through #140 after review and full macOS/iOS checkpoint #371, 2026-11-02.
+Production cutover acceptance remains open. This follows [MF09](graphevo-2-local-v1-bootstrap.md)
+on the S04 custom-sync runtime. The synthetic physical owner/peer protocol passes;
+public activation and broader acceptance remain open. See the
+[bounded evidence](results/authoritative-cloud-bootstrap-2026-11-02.md).
 
 ## Bounded outcome
 
@@ -53,6 +56,10 @@ the cloud conflict; an uncertain or owned claim retains activation admission.
 Require the selected S04 native conversion receipt, matching target store UUID,
 complete mapping and ordinary structural/payload validation. Bind a new stable
 activation UUID to that receipt and the current native store/PH epoch and route.
+Native format 2 also binds the SQLite device/inode identity. A same-volume move
+preserves authority; a copied/restored store cannot assume it merely by retaining
+the native UUID and PH epoch. No absolute path is persisted. Cross-volume owner
+transfer and restored-backup activation require later explicit recovery work.
 Later legitimate local v2 edits before activation are included in the selected
 seed; never rerun conversion to obtain the initial cloud body.
 
@@ -60,10 +67,20 @@ Under the write hold, preflight every current primitive through the actual
 CF01/T04 encoder and current bounds before creating remote application records.
 Persist a canonical seed manifest: sorted logical IDs and kind/type plus a digest
 of each deterministic encoded logical body and attachment content digest/length.
-Define the exact versioned canonical byte encoding with codec tests before
-implementation review. Include optional dates, tags/groups and endpoints; counts
+Format 1 hashes each reconstructed CF01/T04 `payload` using SHA-256, including
+modifiedAt, optional dates, tags/groups and endpoints. Entries contain the UUID,
+kind/type, payload digest, optional asset digest and asset length, sorted by UUID.
+The manifest digest is SHA-256 over JSONEncoder output with sorted keys. Native
+server system fields and change tags are excluded. Counts
 alone cannot validate the seed. Bound the manifest and total preflight work with
 explicit limits and refuse atomically. No new unbounded inventory is permitted.
+
+Current limits are 10,000 primitives, 32 MiB consulted/logical payload, 4 MiB
+encoded manifest and 5 MiB complete native activation metadata. Source native
+inventory stays bounded at 100,000 rows. Verification consults at most 100,000
+zone events and allows 4 MiB secure-archive overhead above the logical payload
+allowance. Snapshot imports also obey the existing session event/byte budgets;
+a destination exceeding them is refused without exposure or hidden limit changes.
 
 Ordinary Data stays an ordinary property. A value exceeding the existing 512-KiB
 default encoded primitive payload allowance blocks activation; MF10 never raises
@@ -116,8 +133,9 @@ change tags and reject foreign revisions.
 Keep activation controls separate from primitive decoding, PH upload, the
 application inbox budget and the rotating shared diagnostic ledger. Reuse the
 session's scope gate/account/stop fences; allocate no additional CKSyncEngine.
-The implementation must version its durable local/session/control formats
-explicitly and refuse incompatible alpha state unchanged. S04 and primitive/
+The native activation format is 2, manifest/cloud control formats are 1 and the
+session document is 7, adding bounded activation routes. Prototype native format 1
+lacked the physical file binding and is refused unchanged. S04 and primitive/
 asset formats need no revision solely for this control protocol.
 
 ## Seeding, publication and peers
@@ -180,7 +198,7 @@ transfer and takeover from a restored backup are later work.
 ## Acceptance and delivery
 
 The implementation is one focused increment from/to `codex/graphevo-2`, after
-review of this contract. Required deterministic coverage includes competing
+review/integration of this contract. Required deterministic coverage includes competing
 conversions, same-claim resume, every durable/network boundary, partial uploads,
 ambiguous claim/publication saves, stale generations, account changes, raw-bind
 bypass, all manual/automatic send paths, oversized Data, history gaps, foreign
@@ -195,9 +213,52 @@ Retain writer owners until independent observation. No reset, copied fresh repli
 or consumed-mutation replay. Private support archives/logs remain external to
 Git/CI/device/cloud; historical/production source acceptance is separate.
 
-For this documentation-only proposal, check links and `git diff --check`; do not
-repeat unchanged suites or request remote CI. Implementation requires affected
+The earlier documentation-only proposal checked links and `git diff --check`,
+without repeating unchanged suites or requesting remote CI. Implementation requires affected
 local checks, review/corrections, the checkpoint required by the current
 [CI policy](graphevo-2-ci-checkpoints.md), then authorized merge. Broader v1
 writer/completeness policies, historical sources, cross-process interruption,
 capacity, public bootstrap and beta/stable acceptance remain open.
+
+## Package interface and explicit progression
+
+`prepareCloudActivation(for:activationID:zone:configuration:declaration:limits:)`
+returns local prepared status. The account session is explicitly started first;
+preparation creates no remote application data. The native receipt commitment is
+checked on reopening, including after later ordinary v2 edits.
+
+`advanceCloudActivation(for:configuration:)` returns status, operationError and
+cleanupPending separately. One call sends at most 100 frozen primitives; another
+call observes the empty queue and verifies/publishes the immutable seed. Recovery
+uses the same activation UUID. `cloudActivationStatus(for:)` is local and does not
+require a started cloud session. A failed native close carries durable status and
+separate operation/cleanup errors in GraphCloudActivationCleanupFailure.
+
+`openCloudReplica(id:at:zone:configuration:limits:)` creates a genuinely empty
+replica, or resumes an already marked replica, and returns status separately from
+`Result<GraphStore, Error>` availability. It refuses active registrations and
+converted/nonempty destinations. The initial complete server cut is retained in
+the normal bounded inbox and applied using the existing import/receipt path.
+
+If initial import committed before availability publication failed, a retry
+reconciles that still-unexposed replica against the new complete validated zone
+cut. Rows imported earlier but absent from that complete cut are removed through
+the normal import/deletion receipt transaction. The native callback permits this
+inventory only for a marked peer in recovering phase, with row/record limits.
+Combined saves/deletions obey existing inbox budgets. Ordinary missing lookups
+and already exposed graph transport retain their existing deletion semantics.
+
+Ordinary binding refuses conversion receipts without published MF10 authority.
+The live private binding path also checks the selected zone's control record so an
+unmarked graph cannot silently populate an MF10 destination. Manual/foreground
+transport checks native admission; the session additionally guards pending
+activation routes. Initial sharing is refused until publication. Normal graphs
+without activation retain their ordinary transport after the binding check.
+
+Ordinary MF10 transport re-fetches the existing published control and confirms its
+identity before offering application work. Missing authority blocks sending; it
+does not authorize zone/claim creation. Observed authority or zone deletion also
+durably closes that session route to ordinary sends and foreground data fetches,
+including after restart, while preserving unrelated graph routes and sticky
+account failures. Native preparation separately counts all modeled detail/control
+rows against the 100,000-row allowance before materializing the seed.

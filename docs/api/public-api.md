@@ -1908,3 +1908,47 @@ failed opening or cancellation preserves the receipt/map/backup result alongside
 later edits. Current URLs are resupplied, never serialized. Existing target cloud
 bindings are refused; bootstrap does not start sync. See
 [MF09](../design/graphevo-2-local-v1-bootstrap.md).
+
+## MF10 package-only authoritative cloud activation
+
+These APIs belong to GraphContextManager and do not change public/default opening:
+
+```swift
+prepareCloudActivation(for: GraphID, activationID: UUID, zone: GraphCloudZone,
+    configuration: GraphCloudConfiguration, declaration: GraphCloudCutoverDeclaration,
+    limits: GraphCloudActivationLimits = .init()) async throws -> GraphCloudActivationStatus
+advanceCloudActivation(for: GraphID, configuration: GraphCloudConfiguration)
+    async throws -> GraphCloudActivationResult
+cloudActivationStatus(for: GraphID) async throws -> GraphCloudActivationStatus?
+openCloudReplica(id: GraphID, at: URL, zone: GraphCloudZone,
+    configuration: GraphCloudConfiguration, limits: GraphCloudActivationLimits = .init())
+    async throws -> GraphCloudReplicaResult
+```
+
+Preparation validates one selected S04 conversion, a bounded immutable seed and
+explicit consumer declarations about v1 source completeness/writers. It holds
+consumer writes across handles and restart. Advancement obtains one conditional
+cloud authority, sends at most 100 primitives per call through existing PH/
+transport, then verifies the complete server seed before publication. Status is
+local; starting the account session remains explicit. No ordinary Data is
+implicitly converted into an attachment or admitted beyond existing codec limits.
+
+Activation results separate durable status, operationError and cleanupPending;
+native-close failure carries status and separate operation/cleanup errors.
+Replica results separate status from `opening: Result<GraphStore, any Error>`.
+Peers must start empty or resume a marked replica; converted/nonempty stores are
+refused. Imports retain cloud identities without upload feedback. Published seeds
+do not certify later global convergence. Local format 2 binds physical file
+identity as well as store UUID/PH epoch, refusing copied-store authority takeover.
+
+Ordinary cloud binding refuses converted stores without published MF10 authority
+and checks live private target authority. Schema S04 and primitive/asset formats remain
+unchanged; session format 7 refuses older alpha documents unchanged. This remains
+package-only, with the bounded physical peer protocol passing and broader cutover
+acceptance open. See
+[MF10](../design/graphevo-2-authoritative-cloud-bootstrap.md).
+
+An interrupted initial peer import is reconciled against a new complete validated
+zone cut before availability: previously imported rows absent from that cut are
+removed through import receipts while consumer access is still closed. This does
+not turn ordinary missing lookups into deletion evidence.

@@ -5,6 +5,7 @@ import GraphEvoRuntime
 
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
+    package var activation: GraphCloudActivationAdapter? = nil
     package let migrationSource: GraphStoreMigrationSource?
     package let v1Conversion: GraphV1ConversionAdapter?
     package let publication: GraphMigrationPublicationAdapter?
@@ -34,10 +35,11 @@ package actor GraphCoordinator {
     private let adapter: GraphStoreAdapter
     private let syncSession: GraphSyncSession?
     private let workspace: GraphMigrationWorkspaceAdapter?
+    private let activation: GraphCloudActivationAdapter?
     private let publication: GraphMigrationPublicationAdapter?
 
-    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil) {
-        self.id = id; self.handle = handle; self.adapter = adapter; self.workspace = workspace; self.publication = publication
+    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil) {
+        self.id = id; self.handle = handle; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation
         self.syncSession = sync.map { GraphSyncSession(graphID: id, handle: handle, adapter: $0) }
     }
 
@@ -49,7 +51,7 @@ package actor GraphCoordinator {
         if creating && exists { throw GraphStoreError.duplicateIdentity }
         if !creating && !exists { throw GraphStoreError.missingStore }
         let handle = try await registry.open(configuration, schema: schema)
-        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication)
+        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication, activation: adapter.activation)
         do {
             if creating {
                 try await handle.transaction {
@@ -65,6 +67,9 @@ package actor GraphCoordinator {
                     try await handle.setDataAvailable(false, terminal: value.blocked)
                 }
             }
+            if let activation = adapter.activation, let value = try await handle.controlRead({ try activation.read($0, id) }), value.blocksWrites {
+                try await handle.restrictActivation(value.authority.activationID, reads: value.peer)
+            }
             return owner
         } catch {
             let original = error
@@ -72,6 +77,40 @@ package actor GraphCoordinator {
             catch { throw GraphCoordinatorQuarantine(owner: owner, failure: error) }
             throw original
         }
+    }
+
+    func activationDocument() async throws -> GraphCloudActivationDocument? {
+        guard let activation else { return nil }; let id = id
+        return try await handle.controlRead { try activation.read($0, id) }
+    }
+    func requiresCloudActivation() async throws -> Bool {
+        guard let activation else { return false }; let id = id
+        return try await handle.controlRead { try activation.requiresActivation($0, id) }
+    }
+    func prepareActivation(_ binding: GraphCloudTransportBinding, operation: UUID, declaration: GraphCloudCutoverDeclaration,
+                           limits: GraphCloudActivationLimits) async throws -> GraphCloudActivationDocument {
+        guard let activation else { throw GraphCloudActivationError.unavailable }
+        return try await handle.controlTransaction { try activation.prepare($0, binding, operation, declaration, limits) }
+    }
+    func persistActivation(_ value: GraphCloudActivationDocument) async throws {
+        guard let activation else { throw GraphCloudActivationError.unavailable }; let id = id
+        try await handle.controlTransaction { try activation.write($0, id, value) }
+    }
+    func prepareActivationPeer(_ binding: GraphCloudTransportBinding, authority: GraphCloudAuthority,
+                               limits: GraphCloudActivationLimits) async throws -> GraphCloudActivationDocument {
+        guard let activation else { throw GraphCloudActivationError.unavailable }
+        return try await handle.controlTransaction { try activation.peer($0, binding, authority, limits) }
+    }
+    func activationAccess(_ id: UUID, peer: Bool = false, release: Bool = false) async throws {
+        try await handle.restrictActivation(id, reads: peer, release: release)
+    }
+    func validateActivationReplica() async throws -> Int {
+        guard let validate = adapter.validateIntegrity else { throw GraphCloudActivationError.unavailable }; let id = id
+        return try await handle.controlRead { try validate($0, id) }
+    }
+    func activationReplicaIDs() async throws -> Set<GraphNodeID> {
+        guard let activation else { throw GraphCloudActivationError.unavailable }; let id = id
+        return try await handle.controlRead { try activation.replicaIDs($0, id) }
     }
 
     static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, registry: StoreRegistry,

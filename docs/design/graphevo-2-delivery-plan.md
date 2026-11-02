@@ -4,10 +4,12 @@
 selects typed local properties on the package-only custom-sync runtime, with
 recorded physical/cost bounds. [MF09](graphevo-2-local-v1-bootstrap.md) connects
 explicit local v1 conversion to ordinary S04 opening. Production/historical source
-acceptance, public bootstrap and authoritative new-cloud activation remain open.
-[MF10](graphevo-2-authoritative-cloud-bootstrap.md) proposes a bounded
-authoritative seed/publication and empty-peer recovery contract; it is not
-implemented and does not close those gates.
+acceptance, public bootstrap and production cloud cutover remain open.
+[MF10](graphevo-2-authoritative-cloud-bootstrap.md) has its contract integrated
+through #139 and its package-only implementation integrated through #140 after
+review and full macOS/iOS checkpoint #371. Its bounded
+owner/peer evidence covers the synthetic protocol, while production/historical
+acceptance, public bootstrap and host cutover prerequisites remain open.
 The dated amendments below retain their historical schema/milestone scope; use
 [development status](graphevo-2-development-status.md) for current integration.
 
