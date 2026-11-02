@@ -27,7 +27,9 @@ private final class NativeV1CompletionGate: @unchecked Sendable {
     func release() { signal.signal() }
 }
 
-@Suite(.timeLimit(.minutes(2)))
+// Bound independent fixture I/O; the explicit task-group case still migrates
+// four stores concurrently and checks that their allocated identities stay apart.
+@Suite(.serialized, .timeLimit(.minutes(2)))
 struct GraphNativeV1MigrationTests {
     private func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("NativeV1-" + UUID().uuidString)

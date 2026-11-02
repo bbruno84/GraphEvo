@@ -85,6 +85,29 @@ retries the same source head. Both jobs were cancelled without executing after
 acquisition. Neither cancelled nor skipped jobs establish a tested checkpoint.
 The PR remains unmerged until a complete reviewed full checkpoint succeeds.
 
+[Full checkpoint #378](https://github.com/bbruno84/GraphEvo/actions/runs/41514422610)
+contains the seed-publication correction. The iOS job again exceeds an existing
+one-minute allowance, this time in
+`GraphCoordinatorTests.initializationAndPartialLoadCleanupFailuresRetainRegistration`.
+This is a different case from #374. The raw native diagnostic bundle was not
+requested for these attempts, so the timeout summaries do not prove a blocked
+native stack or a specific production defect.
+
+A test-fixture follow-up serializes independent cases in the native migration and
+cloud activation suites, reducing simultaneous backed-up migrations from those
+groups. This tests the resource-contention hypothesis; it is not a declaration
+that the prior failures were harmless. Explicit four-operation task-group
+migration and lifecycle race tests keep their existing concurrency. All cases,
+assertions, payloads, deadlines and full-profile selection remain intact.
+Production runtime/store code is unchanged from the seed-publication correction.
+The revised execution still requires a complete successful remote checkpoint.
+Local counts remain 960 macOS and 958 passed iOS functions with the known skip;
+the coordinator cleanup case completes in 12.31 seconds and the explicit
+four-operation migration case in 0.71 seconds. The complete local store suite
+now takes 33.22 seconds, versus 26.67 seconds in the prior local run. Conditions
+are not controlled, so this is not a speedup claim: the change limits overlapping
+fixture work, and remote validation must assess the hosted-runner outcome.
+
 ## Limits and remaining gates
 
 No total property-byte allowance applies to the native route. Format-1 map,

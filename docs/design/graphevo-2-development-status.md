@@ -30,7 +30,11 @@ its one-minute allowance; the same test then passed in focused and full local
 iOS runs without source or allowance changes. Both #375 jobs were cancelled
 without execution after 15-minute runner-capacity waits. These attempts are not
 passing checkpoints. Final status notes change documentation only; #141 remains
-unmerged until full remote validation succeeds. See the
+unmerged until full remote validation succeeds. #378 retains a further iOS
+one-minute timeout in a different existing coordinator cleanup test. A fixture
+follow-up serializes independent cases in the two migration-heavy suites while
+retaining explicit concurrent operations, assertions and unchanged deadlines.
+This is a contention hypothesis requiring a passing remote checkpoint. See the
 [MF11 evidence](results/native-v1-staged-migration-2026-11-02.md).
 
 Expanded numeric property mapping integrates through
