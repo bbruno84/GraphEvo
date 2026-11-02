@@ -246,3 +246,11 @@ unmarked graph cannot silently populate an MF10 destination. Manual/foreground
 transport checks native admission; the session additionally guards pending
 activation routes. Initial sharing is refused until publication. Normal graphs
 without activation retain their ordinary transport after the binding check.
+
+Ordinary MF10 transport re-fetches the existing published control and confirms its
+identity before offering application work. Missing authority blocks sending; it
+does not authorize zone/claim creation. Observed authority or zone deletion also
+durably closes that session route to ordinary sends and foreground data fetches,
+including after restart, while preserving unrelated graph routes and sticky
+account failures. Native preparation separately counts all modeled detail/control
+rows against the 100,000-row allowance before materializing the seed.

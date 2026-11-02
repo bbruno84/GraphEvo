@@ -10,13 +10,15 @@ branch pending integration; broader production/historical cutover gates stay ope
 
 - Contract #139 integrates as `4d6a164`; implementation starts directly from it
   on `codex/v2-authoritative-cloud-activation`, returning to `codex/graphevo-2`.
-- Reviewed shipping/test head is `5335079b3be746b31d76a038bae78ab683c66a78`.
+- Reviewed shipping/test head is `48a42345e0308cdaecf793b120fff5cbd67743b4`.
   The physical protocol exercises `1adbd8d` production activation.
   Subsequent `5ade87a` and `1e9954e` extend only the external device laboratory;
   shipping Sources, tests, manifest and workflow remain identical through those
-  laboratory revisions. Final `5335079` confines ordinary authority lookup to
-  private bindings and adds two scope regressions; the physical private-activation
-  path is unchanged.
+  laboratory revisions. Later local corrections confine ordinary authority lookup
+  to private bindings (`5335079`), block lost published authority (`e009734`) and
+  count complete native row inventory (`48a4234`). These guards have deterministic
+  regression coverage; they are not relabeled as new physical deletion/scale
+  acceptance. S04 and all protocol formats remain unchanged.
 - Native activation format 2 binds physical file identity, native UUID and PH
   epoch. Cloud authority/manifest formats remain 1; session format is 7. S04 and
   primitive/asset formats are unchanged.
@@ -78,9 +80,9 @@ a certificate of future global convergence.
 
 ## Local checks and review corrections
 
-The complete macOS profile passes **947 functions** on `5335079`: 331 legacy,
-508 store, 78 runtime and 30 model. Focused iOS 18.5 Simulator checks pass
-**109 functions / 117 invocations**, zero failures/skips, covering activation,
+The complete macOS profile passes **950 functions** on `48a4234`: 331 legacy,
+511 store, 78 runtime and 30 model. Focused iOS 18.5 Simulator checks pass
+**112 functions / 120 invocations**, zero failures/skips, covering activation,
 bootstrap, session, transport, sharing, foreground scheduling and runtime admission.
 All three independent package/model/process consumers pass; manifest and diff
 validation pass. No unchanged-library suite is repeated for the final prose.
@@ -94,14 +96,15 @@ of other maintenance/sharing restrictions. Core Data external-reference clone
 diagnostics emitted by synthetic large-property fixtures remain in the raw local
 logs; test assertions and backup/source checks pass.
 
-Review closes four concrete gaps: converted stores could bypass preparation via
-ordinary binding; native UUID/PH identity alone admitted physical copies; and a
-foreground worker could become blocked by trying ordinary work during seeding;
-and ordinary shared binding must not consult private activation control.
-Binding/transport/invitation admission now rejects bypasses, the native marker
-checks the receipt and physical file, and pending activation routes suspend
-foreground application work/fetch until publication. A virtual-clock production
-worker regression proves normal progress afterward without clearing failures.
+Review closes ordinary-binding bypass, copied-store admission, premature
+foreground turns and private-control lookup on shared bindings. Published MF10
+transport additionally revalidates existing authority before data work, and
+observed control deletion durably blocks the session route across restart.
+Missing authority never authorizes re-creation. Account failures remain sticky;
+complete modeled native inventory is counted before seed materialization. The
+virtual-clock worker regression proves normal progress after publication without
+clearing failures. Per-operation control reads and metadata/manifest validation
+costs remain explicit production-capacity follow-ups.
 
 ## Remaining gates
 

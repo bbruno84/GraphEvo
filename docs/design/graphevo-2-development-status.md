@@ -29,7 +29,7 @@ recovery. Its [bounded evidence](results/authoritative-cloud-bootstrap-2026-11-0
 records the native exclusion prerequisite and twelve passed same-account
 iPad/iPhone protocol reports: protected seed/restarts, publication, empty-peer
 recovery, ordinary later edits, independent-conversion refusal and another empty
-replica. Local full macOS passes 947 functions; focused iOS passes 109/117.
+replica. Local full macOS passes 950 functions; focused iOS passes 112/120.
 Host v1 completeness/writer policy, production/historical acceptance, deployment
 and reviewed remote integration remain separate requirements.
 Broader

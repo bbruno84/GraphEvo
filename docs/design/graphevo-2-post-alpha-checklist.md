@@ -908,6 +908,11 @@ ordinary edits and competing-conversion refusal pass within that synthetic scope
 Review/remote integration, host v1 writer/completeness policy, historical sources,
 production binary acceptance and deployment remain unchecked gates above.
 
+- [ ] Measure MF10's per-transport authority reads, native receipt/manifest
+  validation, seed verification latency and process memory on representative
+  workloads before establishing production capacity. Count/byte refusals do not
+  certify total memory, SQL I/O, network cost or latency.
+
 MF09 closes its bounded package-only local opening gate through
 [PR #136](https://github.com/bbruno84/GraphEvo/pull/136),
 [the six-stage local device result](results/local-v1-bootstrap-2026-11-02.md) and
