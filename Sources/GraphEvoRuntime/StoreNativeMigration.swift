@@ -22,7 +22,7 @@ package struct StoreNativeMigration: Sendable {
 
     package static let documentKey = "GraphEvo.nativeV1Migration"
 
-    func seed(_ resolved: ResolvedStore) throws {
+    func seed(_ resolved: ResolvedStore, beforeStamp: (() throws -> Void)? = nil) throws {
         guard let url = resolved.url, let operation = resolved.configuration.workspaceID,
               let graph = resolved.configuration.exclusiveGraphID,
               resolved.configuration.access == .readWrite,
@@ -39,14 +39,25 @@ package struct StoreNativeMigration: Sendable {
         }
         guard !FileManager.default.fileExists(atPath: url.path) else { return }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let copier = NSPersistentStoreCoordinator(managedObjectModel: sourceModel)
-        let options: [AnyHashable: Any] = [NSPersistentHistoryTrackingKey: true]
-        try copier.replacePersistentStore(at: url, destinationOptions: options, withPersistentStoreFrom: seedURL,
-                                         sourceOptions: options, ofType: NSSQLiteStoreType)
-        var metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
-        metadata[StoreNativeContext.workspaceKey] = operation.uuidString
-        metadata[StoreNativeContext.historySyncGraphKey] = graph.uuidString
-        metadata[Self.documentKey] = document
-        try NSPersistentStoreCoordinator.setMetadata(metadata, forPersistentStoreOfType: NSSQLiteStoreType, at: url, options: options)
+        let staging = url.deletingLastPathComponent().appendingPathComponent(".graphevo-native-seed-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        try autoreleasepool {
+            let prepared = staging.appendingPathComponent("Graph.sqlite")
+            let copier = NSPersistentStoreCoordinator(managedObjectModel: sourceModel)
+            let options: [AnyHashable: Any] = [NSPersistentHistoryTrackingKey: true]
+            try copier.replacePersistentStore(at: prepared, destinationOptions: options, withPersistentStoreFrom: seedURL,
+                                             sourceOptions: options, ofType: NSSQLiteStoreType)
+            try beforeStamp?()
+            var metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: prepared)
+            metadata[StoreNativeContext.workspaceKey] = operation.uuidString
+            metadata[StoreNativeContext.historySyncGraphKey] = graph.uuidString
+            metadata[Self.documentKey] = document
+            try NSPersistentStoreCoordinator.setMetadata(metadata, forPersistentStoreOfType: NSSQLiteStoreType, at: prepared, options: options)
+            // Publish only a fully marked source. A failed metadata write must
+            // never leave an ordinary v1 store at the requested destination.
+            try copier.replacePersistentStore(at: url, destinationOptions: options, withPersistentStoreFrom: prepared,
+                                             sourceOptions: options, ofType: NSSQLiteStoreType)
+        }
     }
 }

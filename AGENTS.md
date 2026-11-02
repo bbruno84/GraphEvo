@@ -1422,6 +1422,8 @@ v1 bootstrap. Core Data owns the additive schema hop; explicitly prepared lookup
 identities and per-row S04 slots are library transformations. Keep the original
 read-only, the verified backup pinned and the destination workspace unavailable
 until catalog validation, fresh target PH baseline and completion receipt seal.
+Prepare and mark the native seed before publishing the destination; a failed
+metadata write must not expose an ordinary v1 copy at that path.
 Save native metadata with the sealing transaction. Preserve pending/live runtime
 claims across source preparation, target load and failed detachment. Native stage
 contexts may use framework generic managed objects only in this internal adapter;

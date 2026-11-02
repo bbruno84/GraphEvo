@@ -55,6 +55,15 @@ reapplication. Uncommitted bounded-recipe files still require their original
 explicit bounded recovery path; they are not silently reinterpreted as native
 workspaces. The default public v1 Graph initializer is unchanged.
 
+Target seeding prepares a temporary native copy and writes its workspace/document
+metadata before publishing it at the requested destination with Core Data's
+whole-store replacement API. A metadata-write failure leaves that destination
+absent and retryable, rather than exposing an unmarked v1 copy. The original
+restored input stays unchanged. Temporary copies are removed after closed native
+operations; abrupt process termination can leave an unused temporary directory.
+This extra native copy has disk/I/O costs and does not certify every physical
+interruption boundary.
+
 The runtime's optional native initializer requires an exclusive writable local
 workspace/session. Canonical aliases include that admission and its immutable
 native document. Source preparation and target load run under one pending owner;

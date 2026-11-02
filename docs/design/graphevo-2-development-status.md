@@ -17,9 +17,12 @@ The default package-only bootstrap selects this route on iOS 17/macOS 14, while
 the explicit-limits atomic recipe stays available. This removes the total
 property-byte allowance for the new route, not the existing identity-map/native
 format constraints or remaining production/public/cloud gates. Local validation
-passes 959 macOS functions, 957 iOS functions with one known skip, and all three
+passes 960 macOS functions, 958 iOS functions with one known skip, and all three
 consumers. Private local acceptance remains outside Git/CI/cloud. Source review
-covers `814a64d24a9bbb6448c74da46922de4dd6a17e03`.
+initially covered `814a64d24a9bbb6448c74da46922de4dd6a17e03`. A follow-up review
+closes a destination-publication window: the native seed is now stamped in an
+unpublished copy before Core Data replaces the destination. A fault regression
+proves failed stamping leaves no destination and a later retry retains admission.
 
 Integration and the required full remote checkpoint remain pending. In #374,
 macOS never acquired a hosted arm64 runner and an existing iOS adoption test hit

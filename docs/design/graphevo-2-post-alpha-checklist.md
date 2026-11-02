@@ -941,6 +941,8 @@ physical interruption, cross-process writers, scale or new-cloud activation.
 - [x] Implement and locally review native staged conversion without a graph-sized payload
   snapshot or whole-database property-byte budget; preserve source, backups,
   identity allocation, row checkpoints and atomic readiness/sync sealing.
+  Follow-up review includes fault-tested seed metadata stamping before destination
+  publication, preserving absent/retryable targets on preparation failure.
 - [ ] Obtain the required full reviewed remote checkpoint and integrate #141.
   #374 retains an existing iOS adoption-test timeout and unassigned macOS runner;
   #375 retains two unassigned hosted arm64 runners. Local full suites pass, but

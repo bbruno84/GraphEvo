@@ -1,10 +1,12 @@
 # MF11 — native staged v1 migration validation
 
 Date: 2026-11-02. Scope: package-only stopped local v1 conversion to the
-existing S04 schema. Local review is complete on
-`814a64d24a9bbb6448c74da46922de4dd6a17e03`. Required full remote checkpoint and
+existing S04 schema. Initial local review covered
+`814a64d24a9bbb6448c74da46922de4dd6a17e03`; the follow-up below corrects its seed
+publication window. Required full remote checkpoint and
 integration through [PR #141](https://github.com/bbruno84/GraphEvo/pull/141) remain
-pending; final status notes change documentation only.
+pending. Earlier status notes changed documentation only; the follow-up changes
+runtime seeding, its regression test and the matching contract.
 
 ## Selected route
 
@@ -23,9 +25,9 @@ history baseline, pending saves and conversion receipt are complete.
 
 ## Local checks
 
-- Full macOS package run: 959 functions passed (331 legacy, 520 store, 78 runtime,
+- Full macOS package run: 960 functions passed (331 legacy, 520 store, 79 runtime,
   30 model).
-- Full local iOS 18.5 Simulator run: 957 functions passed, zero failures and one
+- Full local iOS 18.5 Simulator run: 958 functions passed, zero failures and one
   known skip. Focused native/bootstrap/conversion/activation checks pass 60
   functions; focused adoption/native/activation checks pass 38 functions.
 - All three independent consumers passed: legacy package consumer, Swift 6 model
@@ -45,6 +47,28 @@ private-source acceptance also passed fresh conversion, exact semantic compariso
 independent raw-archive/hash comparison, verified backup restoration and a new
 process recovering the same receipt. Private stores, maps, reports and logs stay
 outside the repository and are excluded from CI.
+
+## Follow-up review — seed publication
+
+The original runtime copied the unmarked v1 input directly to the requested
+destination before writing workspace/document metadata. A failure during that
+metadata step could leave an ordinary v1 file at the destination: public legacy
+opening could accept it, while native bootstrap recovery could not recognize it
+as this operation's workspace.
+
+Seeding now clones into a fresh temporary native location, stamps all admission
+metadata there, then publishes with Core Data whole-store replacement. An
+injected stamping failure proves the requested destination remains absent, the
+source remains unchanged, temporary files are cleaned up and a normal retry
+publishes matching workspace/document metadata. Ordinary runtime and legacy
+admission refuse that published workspace. No new persistent format or automatic
+reclamation of existing foreign files is introduced.
+
+The current local full counts above include this new runtime regression. Both
+complete platform suites, independent consumers and a fresh private-source
+conversion are repeated after the fix. Existing test allowances are unchanged.
+Physical interruption during native file replacement, platform capacity and
+abrupt-termination cleanup retain their separate gates.
 
 ## Remote checkpoint attempts
 
