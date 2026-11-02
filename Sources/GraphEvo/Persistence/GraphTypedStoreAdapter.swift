@@ -69,6 +69,9 @@ package enum GraphTypedStoreAdapter {
                     try checkCancellation()
                     try GraphQueryValidation.request(request, graphID: graphID)
                     let session = try Session(context, graphID, database: database, maximumCandidates: request.budget.maximumCandidates)
+                    if GraphNativePropertyStorage.enabled(context) {
+                        return try GraphTypedQueryExecution(session: session, request: request).execute()
+                    }
                     let propertyPlan = GraphQueryPropertyPlan(request)
                     let partial = session.nodes.compactMap { id, node -> Node? in
                         guard let keys = propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), !keys.isEmpty else { return nil }
@@ -94,6 +97,14 @@ package enum GraphTypedStoreAdapter {
                 }
             }
         )
+        adapter.validateIntegrity = { context, graphID in
+            try GraphValueDecodingDiagnostics.checking {
+                let session = try Session(context, graphID, database: database)
+                let check = StoreNativeContext.cancellationCheck(in: context)
+                for (id, node) in session.nodes { try check(); try session.validate(session.snapshot(node, id: id)) }
+                return session.nodes.count
+            }
+        }
         adapter.removeAll = { context, graphID, maximum in
             try GraphValueDecodingDiagnostics.checking {
                 try Session(context, graphID, database: database).removeAll(maximumRecords: maximum)

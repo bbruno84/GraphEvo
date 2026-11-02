@@ -215,3 +215,13 @@ records 501 tests, 44 selected sanitizer tests and 72 matched Release rows.
 On the 500-node scalar fixture, 32 shared-query startup falls from 4.74 to 2.55 s;
 32 mixed updates remain about 2.50 s despite improvement. These are local
 measurements, not physical/native acceptance or a product performance envelope.
+
+## S04 selective execution
+
+[P02](graphevo-2-typed-properties.md#p02-hybrid-query-contract) changes the
+package-only S04 route: query integrity covers consulted values and selected
+returned bodies. Presence reads headers; explicit integrity validation is full.
+Native safe predicate prefixes and homogeneous single-key sorts coexist with
+residual Swift evaluation. Current/S03 execution retains this document's
+historical bounded inventory/property-plan behavior. Native selection never
+removes source-order errors, bypasses budgets or certifies cloud completion.

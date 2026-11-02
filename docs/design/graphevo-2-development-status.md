@@ -13,7 +13,8 @@ Expanded numeric property mapping integrates through
 P01 integrates through [PR #133](https://github.com/bbruno84/GraphEvo/pull/133),
 directly into `codex/graphevo-2`. The [typed-property contract](graphevo-2-typed-properties.md)
 separates S04 storage, P02 hybrid query execution and P03 physical/measurement
-validation. Next is P02. TP01 remains retained on
+validation. P02 is active on `codex/v2-native-property-queries`; it is not
+integrated yet. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is opt-in bootstrap, production/historical source acceptance and new-cloud
 activation of one authoritative converted graph.

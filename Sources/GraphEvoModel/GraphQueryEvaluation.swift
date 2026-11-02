@@ -108,24 +108,53 @@ package enum GraphQueryScalar {
     }
 }
 
-/// Pure bounded evaluation over a detached, graph-scoped snapshot. No storage fallback exists here.
+/// Ephemeral shared allowance for native preparation and residual evaluation.
+package final class GraphQueryWorkCounter {
+    package private(set) var steps = 0
+    private let maximum: Int
+    private let checkCancellation: @Sendable () throws -> Void
+    package init(maximum: Int, checkCancellation: @escaping @Sendable () throws -> Void = {}) {
+        self.maximum = maximum; self.checkCancellation = checkCancellation
+    }
+    package func consume() throws {
+        if steps % 64 == 0 { try checkCancellation() }
+        guard steps < maximum else { throw GraphQueryError.budgetExceeded(.steps) }
+        steps += 1
+    }
+}
+
+/// Bounded graph-scoped evaluation. Optional trusted readers defer property access
+/// inside the admitted scope; they never escape or invoke consumer code.
 package final class GraphQueryEvaluation {
     private let request: GraphQueryRequest
     private let graphID: GraphID
     private let records: [GraphRecord]
     private let byID: [GraphNodeID: GraphRecord]
-    private var steps = 0
+    private let work: GraphQueryWorkCounter
+    private var steps: Int { work.steps }
+    private let property: ((GraphNodeID, String) throws -> GraphValue?)?
+    private let exists: ((GraphNodeID, String) throws -> Bool)?
+    private let hydrate: ((GraphRecord) throws -> GraphRecord)?
+    private let eligibleIDs: Set<GraphNodeID>?
+    private let nativeOrder: [GraphNodeID: Int]?
     private let checkCancellation: @Sendable () throws -> Void
-    package init(request: GraphQueryRequest, graphID: GraphID, records: [GraphRecord], checkCancellation: @escaping @Sendable () throws -> Void = {}) throws {
+    package init(request: GraphQueryRequest, graphID: GraphID, records: [GraphRecord], checkCancellation: @escaping @Sendable () throws -> Void = {},
+                 work: GraphQueryWorkCounter? = nil,
+                 property: ((GraphNodeID, String) throws -> GraphValue?)? = nil,
+                 exists: ((GraphNodeID, String) throws -> Bool)? = nil,
+                 hydrate: ((GraphRecord) throws -> GraphRecord)? = nil,
+                 eligibleIDs: Set<GraphNodeID>? = nil, nativeOrder: [GraphNodeID: Int]? = nil) throws {
         try GraphQueryValidation.request(request, graphID: graphID)
         guard records.allSatisfy({ $0.id.graphID == graphID }), Set(records.map(\.id)).count == records.count else { throw GraphQueryError.foreignGraph }
         self.request = request; self.graphID = graphID; self.records = records; self.checkCancellation = checkCancellation
+        self.work = work ?? GraphQueryWorkCounter(maximum: request.budget.maximumSteps, checkCancellation: checkCancellation)
+        self.property = property; self.exists = exists; self.hydrate = hydrate; self.eligibleIDs = eligibleIDs; self.nativeOrder = nativeOrder
         byID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
     }
-    private func step() throws {
-        if steps % 64 == 0 { try checkCancellation() }
-        guard steps < request.budget.maximumSteps else { throw GraphQueryError.budgetExceeded(.steps) }
-        steps += 1
+    private func step() throws { try work.consume() }
+    private func value(_ record: GraphRecord, key: String) throws -> GraphValue? {
+        if let property { return try property(record.id, key) }
+        return record.properties[key]
     }
     private func neighbors(_ source: GraphNodeID, relation: GraphQueryRelation) throws -> [GraphRecord] {
         var ids = Set<GraphNodeID>()
@@ -158,8 +187,10 @@ package final class GraphQueryEvaluation {
         case .id(let id): return record.id == id
         case .tag(let tag): return record.tags.contains(tag)
         case .group(let group): return record.groups.contains(group)
-        case .exists(let name): return record.properties[name] != nil
-        case .property(let name, let op, let value): return try GraphQueryScalar.test(record.properties[name], op, value)
+        case .exists(let name):
+            if let exists { return try exists(record.id, name) }
+            return try value(record, key: name) != nil
+        case .property(let name, let op, let value): return try GraphQueryScalar.test(self.value(record, key: name), op, value)
         case .subject(let id):
             switch record.endpoints { case .relationship(let subject, _): return subject == id; case .action(let subjects, _): return subjects.contains(id); default: return false }
         case .object(let id):
@@ -173,12 +204,12 @@ package final class GraphQueryEvaluation {
             for next in try neighbors(record.id, relation: relation) { if try matches(matching, next) { return true } }; return false
         }
     }
-    private func values(_ record: GraphRecord) -> [GraphValue?] {
-        request.definition.sorts.map { sort in
+    private func values(_ record: GraphRecord) throws -> [GraphValue?] {
+        try request.definition.sorts.map { sort in
             switch sort.key {
             case .identity: return .string(record.id.rawValue.uuidString)
             case .createdDate: return record.createdDate.map(GraphValue.date)
-            case .property(let name): return record.properties[name]
+            case .property(let name): return try value(record, key: name)
             }
         }
     }
@@ -255,6 +286,7 @@ package final class GraphQueryEvaluation {
         let matching = try records.filter { record in
             try step()
             guard record.type == request.definition.type, record.endpoints.kind == request.definition.kind else { return false }
+            if let eligibleIDs, !eligibleIDs.contains(record.id) { return false }
             return try matches(request.definition.predicate, record)
         }
         func output(_ rows: [GraphRecord] = [], cursor: GraphQueryCursor? = nil, count: Int, value: GraphValue? = nil) -> GraphQueryOutput {
@@ -274,14 +306,21 @@ package final class GraphQueryEvaluation {
             var previous: GraphValue?
             for record in matching {
                 try step()
-                if let value = values(record)[index], !isMissing(value) {
+                if let value = try values(record)[index], !isMissing(value) {
                     try GraphQueryScalar.ordered(value)
                     if let previous { _ = try GraphQueryScalar.compare(previous, value) }
                     previous = value
                 }
             }
         }
-        var sorted = try matching.sorted { try compare(values($0), $0.id, values($1), $1.id) < 0 }
+        var sorted = try matching.sorted {
+            if let nativeOrder {
+                try step()
+                guard let first = nativeOrder[$0.id], let second = nativeOrder[$1.id] else { throw GraphQueryError.unsupportedStorage }
+                return first < second
+            }
+            return try compare(values($0), $0.id, values($1), $1.id) < 0
+        }
         if let cursor = request.cursor {
             sorted = try sorted.filter { try compare(values($0), $0.id, cursor.values, cursor.lastID) > 0 }
         }
@@ -289,8 +328,9 @@ package final class GraphQueryEvaluation {
         let selected = Array(sorted.prefix(limit))
         let cursor: GraphQueryCursor?
         if limit < sorted.count, let last = selected.last {
-            cursor = GraphQueryCursor(graphID: graphID, definition: request.definition, values: values(last), lastID: last.id)
+            cursor = GraphQueryCursor(graphID: graphID, definition: request.definition, values: try values(last), lastID: last.id)
         } else { cursor = nil }
-        return output(selected, cursor: cursor, count: matching.count)
+        let returned = try selected.map { record in try hydrate?(record) ?? record }
+        return output(returned, cursor: cursor, count: matching.count)
     }
 }

@@ -87,16 +87,40 @@ public struct GraphQuery<Model: GraphModel>: Sendable {
     public func after(_ cursor: GraphQueryCursor) -> Self { var copy = self; copy.cursor = cursor; return copy }
     public func explain() throws -> GraphQueryPlan {
         try GraphQueryValidation.validate(definition, limit: rowLimit)
-        return GraphQueryPlan(budget: budget)
+        return GraphQueryPlan(budget: budget, definition: definition)
     }
     package var request: GraphQueryRequest { GraphQueryRequest(definition: definition, budget: budget, limit: rowLimit, cursor: cursor) }
 }
 public struct GraphQueryPlan: Sendable {
-    /// The current schema requires explicit bounded inventory and in-memory evaluation, including projections/counts.
-    public enum Strategy: Sendable, Equatable { case boundedInventoryAndMemory }
-    public let strategy: Strategy = .boundedInventoryAndMemory
+    public enum Strategy: Sendable, Equatable { case boundedInventoryAndMemory, adaptiveCoreData }
+    /// Predictive only: the actual store, pending edits and encountered values determine execution.
+    public let strategy: Strategy
+    public let eligiblePredicatePrefixCount: Int
     public let budget: GraphQueryBudget
-    package init(budget: GraphQueryBudget) { self.budget = budget }
+    package init(budget: GraphQueryBudget, definition: GraphQueryDefinition) {
+        self.budget = budget; strategy = .adaptiveCoreData
+        func prefix(_ predicate: GraphQueryPredicate) -> (Int, Bool) {
+            switch predicate {
+            case .and(let values):
+                var count = 0
+                for value in values { let (next, complete) = prefix(value); count += next; if !complete { return (count, false) } }
+                return (count, true)
+            case .all, .none, .id, .type, .tag, .group, .subject, .object: return (0, true)
+            case .exists: return (1, true)
+            case .property(_, let op, let value):
+                switch value {
+                case .boolean, .integer, .unsignedInteger, .null: return (1, true)
+                case .floatingPoint(let number): return number == 0 && number.sign == .minus ? (0, false) : (1, true)
+                case .date(let date): return date.timeIntervalSinceReferenceDate == 0 && date.timeIntervalSinceReferenceDate.sign == .minus ? (0, false) : (1, true)
+                case .string(let text): return text.utf8.allSatisfy { $0 > 0 && $0 < 128 } ? (1, true) : (0, false)
+                case .uuid where op == .equal || op == .notEqual: return (1, true)
+                default: return (0, false)
+                }
+            default: return (0, false)
+            }
+        }
+        eligiblePredicatePrefixCount = prefix(definition.predicate).0
+    }
 }
 /// Execution identity, not a native generation, cloud completeness marker or multi-page snapshot.
 public struct GraphQueryLocalView: Sendable, Equatable {
@@ -108,13 +132,29 @@ public struct GraphQueryLocalView: Sendable, Equatable {
     }
 }
 public struct GraphQueryDiagnostics: Sendable {
+    public enum Strategy: Sendable, Equatable { case memory, hybrid, native }
+    public enum FallbackReason: Sendable, Equatable {
+        case legacyStorage, inMemory, pendingChanges, unsupportedPredicate, serializedValue
+        case mixedTypes, nonASCIIString, unsupportedSort, missingSortValue
+    }
     public let nativeCandidates: Int
     public let scopedNodes: Int
     public let propertyBytesCharged: Int
     public let evaluationSteps: Int
-    package init(nativeCandidates: Int, scopedNodes: Int, propertyBytesCharged: Int, evaluationSteps: Int) {
+    public let strategy: Strategy
+    public let nativeFetchCount: Int
+    public let nativePredicateCount: Int
+    public let materializedRecords: Int
+    public let nativeSortApplied: Bool
+    public let fallbackReasons: [FallbackReason]
+    package init(nativeCandidates: Int, scopedNodes: Int, propertyBytesCharged: Int, evaluationSteps: Int,
+                 strategy: Strategy = .memory, nativeFetchCount: Int = 0, nativePredicateCount: Int = 0,
+                 materializedRecords: Int = 0, nativeSortApplied: Bool = false,
+                 fallbackReasons: [FallbackReason] = [.legacyStorage]) {
         self.nativeCandidates = nativeCandidates; self.scopedNodes = scopedNodes
         self.propertyBytesCharged = propertyBytesCharged; self.evaluationSteps = evaluationSteps
+        self.strategy = strategy; self.nativeFetchCount = nativeFetchCount; self.nativePredicateCount = nativePredicateCount
+        self.materializedRecords = materializedRecords; self.nativeSortApplied = nativeSortApplied; self.fallbackReasons = fallbackReasons
     }
 }
 public struct GraphQueryResult<Model: GraphModel>: Sendable {
@@ -172,6 +212,10 @@ package struct GraphQueryOutput: Sendable {
     package let aggregate: GraphValue?
     package let diagnostics: GraphQueryDiagnostics
     package var visits: [GraphTraversalVisit] = []
+    package init(records: [GraphRecord], cursor: GraphQueryCursor?, count: Int, aggregate: GraphValue?, diagnostics: GraphQueryDiagnostics, visits: [GraphTraversalVisit] = []) {
+        self.records = records; self.cursor = cursor; self.count = count; self.aggregate = aggregate
+        self.diagnostics = diagnostics; self.visits = visits
+    }
 }
 
 extension GraphQueryError: LocalizedError {

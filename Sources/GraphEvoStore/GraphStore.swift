@@ -39,6 +39,7 @@ public struct GraphV1AdoptionReport: Sendable {
 
 /// Privileged callbacks implemented by the current Graph facade adapter.
 package struct GraphStoreAdapter: Sendable {
+    package var validateIntegrity: (@Sendable (NSManagedObjectContext, GraphID) throws -> Int)?
     package var removeAll: (@Sendable (NSManagedObjectContext, GraphID, Int) throws -> Int)?
     package var participantAccess: (@Sendable (NSManagedObjectContext, GraphID, GraphCloudParticipantAccess?) throws -> GraphCloudParticipantAccess?)?
     package var beginMutation: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?
@@ -215,6 +216,14 @@ public actor GraphStore {
             if let ownerLease { try await ownerLease.close() }
             else { try await handle.close() }
         } catch { throw Self.translate(error) }
+    }
+
+    /// Full local payload and structural validation, separate from selective query reads.
+    package func validateIntegrity() async throws -> Int {
+        let adapter = adapter, id = id
+        guard let validate = adapter.validateIntegrity else { throw GraphStoreError.unsupportedLayout }
+        do { return try await handle.read { try validate($0, id) } }
+        catch { throw Self.translate(error) }
     }
 
     public func read<Value: Sendable>(

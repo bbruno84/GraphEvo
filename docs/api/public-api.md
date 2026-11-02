@@ -1869,3 +1869,22 @@ older stores. Cloud keeps one serialized primitive record with its existing
 fields. GraphValue envelope version 2 adds lossless based URLs and reads version 1.
 P01 keeps memory query evaluation; native planning and physical performance/
 sharing/recovery validation remain separate checkpoints.
+
+## S04 adaptive query execution
+
+On the package-only S04 path, queries validate consulted fields and returned
+records; they do not read every discarded body. Presence checks read headers.
+`explain()` returns predictive `GraphQueryPlan.strategy == .adaptiveCoreData` and
+`eligiblePredicatePrefixCount`, rather than a certificate of actual native use.
+Actual `GraphQueryDiagnostics` adds `strategy` (`memory`, `hybrid`, `native`),
+`nativeFetchCount`, `nativePredicateCount`, `materializedRecords`,
+`nativeSortApplied` and `fallbackReasons`. Existing diagnostic fields remain.
+Current/S03 stores retain bounded memory execution and report `legacyStorage`.
+
+S04 pushes safe source-order predicate prefixes and homogeneous complete single
+property sorts through NSPredicate/NSFetchRequest. Unsupported comparisons stay
+in Swift; mixed-type errors, null/missing, exact numeric categories, UUID ties,
+cursors, pending mutations and explicit budgets retain their semantics. No limit
+is applied before residual evaluation. Package-only `GraphStore.validateIntegrity()`
+uses an admitted pinned full read when a caller needs full local validation.
+See [P02](../design/graphevo-2-typed-properties.md#p02-hybrid-query-contract).

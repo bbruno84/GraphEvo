@@ -1343,3 +1343,12 @@ point reads, PH, assets and migration paths. Preserve serialized Decimal, based
 URL, negative-zero and NUL-string cases. Cloud remains a serialized primitive
 record, independent of local columns. P01 keeps memory query evaluation; P02
 planner and P03 physical/performance evidence are separate required checkpoints.
+
+For S04 P02, preserve source-order native prefixes and residual errors. Property
+headers use dictionary projections; never fetch every body to discover keys.
+Resolve logical keys with Swift equality but keep distinct physical Unicode
+spellings in predicate arguments. Query integrity covers consulted values and
+returned bodies; full validation is explicit. Native sort chunks merge before
+cursor/limit. Pending/in-memory scopes retain memory semantics. Charge native
+preparation and residual work to the same ephemeral allowance, and bytes before
+decoding; no persistent scheduler/cache is introduced by query execution.
