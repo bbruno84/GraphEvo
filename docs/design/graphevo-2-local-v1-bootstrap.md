@@ -70,6 +70,8 @@ with a conflicting binding during bootstrap reports busy, and a post-commit chec
 returns the committed receipt with failed availability rather than activating it.
 Bootstrap does not restore a cloud participation as an opening side effect.
 Session-generation changes during a binding check are refused conservatively.
+If a session is still opening and its binding document is unknown, bootstrap
+returns busy promptly rather than awaiting account/network startup.
 No engine state is reset or transferred.
 
 The consumer must serialize cloud configuration for this graph with bootstrap.
@@ -123,10 +125,11 @@ reviewed source, then authorized integration into `codex/graphevo-2`.
 
 ## Local review checkpoint
 
-Local checks pass 922 macOS functions (331 legacy, 486 store, 76 runtime,
-29 model), iOS store/model suites plus the final fourteen bootstrap tests, both
+Local checks pass 923 macOS functions (331 legacy, 487 store, 76 runtime,
+29 model), iOS store/model suites plus the final fifteen bootstrap tests, both
 independent Swift 6 consumers, manifest and diff checks. Review adds the consumer
 read-admission check so stored participation metadata cannot appear locally ready,
-and covers a conflicting session restored while conversion is admitted. Native
+and covers a conflicting session restored while conversion is admitted. Pending
+account startup refuses promptly without source/destination effects. Native
 detach quarantine remains owned; a post-commit error cannot hide the receipt.
 Physical local checks and final reviewed-source CI are recorded at integration.

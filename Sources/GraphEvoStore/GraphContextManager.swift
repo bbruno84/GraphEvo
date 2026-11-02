@@ -33,6 +33,7 @@ package actor GraphContextManager {
         let id = UUID()
         let configuration: GraphCloudConfiguration
         let task: Task<GraphCloudSession, any Error>
+        var session: GraphCloudSession?
     }
     private var cloudSessions: [String: CloudOpening] = [:]
     #if DEBUG
@@ -79,6 +80,7 @@ package actor GraphContextManager {
             if !(error is GraphCloudQuarantine), cloudSessions[key]?.id == opening.id { cloudSessions.removeValue(forKey: key) }
             throw error
         }
+        if cloudSessions[key]?.id == opening.id { cloudSessions[key]?.session = session }
         let status = try await session.startStatus()
         for id in Array(localV1Bootstraps.keys) {
             guard !(await session.containsBinding(for: id)) else { throw GraphStoreMigrationError.busy }
@@ -703,7 +705,9 @@ package actor GraphContextManager {
     func requireUnboundBootstrap(_ id: GraphID) async throws {
         let sessions = Array(cloudSessions.values), tokens = Set(cloudSessions.values.map(\.id))
         for opening in sessions {
-            let session = try await opening.task.value
+            // Do not make local conversion wait for an account/network startup.
+            // Until its document is available we cannot certify this ID is unbound.
+            guard let session = opening.session else { throw GraphStoreMigrationError.busy }
             guard !(await session.containsBinding(for: id)) else { throw GraphStoreMigrationError.invalidRequest }
         }
         guard Set(cloudSessions.values.map(\.id)) == tokens else { throw GraphStoreMigrationError.busy }

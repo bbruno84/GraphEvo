@@ -299,4 +299,25 @@ private struct BootstrapFault: Error {}
         #expect(await m.registeredGraphCount == 0)
     }
 
+    @Test func aPendingAccountStartupRefusesPromptlyWithoutStartingConversion() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let r = request(root); _ = try await seedConversionSource(r.sourceURL)
+        let arrived = AsyncStream<Void>.makeStream(), release = AsyncStream<Void>.makeStream(), m = manager()
+        let config = GraphCloudConfiguration(containerIdentifier: "iCloud.bootstrap." + UUID().uuidString, environment: .development,
+            directory: root.appendingPathComponent("Session"))
+        let fake = GraphCloudAdapter(account: { _ in
+            arrived.continuation.yield(())
+            var permit = release.stream.makeAsyncIterator(); _ = await permit.next()
+            return "bootstrap-account"
+        }, make: { _, _, _, _ in .init(fetch: { _ in }, cancel: {}) })
+        let starting = Task { try await m.startCloudSession(config, adapter: fake) }
+        var arrivals = arrived.stream.makeAsyncIterator(); _ = await arrivals.next()
+        defer { release.continuation.yield(()) }
+        await #expect(throws: GraphV1ConversionError.busy) { try await m.openGraph(convertingLocalV1: r) }
+        #expect(!FileManager.default.fileExists(atPath: r.destinationURL.path) && !FileManager.default.fileExists(atPath: r.backupRoot.path))
+        release.continuation.yield(()); _ = try await starting.value
+        let result = try await m.openGraph(convertingLocalV1: r); try await result.opening.get().close()
+        try await m.stopCloudSession(config)
+    }
+
 }
