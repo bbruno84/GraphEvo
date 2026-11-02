@@ -1,7 +1,8 @@
 # Expanded numeric property mapping
 
-Status: focused alpha increment on `codex/v2-numeric-property-values`, directly
-from integrated #131. This expands model-facing `GraphPropertyValue` conversions;
+Status: focused alpha increment integrates through
+[PR #132](https://github.com/bbruno84/GraphEvo/pull/132), directly from #131, after
+local checks, review and full CI #343. This expands model-facing `GraphPropertyValue` conversions;
 it does not adopt the TP01 native-property schema or change the query planner.
 
 ## Accepted Swift types
@@ -74,5 +75,13 @@ Local checks pass 897 macOS functions (331 legacy, 462 store, 76 runtime, 28 mod
 28 iOS model functions/35 invocations, both independent consumers and manifest/
 diff validation. Agent review checks signedness, exact range conversion, finite
 Float fidelity and unchanged codec/schema boundaries; no remaining blockers are
-identified. The final full CI checkpoint is requested after that review. This
-narrow API addition does not close native-property/query or physical cloud gates.
+identified. This narrow API addition does not close native-property/query or
+physical cloud gates.
+
+Full [checkpoint #343](https://github.com/bbruno84/GraphEvo/actions/runs/41397002045)
+passes after review on `73dde6940d81133f6c97f858f65ba85eb03abc13`: 897 macOS
+functions and both consumers; 895 passed iOS functions/1008 passed invocations,
+zero failures and one known legacy temporary-path alias skip. The master-only
+PackageConsumer job is intentionally skipped. Final integration notes change
+documentation only; source/tests/manifest/consumer/workflow inputs match this
+reviewed checkpoint, without a second unchanged-code full CI run.

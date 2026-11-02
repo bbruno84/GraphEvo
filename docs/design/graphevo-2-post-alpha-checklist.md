@@ -55,7 +55,10 @@ checkpoint/queue recovery or selected-model/custom-sync cloud gates.
   same-UUID graph isolation, native reopen and typed observation with a two-file
   independent consumer. Corrected full CI #340 passes after the retained #338
   consumer entry-point failure. This closes the narrow API requirement, not
-  production model/migration/cloud acceptance.
+  production model/migration/cloud acceptance. [Numeric mapping / #132](graphevo-2-numeric-properties.md)
+  adds eight Swift numeric conformances with exact narrowing and full CI #343;
+  logical cases and wire/native formats are unchanged. Native-property schema/
+  planner adoption remains separate.
 - [x] Select the native 2.0 target after reviewing query, attachment, sharing and
   migration requirements: [S01](graphevo-2-persistent-schema.md), 2026-10-30.
   Retain twelve entities; select graph/node projections, optional node data
