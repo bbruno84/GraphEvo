@@ -20,8 +20,13 @@ records the completed validation checkpoint, with no source/test changes. MF09 i
 within its package-only scope. The S04 sort-capacity follow-up integrates through
 [PR #137](https://github.com/bbruno84/GraphEvo/pull/137), directly into
 `codex/graphevo-2`. [CI profile streamlining](graphevo-2-ci-checkpoints.md) integrates directly through
-[PR #138](https://github.com/bbruno84/GraphEvo/pull/138). No next implementation
-branch is selected. Broader
+[PR #138](https://github.com/bbruno84/GraphEvo/pull/138).
+[MF10 authoritative new-cloud activation](graphevo-2-authoritative-cloud-bootstrap.md)
+is the next proposed contract, on documentation-only
+`codex/v2-authoritative-cloud-contract`; implementation is not started.
+It selects one converted seed before publication and requires empty-peer recovery,
+with explicit host cutover prerequisites and no independent random-ID uploads.
+Broader
 capacity and public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is production/historical source acceptance, public facade/bootstrap integration
