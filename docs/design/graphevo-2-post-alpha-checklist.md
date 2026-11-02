@@ -943,10 +943,11 @@ physical interruption, cross-process writers, scale or new-cloud activation.
   identity allocation, row checkpoints and atomic readiness/sync sealing.
   Follow-up review includes fault-tested seed metadata stamping before destination
   publication, preserving absent/retryable targets on preparation failure.
-- [ ] Obtain the required full reviewed remote checkpoint and integrate #141.
-  #374 retains an existing iOS adoption-test timeout and unassigned macOS runner;
-  #375 retains two unassigned hosted arm64 runners. Local full suites pass, but
-  unexecuted/skipped jobs are not passing checkpoints.
+- [x] Complete the required full reviewed checkpoint and integrate #141. #381
+  passes 960 macOS functions, 958 passed iOS functions with the known skip and
+  both Swift 6 consumers on `22db0d67c6fff65d2665c64fbc53e20164db00d7`. Only the
+  unassigned iOS job is retried; the successful macOS job is retained. Earlier
+  #374/#375/#378 failures remain evidence, not passing checkpoints.
 - [ ] Retain larger identity-map/receipt formats, platform memory/disk capacity,
   historical model/codec coverage, physical interruption and public/production
   cutover as separate acceptance gates. Synthetic payload/page tests do not

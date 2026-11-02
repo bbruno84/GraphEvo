@@ -101,8 +101,9 @@ other suites can still run in parallel, following
 [Swift Testing's scoped serialization](https://developer.apple.com/documentation/testing/parallelization).
 Test counts, assertions, payload sizes,
 time allowances and profile selection remain unchanged. Hosted timeout/capacity
-failures remain recorded; reduced fixture contention needs a successful remote
-checkpoint before integration. See [MF11 evidence](results/native-v1-staged-migration-2026-11-02.md).
+failures remain recorded; reviewed full checkpoint #381 passes both platforms
+and Swift 6 consumers after this change. This is bounded acceptance, not a
+stack-level diagnosis of prior timeouts. See [MF11 evidence](results/native-v1-staged-migration-2026-11-02.md).
 
 ## Diagnostics and evidence
 

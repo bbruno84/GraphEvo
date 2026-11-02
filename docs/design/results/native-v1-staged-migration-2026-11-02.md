@@ -1,12 +1,11 @@
 # MF11 — native staged v1 migration validation
 
 Date: 2026-11-02. Scope: package-only stopped local v1 conversion to the
-existing S04 schema. Initial local review covered
-`814a64d24a9bbb6448c74da46922de4dd6a17e03`; the follow-up below corrects its seed
-publication window. Required full remote checkpoint and
-integration through [PR #141](https://github.com/bbruno84/GraphEvo/pull/141) remain
-pending. Earlier status notes changed documentation only; the follow-up changes
-runtime seeding, its regression test and the matching contract.
+existing S04 schema. Reviewed full checkpoint #381 passes on
+`22db0d67c6fff65d2665c64fbc53e20164db00d7`, integrating through
+[PR #141](https://github.com/bbruno84/GraphEvo/pull/141). Final integration notes
+change documentation only. Initial implementation/review and failed checkpoint
+attempts below retain their original scope.
 
 ## Selected route
 
@@ -83,7 +82,8 @@ No source or test allowances were changed to suppress the failure.
 retries the same source head. Both jobs were cancelled without executing after
 15-minute waits. GitHub reports that hosted macOS arm64 capacity prevented runner
 acquisition. Neither cancelled nor skipped jobs establish a tested checkpoint.
-The PR remains unmerged until a complete reviewed full checkpoint succeeds.
+The later reviewed checkpoint below supplies acceptance; these earlier attempts
+remain failed/unexecuted evidence.
 
 [Full checkpoint #378](https://github.com/bbruno84/GraphEvo/actions/runs/41514422610)
 contains the seed-publication correction. The iOS job again exceeds an existing
@@ -100,13 +100,37 @@ that the prior failures were harmless. Explicit four-operation task-group
 migration and lifecycle race tests keep their existing concurrency. All cases,
 assertions, payloads, deadlines and full-profile selection remain intact.
 Production runtime/store code is unchanged from the seed-publication correction.
-The revised execution still requires a complete successful remote checkpoint.
+The revised execution passes the reviewed remote checkpoint below.
 Local counts remain 960 macOS and 958 passed iOS functions with the known skip;
 the coordinator cleanup case completes in 12.31 seconds and the explicit
 four-operation migration case in 0.71 seconds. The complete local store suite
 now takes 33.22 seconds, versus 26.67 seconds in the prior local run. Conditions
 are not controlled, so this is not a speedup claim: the change limits overlapping
 fixture work, and remote validation must assess the hosted-runner outcome.
+
+## Reviewed full checkpoint and integration
+
+[Full checkpoint #381](https://github.com/bbruno84/GraphEvo/actions/runs/41517663511)
+passes on `22db0d67c6fff65d2665c64fbc53e20164db00d7`:
+
+- macOS: 331 legacy functions and 629 Swift Testing functions pass, 960 total.
+- iOS 18.5 Simulator: 958 passed functions, zero failures and one known skip,
+  959 total. The full Xcode test interval is 147.51 seconds on that hosted runner.
+- Swift 6 model and independent-process consumers pass on macOS, along with
+  manifest, profile and formatting guards.
+
+The first iOS job never acquired a hosted runner. Only that job is retried on the
+same head; its success retains the original successful macOS job and consumers.
+Failure-only native diagnostics were requested but no failed native result needed
+uploading for this passing checkpoint. Unrelated skipped consumer/diagnostic jobs
+are not counted as passed tests.
+
+The fixture scheduling change passes this bounded checkpoint; the previous
+summaries do not establish a definitive stack-level root cause or universal
+absence of timing flakes. Explicit concurrency cases keep their task groups.
+Final integration notes change documentation only; shipping, tests, consumers,
+manifest and workflow inputs match the reviewed checkpoint. No release/tag or
+broader migration/public/cloud acceptance is implied.
 
 ## Limits and remaining gates
 
