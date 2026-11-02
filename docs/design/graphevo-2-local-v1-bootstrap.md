@@ -132,4 +132,6 @@ read-admission check so stored participation metadata cannot appear locally read
 and covers a conflicting session restored while conversion is admitted. Pending
 account startup refuses promptly without source/destination effects. Native
 detach quarantine remains owned; a post-commit error cannot hide the receipt.
-Physical local checks and final reviewed-source CI are recorded at integration.
+The [six-stage physical report](results/local-v1-bootstrap-2026-11-02.md) records
+iPad/XR conversion, restart and final-source recovery. Final reviewed-source CI
+is recorded at integration.
