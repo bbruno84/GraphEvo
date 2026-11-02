@@ -19,6 +19,8 @@ package actor GraphContextManager {
     nonisolated let migrationIdentity = UUID()
     var publishingMigrations = Set<GraphID>()
     var migratingStores = Set<GraphID>()
+    struct LocalV1BootstrapAdmission { let token: UUID; let key: StoreKey }
+    var localV1Bootstraps: [GraphID: LocalV1BootstrapAdmission] = [:]
     let registry: StoreRegistry
     let schema: StoreSchema
     let adapter: GraphCoordinatorAdapter
@@ -31,6 +33,7 @@ package actor GraphContextManager {
         let id = UUID()
         let configuration: GraphCloudConfiguration
         let task: Task<GraphCloudSession, any Error>
+        var session: GraphCloudSession?
     }
     private var cloudSessions: [String: CloudOpening] = [:]
     #if DEBUG
@@ -77,7 +80,11 @@ package actor GraphContextManager {
             if !(error is GraphCloudQuarantine), cloudSessions[key]?.id == opening.id { cloudSessions.removeValue(forKey: key) }
             throw error
         }
+        if cloudSessions[key]?.id == opening.id { cloudSessions[key]?.session = session }
         let status = try await session.startStatus()
+        for id in Array(localV1Bootstraps.keys) {
+            guard !(await session.containsBinding(for: id)) else { throw GraphStoreMigrationError.busy }
+        }
         try await restoreSharingRegistrations(configuration: configuration)
         return status
     }
@@ -102,6 +109,7 @@ package actor GraphContextManager {
 
     package func bindCloudZone(_ zone: GraphCloudZone, to graphID: GraphID,
                                configuration: GraphCloudConfiguration) async throws {
+        guard localV1Bootstraps[graphID] == nil else { throw GraphStoreMigrationError.busy }
         guard let entry = entries[graphID], entry.closing == nil else { throw GraphStoreError.missingGraph }
         let owner = try await entry.opening.value
         try await owner.validateCloudBinding(adapter.initialize)
@@ -486,7 +494,7 @@ package actor GraphContextManager {
     }
 
     private func canSynchronize(_ id: GraphID, inheriting permit: GraphCloudSyncPermit? = nil) -> Bool {
-        if blockedSharingGraphs.contains(id) { return false }
+        if blockedSharingGraphs.contains(id) || localV1Bootstraps[id] != nil { return false }
         let control = synchronization[id] ?? GraphCloudSyncControl()
         return control.state == .active || (permit?.graphID == id && permit.map { control.operations.contains($0.id) } == true)
     }
@@ -688,7 +696,24 @@ package actor GraphContextManager {
         try await request(id: id, url: url, creating: false)
     }
 
-    private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphStore {
+    func openBootstrappedGraph(id: GraphID, at url: URL, permit: UUID) async throws -> GraphStore {
+        guard localV1Bootstraps[id]?.token == permit else { throw GraphStoreMigrationError.busy }
+        return try await request(id: id, url: url, creating: false, bootstrapPermit: permit)
+    }
+
+    /// Checks only sessions explicitly started by the caller; bootstrap never starts one.
+    func requireUnboundBootstrap(_ id: GraphID) async throws {
+        let sessions = Array(cloudSessions.values), tokens = Set(cloudSessions.values.map(\.id))
+        for opening in sessions {
+            // Do not make local conversion wait for an account/network startup.
+            // Until its document is available we cannot certify this ID is unbound.
+            guard let session = opening.session else { throw GraphStoreMigrationError.busy }
+            guard !(await session.containsBinding(for: id)) else { throw GraphStoreMigrationError.invalidRequest }
+        }
+        guard Set(cloudSessions.values.map(\.id)) == tokens else { throw GraphStoreMigrationError.busy }
+    }
+
+    private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins, bootstrapPermit: UUID? = nil) async throws -> GraphStore {
         do {
             try Task.checkCancellation()
             guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
@@ -696,6 +721,11 @@ package actor GraphContextManager {
             if let existing = locations[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
             while true {
                 try Task.checkCancellation()
+                guard !migratingStores.contains(id),
+                      localV1Bootstraps[id] == nil || localV1Bootstraps[id]?.token == bootstrapPermit,
+                      !localV1Bootstraps.contains(where: { $0.key != id && $0.value.key == resolved.key }) else {
+                    throw GraphStoreMigrationError.busy
+                }
                 if let entry = entries[id] {
                     guard entry.key == resolved.key else { throw GraphStoreError.ownershipConflict }
                     if let closing = entry.closing {
@@ -741,7 +771,9 @@ package actor GraphContextManager {
                     if !creating { try Task.checkCancellation() }
                     let graph = try await owner.lease { try await self.release(id, generation: generation, token: token) }
                     locations[id] = GraphLocation(key: entry.key, url: entry.url)
-                    try await restoreSharingOnOpen(id, owner: owner)
+                    // A converted local graph must not acquire an existing cloud participation
+                    // as an opening side effect. Bootstrap verifies that the ID is unbound.
+                    if bootstrapPermit == nil { try await restoreSharingOnOpen(id, owner: owner) }
                     automaticChanged()
                     return graph
                 } catch {

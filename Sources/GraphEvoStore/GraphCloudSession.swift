@@ -464,6 +464,8 @@ actor GraphCloudSession {
         guard limit > 0 else { throw GraphCloudError.invalidConfiguration }
         return Array(document.inbox.prefix(limit))
     }
+    func containsBinding(for id: GraphID) -> Bool { document.bindings.contains { $0.graphID == id } }
+
     func binding(for zone: GraphCloudZone) -> GraphCloudBinding? { document.bindings.first { $0.zone == zone } }
 
     func stop() async throws {

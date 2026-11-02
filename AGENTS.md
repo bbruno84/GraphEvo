@@ -1352,3 +1352,25 @@ returned bodies; full validation is explicit. Native sort chunks merge before
 cursor/limit. Pending/in-memory scopes retain memory semantics. Charge native
 preparation and residual work to the same ephemeral allowance, and bytes before
 decoding; no persistent scheduler/cache is introduced by query execution.
+
+## V2 MF09 local v1 bootstrap
+
+Read [MF09](docs/design/graphevo-2-local-v1-bootstrap.md). The package-only explicit
+bootstrap reuses MF07/MF08 and opens S04 under a GraphID/destination admission
+through ordinary readiness. Before-commit failures throw; post-commit opening
+failures return the committed conversion result separately. Never lose the
+receipt/map, replay conversion after commit, rebind another registration, or
+release native claims after a detach failure. Consumer request IDs/current URLs
+remain explicit. Same-target open/create/conversion is refused; unrelated graphs
+progress. Reject known target cloud bindings and keep sync admission closed
+during bootstrap. Do not start/discover cloud sessions or turn this bridge into
+implicit public opening/cloud cutover. Historical/production sources and physical
+interruption/scale remain separate acceptance gates.
+
+MF09 integrates through #136 after local/device review and full checkpoint #355
+on `39fb59a` (shipping source `9dc5cfa`). Retain the
+[six-stage local result](docs/design/results/local-v1-bootstrap-2026-11-02.md)
+as local availability/backup/restart evidence only. Pending cloud account startup
+refuses promptly rather than blocking local conversion on network work. Public
+facade, historical sources, physical interruption/scale and new-cloud authority
+remain separate gates.

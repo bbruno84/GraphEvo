@@ -1,6 +1,14 @@
 # GraphEvo 2 — delivery plan
 
-Current amendment M18: [S03](graphevo-2-history-schema.md) keeps the S02 shape
+2026-11-02 implementation update: [S04/P01–P03](graphevo-2-typed-properties.md)
+selects typed local properties on the package-only custom-sync runtime, with
+recorded physical/cost bounds. [MF09](graphevo-2-local-v1-bootstrap.md) connects
+explicit local v1 conversion to ordinary S04 opening. Production/historical source
+acceptance, public bootstrap and authoritative new-cloud activation remain open.
+The dated amendments below retain their historical schema/milestone scope; use
+[development status](graphevo-2-development-status.md) for current integration.
+
+Historical amendment M18: [S03](graphevo-2-history-schema.md) keeps the S02 shape
 and preserves the six graph/node identity attributes in deletion history.
 Persistent History is the selected discovery source; production processing and
 durable pending/checkpoint publication follow model adoption. No per-mutation

@@ -1891,3 +1891,18 @@ cursors, pending mutations and explicit budgets retain their semantics. No limit
 is applied before residual evaluation. Package-only `GraphStore.validateIntegrity()`
 uses an admitted pinned full read when a caller needs full local validation.
 See [P02](../design/graphevo-2-typed-properties.md#p02-hybrid-query-contract).
+
+## MF09 package-only local v1 bootstrap
+
+`GraphContextManager.openGraph(convertingLocalV1: GraphStoreMigrationRequest,
+limits: GraphV1ConversionLimits = .init()) async throws -> GraphV1BootstrapResult`
+combines existing backed-up conversion/recovery with ordinary S04 opening under
+one admission. It does not change any public/default opener.
+
+The Sendable result separates `conversion: GraphV1ConversionResult` from
+`opening: Result<GraphStore, any Error>`. Errors before commit throw. After commit,
+failed opening or cancellation preserves the receipt/map/backup result alongside
+`opening.failure`. Repeating the same request recovers the receipt, preserving
+later edits. Current URLs are resupplied, never serialized. Existing target cloud
+bindings are refused; bootstrap does not start sync. See
+[MF09](../design/graphevo-2-local-v1-bootstrap.md).
