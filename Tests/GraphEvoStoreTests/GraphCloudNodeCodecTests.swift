@@ -61,7 +61,8 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         let opaque = try GraphEncodedValue(codec: "application.unknown", version: 91, data: Data([0, 255, 42]))
         let values: [String: GraphValue] = [
             "null": .null, "bool": .boolean(true), "signed": .integer(.min), "unsigned": .unsignedInteger(.max),
-            "double": .floatingPoint(-1234.125), "decimal": .decimal(Decimal(string: "12345678901234567890.123456789012345678")!),
+            "double": .floatingPoint(-1234.125), "negativeZero": .floatingPoint(-0.0),
+            "basedURL": .url(URL(string: "../child", relativeTo: URL(string: "https://example.invalid/base/")!)!), "decimal": .decimal(Decimal(string: "12345678901234567890.123456789012345678")!),
             "string": .string("caffè 🐈"), "data": .data(Data([0, 1, 255])), "date": .date(Date(timeIntervalSince1970: 12345.125)),
             "url": .url(URL(string: "https://example.com/a?b=c")!), "uuid": .uuid(uuid),
             "array": .array([.null, .integer(4), .object(["nested": .string("value")])]),
@@ -240,7 +241,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         defer { try? FileManager.default.removeItem(at: dir) }
         let gate = CloudFormatCommitGate()
         let registry = StoreRegistry(hooks: .init(afterCommit: { gate.afterCommit() }))
-        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: graphID, at: dir.appendingPathComponent("Graph.sqlite"))
         _ = try await graph.transaction { try $0.insert(node()) }
         let route = GraphCloudBinding(zone: binding.zone, graphID: graphID)
@@ -257,7 +258,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
     @Test func realPHBatchEncodingFailureRetainsPendingAndReleasesAttempt() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("CloudFormat-\(UUID())")
         defer { try? FileManager.default.removeItem(at: dir) }
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: graphID, at: dir.appendingPathComponent("Graph.sqlite"))
         _ = try await graph.transaction { try $0.insert(node(properties: ["value": .integer(1)])) }
         let route = GraphCloudBinding(zone: binding.zone, graphID: graphID)

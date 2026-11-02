@@ -6,7 +6,7 @@ import GraphEvoModel
 
 /// Internal production entry point; public opening remains a later increment.
 enum GraphCoordinatorFactory {
-    static let shared = GraphContextManager(schema: GraphRuntimeSchema.nativeIdentity, adapter: adapter)
+    static let shared = GraphContextManager(schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
 
     static var adapter: GraphCoordinatorAdapter { makeAdapter() }
 

@@ -31,7 +31,7 @@ private actor CoordinatorGate {
         return url
     }
     private func manager(_ registry: StoreRegistry = StoreRegistry()) -> GraphContextManager {
-        GraphContextManager(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
     }
     private func admitted(_ count: Int, by manager: GraphContextManager) async throws {
         for _ in 0..<5_000 {
@@ -198,7 +198,7 @@ private actor CoordinatorGate {
             try await Task.sleep(for: .milliseconds(1))
         }
         #expect(await manager.registeredGraphCount == 0)
-        let next = try await GraphDatabase.open(at: url, schema: .nativeIdentity)
+        let next = try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         try await next.close()
     }
 

@@ -91,7 +91,7 @@ private actor RemovalGate {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Lifecycle-\(UUID())")
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.lifecycle.\(UUID())", environment: .development,
             directory: root.appendingPathComponent("Engine"), maximumBytes: maximumBytes)
-        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let cloud = LifecycleCloud(), id = GraphID(), url = root.appendingPathComponent("Graph.sqlite")
         let graph = try await manager.createGraph(id: id, at: url)
         _ = try await manager.startCloudSession(config, adapter: cloud.adapter, disk: disk)
@@ -215,7 +215,7 @@ private actor RemovalGate {
         defer { try? FileManager.default.removeItem(at: f.root) }
         await #expect(throws: (any Error).self) { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
         #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .purging)
-        let other = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let other = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         if !after { await #expect(throws: (any Error).self) { try await other.openGraph(id: f.graph.id, at: f.url) } }
         await #expect(throws: (any Error).self) { try await f.graph.read { _ in () } }
         let recovered = try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
@@ -233,7 +233,7 @@ private actor RemovalGate {
         await #expect(throws: GraphCloudError.persistence) { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
         #expect(!FileManager.default.fileExists(atPath: f.url.path))
         try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
-        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
         try await restarted.registerCloudGraphLocation(f.graph.id, at: f.url, configuration: f.config)
         #expect(try await restarted.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .removed)
@@ -265,7 +265,7 @@ private actor RemovalGate {
         defer { try? FileManager.default.removeItem(at: root) }
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.owner.\(UUID())", environment: .development, directory: root.appendingPathComponent("Engine"))
         let cloud = LifecycleCloud(account: "owner"), id = GraphID()
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: id, at: root.appendingPathComponent("Private.sqlite"))
         _ = try await manager.startCloudSession(config, adapter: cloud.adapter)
         try await manager.bindCloudZone(.init(scope: .private, owner: CKCurrentUserDefaultName, name: "A"), to: id, configuration: config)
@@ -312,7 +312,7 @@ private actor RemovalGate {
         for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: f.url.path + suffix) {
             try FileManager.default.moveItem(atPath: f.url.path + suffix, toPath: moved.path + suffix)
         }
-        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
         try await restarted.registerCloudGraphLocation(f.graph.id, at: moved, configuration: f.config)
         let graph = try await restarted.openGraph(id: f.graph.id, at: moved)
@@ -325,7 +325,7 @@ private actor RemovalGate {
         let f = try await fixture()
         defer { try? FileManager.default.removeItem(at: f.root) }
         try await f.graph.close()
-        let other = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let other = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let url = f.root.appendingPathComponent("Unrelated.sqlite"), otherID = GraphID()
         let foreign = try await other.createGraph(id: otherID, at: url), nodeID = foreign.makeNodeID()
         _ = try await foreign.transaction { try $0.insert(GraphRecord(id: nodeID, type: "Unrelated")) }
@@ -369,7 +369,7 @@ private actor RemovalGate {
         defer { try? FileManager.default.removeItem(at: f.root) }
         await #expect(throws: (any Error).self) { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
         if cleaned { #expect(!FileManager.default.fileExists(atPath: f.url.path)) }
-        let unrelated = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let unrelated = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let source = f.root.appendingPathComponent("Unrelated.sqlite")
         let other = try await unrelated.createGraph(id: GraphID(), at: source)
         _ = try await other.transaction { try $0.insert(GraphRecord(id: other.makeNodeID(), type: "MustSurvive")) }
@@ -414,7 +414,7 @@ private actor RemovalGate {
             owner: "owner", zoneName: binding.zone.name, recipient: "participant", url: URL(string: "https://www.icloud.com/share/Interrupted")!)
         let joined = try await session.beginMembership(binding, storeID: owner.storeIdentity(), shareIdentity: GraphCloudShareIdentity.of(invitation.url))
         try await graph.close(); try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
-        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
         try await restarted.registerCloudGraphLocation(id, at: url, configuration: f.config)
         let reopened = try await restarted.openGraph(id: id, at: url)
@@ -496,7 +496,7 @@ private actor RemovalGate {
         #expect(try await f.manager.cloudInbox(f.config, limit: f.config.maximumEvents) == retained)
         #expect(try Data(contentsOf: url).count <= f.config.maximumBytes)
         try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
-        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         await f.cloud.failCommand(nil)
         _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
         if offlineLeave { #expect(try await restarted.leaveCloudShare(for: f.graph.id, configuration: f.config).remoteOperationPending == false) }
@@ -519,7 +519,7 @@ private actor RemovalGate {
                 accepted: false, identity: member.identity, generation: UUID()))
         }
         try await graph.close(); try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
-        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
         try await restarted.registerCloudGraphLocation(id, at: url, configuration: f.config)
         await #expect(throws: (any Error).self) { try await restarted.openGraph(id: id, at: url) }

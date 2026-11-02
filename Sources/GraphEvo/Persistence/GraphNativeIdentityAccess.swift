@@ -244,7 +244,7 @@ struct GraphNativeIdentityAccess: Sendable {
                 return nil
             }
             let endpoints = try references(context, node: node, id: id, root: root, membership: membership)
-            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: root) { entity in
+            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: root, propertyKeys: GraphNativePropertyStorage.enabled(context) ? [] : nil) { entity in
                 guard let graph = entity.node.value(forKey: graphAttribute) as? String,
                       graph == id.graphID.rawValue.uuidString,
                       let text = entity.node.value(forKey: nodeAttribute) as? String, let uuid = UUID(uuidString: text) else {
@@ -257,6 +257,11 @@ struct GraphNativeIdentityAccess: Sendable {
             }
             guard let keys = node[dynamicMember: GraphTypedStoreAdapter.formatsKey] as? [String],
                   Set(keys).count == keys.count, keys.allSatisfy({ !$0.hasPrefix(GraphTypedStoreAdapter.prefix) }) else { throw GraphStoreError.corruptIdentity }
+            if GraphNativePropertyStorage.enabled(context) {
+                guard keys.isEmpty else { throw GraphStoreError.corruptIdentity }
+                return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints,
+                    properties: GraphNativePropertyStorage.properties(node, keys: nil), tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+            }
             var values = raw.properties.filter { !$0.key.hasPrefix(GraphTypedStoreAdapter.prefix) }
             for key in keys {
                 guard case .data(let bytes) = values[key] else { throw GraphStoreError.corruptIdentity }

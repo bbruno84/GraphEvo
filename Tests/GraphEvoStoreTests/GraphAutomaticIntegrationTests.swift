@@ -65,7 +65,7 @@ private actor AutomaticReplicaBus {
     }
     private func replica(_ bus: AutomaticReplicaBus, id: GraphID, container: String, root: URL? = nil) async throws -> Replica {
         let root = root ?? FileManager.default.temporaryDirectory.appendingPathComponent("AutomaticReplica-" + UUID().uuidString)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let url = root.appendingPathComponent("Graph.sqlite")
         let graph: GraphStore
         if FileManager.default.fileExists(atPath: url.path) { graph = try await manager.openGraph(id: id, at: url) }

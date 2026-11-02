@@ -1331,3 +1331,15 @@ The extension mapping correction integrates through #131. Corrected full CI #340
 passes on `b665706`, after #338 caught the multi-file consumer's `main.swift` /
 `@main` conflict on Swift 6.1. Keep the consumer entry point named
 `ModelConsumer.swift`; no runtime/schema change was needed for that correction.
+
+## V2 S04 typed-property work
+
+Read [P01–P03](docs/design/graphevo-2-typed-properties.md) before property/schema
+or query work. The package-only custom-sync factory selects S04; historical
+`nativeIdentity`/native-mirroring factories remain S03. Do not relabel or convert
+old files automatically. Typed values have one active native/envelope slot;
+reserved metadata retains the legacy object field. Use the central codec for
+point reads, PH, assets and migration paths. Preserve serialized Decimal, based
+URL, negative-zero and NUL-string cases. Cloud remains a serialized primitive
+record, independent of local columns. P01 keeps memory query evaluation; P02
+planner and P03 physical/performance evidence are separate required checkpoints.

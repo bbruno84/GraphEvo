@@ -1812,7 +1812,7 @@ refused. See [MF04](../design/graphevo-2-migration-workspace.md) and
 
 `GraphContextManager.convertLocalV1Store(at:to:graphID:operationID:backupsIn:reason:limits:) async throws -> GraphV1ConversionResult`
 validates one stopped local v1 source, verifies/pins a complete legacy backup and
-commits a distinct native S03 graph plus stable legacy-ID map/receipt atomically.
+commits a distinct native S04 graph plus stable legacy-ID map/receipt atomically.
 Source files/model are not rewritten; no old cloud identity or PH is imported and
 no cloud session starts. The caller persists the request IDs and supplies current
 URLs again after restart. Repeat the same request to recover its receipt without
@@ -1856,3 +1856,16 @@ context-free `GraphRecord(model)` / `graphRecord()` conveniences; conformers upd
 the serializer requirement to `graphRecord(in:)`. No stored identity, native model
 or wire format changes. See [extension model mapping](../design/graphevo-2-extension-model-mapping.md)
 for the complete two-file example and Sendable constraints.
+
+## Package-only S04 property storage
+
+The custom-sync ContextManager now selects
+[S04 typed properties](../design/graphevo-2-typed-properties.md). Scalars route to
+lossless native columns after GraphModel mapping; compound values and special
+cases retain a single serialized representation. The public GraphRecord,
+GraphPropertyValue and existing GraphDatabase openers are unchanged. Public
+`nativeIdentity` still selects S03; it does not open S04 or implicitly upgrade
+older stores. Cloud keeps one serialized primitive record with its existing
+fields. GraphValue envelope version 2 adds lossless based URLs and reads version 1.
+P01 keeps memory query evaluation; native planning and physical performance/
+sharing/recovery validation remain separate checkpoints.

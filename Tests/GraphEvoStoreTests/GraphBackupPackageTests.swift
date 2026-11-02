@@ -27,7 +27,7 @@ private actor ExportValidationGate {
 
 @Suite(.timeLimit(.minutes(2))) struct GraphBackupPackageTests {
     private func manager() -> GraphContextManager {
-        GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
     }
     private func root() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("GraphPackage-" + UUID().uuidString)

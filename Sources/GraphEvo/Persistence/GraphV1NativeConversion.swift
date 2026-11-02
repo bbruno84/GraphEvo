@@ -23,7 +23,7 @@ enum GraphV1NativeConversion {
         let createdDate: Date?
     }
     static let adapter = GraphV1ConversionAdapter(sourceSchema: GraphRuntimeSchema.current,
-        targetSchemaIdentifier: GraphRuntimeSchema.nativeIdentity.identifier,
+        targetSchemaIdentifier: GraphRuntimeSchema.typedProperties.identifier,
         snapshot: { try snapshot($0, id: $1, limits: $2) }, receipt: { try receipt($0, id: $1) }, apply: { try apply($0, intent: $1, snapshot: $2) })
 
     private static func snapshot(_ context: NSManagedObjectContext, id: GraphID, limits: GraphV1ConversionLimits) throws -> GraphV1Snapshot {

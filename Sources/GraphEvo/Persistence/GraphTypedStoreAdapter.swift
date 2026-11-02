@@ -49,10 +49,17 @@ package enum GraphTypedStoreAdapter {
                     guard node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType else { return nil }
                     guard session.kind(node) == .entity else { throw GraphAttachmentError.notAnAttachment }
                     // A metadata projection must not decode the body or unrelated application values.
-                    let formats = try session.encodedKeys(node)
-                    let key = formats.contains(GraphAttachmentPayload.metadataKey) ? GraphAttachmentPayload.metadataKey : GraphAttachmentPayload.contentKey
-                    guard formats.contains(key), let bytes = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
-                    let record = try GraphRecord(id: id, type: node.type, properties: [key: GraphValueCodec.decode(bytes)])
+                    let available = GraphNativePropertyStorage.enabled(context) ? try GraphNativePropertyStorage.keys(node) : try session.encodedKeys(node)
+                    let key = available.contains(GraphAttachmentPayload.metadataKey) ? GraphAttachmentPayload.metadataKey : GraphAttachmentPayload.contentKey
+                    let value: GraphValue
+                    if GraphNativePropertyStorage.enabled(context) {
+                        guard let stored = try GraphNativePropertyStorage.properties(node, keys: [key])[key] else { throw GraphStoreError.corruptIdentity }
+                        value = stored
+                    } else {
+                        guard available.contains(key), let bytes = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
+                        value = try GraphValueCodec.decode(bytes)
+                    }
+                    let record = try GraphRecord(id: id, type: node.type, properties: [key: value])
                     return try GraphAttachmentPayload.metadata(from: record)
                 }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
             },
@@ -67,16 +74,16 @@ package enum GraphTypedStoreAdapter {
                         guard let keys = propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), !keys.isEmpty else { return nil }
                         return node
                     }
-                    let propertyRows = try GraphRuntimeMetadata(nodes: partial, keys: propertyPlan.referencedKeys, context: context, minimumPersistedOwners: 0)
+                    let propertyRows: GraphRuntimeMetadata? = GraphNativePropertyStorage.enabled(context) ? nil : try GraphRuntimeMetadata(nodes: partial, keys: propertyPlan.referencedKeys, context: context, minimumPersistedOwners: 0)
                     var remaining = request.budget.maximumPropertyBytes
                     var records: [GraphRecord] = []
                     for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
                         try checkCancellation()
                         guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
-                        records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), propertyRows: propertyRows) { raw in
+                        records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), propertyRows: propertyRows, chargingBytes: GraphNativePropertyStorage.enabled(context) ? { try GraphQueryStoredCost.charge($0, remaining: &remaining) } : nil) { raw in
                             try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
                             for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
-                            for (key, value) in raw.properties where !key.hasPrefix(prefix) {
+                            for (key, value) in raw.properties where !GraphNativePropertyStorage.enabled(context) && !key.hasPrefix(prefix) {
                                 try GraphQueryStoredCost.charge(key.utf8.count, remaining: &remaining)
                                 try GraphQueryStoredCost.charge(value, remaining: &remaining)
                             }
@@ -423,8 +430,9 @@ package enum GraphTypedStoreAdapter {
             return id
         }
 
-        func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, propertyRows: GraphRuntimeMetadata? = nil, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
+        func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, propertyRows: GraphRuntimeMetadata? = nil, chargingBytes: ((Int) throws -> Void)? = nil, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
             if !allowUnprojectedRows { try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: id.rawValue) }
+            let typed = GraphNativePropertyStorage.enabled(context)
             let projected: [String: Any]? = propertyKeys.flatMap { keys in
                 propertyRows.map { rows in
                     keys.reduce(into: [:]) { values, key in
@@ -433,8 +441,14 @@ package enum GraphTypedStoreAdapter {
                 }
             }
             let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil,
-                propertyKeys: propertyKeys, projectedProperties: projected, referenceID: referenceID)
+                propertyKeys: typed ? [] : propertyKeys, projectedProperties: typed ? [:] : projected, referenceID: referenceID)
             try charging?(raw)
+            if typed {
+                _ = try encodedKeys(node)
+                let properties = try GraphNativePropertyStorage.properties(node, keys: propertyKeys, charge: chargingBytes)
+                return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: properties,
+                                       tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+            }
             var properties = raw.properties.filter { !$0.key.hasPrefix(prefix) }
             for key in try encodedKeys(node) where propertyKeys == nil || propertyKeys!.contains(key) {
                 guard let value = properties[key], case .data(let data) = value else { throw GraphStoreError.corruptIdentity }
@@ -451,6 +465,7 @@ package enum GraphTypedStoreAdapter {
         func encodedKeys(_ node: Node) throws -> Set<String> {
             guard let raw = metadataValue(node, formatsKey), let keys = raw as? [String], Set(keys).count == keys.count,
                   keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.corruptIdentity }
+            if GraphNativePropertyStorage.enabled(context), !keys.isEmpty { throw GraphStoreError.corruptIdentity }
             return Set(keys)
         }
 
@@ -504,7 +519,9 @@ package enum GraphTypedStoreAdapter {
             guard nodes[record.id] == nil else { throw GraphStoreError.duplicateIdentity }
             guard !GraphMutationMetadata.isDeleted(context, id: record.id) else { throw GraphStoreError.duplicateIdentity }
             if let root, try GraphMutationMetadata.deletedIDs(root).contains(record.id.rawValue.uuidString) { throw GraphStoreError.duplicateIdentity }
-            let values = try record.properties.mapValues { try GraphValueCodec.encode($0) }
+            let typed = GraphNativePropertyStorage.enabled(context)
+            let prepared = typed ? try record.properties.mapValues { try GraphNativePropertyStorage.prepare($0) } : [:]
+            let values = typed ? [:] : try record.properties.mapValues { try GraphValueCodec.encode($0) }
             let (subjects, objects) = try resolve(record.endpoints)
             let node: Node
             switch record.endpoints.kind {
@@ -516,6 +533,7 @@ package enum GraphTypedStoreAdapter {
             if database, let entity = node as? Entity { membership?.add(objects: entity) }
             node[dynamicMember: formatsKey] = values.keys.sorted()
             for (key, value) in values { node[dynamicMember: key] = value }
+            for (key, value) in prepared { try GraphNativePropertyStorage.write(value, key: key, to: node) }
             node.add(tags: Array(record.tags))
             node.add(to: Array(record.groups))
             if let date = record.createdDate { node.setCreatedDate(date) }
@@ -539,15 +557,24 @@ package enum GraphTypedStoreAdapter {
             try validate(updated)
             if updated == current { return current }
             let (subjects, objects) = try resolve(updated.endpoints)
+            let typed = GraphNativePropertyStorage.enabled(context)
+            var prepared: [String: GraphNativePropertyStorage.Prepared] = [:]
             var values: [String: Data] = [:]
             for (key, change) in patch.properties {
-                if case .set(let value) = change { values[key] = try GraphValueCodec.encode(value) }
+                if case .set(let value) = change {
+                    if typed { prepared[key] = try GraphNativePropertyStorage.prepare(value) }
+                    else { values[key] = try GraphValueCodec.encode(value) }
+                }
             }
             var encoded = try encodedKeys(node)
             for (key, change) in patch.properties {
                 switch change {
-                case .set: node[dynamicMember: key] = values[key]; encoded.insert(key)
-                case .remove: node[dynamicMember: key] = nil; encoded.remove(key)
+                case .set:
+                    if typed { try GraphNativePropertyStorage.write(prepared[key]!, key: key, to: node) }
+                    else { node[dynamicMember: key] = values[key]; encoded.insert(key) }
+                case .remove:
+                    if typed { try GraphNativePropertyStorage.remove(key, from: node) }
+                    else { node[dynamicMember: key] = nil; encoded.remove(key) }
                 }
             }
             node[dynamicMember: formatsKey] = encoded.sorted()

@@ -76,7 +76,7 @@ private final class PolicyBarrier: @unchecked Sendable {
     private func fixture(_ policy: GraphConflictPolicy = .lastEditWins) async throws -> Fixture {
         let clock = PolicyClock(), bus = PolicyBus()
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Policies-\(UUID())")
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity,
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
             adapter: GraphCoordinatorFactory.makeAdapter(clock: { clock.now() }))
         let graph = try await manager.createGraph(id: GraphID(), at: dir.appendingPathComponent("Graph.sqlite"), conflictPolicy: policy)
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.policies." + UUID().uuidString, environment: .development, directory: dir.appendingPathComponent("Engine"))

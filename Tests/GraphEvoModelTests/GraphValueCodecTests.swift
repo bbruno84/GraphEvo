@@ -19,7 +19,7 @@ struct GraphValueCodecTests {
     }
 
     @Test func unknownEnvelopeVersionIsNotSilentlyDecodedAsVersionOne() throws {
-        let data = Data(#"{"value":{"null":{}},"version":2}"#.utf8)
+        let data = Data(#"{"value":{"null":{}},"version":99}"#.utf8)
         #expect(throws: GraphModelError.self) { try GraphValueCodec.decode(data) }
     }
 }
@@ -40,5 +40,24 @@ extension GraphValueCodecTests {
         }
         let nested: GraphValue = .array([.data(Data([0, 255])), .object(["bytes": .data(Data())])])
         #expect(try GraphValueCodec.decode(GraphValueCodec.encode(nested)) == nested)
+    }
+}
+
+
+extension GraphValueCodecTests {
+    @Test func basedURLsAndNestedValuesUseVersionTwoWithoutFlattening() throws {
+        let base = URL(string: "https://example.invalid/base/")!
+        let url = URL(string: "child?q=1", relativeTo: base)!
+        for value: GraphValue in [.url(url), .array([.url(url)]), .object(["key": .url(url)])] {
+            let bytes = try GraphValueCodec.encode(value)
+            #expect(String(decoding: bytes, as: UTF8.self).contains("\"version\":2"))
+            #expect(try GraphValueCodec.decode(bytes) == value)
+            let invalidV1 = String(decoding: bytes, as: UTF8.self).replacingOccurrences(of: "\"version\":2", with: "\"version\":1")
+            #expect(throws: GraphModelError.self) { try GraphValueCodec.decode(Data(invalidV1.utf8)) }
+        }
+        let decoded = try GraphValueCodec.decode(GraphValueCodec.encode(.url(url)))
+        if case .url(let round) = decoded { #expect(round.baseURL == base); #expect(round.relativeString == url.relativeString) }
+        else { Issue.record("URL kind changed") }
+        #expect(String(decoding: try GraphValueCodec.encode(.url(base)), as: UTF8.self).contains("\"version\":1"))
     }
 }

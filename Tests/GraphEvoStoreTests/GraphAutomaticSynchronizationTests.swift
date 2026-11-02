@@ -354,7 +354,7 @@ private actor AutomaticBus {
         defer { try? FileManager.default.removeItem(at: root) }
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.opening." + UUID().uuidString,
                                              environment: .development, directory: root)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let gate = AutomaticGate()
         let failed = GraphCloudAdapter(account: { _ in await gate.enter(); throw GraphCloudError.accountUnavailable },
                                       make: { _, _, _, _ in GraphCloudDriver(fetch: { _ in }, cancel: {}) })

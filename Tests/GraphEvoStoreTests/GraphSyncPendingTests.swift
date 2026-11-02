@@ -26,7 +26,7 @@ private actor SyncTestSignal {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GraphSync-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("Graph.sqlite")
-        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: adapter)
+        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
         let graph = try await manager.createGraph(id: GraphID(), at: url)
         let a = graph.makeNodeID(), b = graph.makeNodeID()
         try await graph.transaction {
@@ -87,7 +87,7 @@ private actor SyncTestSignal {
         #expect(try await state(f.graph) == nil)
         #expect(try await f.graph.read { try $0.record(for: f.a)?.properties["value"] } == .integer(1))
         try await f.graph.close()
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: base)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: base)
         let reopened = try await manager.openGraph(id: f.graph.id, at: f.url)
         #expect(try await reopened.collectSyncChanges() == 2)
         try await reopened.close()
@@ -341,14 +341,18 @@ private actor SyncTestSignal {
                     : GraphDatabase.openMirrored(at: f.url, containerIdentifier: "iCloud.example.invalid", schema: .nativeIdentity))
                 try await unexpected.close(); Issue.record("A coordinated store was admitted to native mirroring.")
             } catch GraphStoreError.persistence(underlying: let error) {
-                guard let runtime = error as? StoreRuntimeError, case .invalidConfiguration = runtime else { throw error }
+                guard let runtime = error as? StoreRuntimeError else { throw error }
+                switch runtime {
+                case .invalidConfiguration, .incompatibleStore: break
+                default: throw error
+                }
             }
             #expect(!FileManager.default.fileExists(atPath: absent.path))
         }
-        let local = try await GraphDatabase.open(at: f.url, schema: .nativeIdentity)
+        let local = try await GraphDatabase.open(configuration: .init(location: .sqlite(f.url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         await #expect(throws: GraphStoreError.self) { try await local.createGraph() }
         #expect(try await local.graphIDs() == [f.graph.id]); try await local.close()
-        let reader = try await GraphDatabase.openReadOnly(at: f.url, schema: .nativeIdentity)
+        let reader = try await GraphDatabase.open(configuration: .init(location: .sqlite(f.url), access: .readOnly), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         let graph = try await reader.openGraph(f.graph.id)
         #expect(try await graph.fetchAll(ObservedItem.self).count == 1)
         try await graph.close(); try await reader.close()
@@ -356,17 +360,17 @@ private actor SyncTestSignal {
         #expect(try await reopened.collectSyncChanges() == 2); try await reopened.close()
     }
 
-    @Test func unmarkedS03IsNotSilentlyActivatedAsACoordinatedStore() async throws {
+    @Test func unmarkedS04IsNotSilentlyActivatedAsACoordinatedStore() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("UnmarkedSync-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("Unmarked.sqlite")
-        let db = try await GraphDatabase.open(at: url, schema: .nativeIdentity), graph = try await db.createGraph()
+        let db = try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database), graph = try await db.createGraph()
         let node = graph.makeNodeID()
         _ = try await graph.transaction { try $0.insert(GraphRecord(id: node, type: "retained")) }
         try await graph.close(); try await db.close()
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         await #expect(throws: GraphSyncError.self) { try await manager.openGraph(id: graph.id, at: url) }
-        let retained = try await GraphDatabase.open(at: url, schema: .nativeIdentity), data = try await retained.openGraph(graph.id)
+        let retained = try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database), data = try await retained.openGraph(graph.id)
         #expect(try await data.read { try $0.record(for: node)?.type } == "retained")
         try await data.close(); try await retained.close()
     }
@@ -392,7 +396,7 @@ private actor SyncTestSignal {
         proceed.signal()
         await #expect(throws: GraphStoreError.self) { try await preparation.value }
         try await close.value
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: base)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: base)
         let reopened = try await manager.openGraph(id: f.graph.id, at: f.url)
         #expect(try await reopened.collectSyncChanges() == 2)
         try await reopened.close()

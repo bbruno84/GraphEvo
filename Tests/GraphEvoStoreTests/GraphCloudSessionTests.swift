@@ -67,7 +67,7 @@ private actor CloudSignal {
         GraphCloudZone(scope: scope, owner: "owner", name: name)
     }
     private func manager() -> GraphContextManager {
-        GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
     }
     private func create(_ manager: GraphContextManager, _ config: GraphCloudConfiguration, _ name: String = "A") async throws -> GraphStore {
         try await manager.createGraph(id: GraphID(), at: config.directory.appendingPathComponent("\(name).sqlite"))
