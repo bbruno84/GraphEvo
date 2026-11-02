@@ -848,7 +848,7 @@ remain open; do not expand the evidence beyond its tested source pins.
   internal v1 conversion regression coverage; no public opener or implicit upgrade.
 - [x] Complete P02 native/residual planner, consulted-field validation, explain
   diagnostics and bounded source-order semantic regression tests.
-- [ ] Complete P03 actual-runtime S03/S04 measurements and fresh physical
+- [x] Complete P03 actual-runtime S03/S04 measurements and fresh physical
   CloudKit/sharing/empty-recovery evidence before closing adoption gates.
 - [ ] Measure S04 indexes, raw/external binary storage and serialized exceptions
   at the end-of-alpha cost review. Retain mandatory v1 migration and production
@@ -866,3 +866,15 @@ and corrected [checkpoint #351](https://github.com/bbruno84/GraphEvo/actions/run
 The first #349 did not cover the subsequently found aggregate defect. P03 retains
 measured costs and refusals separately; planner integration is not performance
 acceptance for every allowance or dataset.
+
+P03 closes the bounded validation protocol in the
+[S04 runtime/physical report](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md):
+fourteen physical stages and complete runtime measurements, without a cloud reset.
+
+- [ ] Before beta capacity acceptance, review the S04 2,000-record native sort
+  refusal at 100,000 steps (S03 succeeds with the same allowance). Preserve the
+  refusal and shared work accounting; evaluate preparation/merge/order costs
+  rather than silently raising budgets or falling back without diagnostics.
+- [ ] Retain the measured +6.9% fixture disk/index cost and simple-count cost at
+  400 records in the end-of-alpha cost review. The approximately 3x selected-row/
+  page gain does not establish every supported production envelope.

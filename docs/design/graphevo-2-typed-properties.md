@@ -221,3 +221,14 @@ Corrected reviewed source `0226a2d34cfe3df9a303d7b463dbcafc93b57147` passes full
 macOS suites/consumers and 906 passed iOS functions/1019 invocations, zero failures
 and one known legacy alias skip. Final notes are documentation-only and do not
 substitute #349 for the corrected source's validation.
+
+## P03 recorded validation
+
+The [runtime and physical report](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md)
+retains six isolated 400-record Release runs, one larger capacity fixture per
+variant, and fourteen physical owner/participant stages. Selected full-record
+queries/pages improve about 3x at 400 records; simple count is slightly slower,
+disk grows and the 2,000-row S04 sort refuses the unchanged step allowance.
+Private/shared empty recovery, restart, all value kinds, explicit null, topology,
+2-MiB assets and no-loop checks pass. This closes bounded P03 execution, with the
+reported sort capacity and broader beta/production gates still explicit.
