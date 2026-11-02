@@ -846,7 +846,7 @@ remain open; do not expand the evidence beyond its tested source pins.
 
 - [x] Review and integrate P01 S04 storage with codec, PH, attachment, backup and
   internal v1 conversion regression coverage; no public opener or implicit upgrade.
-- [ ] Complete P02 native/residual planner, consulted-field validation, explain
+- [x] Complete P02 native/residual planner, consulted-field validation, explain
   diagnostics and bounded source-order semantic regression tests.
 - [ ] Complete P03 actual-runtime S03/S04 measurements and fresh physical
   CloudKit/sharing/empty-recovery evidence before closing adoption gates.
@@ -860,3 +860,9 @@ P01 closes only local/injected S04 storage adoption through
 [PR #133](https://github.com/bbruno84/GraphEvo/pull/133) and
 [checkpoint #346](https://github.com/bbruno84/GraphEvo/actions/runs/41403835359).
 Physical S04, native query execution and performance acceptance remain open.
+
+P02 closes its bounded execution contract via [PR #134](https://github.com/bbruno84/GraphEvo/pull/134)
+and corrected [checkpoint #351](https://github.com/bbruno84/GraphEvo/actions/runs/41408938116).
+The first #349 did not cover the subsequently found aggregate defect. P03 retains
+measured costs and refusals separately; planner integration is not performance
+acceptance for every allowance or dataset.

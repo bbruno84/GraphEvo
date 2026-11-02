@@ -1329,9 +1329,12 @@ nor cloud-completeness marker. Separate pages execute in new local views.
 `GraphQueryDiagnostics: Sendable` exposes `nativeCandidates`, `scopedNodes`,
 `propertyBytesCharged`, `evaluationSteps: Int`. Byte charging is a documented
 payload/structural tariff, not resident memory. Steps are logical engine work.
-`GraphQueryPlan: Sendable` contains `strategy: Strategy`, `budget`;
-`Strategy: Sendable, Equatable` currently has only `boundedInventoryAndMemory`.
-Explain validates shape; graph-specific references/cursors are checked at execution.
+`GraphQueryPlan: Sendable` contains `strategy: Strategy`, `budget` and
+`eligiblePredicatePrefixCount`. Strategy includes the historical
+`boundedInventoryAndMemory` and predictive `adaptiveCoreData`; explain returns
+the latter without promising actual native execution. Execution diagnostics
+report the selected strategy (see S04 below). Explain validates shape;
+graph-specific references/cursors are checked at execution.
 
 `GraphQueryError: Error, Equatable, LocalizedError` distinguishes `invalidBudget`,
 `invalidLimit`, `invalidPropertyName`, `invalidModelType`, `invalidTraversal`,

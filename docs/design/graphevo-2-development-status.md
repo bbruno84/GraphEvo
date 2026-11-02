@@ -13,13 +13,34 @@ Expanded numeric property mapping integrates through
 P01 integrates through [PR #133](https://github.com/bbruno84/GraphEvo/pull/133),
 directly into `codex/graphevo-2`. The [typed-property contract](graphevo-2-typed-properties.md)
 separates S04 storage, P02 hybrid query execution and P03 physical/measurement
-validation. P02 is active on `codex/v2-native-property-queries`; it is not
-integrated yet. TP01 remains retained on
+validation. P02 integrates through [PR #134](https://github.com/bbruno84/GraphEvo/pull/134).
+P03's local runtime/physical evidence is being recorded in its own documentation
+checkpoint. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is opt-in bootstrap, production/historical source acceptance and new-cloud
 activation of one authoritative converted graph.
 
-## Latest integrated increment — P01 S04 typed properties
+## Latest integrated increment — P02 hybrid S04 queries
+
+Safe source-order predicate prefixes use Core Data, with scoped lazy residual
+values and complete returned bodies. Counts and homogeneous native property sorts
+preserve null/missing, numeric categories, UUID ties and cursor ordering. Pending
+and in-memory scopes retain memory semantics. Actual diagnostics distinguish the
+chosen strategy and fallback reasons; explicit full integrity remains separate.
+S04, cloud fields and persistent document formats are unchanged.
+
+Local checks pass 908 macOS functions and corrected iOS query suites. The initial
+checkpoint #349 passed but a subsequent benchmark guard exposed a lazy-aggregate
+lookup missing from tests. Corrected sum/min/max/category/overflow and native
+header-registration regression tests pass. Full [checkpoint #351](https://github.com/bbruno84/GraphEvo/actions/runs/41408938116)
+passes on reviewed `0226a2d34cfe3df9a303d7b463dbcafc93b57147`: macOS suites and
+both independent consumers; 906 passed iOS functions/1019 invocations, zero
+failures and one known legacy alias skip. Final notes/API prose are docs-only;
+shipping/test/consumer inputs match the checkpoint exactly. P03 must retain actual
+costs and budget refusals rather than treating toy native predicates as runtime
+measurements. Broader production/beta gates remain open.
+
+## Earlier integrated increment — P01 S04 typed properties
 
 The custom-sync ContextManager and internal v1 target select S04 with lossless
 native scalars and serialized exceptions. Historical public nativeIdentity and

@@ -214,3 +214,10 @@ and S03/native aggregate comparisons. Query-header snapshots also no longer
 register application property objects before dictionary header discovery; a
 native registered-object regression test covers that boundary. These are source
 changes and require a new reviewed checkpoint, not a documentation-only waiver.
+
+P02 integrates via [PR #134](https://github.com/bbruno84/GraphEvo/pull/134).
+Corrected reviewed source `0226a2d34cfe3df9a303d7b463dbcafc93b57147` passes full
+[checkpoint #351](https://github.com/bbruno84/GraphEvo/actions/runs/41408938116):
+macOS suites/consumers and 906 passed iOS functions/1019 invocations, zero failures
+and one known legacy alias skip. Final notes are documentation-only and do not
+substitute #349 for the corrected source's validation.

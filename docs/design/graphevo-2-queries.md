@@ -177,7 +177,8 @@ and the complete bounded node/identity/membership/endpoint/format-list inventory
 It avoids fetching property rows or decoding property bodies for same-model nodes
 that a leading finite identity guard rejects. Candidate/scoped-node diagnostics,
 structural validation, cancellation and evaluation steps retain their scope;
-`explain()` still reports `boundedInventoryAndMemory`. This is not indexed native
+At the M03 checkpoint, `explain()` reported `boundedInventoryAndMemory`. That
+historical path is not indexed native
 row selection or a native COUNT/projection implementation.
 
 An ID predicate, `none`, or an OR whose every branch has a finite identity guard
