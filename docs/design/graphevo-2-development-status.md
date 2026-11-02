@@ -14,11 +14,29 @@ P01 integrates through [PR #133](https://github.com/bbruno84/GraphEvo/pull/133),
 directly into `codex/graphevo-2`. The [typed-property contract](graphevo-2-typed-properties.md)
 separates S04 storage, P02 hybrid query execution and P03 physical/measurement
 validation. P02 integrates through [PR #134](https://github.com/bbruno84/GraphEvo/pull/134).
-P03's local runtime/physical evidence is being recorded in its own documentation
-checkpoint. TP01 remains retained on
+P03's [runtime/physical evidence](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md)
+records the completed validation checkpoint, with no source/test changes. No next
+implementation branch is selected; the measured sort-capacity follow-up and
+remaining migration/bootstrap gates stay open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is opt-in bootstrap, production/historical source acceptance and new-cloud
 activation of one authoritative converted graph.
+
+## Latest validation — P03 S04 runtime and CloudKit
+
+The [report](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md) records
+six isolated Release measurements at 400 records and a 2,000-record capacity
+fixture per variant. Selected records/sort pages improve about 3x at 400 records;
+count is slightly slower, disk grows 6.9% and process peak falls 15.9%. At 2,000
+records the S04 sort refuses the unchanged 100,000-step allowance while S03 passes;
+this remains a pre-beta cost/capacity follow-up.
+
+Fourteen physical stages pass on iPad owner/XR guest, including reciprocal edits,
+private and shared empty recovery, restart, typed query/sum/null, exact primitive
+inventories/topology, 2-MiB assets, read-only denial and empty upload work. No cloud
+reset, copied replica or mutation replay is used. Bounded P03 closes; broader
+capacity, public bootstrap, historical v1 conversion and production cutover gates
+remain open. No new schema revision or release tag is introduced.
 
 ## Latest integrated increment — P02 hybrid S04 queries
 
