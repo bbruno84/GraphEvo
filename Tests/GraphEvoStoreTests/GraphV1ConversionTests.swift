@@ -6,7 +6,7 @@ import Testing
 @testable import GraphEvoStore
 @testable import GraphEvoRuntime
 
-@MainActor private func seedConversionSource(_ url: URL, empty: Bool = false, reserved: Bool = false, nullable: Bool = false) throws -> [String] {
+@MainActor func seedConversionSource(_ url: URL, empty: Bool = false, reserved: Bool = false, nullable: Bool = false) throws -> [String] {
     try autoreleasepool {
         let graph = Graph(storeURL: url, migrationEnabled: false)
         guard graph.isReady else { throw GraphV1ConversionError.unsupportedSource }

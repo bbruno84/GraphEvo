@@ -15,9 +15,11 @@ directly into `codex/graphevo-2`. The [typed-property contract](graphevo-2-typed
 separates S04 storage, P02 hybrid query execution and P03 physical/measurement
 validation. P02 integrates through [PR #134](https://github.com/bbruno84/GraphEvo/pull/134).
 P03's [runtime/physical evidence](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md)
-records the completed validation checkpoint, with no source/test changes. No next
-implementation branch is selected; the measured sort-capacity follow-up and
-remaining migration/bootstrap gates stay open. TP01 remains retained on
+records the completed validation checkpoint, with no source/test changes. MF09 is active on `codex/v2-local-v1-bootstrap`: the
+[local conversion/opening contract](graphevo-2-local-v1-bootstrap.md) connects the
+existing converter to package-only ordinary opening. This increment is not yet
+integrated. The measured sort-capacity follow-up and public/historical/cloud
+migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is opt-in bootstrap, production/historical source acceptance and new-cloud
 activation of one authoritative converted graph.

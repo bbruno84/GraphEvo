@@ -5,6 +5,11 @@ Status: package-only implementation integrates through
 after review and full CI #331 on `f24029a`. This supplies the first bounded local conversion route, not automatic
 public migration, a cloud cutover or completion of mandatory v1 acceptance.
 
+Since [P01](graphevo-2-typed-properties.md), the selected internal target is S04.
+Historical MF07 physical evidence below retains its original S03 scope.
+[MF09](graphevo-2-local-v1-bootstrap.md) adds explicit package-only ordinary
+opening after conversion; public/default opening and cloud cutover remain separate.
+
 ## Admission and supported source
 
 `GraphContextManager.convertLocalV1Store(at:to:graphID:operationID:backupsIn:reason:limits:)`

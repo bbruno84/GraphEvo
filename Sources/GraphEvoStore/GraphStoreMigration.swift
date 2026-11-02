@@ -118,6 +118,17 @@ extension GraphContextManager {
     package func migrateStore<Snapshot, Intent, Receipt>(using migration: GraphStoreMigrationDefinition<Snapshot, Intent, Receipt>,
         request: GraphStoreMigrationRequest, limits: GraphStoreMigrationLimits = .init()) async throws -> GraphStoreMigrationResult<Receipt> {
         try limits.validate()
+        let destination = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue))
+        guard localV1Bootstraps[request.graphID] == nil,
+              !localV1Bootstraps.values.contains(where: { $0.key == destination.key }) else { throw GraphStoreMigrationError.busy }
+        return try await performStoreMigration(using: migration, request: request, limits: limits)
+    }
+
+    // The bootstrap caller already owns a wider admission through final opening.
+    // Other callers enter through migrateStore, which cannot bypass that admission.
+    func performStoreMigration<Snapshot, Intent, Receipt>(using migration: GraphStoreMigrationDefinition<Snapshot, Intent, Receipt>,
+        request: GraphStoreMigrationRequest, limits: GraphStoreMigrationLimits) async throws -> GraphStoreMigrationResult<Receipt> {
+        try limits.validate()
         guard let configured = adapter.migrationSource, configured.matches(migration.source),
               schema.identifier == migration.targetSchemaIdentifier else { throw GraphStoreMigrationError.unavailable }
         guard migratingStores.insert(request.graphID).inserted else { throw GraphStoreMigrationError.busy }
