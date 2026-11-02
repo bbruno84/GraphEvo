@@ -126,6 +126,12 @@ private struct BootstrapFault: Error {}
         #expect(!FileManager.default.fileExists(atPath: r.destinationURL.path))
         await #expect(throws: GraphV1ConversionError.busy) { try await m.openGraph(id: r.graphID, at: r.destinationURL) }
         await #expect(throws: GraphV1ConversionError.busy) { try await m.createGraph(id: GraphID(), at: r.destinationURL) }
+        let alias = root.appendingPathExtension("alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: root)
+        defer { try? FileManager.default.removeItem(at: alias) }
+        await #expect(throws: GraphV1ConversionError.busy) {
+            try await m.createGraph(id: GraphID(), at: alias.appendingPathComponent("V2.sqlite"))
+        }
         await #expect(throws: GraphV1ConversionError.busy) { try await m.openGraph(convertingLocalV1: r) }
         await #expect(throws: GraphV1ConversionError.busy) {
             try await m.convertLocalV1Store(at: r.sourceURL, to: r.destinationURL, graphID: r.graphID, operationID: r.operationID, backupsIn: r.backupRoot)
