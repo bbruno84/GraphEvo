@@ -899,6 +899,12 @@ fourteen physical stages and complete runtime measurements, without a cloud rese
 
 See [MF09](graphevo-2-local-v1-bootstrap.md).
 
+[MF10](graphevo-2-authoritative-cloud-bootstrap.md) proposes the next bounded
+new-cloud activation contract: one durable authority, immutable seed validation,
+recoverable publication and empty-peer imports. It is design-only. Implementation,
+first-claim concurrency evidence, host v1 writer/completeness policy, binary
+publishability and independent physical recovery remain unchecked gates above.
+
 MF09 closes its bounded package-only local opening gate through
 [PR #136](https://github.com/bbruno84/GraphEvo/pull/136),
 [the six-stage local device result](results/local-v1-bootstrap-2026-11-02.md) and

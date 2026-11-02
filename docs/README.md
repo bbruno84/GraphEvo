@@ -26,6 +26,9 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
+- [MF10 authoritative cloud bootstrap](design/graphevo-2-authoritative-cloud-bootstrap.md):
+  proposed single-conversion authority, recoverable seed publication and empty peers.
+
 - [Consumer-owned data](design/graphevo-2-data-formats.md): application meaning,
   optional version properties and typed decoding without a central format registry.
 
