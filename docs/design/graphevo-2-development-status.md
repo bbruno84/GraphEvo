@@ -10,15 +10,32 @@ integration into the main v2 branch or beta readiness.
 
 Expanded numeric property mapping integrates through
 [PR #132](https://github.com/bbruno84/GraphEvo/pull/132), directly from #131.
-The active branch is `codex/v2-typed-property-storage` (P01), directly from
-`codex/graphevo-2`. The [typed-property contract](graphevo-2-typed-properties.md)
+P01 integrates through [PR #133](https://github.com/bbruno84/GraphEvo/pull/133),
+directly into `codex/graphevo-2`. The [typed-property contract](graphevo-2-typed-properties.md)
 separates S04 storage, P02 hybrid query execution and P03 physical/measurement
-validation. P01 is not integrated yet. TP01 remains retained on
+validation. Next is P02. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is opt-in bootstrap, production/historical source acceptance and new-cloud
 activation of one authoritative converted graph.
 
-## Latest integrated increment — numeric property mapping
+## Latest integrated increment — P01 S04 typed properties
+
+The custom-sync ContextManager and internal v1 target select S04 with lossless
+native scalars and serialized exceptions. Historical public nativeIdentity and
+native-mirroring openings retain S03. No implicit conversion or public opener is
+added; cloud record fields remain unchanged. GraphValue envelope v2 preserves
+based URLs and reads v1. P01 retains memory query execution.
+
+Local checks pass 901 macOS functions, iOS store/model suites and final focused
+checks, both independent consumers and manifest/diff validation. Agent review
+finds no remaining P01 blockers. One full [checkpoint #346](https://github.com/bbruno84/GraphEvo/actions/runs/41403835359)
+passes on `d9634b0aef46826bbc1229896cff00213364bd9c`: macOS suites and both
+consumers; 899 passed iOS functions/1012 invocations, zero failures and one known
+legacy alias skip. Final integration notes are documentation-only; source/test/
+consumer inputs match the checkpoint. P02 and P03 remain open, including actual
+runtime measurements and physical S04 CloudKit/sharing/recovery evidence.
+
+## Earlier integrated increment — numeric property mapping
 
 [The contract](graphevo-2-numeric-properties.md) adds Int8/Int16/Int32,
 UInt/UInt8/UInt16/UInt32 and Float to GraphPropertyValue. These route through the

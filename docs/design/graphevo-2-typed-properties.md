@@ -123,3 +123,10 @@ review corrected typed attachment metadata double-decoding, enforced the empty
 legacy format list on S04 readers and removed serialize-on-read validation.
 There are no remaining blocking P01 review findings. These checks are local or
 injected; no physical S04 CloudKit result is claimed here.
+
+P01 integrates via [PR #133](https://github.com/bbruno84/GraphEvo/pull/133).
+Reviewed source `d9634b0aef46826bbc1229896cff00213364bd9c` passes full
+[CI #346](https://github.com/bbruno84/GraphEvo/actions/runs/41403835359): macOS
+suites and both independent consumers, 899 passed iOS functions/1012 invocations,
+zero failures and one known legacy alias skip. Integration notes are docs-only;
+shipping/test/consumer inputs remain identical to the checkpoint.

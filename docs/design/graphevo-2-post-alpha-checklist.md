@@ -844,7 +844,7 @@ remain open; do not expand the evidence beyond its tested source pins.
 
 ## Typed local properties (P01–P03)
 
-- [ ] Review and integrate P01 S04 storage with codec, PH, attachment, backup and
+- [x] Review and integrate P01 S04 storage with codec, PH, attachment, backup and
   internal v1 conversion regression coverage; no public opener or implicit upgrade.
 - [ ] Complete P02 native/residual planner, consulted-field validation, explain
   diagnostics and bounded source-order semantic regression tests.
@@ -855,3 +855,8 @@ remain open; do not expand the evidence beyond its tested source pins.
   bootstrap/cloud-cutover acceptance as separate gates.
 
 See [the typed-property contract](graphevo-2-typed-properties.md).
+
+P01 closes only local/injected S04 storage adoption through
+[PR #133](https://github.com/bbruno84/GraphEvo/pull/133) and
+[checkpoint #346](https://github.com/bbruno84/GraphEvo/actions/runs/41403835359).
+Physical S04, native query execution and performance acceptance remain open.
