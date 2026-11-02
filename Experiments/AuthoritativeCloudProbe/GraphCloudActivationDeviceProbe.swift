@@ -103,11 +103,20 @@ public actor GraphCloudActivationDeviceProbe {
         let database = CKContainer(identifier: configuration.containerIdentifier).privateCloudDatabase
         var token: CKServerChangeToken?
         var current: [String: GraphRecord] = [:]
+        var authorityObserved = false
         repeat {
             let page = try await database.recordZoneChanges(inZoneWith: .init(zoneName: zone.name, ownerName: zone.owner), since: token, resultsLimit: 100)
             for (key, result) in page.modificationResultsByID {
                 let record = try result.get().record
-                if key.recordName == "graphevo.activation" { continue }
+                if key.recordName == "graphevo.activation" {
+                    guard record.recordType == "GraphEvoActivation", let bytes = record["payload"] as? Data,
+                          bytes.count <= 16 * 1024 else { throw Failure() }
+                    let authority = try JSONDecoder().decode(GraphCloudAuthority.self, from: bytes)
+                    guard authority.published, authority.graphID == graph.id, authority.activationID == graph.id.rawValue,
+                          record.recordChangeTag?.isEmpty == false else { throw Failure() }
+                    authorityObserved = true
+                    continue
+                }
                 current[key.recordName] = try GraphCloudNodeCodec.decode(record, binding: binding).record
             }
             for value in page.deletions { current.removeValue(forKey: value.recordID.recordName) }
@@ -116,7 +125,7 @@ public actor GraphCloudActivationDeviceProbe {
             if !page.moreComing { break }
         } while true
         let remoteRecords = Array(current.values)
-        guard remoteRecords.count == 6, Set(remoteRecords.map(\.id)).count == 6 else { throw Failure() }
+        guard authorityObserved, remoteRecords.count == 6, Set(remoteRecords.map(\.id)).count == 6 else { throw Failure() }
         let graphID = graph.id
         try await graph.read { scope in
             let actual = try scope.withContext { context, _ in

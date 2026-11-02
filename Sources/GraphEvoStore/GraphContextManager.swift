@@ -206,8 +206,9 @@ package actor GraphContextManager {
         inheriting parent: GraphCloudSyncPermit? = nil, only graphID: GraphID? = nil, eligibleIDs: Set<GraphID>? = nil) async throws -> Set<GraphID> {
         let session = try await cloud(configuration)
         let routes = try await session.routes(in: scope)
+        let activationBlocked = await session.pendingActivationIDs
         let selected = routes.filter { route in
-            (graphID == nil || route.graphID == graphID) && (eligibleIDs?.contains(route.graphID) ?? true) && canSynchronize(route.graphID, inheriting: parent)
+            !activationBlocked.contains(route.graphID) && (graphID == nil || route.graphID == graphID) && (eligibleIDs?.contains(route.graphID) ?? true) && canSynchronize(route.graphID, inheriting: parent)
         }
         // Preserve control-only fetches for an unbound scope; a fully paused bound scope does no network work.
         if selected.isEmpty && (!routes.isEmpty || eligibleIDs != nil) { return [] }
@@ -623,10 +624,11 @@ package actor GraphContextManager {
     private func automaticInventory(_ config: GraphCloudConfiguration) async throws -> [GraphAutomaticGraph] {
         let session = try await cloud(config)
         let routes = try await session.routes(in: .private) + session.routes(in: .shared)
+        let activationBlocked = await session.pendingActivationIDs
         return routes.compactMap { route in
             guard let entry = entries[route.graphID], entry.ready, entry.closing == nil else { return nil }
             return GraphAutomaticGraph(id: route.graphID, generation: entry.generation, scope: route.zone.scope,
-                                       paused: !canSynchronize(route.graphID))
+                                       paused: activationBlocked.contains(route.graphID) || !canSynchronize(route.graphID))
         }
     }
     private func automaticFeed(_ graph: GraphAutomaticGraph) async throws -> StoreInvalidationFeed {

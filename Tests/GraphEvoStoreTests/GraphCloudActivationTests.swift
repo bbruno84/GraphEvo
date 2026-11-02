@@ -434,4 +434,30 @@ private actor ActivationServer {
         await #expect(throws: GraphCloudActivationError.invalidState) { _ = try await other.openGraph(id: f.graph.id, at: clone.appendingPathComponent("Target.sqlite")) }
         #expect(await server.sends == 0)
     }
+
+    @Test func foregroundWorkerWaitsForPublicationAndResumesWithoutClearingAStickyFailure() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await prepare(f)
+        _ = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        let clock = AutomaticTestClock()
+        try await f.manager.setAutomaticCloudSynchronizationActive(true, configuration: f.config, clock: clock.value)
+        let deadline = ContinuousClock.now + .seconds(10)
+        while try await f.manager.automaticCloudSynchronizationStatus(for: f.graph.id, configuration: f.config).phase != .suspended {
+            guard ContinuousClock.now < deadline else { throw GraphCloudActivationError.busy }
+            await Task.yield()
+        }
+        #expect(await server.sends == 1)
+        let published = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(published.status.phase == .published && published.operationError == nil)
+        try await patch(f.graph, id: f.invoice)
+        while await server.sends < 2 {
+            guard ContinuousClock.now < deadline else { throw GraphCloudActivationError.busy }
+            clock.advance(1)
+            await Task.yield()
+        }
+        #expect(try await f.manager.automaticCloudSynchronizationStatus(for: f.graph.id, configuration: f.config).phase != .blocked)
+        try await f.manager.setAutomaticCloudSynchronizationActive(false, configuration: f.config)
+        try await close(f)
+    }
 }

@@ -224,6 +224,7 @@ actor GraphCloudSession {
         try publish(next); try enable(.private)
     }
     func activationRoute(for id: GraphID) -> GraphCloudActivationRoute? { document.activations.first { $0.binding.graphID == id } }
+    var pendingActivationIDs: Set<GraphID> { Set(document.activations.filter { !$0.published }.map { $0.binding.graphID }) }
     func stageActivationSnapshot(_ events: [GraphCloudIncoming], for binding: GraphCloudBinding, activationID: UUID) throws {
         try check()
         guard let route = activationRoute(for: binding.graphID), route.binding == binding,
@@ -360,7 +361,10 @@ actor GraphCloudSession {
         }
         let zones = document.bindings.filter { $0.zone.scope == scope }.map(\.zone)
         if let selected { guard selected.isSubset(of: Set(zones)) else { throw GraphCloudError.invalidConfiguration } }
-        try await driver.fetch(zones.filter { selected?.contains($0) ?? true })
+        let blocked = Set(document.activations.filter { !$0.published }.map { $0.binding.zone })
+        let permitted = zones.filter { !blocked.contains($0) && (selected?.contains($0) ?? true) }
+        if permitted.isEmpty && !zones.isEmpty { return }
+        try await driver.fetch(permitted)
         if let failure { throw failure }
     }
 

@@ -24,7 +24,7 @@ extension GraphContextManager {
     private func withActivationOwner<Value: Sendable>(_ id: GraphID,
         _ body: (isolated GraphContextManager, GraphCoordinator) async throws -> Value) async throws -> Value {
         guard activatingCloudGraphs.insert(id).inserted else { throw GraphCloudActivationError.busy }
-        defer { activatingCloudGraphs.remove(id) }
+        defer { activatingCloudGraphs.remove(id); automaticChanged() }
         guard let location = locations[id] else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: id, at: location.url)
         guard let entry = entries[id], entry.closing == nil else { try await graph.close(); throw GraphStoreError.closed }
@@ -165,7 +165,7 @@ extension GraphContextManager {
         guard zone.scope == .private, !zone.name.isEmpty, !zone.owner.isEmpty,
               entries[id] == nil, localV1Bootstraps[id] == nil, !migratingStores.contains(id),
               activatingCloudGraphs.insert(id).inserted else { throw GraphCloudActivationError.busy }
-        defer { activatingCloudGraphs.remove(id) }
+        defer { activatingCloudGraphs.remove(id); automaticChanged() }
         let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
         guard !entries.values.contains(where: { $0.key == resolved.key }),
               !locations.contains(where: { $0.key != id && $0.value.key == resolved.key }),
