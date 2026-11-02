@@ -20,8 +20,12 @@ public actor GraphCloudActivationDeviceProbe {
 
     public func execute(stage: String, run: UUID, replica: String, directory: URL, container: String) async throws -> [String] {
         guard container == "iCloud.com.valerioburiani.GraphCKDemo",
-              ["prepare", "seed", "publish", "verify", "recover-peer"].contains(stage),
-              replica == "owner" || (stage == "recover-peer" && ["peer", "fresh"].contains(replica)) else { throw Failure() }
+              ["prepare", "seed", "publish", "verify", "recover-peer", "refresh-peer", "verify-account", "update-owner"].contains(stage),
+              ["owner", "peer", "fresh", "contender"].contains(replica),
+              stage == "verify-account" ||
+                (["prepare", "seed"].contains(stage) && ["owner", "contender"].contains(replica)) ||
+                (["publish", "verify", "update-owner"].contains(stage) && replica == "owner") ||
+                (["recover-peer", "refresh-peer"].contains(stage) && ["peer", "fresh"].contains(replica)) else { throw Failure() }
         let root = directory.appendingPathComponent(run.uuidString).appendingPathComponent(replica)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent(stage + ".started"), options: .withoutOverwriting)
@@ -30,25 +34,45 @@ public actor GraphCloudActivationDeviceProbe {
         let zone = GraphCloudZone(scope: .private, owner: CKCurrentUserDefaultName, name: "GE2-MF10-" + run.uuidString)
         let manager = GraphContextManager(schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         retainedManager = manager
-        if stage == "recover-peer" {
-            guard !FileManager.default.fileExists(atPath: target.path) else { throw Failure() }
+        if stage == "verify-account" {
             _ = try await manager.startCloudSession(config)
-            let recovered = try await manager.openCloudReplica(id: id, at: target, zone: zone, configuration: config)
-            let graph = try recovered.opening.get(); retainedGraph = graph
-            guard recovered.status.phase == .published, try await graph.validateIntegrity() == 6,
+            let account = try await manager.cloudSharingIdentity(config)
+            let digest = Data(SHA256.hash(data: Data((run.uuidString + account).utf8)))
+            try digest.write(to: root.appendingPathComponent("account.digest"), options: .withoutOverwriting)
+            return ["Read-only salted account comparison retained privately; no graph opened or cloud data changed."]
+        }
+        if stage == "recover-peer" || stage == "refresh-peer" {
+            let graph: GraphStore
+            if stage == "recover-peer" {
+                guard !FileManager.default.fileExists(atPath: target.path) else { throw Failure() }
+                _ = try await manager.startCloudSession(config)
+                let recovered = try await manager.openCloudReplica(id: id, at: target, zone: zone, configuration: config)
+                graph = try recovered.opening.get()
+                guard recovered.status.phase == .published else { throw Failure() }
+            } else {
+                graph = try await manager.openGraph(id: id, at: target)
+                _ = try await manager.startCloudSession(config)
+                try await manager.fetchCloudChanges(.private, configuration: config)
+                _ = try await manager.applyCloudInbox(for: id, configuration: config)
+            }
+            retainedGraph = graph
+            guard try await graph.validateIntegrity() == 6,
                   try await graph.collectSyncChanges() == 0 else { throw Failure() }
             try await Self.checkCurrentServer(graph: graph, zone: zone, configuration: config)
             return ["A genuinely empty S04 peer recovered complete current IDs, bodies, topology and 2-MiB attachment.",
                     "Full integrity and empty outgoing work verified; owner must remain live on its independent device."]
         }
         let graph: GraphStore
+        var operationBytes = run.uuid
+        if replica == "contender" { operationBytes.15 ^= 73 }
+        let operation = UUID(uuid: operationBytes)
         let proofURL = root.appendingPathComponent("proof.json")
         if stage == "prepare" {
             guard !FileManager.default.fileExists(atPath: target.path), !FileManager.default.fileExists(atPath: source.path) else { throw Failure() }
             try await Self.seed(source)
             let digest = Data(SHA256.hash(data: try Data(contentsOf: source)))
             let converted = try await manager.openGraph(convertingLocalV1: .init(sourceURL: source, destinationURL: target,
-                graphID: id, operationID: run, backupRoot: root.appendingPathComponent("Backups"), reason: "MF10 synthetic local source"))
+                graphID: id, operationID: operation, backupRoot: root.appendingPathComponent("Backups"), reason: "MF10 synthetic local source"))
             graph = try converted.opening.get()
             let ownerID = try requireValue(converted.conversion.receipt.nodeIDs.values.first)
             let attachment = try GraphAttachmentPayload(id: graph.makeNodeID(), ownerID: ownerID, fileName: "proof.bin", contentType: "public.data", data: Data(repeating: 41, count: 2 * 1024 * 1024))
@@ -56,7 +80,7 @@ public actor GraphCloudActivationDeviceProbe {
             let proof = Proof(sourceDigest: digest, nodeIDs: Array(converted.conversion.receipt.nodeIDs.values) + [attachmentID])
             try JSONEncoder().encode(proof).write(to: proofURL, options: .withoutOverwriting)
             _ = try await manager.startCloudSession(config)
-            let prepared = try await manager.prepareCloudActivation(for: id, activationID: run, zone: zone, configuration: config,
+            let prepared = try await manager.prepareCloudActivation(for: id, activationID: operation, zone: zone, configuration: config,
                 declaration: .init(sourceSelection: "Only this synthetic source", completeness: "Five explicitly constructed primitives",
                     stoppedWriters: "Legacy writer detached", returningClients: "No other legacy fixture writers"))
             guard prepared.phase == .prepared, prepared.recordCount == 6 else { throw Failure() }
@@ -69,8 +93,24 @@ public actor GraphCloudActivationDeviceProbe {
                 do { try await graph.transaction { _ in () }; throw Failure() }
                 catch GraphStoreError.writesSuspended { }
                 let result = try await manager.advanceCloudActivation(for: id, configuration: config)
-                if let failure = result.operationError { throw failure }
-                guard result.status.phase == (stage == "seed" ? .seeding : .published) else { throw Failure() }
+                if replica == "contender" {
+                    guard result.operationError as? GraphCloudActivationError == .authorityConflict, result.status.phase == .conflict else { throw Failure() }
+                } else {
+                    if let failure = result.operationError { throw failure }
+                    guard result.status.phase == (stage == "seed" ? .seeding : .published) else { throw Failure() }
+                }
+            } else if stage == "update-owner" {
+                let invoice = try await graph.read { scope in
+                    try scope.withContext { context, _ in
+                        let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
+                        guard let invoice = session.nodes.first(where: { $0.value.type == "Invoice" })?.key else { throw Failure() }
+                        return invoice
+                    }
+                }
+                _ = try await graph.transaction { try $0.patch(.init(id: invoice, properties: ["later": .set(.integer(2))])) }
+                let sent = try await manager.sendCloudChanges(for: id, configuration: config)
+                guard sent.transportError == nil, sent.failures.isEmpty else { throw Failure() }
+                try await Self.checkCurrentServer(graph: graph, zone: zone, configuration: config)
             } else {
                 guard try await manager.cloudActivationStatus(for: id)?.phase == .published else { throw Failure() }
                 try await Self.checkCurrentServer(graph: graph, zone: zone, configuration: config)
