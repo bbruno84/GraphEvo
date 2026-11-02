@@ -41,6 +41,9 @@ enum GraphNativeIdentityDatabaseAdapter {
                 guard let query = base.graph.query else { throw GraphStoreError.unsupportedLayout }
                 return try query(context, graphID, request)
             })
+        graph.validateIntegrity = { context, id in
+            try validate(context, graphID: id, allowsMirroring: allowsMirroring)
+        }
         graph.removeAll = { context, graphID, maximum in
             try access.checkGraph(context, graphID: graphID)
             guard let remove = base.graph.removeAll else { throw GraphStoreError.unsupportedLayout }

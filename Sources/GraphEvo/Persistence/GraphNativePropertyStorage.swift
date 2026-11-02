@@ -47,7 +47,10 @@ enum GraphNativePropertyStorage {
     }
     static func logicalKey(_ row: NSManagedObject) throws -> String {
         guard let name = row.value(forKey: "name") as? String else { throw GraphStoreError.corruptIdentity }
-        guard name.hasPrefix(keyPrefix), row.value(forKey: kindKey) != nil else { return name }
+        return try logicalKey(name: name, typed: row.value(forKey: kindKey) != nil)
+    }
+    static func logicalKey(name: String, typed: Bool) throws -> String {
+        guard name.hasPrefix(keyPrefix), typed else { return name }
         guard let bytes = Data(base64Encoded: String(name.dropFirst(keyPrefix.count))),
               let key = String(data: bytes, encoding: .utf8), key.utf8.contains(0), physicalKey(key) == name else {
             throw GraphStoreError.corruptIdentity
@@ -81,7 +84,7 @@ enum GraphNativePropertyStorage {
         case .encoded: return try envelope(.encoded)
         }
     }
-    private static func requiresEnvelope(_ value: GraphValue) -> Bool {
+    static func requiresEnvelope(_ value: GraphValue) -> Bool {
         switch value {
         case .decimal, .array, .object, .encoded: return true
         case .string(let string): return string.utf8.contains(0)

@@ -130,3 +130,94 @@ Reviewed source `d9634b0aef46826bbc1229896cff00213364bd9c` passes full
 suites and both independent consumers, 899 passed iOS functions/1012 invocations,
 zero failures and one known legacy alias skip. Integration notes are docs-only;
 shipping/test/consumer inputs remain identical to the checkpoint.
+
+## P02 hybrid query contract
+
+S04 queries retain the bounded full node/identity/membership/endpoint inventory,
+then fetch property **headers** through Core Data dictionary projections. Header
+queries omit the legacy object field and every native value slot. Key resolution
+uses Swift String equality while preserving all physical NFC/NFD names in native
+predicate arguments. Duplicate logical rows are rejected when consulted; returned
+records and explicit integrity validation inspect their complete payloads.
+
+Application values are loaded on demand, cached only within the admitted query
+scope, and charged once before envelope decoding. Filter and sort keys are
+consulted as needed; full bodies are materialized only for selected record results.
+Projection reads materialize selected fields only. Presence tests consult headers,
+not bodies. Unrelated discarded bodies do not constitute an integrity certificate.
+`GraphStore.validateIntegrity()` is a package-only full validation operation using
+the existing native validator, on an admitted pinned read. The existing public
+GraphDatabase integrity API retains its contract.
+
+A SQLite context without pending changes can translate a **source-order AND
+prefix**. Structural guards narrow the scoped candidates; presence and safe
+native scalar comparisons use NSPredicate fetches on property entities. Null and
+absence remain distinct. UInt64 uses its fixed-width representation. Equality
+preserves value categories; ordered mixed categories remain errors. Translation
+stops at unsupported atoms or encountered serialized/mixed/unsafe values; a later
+condition never bypasses an earlier residual error. OR, NOT, related predicates
+and traversal use the same scoped lazy Swift evaluator. Related predicates still
+see the complete structural inventory. ASCII literals and consulted ASCII strings
+can use native string comparison; other strings remain in Swift. No direct SQL or
+SUBQUERY dependency is introduced.
+
+A single complete homogeneous native property sort uses Core Data sort
+descriptors and UUID tie-breaking. Chunk results are merged before cursor/limit;
+missing/null/mixed/serialized/multi-key sorts remain residual. Scalar eligibility
+checks do not serialize a value just to decide whether it can be native. Counts
+with a complete native prefix use Core Data counts after duplicate validation;
+no application model is decoded. Aggregate sums retain exact overflow/category
+rules in Swift. Pending contexts and in-memory stores use memory evaluation and
+still see uncommitted edits.
+
+One ephemeral step allowance covers preparation/header visits, native result
+visits, chunk merge and residual evaluation. Candidate allowance still includes
+all native node rows; consulted byte allowance includes structural fields and
+stored property values before decoding. These are explicit bounded work/byte
+contracts, not SQL-I/O, elapsed-time or whole-process-memory limits. No partial
+result escapes a refusal. Cancellation checks continue through trusted scoped
+metadata; no managed object, cache or consumer body escapes or is replayed.
+
+`GraphQuery.explain()` predicts adaptive Core Data eligibility, without promising
+that a particular store/data snapshot will use it. `eligiblePredicatePrefixCount`
+is syntax/literal eligibility. Actual diagnostics report memory/hybrid/native
+execution, native fetch and predicate counts, selected materialized-record count,
+native sorting and explicit fallback reasons. Existing S03/current queries retain
+their memory evaluator and legacy-storage diagnostic reason. Cloud, PH queues,
+S04 schema and all persistent/cloud document formats remain unchanged by P02.
+
+### P02 local review and checks (2026-11-02)
+
+Local macOS checks pass 908 functions (331 legacy, 472 store, 76 runtime,
+29 model). iOS store/model suites and final focused query suites pass, as do both
+independent Swift 6 consumers and manifest/diff checks. Native-vs-S03 comparisons
+exercise numeric categories and extrema, null/missing, literal ASCII strings,
+UUID/date equality, Boolean combinations, residual Decimal/negative-zero/Unicode,
+projections and counts. Dedicated cases cover mixed physical Unicode key spellings,
+NUL keys, unsupported-value/source-order errors, pending changes, in-memory,
+related traversal, malformed discarded/returned bodies, explicit full integrity,
+and a 300-record native sort merged across chunks and every cursor page.
+
+Review corrected physical-name deduplication (Swift string equality must not
+collapse SQL spellings), avoided serialize-on-read eligibility checks, kept sorts
+out of count/aggregate execution and preserved the explicit integrity route.
+No remaining blocking P02 finding is known. Performance acceptance and physical
+S04 sharing/replica recovery still require P03; tests have no latency threshold.
+
+### P02 pre-merge corrections
+
+The initial full CI #349 passed on `cfaabc6`, but subsequent local laboratory
+semantic assertions exposed an untested lazy-aggregate route: the evaluator
+read the structural snapshot instead of its scoped property reader. This is
+corrected before merge, with sum/min/max, null/missing, overflow, mixed categories
+and S03/native aggregate comparisons. Query-header snapshots also no longer
+register application property objects before dictionary header discovery; a
+native registered-object regression test covers that boundary. These are source
+changes and require a new reviewed checkpoint, not a documentation-only waiver.
+
+P02 integrates via [PR #134](https://github.com/bbruno84/GraphEvo/pull/134).
+Corrected reviewed source `0226a2d34cfe3df9a303d7b463dbcafc93b57147` passes full
+[checkpoint #351](https://github.com/bbruno84/GraphEvo/actions/runs/41408938116):
+macOS suites/consumers and 906 passed iOS functions/1019 invocations, zero failures
+and one known legacy alias skip. Final notes are documentation-only and do not
+substitute #349 for the corrected source's validation.
