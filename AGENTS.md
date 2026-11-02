@@ -1402,6 +1402,9 @@ Read it before changing v1 new-cloud activation. Require one
 selected conversion/route, durable remote authority before uploads, immutable seed
 preflight and empty-peer recovery. Converted stores cannot bypass this admission
 through ordinary binding; preserve native restart gates and session send guards.
+An unexposed recovering peer reconciles prior imports against a complete validated
+zone cut through normal import/deletion receipts; generic missing lookups are
+unchanged. Preserve native limits, closed consumer admission and no upload feedback.
 Native activation format is 2, control/manifest formats are 1 and session format
 is 7, refusing old alpha state
 unchanged. S04/primitive/asset formats remain unchanged. Retain the bounded

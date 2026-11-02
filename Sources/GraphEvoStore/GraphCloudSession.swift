@@ -230,7 +230,7 @@ actor GraphCloudSession {
         guard let route = activationRoute(for: binding.graphID), route.binding == binding,
               route.activationID == activationID, route.peer, !route.published,
               !document.inbox.contains(where: { $0.change.zone == binding.zone }),
-              events.allSatisfy({ $0.zone == binding.zone && $0.kind == .recordChanged && $0.recordType == GraphCloudNodeCodec.recordType }) else {
+              events.allSatisfy({ $0.valid && $0.zone == binding.zone && ($0.kind == .recordChanged || $0.kind == .recordDeleted) && $0.recordType == GraphCloudNodeCodec.recordType }) else {
             throw GraphCloudActivationError.busy
         }
         var next = document

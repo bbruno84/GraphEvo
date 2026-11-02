@@ -219,11 +219,13 @@ package struct GraphCloudActivationAdapter: Sendable {
     package let prepare: @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, UUID, GraphCloudCutoverDeclaration, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument
     package let write: @Sendable (NSManagedObjectContext, GraphID, GraphCloudActivationDocument) throws -> Void
     package let peer: @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, GraphCloudAuthority, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument
+    package let replicaIDs: @Sendable (NSManagedObjectContext, GraphID) throws -> Set<GraphNodeID>
     package init(requiresActivation: @escaping @Sendable (NSManagedObjectContext, GraphID) throws -> Bool,
                  read: @escaping @Sendable (NSManagedObjectContext, GraphID) throws -> GraphCloudActivationDocument?,
                  prepare: @escaping @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, UUID, GraphCloudCutoverDeclaration, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument,
                  write: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudActivationDocument) throws -> Void,
-                 peer: @escaping @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, GraphCloudAuthority, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument) {
-        self.requiresActivation = requiresActivation; self.read = read; self.prepare = prepare; self.write = write; self.peer = peer
+                 peer: @escaping @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, GraphCloudAuthority, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument,
+                 replicaIDs: @escaping @Sendable (NSManagedObjectContext, GraphID) throws -> Set<GraphNodeID>) {
+        self.requiresActivation = requiresActivation; self.read = read; self.prepare = prepare; self.write = write; self.peer = peer; self.replicaIDs = replicaIDs
     }
 }

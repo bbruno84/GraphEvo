@@ -205,12 +205,21 @@ extension GraphContextManager {
                 let binding = current.binding
                 let retained = try await session.incoming(for: zone, limit: configuration.maximumEvents)
                 if !retained.isEmpty { _ = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: configuration.maximumEvents) }
-                let events = try await session.activationControl { service, _ in
+                var events = try await session.activationControl { service, _ in
                     guard let latest = try await service.fetch(configuration, route), latest.value.published,
                           latest.value.matches(remote.value) else { throw GraphCloudActivationError.recoveryRequired }
                     let inventory = try await service.inventory(configuration, route, limits)
                     _ = try Self.seedRecords(inventory, binding: route, authority: remote.value)
                     return inventory.filter { !GraphCloudAuthorityCodec.isControl($0) }
+                }
+                // Only this unexposed replica may be reconciled against a complete verified zone cut.
+                // A retry can otherwise retain an earlier import whose row was subsequently deleted remotely.
+                let present = Set(events.compactMap(\.recordName))
+                for nodeID in try await owner.activationReplicaIDs().sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+                    let name = try GraphCloudNodeCodec.recordID(for: nodeID, binding: route).recordName
+                    if !present.contains(name) {
+                        events.append(.init(kind: .recordDeleted, zone: zone, recordName: name, recordType: GraphCloudNodeCodec.recordType))
+                    }
                 }
                 try await session.stageActivationSnapshot(events, for: route, activationID: remote.value.activationID)
                 _ = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: configuration.maximumEvents)

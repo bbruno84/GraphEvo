@@ -240,6 +240,14 @@ replica, or resumes an already marked replica, and returns status separately fro
 converted/nonempty destinations. The initial complete server cut is retained in
 the normal bounded inbox and applied using the existing import/receipt path.
 
+If initial import committed before availability publication failed, a retry
+reconciles that still-unexposed replica against the new complete validated zone
+cut. Rows imported earlier but absent from that complete cut are removed through
+the normal import/deletion receipt transaction. The native callback permits this
+inventory only for a marked peer in recovering phase, with row/record limits.
+Combined saves/deletions obey existing inbox budgets. Ordinary missing lookups
+and already exposed graph transport retain their existing deletion semantics.
+
 Ordinary binding refuses conversion receipts without published MF10 authority.
 The live private binding path also checks the selected zone's control record so an
 unmarked graph cannot silently populate an MF10 destination. Manual/foreground

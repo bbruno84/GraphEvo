@@ -1947,3 +1947,8 @@ unchanged; session format 7 refuses older alpha documents unchanged. This remain
 package-only, with the bounded physical peer protocol passing and broader cutover
 acceptance open. See
 [MF10](../design/graphevo-2-authoritative-cloud-bootstrap.md).
+
+An interrupted initial peer import is reconciled against a new complete validated
+zone cut before availability: previously imported rows absent from that cut are
+removed through import receipts while consumer access is still closed. This does
+not turn ordinary missing lookups into deletion evidence.

@@ -11,7 +11,15 @@ enum GraphCloudActivationNative {
     static let key = GraphTypedStoreAdapter.prefix + "cloudActivation"
     static let adapter = GraphCloudActivationAdapter(requiresActivation: { context, id in
         try GraphTypedStoreAdapter.controlRoot(context, id: id)[dynamicMember: GraphV1NativeConversion.receiptKey] != nil
-    }, read: read, prepare: prepare, write: write, peer: peer)
+    }, read: read, prepare: prepare, write: write, peer: peer, replicaIDs: { context, id in
+        guard let document = try read(context, id), document.peer, document.phase == .recovering else {
+            throw GraphCloudActivationError.invalidRequest
+        }
+        try validateInventory(context)
+        let session = try GraphTypedStoreAdapter.Session(context, id, database: true, maximumCandidates: 100_000)
+        guard session.nodes.count <= document.limits.maximumRecords else { throw GraphCloudActivationError.limitExceeded }
+        return Set(session.nodes.keys)
+    })
 
     private static func fileIdentity(_ context: NSManagedObjectContext) throws -> WorkspaceFileIdentity {
         guard let url = context.persistentStoreCoordinator?.persistentStores.first?.url else { throw GraphCloudActivationError.invalidState }

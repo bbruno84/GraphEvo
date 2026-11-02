@@ -108,6 +108,10 @@ package actor GraphCoordinator {
         guard let validate = adapter.validateIntegrity else { throw GraphCloudActivationError.unavailable }; let id = id
         return try await handle.controlRead { try validate($0, id) }
     }
+    func activationReplicaIDs() async throws -> Set<GraphNodeID> {
+        guard let activation else { throw GraphCloudActivationError.unavailable }; let id = id
+        return try await handle.controlRead { try activation.replicaIDs($0, id) }
+    }
 
     static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, registry: StoreRegistry,
                                 schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {

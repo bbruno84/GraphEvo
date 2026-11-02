@@ -55,6 +55,7 @@ private actor ActivationServer {
         }
         return .init(batchID: batch.id, graphID: batch.graphID, zone: batch.zone, saved: saved, deletedNames: deleted, failures: failed)
     }
+    func removeRecord(_ id: GraphNodeID, route: GraphCloudBinding) { records.removeValue(forKey: route.zone.name + "node." + id.rawValue.uuidString.lowercased()) }
     func removeAuthority(_ route: GraphCloudBinding) { authorities.removeValue(forKey: key(route)) }
     func injectAuthority(_ value: GraphCloudAuthority, route: GraphCloudBinding) throws {
         authorities[key(route)] = try GraphCloudAuthorityCodec.decode(GraphCloudAuthorityCodec.encode(value, binding: route, base: nil), binding: route)
@@ -92,8 +93,8 @@ private actor ActivationServer {
         .init(sourceSelection: "Synthetic selected source", completeness: "Exact fixture inventory",
               stoppedWriters: "Fixture writer detached", returningClients: "No legacy writers in this fixture")
     }
-    private func manager() -> GraphContextManager {
-        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+    private func manager(adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) -> GraphContextManager {
+        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
     }
     private func fixture(_ server: ActivationServer, oversized: Bool = false, attachments: Bool = false, id: GraphID = GraphID(), container: String? = nil) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Activation-" + UUID().uuidString)
@@ -542,4 +543,39 @@ private actor ActivationServer {
         #expect(try await f.manager.cloudActivationStatus(for: f.graph.id) == nil)
         try await close(f)
     }
+    @Test(arguments: [false, true])
+    func interruptedPeerDropsRowsAbsentFromTheNewCompleteServerCut(empty: Bool) async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        try await publish(f)
+        let optional = try #require(try await f.graph.read { scope in
+            try f.nodeIDs.compactMap { try scope.record(for: $0) }.first { $0.type == "optional" }?.id
+        })
+        try await close(f)
+        var adapter = GraphCoordinatorFactory.adapter
+        let original = try #require(adapter.activation)
+        adapter.activation = .init(requiresActivation: original.requiresActivation, read: original.read, prepare: original.prepare,
+            write: { context, id, value in
+                if value.peer && value.phase == .published { throw GraphCloudActivationError.recoveryRequired }
+                try original.write(context, id, value)
+            }, peer: original.peer, replicaIDs: original.replicaIDs)
+        let first = manager(adapter: adapter)
+        let config = GraphCloudConfiguration(containerIdentifier: f.config.containerIdentifier, environment: .development, directory: f.root.appendingPathComponent("InterruptedPeerCloud"))
+        _ = try await first.startCloudSession(config, adapter: server.adapter)
+        let target = f.root.appendingPathComponent("InterruptedPeer.sqlite")
+        let interrupted = try await first.openCloudReplica(id: f.graph.id, at: target, zone: f.zone, configuration: config)
+        #expect(interrupted.status.phase == .recovering)
+        #expect(throws: GraphCloudActivationError.recoveryRequired) { _ = try interrupted.opening.get() }
+        try await first.stopCloudSession(config)
+        for id in empty ? f.nodeIDs : [optional] { await server.removeRecord(id, route: f.route) }
+        let next = manager()
+        _ = try await next.startCloudSession(config, adapter: server.adapter)
+        let recovered = try await next.openCloudReplica(id: f.graph.id, at: target, zone: f.zone, configuration: config)
+        let graph = try recovered.opening.get()
+        #expect(try await graph.read { try $0.record(for: optional) } == nil)
+        #expect(try await graph.validateIntegrity() == (empty ? 0 : 4))
+        #expect(try await graph.collectSyncChanges() == 0)
+        try await graph.close(); try await next.stopCloudSession(config)
+    }
+
 }
