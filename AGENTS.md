@@ -331,6 +331,23 @@ unfinished v2 code into the v1 `develop` branch. Promote the final stable 2.0
 release to both `master` and `develop` through reviewed PRs; do not merge merely
 to set up branches.
 
+## V2 test and CI scope
+
+Follow [CI profiles](docs/design/graphevo-2-ci-checkpoints.md): review and affected
+local checks first, then `ci-checkpoint` for focused v2-only work. It runs the
+store/runtime/model suites on both platforms and the Swift 6 consumers; the large
+capacity fixture is retained in full validation and relevant local checks.
+Use `ci-full-checkpoint` for legacy/shared-foundation changes, test/CI
+infrastructure, milestone/tag/release acceptance. Full takes precedence if both
+labels exist. Remove both labels before intermediate fixes. Skipped jobs are not
+passing checks. Do not rerun unchanged full suites for documentation-only notes.
+For v2-only changes this scoped policy replaces the unconditional full-suite
+command in the general checklist below. Experimental executables compile only
+with `GRAPHEVO_BUILD_LABS=1` and never belong to ordinary CI builds. The ordinary
+Xcode package scheme is `GraphEvo`. Native failed
+xcresult uploads are opt-in (`ci-diagnostics`); default failure artifacts are text
+and summaries retained one day. Do not add storage-heavy caches by default.
+
 ## Git and pull-request workflow
 
 Keep every change tracked, described, and easy to reverse. Do not work directly

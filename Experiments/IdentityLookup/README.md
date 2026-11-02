@@ -6,8 +6,8 @@ without a configured compound fetch index. Read the
 [contract](../../docs/design/graphevo-2-native-identity-experiment.md).
 
 ```sh
-swift build -c release --product IdentityLookupProbe
-swift build -c release --show-bin-path
+GRAPHEVO_BUILD_LABS=1 swift build -c release --product IdentityLookupProbe
+GRAPHEVO_BUILD_LABS=1 swift build -c release --show-bin-path
 python3 Experiments/IdentityLookup/run.py --executable /absolute/bin/IdentityLookupProbe \
   --output /tmp/new-native-identity-run
 ```

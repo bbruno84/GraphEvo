@@ -2,6 +2,7 @@
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
+import Foundation
 
 let package = Package(
     name: "GraphEvo",
@@ -13,18 +14,6 @@ let package = Package(
         // .library(name: "GraphEvoMigration", targets: ["GraphEvoMigration"]) // se lo separi
     ],
     targets: [
-        .executableTarget(
-            name: "ObservationCostProbe",
-            dependencies: ["GraphEvo"],
-            path: "Experiments/SharedObservation/Sources",
-            swiftSettings: [.swiftLanguageMode(.v6)]
-        ),
-        .executableTarget(
-            name: "IdentityLookupProbe",
-            dependencies: ["GraphEvo"],
-            path: "Experiments/IdentityLookup/Sources",
-            swiftSettings: [.swiftLanguageMode(.v6)]
-        ),
         .target(
             name: "GraphEvo",
             dependencies: ["GraphEvoRuntime", "GraphEvoModel", "GraphEvoStore"],
@@ -79,5 +68,10 @@ let package = Package(
         //     dependencies: ["GraphEvo", "GraphEvoMigration"],
         //     path: "Tests/GraphEvoMigrationTests"
         // )
-    ]
+    ] + (ProcessInfo.processInfo.environment["GRAPHEVO_BUILD_LABS"] == "1" ? [
+        .executableTarget(name: "ObservationCostProbe", dependencies: ["GraphEvo"],
+            path: "Experiments/SharedObservation/Sources", swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "IdentityLookupProbe", dependencies: ["GraphEvo"],
+            path: "Experiments/IdentityLookup/Sources", swiftSettings: [.swiftLanguageMode(.v6)])
+    ] : [])
 )

@@ -36,3 +36,6 @@ fastlane/test_output/
 *.swo
 *.DS_Store
 *.orig
+
+# Python CI helpers
+__pycache__/

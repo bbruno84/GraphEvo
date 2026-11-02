@@ -19,7 +19,12 @@ records the completed validation checkpoint, with no source/test changes. MF09 i
 [explicit local conversion/opening](graphevo-2-local-v1-bootstrap.md) is complete
 within its package-only scope. The S04 sort-capacity follow-up integrates through
 [PR #137](https://github.com/bbruno84/GraphEvo/pull/137), directly into
-`codex/graphevo-2`. No next implementation branch is selected. Broader
+`codex/graphevo-2`. The focused branch `codex/v2-ci-fast-checkpoints` is streamlining test setup and
+CI profiles; it is not integrated yet. Local v2 profiles pass 593 macOS/592 iOS
+functions; full profiles retain 925 macOS and 923 passed iOS functions plus the
+known skip. All three independent consumers and six profile guards pass. Review
+finds no remaining blocker; a full checkpoint is next because CI/test infrastructure
+changes. Broader
 capacity and public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is production/historical source acceptance, public facade/bootstrap integration

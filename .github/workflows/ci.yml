@@ -2,6 +2,16 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: Validation scope (v2 is available on codex branches)
+        type: choice
+        options: [full, v2]
+        default: full
+      diagnostics:
+        description: Retain the full failed iOS xcresult bundle
+        type: boolean
+        default: false
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches:
@@ -17,24 +27,28 @@ on:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+  GRAPHEVO_CI_PROFILE: ${{ ((github.event_name == 'pull_request' && github.base_ref == 'codex/graphevo-2' && !contains(github.event.pull_request.labels.*.name, 'ci-full-checkpoint')) || (github.event_name == 'workflow_dispatch' && inputs.profile == 'v2' && startsWith(github.ref, 'refs/heads/codex/'))) && 'v2' || 'full' }}
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/codex/graphevo-2' }}
+  cancel-in-progress: ${{ (github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint')) || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/codex/graphevo-2' }}
 
 jobs:
   test:
-    # Alpha PRs use explicit checkpoints; stable/v1 and manual runs keep full validation.
+    # Alpha checkpoints use v2 suites; full checkpoints and v1/releases keep every suite.
     if: >-
       github.event_name != 'pull_request' ||
       github.base_ref != 'codex/graphevo-2' ||
-      (contains(github.event.pull_request.labels.*.name, 'ci-checkpoint') &&
-       (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint'))
+      ((contains(github.event.pull_request.labels.*.name, 'ci-checkpoint') ||
+        contains(github.event.pull_request.labels.*.name, 'ci-full-checkpoint')) &&
+       (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint' ||
+        github.event.label.name == 'ci-full-checkpoint'))
     name: Swift package validation
     runs-on: macos-15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -48,9 +62,6 @@ jobs:
 
       - name: Validate package manifest
         run: swift package dump-package
-
-      - name: Resolve dependencies
-        run: xcodebuild -resolvePackageDependencies -scheme GraphEvo-Package
 
       - name: Prepare iOS 18.5 simulator
         run: |
@@ -68,45 +79,63 @@ jobs:
           fi
           GRAPHEVO_SIMULATOR_ID="$(xcrun simctl create 'GraphEvo CI' com.apple.CoreSimulator.SimDeviceType.iPhone-16 com.apple.CoreSimulator.SimRuntime.iOS-18-5)"
           xcrun simctl boot "$GRAPHEVO_SIMULATOR_ID"
-          xcrun simctl bootstatus "$GRAPHEVO_SIMULATOR_ID" -b
+          # Xcode waits for readiness; boot proceeds while compilation starts.
           echo "GRAPHEVO_SIMULATOR_ID=$GRAPHEVO_SIMULATOR_ID" >> "$GITHUB_ENV"
 
-      - name: Build and run tests on iOS Simulator
-        run: >-
-          xcodebuild test
-          -scheme GraphEvo-Package
-          -destination 'platform=iOS Simulator,id=${{ env.GRAPHEVO_SIMULATOR_ID }}'
-          -resultBundlePath '${{ runner.temp }}/graphevo-ios.xcresult'
-          CODE_SIGNING_ALLOWED=NO
+      - name: Validate test profiles
+        run: python3 -m unittest discover -s Scripts/tests
 
-      - name: Summarize iOS test results
-        if: always()
+      - name: Build and run ${{ env.GRAPHEVO_CI_PROFILE }} tests on iOS Simulator
+        run: |
+          set -o pipefail
+          python3 Scripts/run_ci_tests.py --platform ios --profile "$GRAPHEVO_CI_PROFILE" \
+            --destination "platform=iOS Simulator,id=$GRAPHEVO_SIMULATOR_ID" \
+            --result-bundle "$RUNNER_TEMP/graphevo-ios.xcresult" \
+            2>&1 | tee "$RUNNER_TEMP/graphevo-ios.log"
+
+      - name: Summarize failed iOS test results
+        if: failure()
         run: |
           if [ -d "$RUNNER_TEMP/graphevo-ios.xcresult" ]; then
-            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/graphevo-ios.xcresult"
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/graphevo-ios.xcresult" > "$RUNNER_TEMP/graphevo-ios.summary.json"
+            python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print({k:s.get(k) for k in ("passedTests", "failedTests", "skippedTests", "totalTestCount")})' "$RUNNER_TEMP/graphevo-ios.summary.json"
           fi
 
-      - name: Retain failed iOS test diagnostics
+      - name: Retain failed iOS text diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: graphevo-ios-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/graphevo-ios.log
+            ${{ runner.temp }}/graphevo-ios.summary.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Retain explicitly requested native diagnostics
+        if: failure() && (inputs.diagnostics == true || contains(github.event.pull_request.labels.*.name, 'ci-diagnostics'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphevo-ios-xcresult-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/graphevo-ios.xcresult
           if-no-files-found: ignore
-          retention-days: 3
+          retention-days: 1
 
       - name: Check diff formatting
         run: git diff --check
 
   macos:
-    # Alpha PRs use explicit checkpoints; stable/v1 and manual runs keep full validation.
+    # Alpha checkpoints use v2 suites; full checkpoints and v1/releases keep every suite.
     if: >-
       github.event_name != 'pull_request' ||
       github.base_ref != 'codex/graphevo-2' ||
-      (contains(github.event.pull_request.labels.*.name, 'ci-checkpoint') &&
-       (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint'))
+      ((contains(github.event.pull_request.labels.*.name, 'ci-checkpoint') ||
+        contains(github.event.pull_request.labels.*.name, 'ci-full-checkpoint')) &&
+       (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint' ||
+        github.event.label.name == 'ci-full-checkpoint'))
     name: Swift package validation (macOS)
     runs-on: macos-15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -121,15 +150,11 @@ jobs:
       - name: Validate package manifest
         run: swift package dump-package
 
-      - name: Resolve dependencies
-        run: xcodebuild -resolvePackageDependencies -scheme GraphEvo-Package
+      - name: Validate test profiles
+        run: python3 -m unittest discover -s Scripts/tests
 
-      - name: Build and run tests on macOS
-        run: >-
-          xcodebuild test
-          -scheme GraphEvo-Package
-          -destination 'platform=macOS'
-          CODE_SIGNING_ALLOWED=NO
+      - name: Build and run ${{ env.GRAPHEVO_CI_PROFILE }} tests on macOS
+        run: python3 Scripts/run_ci_tests.py --platform macos --profile "$GRAPHEVO_CI_PROFILE"
 
       - name: Check diff formatting
         run: git diff --check
@@ -145,6 +170,7 @@ jobs:
       github.ref == 'refs/heads/master' ||
       (github.event_name == 'pull_request' && github.base_ref == 'master')
     runs-on: macos-15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
