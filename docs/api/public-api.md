@@ -860,8 +860,14 @@ available for v1 stores. See the
   codec/version/data; unknown codecs retain bytes without implicit execution.
 - `GraphPropertyValue: Sendable`: `var graphValue: GraphValue { get }` and
   `init(graphValue: GraphValue) throws`. Conformances: GraphValue,
-  GraphEncodedValue, String, Bool, Int, Int64, UInt64, Double, Decimal, Data,
+  GraphEncodedValue, String, Bool, Int8, Int16, Int32, Int, Int64, UInt8, UInt16,
+  UInt32, UInt, UInt64, Float, Double, Decimal, Data,
   Date, URL, UUID, and conditional Optional, Array and string-keyed Dictionary.
+  Integer widths widen to the existing signed/unsigned 64-bit cases; narrowing
+  checks exact range and preserves signedness. Float widens to Double and decodes
+  only finite exactly representable values, without rounding/underflow/overflow.
+  GraphValue cases and wire formats remain unchanged. See
+  [numeric property mapping](../design/graphevo-2-numeric-properties.md).
 - `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:) throws`:
   read-only fields; endpoints defaults to `.entity`, properties/tags/groups to
   empty and creation date to nil. Type/property keys must be nonempty and

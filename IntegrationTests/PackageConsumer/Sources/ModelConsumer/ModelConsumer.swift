@@ -84,6 +84,7 @@ import GraphEvo
         guard try await nativeReader.fetch(nativeProfile.id, as: Profile.self)?.displayName == "Grace" else { throw GraphStoreError.missingNode }
         try await nativeReader.close(); try await nativeReopen.close()
         try await checkMirroredOverloadValidation()
+        try await checkNumericPropertyValues(at: directory.appendingPathComponent("Numeric.sqlite"))
         print("GraphEvo Swift 6 typed store, graph catalog and native schema consumer passed")
     }
 }

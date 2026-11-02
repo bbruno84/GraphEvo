@@ -111,6 +111,9 @@ this increment. GraphValue and GraphRecord deliberately do not acquire an
 implicit synthesized Codable persistence format.
 
 `GraphPropertyValue` converts these explicitly to application property types.
+[Expanded numeric mapping](graphevo-2-numeric-properties.md) adds narrow signed/
+unsigned Swift integers, UInt and Float while retaining the existing three
+integer/unsigned/floating logical categories and exact narrowing checks.
 Standard conversions are strict: Bool is not integer 1, and a Double field does
 not silently coerce an integer. Optional fields decode `.null` to nil, while an
 absent key still throws `missingProperty`. Incorrect representations throw a

@@ -1,6 +1,6 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-01. This is the single entry point for **integrated work,
+Updated: 2026-11-02. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
@@ -8,15 +8,34 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
-Extension-only model mapping integrates through
-[PR #131](https://github.com/bbruno84/GraphEvo/pull/131), directly from #130.
-No next implementation branch is open. Next: return to native-property
-schema/planner design, using TP01 retained on `codex/experiment-typed-properties`.
-The experiment is not an adopted schema or production query engine. Migration's
-remaining route is supported opt-in bootstrap, production/historical source
-acceptance and new-cloud activation of one authoritative converted graph.
+Expanded numeric property mapping integrates through
+[PR #132](https://github.com/bbruno84/GraphEvo/pull/132), directly from #131.
+No next implementation branch is open. Next: native-property schema/planner
+design, using TP01 retained on `codex/experiment-typed-properties`. The experiment
+is not an adopted schema or production query engine. Migration's remaining route
+is opt-in bootstrap, production/historical source acceptance and new-cloud
+activation of one authoritative converted graph.
 
-## Latest integrated correction — extension-only model mapping
+## Latest integrated increment — numeric property mapping
+
+[The contract](graphevo-2-numeric-properties.md) adds Int8/Int16/Int32,
+UInt/UInt8/UInt16/UInt32 and Float to GraphPropertyValue. These route through the
+existing signed Int64, unsigned UInt64 and Double cases. Narrowing checks exact
+range/category; Float checks finite exact representability. No new GraphValue,
+codec, S03, cloud/session/backup format or identity mapping is introduced.
+The independent public consumer validates all eight types on native SQLite,
+including queries, reopen and a rejected overflowing typed patch with retained data.
+
+Local checks pass 897 macOS functions, 28 iOS model functions/35 invocations,
+both consumers and manifest/diff checks. Agent review finds no blocking issues.
+One full [checkpoint #343](https://github.com/bbruno84/GraphEvo/actions/runs/41397002045)
+passes on `73dde6940d81133f6c97f858f65ba85eb03abc13`: 897 macOS functions and both
+consumers; 895 passed iOS functions/1008 invocations, zero failures and one known
+legacy alias skip. Final status/checklist edits are documentation-only; all
+shipping/test/consumer inputs match the reviewed checkpoint. Native typed columns,
+UUID/URI adoption, predicate planning and physical cloud/schema gates remain open.
+
+## Earlier integrated correction — extension-only model mapping
 
 [The contract](graphevo-2-extension-model-mapping.md) permits a Foundation-only
 Sendable domain model with UUID identity and a separate GraphEvo conformance file.
