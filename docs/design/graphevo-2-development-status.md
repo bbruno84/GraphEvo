@@ -8,6 +8,16 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+[MF11 native staged v1 conversion](graphevo-2-native-v1-migration.md) is under
+implementation on `codex/v2-native-v1-migration`, directly from integrated #140.
+Core Data owns the native schema hop. A writable isolated v1 copy retains lookup
+identities before migration; native handlers convert property rows in batches.
+The default package-only bootstrap selects this route on iOS 17/macOS 14, while
+the explicit-limits atomic recipe stays available. This removes the total
+property-byte allowance for the new route, not the existing identity-map/native
+format constraints or remaining production/public/cloud gates. Integration,
+review and final checkpoint are pending.
+
 Expanded numeric property mapping integrates through
 [PR #132](https://github.com/bbruno84/GraphEvo/pull/132), directly from #131.
 P01 integrates through [PR #133](https://github.com/bbruno84/GraphEvo/pull/133),

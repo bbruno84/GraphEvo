@@ -935,3 +935,15 @@ physical interruption, cross-process writers, scale or new-cloud activation.
   reviewed full checkpoint #365 on `1927535`. Keep historical full-run evidence
   unchanged and record each new run's actual profile. Cold remote v2-profile
   timing remains unmeasured; full iOS and runner-queue costs remain explicit.
+
+## MF11 native staged conversion
+
+- [ ] Review/integrate native staged conversion without a graph-sized payload
+  snapshot or whole-database property-byte budget; preserve source, backups,
+  identity allocation, row checkpoints and atomic readiness/sync sealing.
+- [ ] Retain larger identity-map/receipt formats, platform memory/disk capacity,
+  historical model/codec coverage, physical interruption and public/production
+  cutover as separate acceptance gates. Synthetic payload/page tests do not
+  certify every workload; private source artifacts remain outside Git/CI/cloud.
+
+See [MF11](graphevo-2-native-v1-migration.md).

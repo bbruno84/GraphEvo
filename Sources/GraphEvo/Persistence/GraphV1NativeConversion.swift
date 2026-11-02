@@ -10,7 +10,7 @@ import GraphEvoStore
 enum GraphV1NativeConversion {
     static let legacyArchiveCodec = "GraphEvo.v1.secure-archive"
     static let receiptKey = GraphTypedStoreAdapter.prefix + "v1Conversion"
-    private struct Canonical: Encodable {
+    struct Canonical: Encodable {
         let legacyID: String
         let type: String
         let kind: String

@@ -162,6 +162,7 @@ package actor StoreRegistry {
         let generation = UUID()
         let resolved: ResolvedStore
         let schema: StoreSchema
+        let nativeMigrationDocument: Data?
         let opening: Task<StoreResources, any Error>
         var fileIdentities: [StoreKey: FileIdentity] = [:]
         var tokens: Set<UUID> = []
@@ -176,7 +177,8 @@ package actor StoreRegistry {
 
     init(hooks: StoreLifecycleHooks = StoreLifecycleHooks()) { self.hooks = hooks }
 
-    package func open(_ configuration: StoreConfiguration, schema: StoreSchema) async throws -> StoreHandle {
+    package func open(_ configuration: StoreConfiguration, schema: StoreSchema,
+                      nativeMigration: StoreNativeMigration? = nil) async throws -> StoreHandle {
         try Task.checkCancellation()
         let resolved = try ResolvedStore(configuration)
         while true {
@@ -200,14 +202,16 @@ package actor StoreRegistry {
                 }
             }
             if let entry = entries[resolved.key] {
-                guard try entry.resolved.isCompatible(with: resolved), entry.schema.isCompatible(with: schema) else {
+                guard try entry.resolved.isCompatible(with: resolved), entry.schema.isCompatible(with: schema),
+                      entry.nativeMigrationDocument == nativeMigration?.document else {
                     throw StoreRuntimeError.configurationConflict(resolved.url)
                 }
                 try validateIdentities(entry.fileIdentities, current: identities, resolved: resolved)
             } else {
                 let hooks = hooks, owner = owner
-                let opening = Task.detached { try await StoreResources.open(resolved, schema: schema, hooks: hooks, owner: owner) }
-                entries[resolved.key] = Entry(resolved: resolved, schema: schema, opening: opening, fileIdentities: identities)
+                let opening = Task.detached { try await StoreResources.open(resolved, schema: schema, hooks: hooks, owner: owner, nativeMigration: nativeMigration) }
+                entries[resolved.key] = Entry(resolved: resolved, schema: schema, nativeMigrationDocument: nativeMigration?.document,
+                                             opening: opening, fileIdentities: identities)
             }
             let token = UUID()
             entries[resolved.key]!.tokens.insert(token)
@@ -232,7 +236,10 @@ package actor StoreRegistry {
                 if entries[resolved.key]?.generation == entry.generation {
                     entries[resolved.key]?.fileIdentities = current
                 }
-                try Task.checkCancellation()
+                // A successful native initializer has sealed a durable conversion.
+                // Drain it and return its handle; the bootstrap reports any later
+                // caller cancellation separately from that committed outcome.
+                if nativeMigration == nil { try Task.checkCancellation() }
             } catch {
                 try await release(resolved.key, generation: entry.generation, token: token)
                 throw error

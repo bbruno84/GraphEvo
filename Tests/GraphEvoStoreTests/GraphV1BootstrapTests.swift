@@ -40,7 +40,10 @@ private struct BootstrapFault: Error {}
               graphID: id, operationID: operation, backupRoot: root.appendingPathComponent("Backups"), reason: "Explicit bootstrap fixture")
     }
     private func manager(registry: StoreRegistry = StoreRegistry(), adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) -> GraphContextManager {
-        .init(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        // Retain MF09's bounded-recipe lifecycle and injection coverage. MF11's
+        // default native route has its own stage/recovery regressions.
+        var bounded = adapter; bounded.nativeV1Migration = nil
+        return .init(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: bounded)
     }
     private func adapter(snapshot: (@Sendable () throws -> Void)? = nil, apply: (@Sendable () throws -> Void)? = nil,
                          opening: (@Sendable () throws -> Void)? = nil) -> GraphCoordinatorAdapter {

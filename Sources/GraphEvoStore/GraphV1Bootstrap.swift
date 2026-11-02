@@ -10,11 +10,20 @@ package struct GraphV1BootstrapResult: Sendable {
 }
 
 extension GraphContextManager {
+    /// Uses native staged conversion where supported; the retained bounded recipe
+    /// remains explicit through the overload that takes limits.
+    package func openGraph(convertingLocalV1 request: GraphStoreMigrationRequest) async throws -> GraphV1BootstrapResult {
+        if #available(iOS 17, macOS 14, *), adapter.nativeV1Migration != nil {
+            return try await openGraph(migratingNativeV1: request)
+        }
+        return try await openGraph(convertingLocalV1: request, limits: .init())
+    }
+
     /// Explicitly converts or recovers one stopped local v1 source and opens its distinct native target.
     /// The caller retains request IDs/current URLs and must not configure cloud for this graph concurrently.
     /// No handle is exposed until verified conversion and ordinary native opening both succeed.
     package func openGraph(convertingLocalV1 request: GraphStoreMigrationRequest,
-                           limits: GraphV1ConversionLimits = .init()) async throws -> GraphV1BootstrapResult {
+                           limits: GraphV1ConversionLimits) async throws -> GraphV1BootstrapResult {
         try Task.checkCancellation()
         try limits.validate()
         guard let conversion = adapter.v1Conversion, schema.identifier == conversion.targetSchemaIdentifier else {

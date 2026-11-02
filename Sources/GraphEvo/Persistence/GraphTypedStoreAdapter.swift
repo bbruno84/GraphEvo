@@ -161,8 +161,19 @@ package enum GraphTypedStoreAdapter {
         return ([root, membership] + Array(session.nodes.values)).flatMap(\.runtimeOwnedObjectIDs)
     }
 
-    private static func createGraph(_ context: NSManagedObjectContext, id: GraphID) throws {
-        guard !(try catalog(context)).contains(id) else { throw GraphStoreError.duplicateIdentity }
+    static func createMigratedGraph(_ context: NSManagedObjectContext, id: GraphID) throws {
+        guard let coordinator = context.persistentStoreCoordinator, let store = coordinator.persistentStores.first,
+              coordinator.metadata(for: store)[StoreNativeContext.workspaceKey] is String,
+              coordinator.metadata(for: store)[StoreNativeContext.historySyncGraphKey] as? String == id.rawValue.uuidString,
+              coordinator.metadata(for: store)[StoreNativeMigration.documentKey] is Data else { throw GraphStoreError.legacyStoreRequiresAdoption }
+        let request = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityName)
+        request.predicate = NSPredicate(format: "type == %@", rootType); request.fetchLimit = 1
+        guard try context.fetch(request).isEmpty else { throw GraphStoreError.duplicateIdentity }
+        try createGraph(context, id: id, migrated: true)
+    }
+
+    private static func createGraph(_ context: NSManagedObjectContext, id: GraphID, migrated: Bool = false) throws {
+        if !migrated { guard !(try catalog(context)).contains(id) else { throw GraphStoreError.duplicateIdentity } }
         try GraphNativeIdentityColumns.validateModel(in: context)
         let graph = facade(context)
         let root = Entity(rootType, graph: graph)

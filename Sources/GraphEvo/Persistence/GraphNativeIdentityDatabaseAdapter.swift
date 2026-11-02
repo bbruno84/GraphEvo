@@ -13,6 +13,15 @@ enum GraphNativeIdentityDatabaseAdapter {
 
     static var database: GraphDatabaseAdapter { makeDatabase() }
 
+    static func activateMigratedGraph(_ context: NSManagedObjectContext, graphID: GraphID) throws {
+        guard let coordinator = context.persistentStoreCoordinator, let store = coordinator.persistentStores.first,
+              coordinator.metadata(for: store)[StoreNativeContext.workspaceKey] is String,
+              coordinator.metadata(for: store)[StoreNativeMigration.documentKey] is Data else {
+            throw GraphStoreError.legacyStoreRequiresAdoption
+        }
+        try access().backfill(context, graphID: graphID)
+    }
+
     static func makeDatabase(allowsMirroring: Bool = false) -> GraphDatabaseAdapter {
         let access = access(allowsMirroring: allowsMirroring)
         let base = GraphTypedStoreAdapter.database

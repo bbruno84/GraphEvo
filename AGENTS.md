@@ -1414,3 +1414,20 @@ the synthetic protocol does not certify historical sources or old-client fences.
 Host v1 writer/completeness prerequisites remain explicit; no diagnostic
 ledger, local flag or KVS value is a distributed cutover fence. Keep private support
 fixtures outside Git/CI/device/cloud. No public bootstrap or beta gate closes here.
+
+## V2 MF11 native staged v1 conversion
+
+Read [MF11](docs/design/graphevo-2-native-v1-migration.md) before changing the native
+v1 bootstrap. Core Data owns the additive schema hop; explicitly prepared lookup
+identities and per-row S04 slots are library transformations. Keep the original
+read-only, the verified backup pinned and the destination workspace unavailable
+until catalog validation, fresh target PH baseline and completion receipt seal.
+Save native metadata with the sealing transaction. Preserve pending/live runtime
+claims across source preparation, target load and failed detachment. Native stage
+contexts may use framework generic managed objects only in this internal adapter;
+normal domain access continues through Node facades. No total property-byte
+allowance is applied by this route; existing format-1 identity/receipt/history
+bounds and individual decoder memory requirements remain explicit. The default
+package bootstrap selects it on iOS 17/macOS 14; explicit-limits MF07/MF09 recovery
+and all public legacy openers retain their historical scope. Do not publish private
+source archives, generated stores, identity maps or raw acceptance diagnostics.

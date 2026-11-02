@@ -40,6 +40,32 @@ enum GraphSyncCheckpointAdapter {
         }
     }
 
+    /// Establish a new local baseline only inside the sealed native-v1 workspace.
+    /// The token belongs to the migrated target, never to an old cloud session.
+    static func seedNativeConversion(_ context: NSManagedObjectContext, graphID: GraphID, ids: Set<GraphNodeID>) throws {
+        guard let coordinator = context.persistentStoreCoordinator, let store = coordinator.persistentStores.first,
+              coordinator.metadata(for: store)[StoreNativeContext.workspaceKey] is String,
+              coordinator.metadata(for: store)[StoreNativeMigration.documentKey] is Data else { throw GraphSyncError.invalidState }
+        var value = try load(context, id: graphID, limits: .init())
+        if value.original != nil { return }
+        let request = NSPersistentHistoryChangeRequest.fetchHistory(after: nil as NSPersistentHistoryToken?)
+        request.resultType = .transactionsOnly; request.affectedStores = [store]
+        guard let fetch = NSPersistentHistoryTransaction.fetchRequest else { throw GraphSyncError.historyUnavailable }
+        request.fetchRequest = fetch
+        guard let result = try context.execute(request) as? NSPersistentHistoryResult,
+              let latest = (result.result as? [NSPersistentHistoryTransaction])?.max(by: { $0.transactionNumber < $1.transactionNumber }),
+              latest.transactionNumber > 0 else { throw GraphSyncError.historyUnavailable }
+        value.state.token = try NSKeyedArchiver.archivedData(withRootObject: latest.token, requiringSecureCoding: true)
+        value.state.transaction = latest.transactionNumber
+        let session = try GraphTypedStoreAdapter.Session(context, graphID, database: true)
+        guard Set(session.nodes.keys) == ids else { throw GraphSyncError.invalidState }
+        value.state.pending = try ids.map { id in
+            guard let node = try session.node(id), let kind = node.node.entity.name else { throw GraphSyncError.unresolvedChange }
+            return GraphSyncChange(id: id, nativeKind: kind, operation: .save, generation: latest.transactionNumber)
+        }.sorted(by: ordered)
+        try persist(context, value)
+    }
+
     /// Reserve only for a newly created coordinated resource, never infer a prior mirror's purpose.
     static func reservePurpose(_ context: NSManagedObjectContext, graphID: GraphID) throws {
         guard let coordinator = context.persistentStoreCoordinator, let store = coordinator.persistentStores.first else { throw GraphSyncError.invalidState }

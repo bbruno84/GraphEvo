@@ -30,7 +30,10 @@ enum GraphCoordinatorFactory {
             }
             return try GraphMutationMetadata.policy(root)
         }
-        var coordinator = GraphCoordinatorAdapter(graph: graph, sync: sync, v1Conversion: GraphV1NativeConversion.adapter, migrationSource: GraphV1NativeConversion.adapter.migrationSource, initializePolicy: { context, id, policy in
+        let migrationSource = GraphStoreMigrationSource(schema: GraphRuntimeSchema.current, legacyReadOnly: true) { context, id in
+            try GraphV1NativeInventory.inspect(context, id: id).storeID
+        }
+        var coordinator = GraphCoordinatorAdapter(graph: graph, sync: sync, v1Conversion: GraphV1NativeConversion.adapter, migrationSource: migrationSource, initializePolicy: { context, id, policy in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
         }, publication: GraphMigrationNativePublication.adapter, workspace: GraphMigrationNativeWorkspace.adapter, prepareWorkspace: { context, id in
@@ -75,6 +78,9 @@ enum GraphCoordinatorFactory {
             else { try GraphSyncCheckpointAdapter.requirePurpose(context, graphID: id) }
         }
         coordinator.activation = GraphCloudActivationNative.adapter
+        if #available(iOS 17, macOS 14, *) {
+            coordinator.nativeV1Migration = GraphV1StagedMigration.adapter
+        }
         return coordinator
     }
     static func validateGraph(_ context: NSManagedObjectContext, id: GraphID) throws {
