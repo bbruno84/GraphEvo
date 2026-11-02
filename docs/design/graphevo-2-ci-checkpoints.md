@@ -90,7 +90,7 @@ The legacy retention tests seed valid boundary-sized histories once and invoke
 normal durable transitions to test compaction at the unchanged 2-MiB limit. They
 no longer perform hundreds of preparatory fsync/history-decode cycles. The export
 test uses a small vector PDF to test the same save/reopen contract without
-PDFKit image-analysis startup. Crash/journal/KVS/corruption cases are retained.
+creating a PDF page from an image. Crash/journal/KVS/corruption cases are retained.
 
 ## Diagnostics and evidence
 
@@ -118,4 +118,15 @@ The previous #362 iOS job spent 272.27 seconds in image/PDF export and 50.74/
 11.37 seconds in the two legacy retention cases. Revised retention cases run in
 roughly 0.1–0.2 seconds locally, still exercising the real 2-MiB boundary. Machines,
 cache state and instrumentation differ, so no cross-environment speed ratio is
-claimed. Remote full-profile timing is recorded after review and validation.
+claimed. Reviewed full [checkpoint #365](https://github.com/bbruno84/GraphEvo/actions/runs/41448941858)
+passes on `19275350aad6e0b450fecdc17dc2606790dd0429`, integrating through #138.
+MacOS retains all 925 functions and both Swift 6 consumers; iOS retains 923 passed
+functions, zero failures and the known legacy skip. Job-log spans excluding runner
+queue are 279 seconds macOS and 768 seconds iOS, versus 425/837 seconds for #362.
+The macOS retention cases each take 0.23 seconds. The complete iOS profile remains
+costly; normal v2 checkpoints omit its legacy execution. Cold remote v2-profile
+latency has not yet been measured. In this run iOS also waited roughly ten minutes
+for a runner, separately from execution; queue availability is not a test speedup.
+
+Final integration notes are documentation-only. Shipping/test/manifest/scripts/
+consumer/workflow inputs match the tested commit; library Sources remain unchanged.

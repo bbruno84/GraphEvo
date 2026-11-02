@@ -912,5 +912,7 @@ physical interruption, cross-process writers, scale or new-cloud activation.
   infrastructure, milestone/tag/release acceptance. A v2 profile checkpoint
   verifies store/runtime/model and Swift 6 consumers, with the large capacity
   fixture deferred to full/relevant local checks; it is not full beta acceptance.
-  See [CI profiles](graphevo-2-ci-checkpoints.md). Keep historical full-run evidence
-  unchanged and record each new run's actual profile.
+  See [CI profiles](graphevo-2-ci-checkpoints.md), integrated through #138 after
+  reviewed full checkpoint #365 on `1927535`. Keep historical full-run evidence
+  unchanged and record each new run's actual profile. Cold remote v2-profile
+  timing remains unmeasured; full iOS and runner-queue costs remain explicit.
