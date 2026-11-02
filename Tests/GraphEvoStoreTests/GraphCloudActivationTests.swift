@@ -77,7 +77,9 @@ private actor ActivationServer {
     }
 }
 
-@Suite(.timeLimit(.minutes(2))) struct GraphCloudActivationTests {
+// Every fixture performs a backed-up native conversion. Serialize independent
+// cases rather than saturating the full suite with simultaneous migrations.
+@Suite(.serialized, .timeLimit(.minutes(2))) struct GraphCloudActivationTests {
     private struct Fixture {
         let root: URL
         let manager: GraphContextManager

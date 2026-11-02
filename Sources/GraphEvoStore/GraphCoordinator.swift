@@ -8,6 +8,7 @@ package struct GraphCoordinatorAdapter: Sendable {
     package var activation: GraphCloudActivationAdapter? = nil
     package let migrationSource: GraphStoreMigrationSource?
     package let v1Conversion: GraphV1ConversionAdapter?
+    package var nativeV1Migration: GraphNativeV1MigrationAdapter?
     package let publication: GraphMigrationPublicationAdapter?
     package let workspace: GraphMigrationWorkspaceAdapter?
     package let prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)?

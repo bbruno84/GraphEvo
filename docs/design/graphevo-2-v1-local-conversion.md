@@ -1,5 +1,9 @@
 # MF07 — explicit local v1 to S03 conversion
 
+[MF11 native staged migration](graphevo-2-native-v1-migration.md) supersedes the
+default package bootstrap on iOS 17/macOS 14. The explicit-limits overload and
+low-level conversion retain this bounded atomic recipe and its historical evidence.
+
 Status: package-only implementation integrates through
 [PR #129](https://github.com/bbruno84/GraphEvo/pull/129), based directly on #128,
 after review and full CI #331 on `f24029a`. This supplies the first bounded local conversion route, not automatic

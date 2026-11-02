@@ -1,5 +1,9 @@
 # MF09 — explicit local v1 conversion and opening
 
+[MF11 native staged migration](graphevo-2-native-v1-migration.md) supersedes the
+default package bootstrap on iOS 17/macOS 14. The explicit-limits overload and
+low-level conversion retain this bounded atomic recipe and its historical evidence.
+
 ## Scope
 
 MF09 connects the existing MF07/MF08 conversion to ordinary ContextManager

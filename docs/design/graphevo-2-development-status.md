@@ -8,6 +8,34 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+[MF11 native staged v1 conversion](graphevo-2-native-v1-migration.md) integrates
+through [PR #141](https://github.com/bbruno84/GraphEvo/pull/141), directly from
+integrated #140. Core Data owns the native schema hop; library handlers prepare
+logical identities and convert properties in batches. The default package-only
+bootstrap selects this route on iOS 17/macOS 14. The explicit-limits atomic
+recipe remains available. Original sources stay read-only and ordinary admission
+remains closed until catalog, fresh target history baseline and receipt seal.
+
+Follow-up review closes a destination-publication window: metadata is stamped in
+an unpublished native seed before Core Data replaces the destination. A fault
+regression proves failed stamping leaves no destination and a later retry retains
+admission. Independent heavy fixture cases are serialized per suite; explicit
+concurrent migration/lifecycle cases, assertions, payloads and deadlines remain.
+
+Reviewed [full checkpoint #381](https://github.com/bbruno84/GraphEvo/actions/runs/41517663511)
+passes on `22db0d67c6fff65d2665c64fbc53e20164db00d7`: 960 macOS functions,
+958 passed iOS functions with the known skip, and both Swift 6 consumers.
+The first iOS job never acquired a hosted runner; its sole retry passes on the
+same head, retaining the successful macOS job. Earlier timeout/capacity attempts
+retain their actual failed scope in the [MF11 evidence](results/native-v1-staged-migration-2026-11-02.md).
+Final integration notes are documentation-only; shipping/test/consumer/workflow
+inputs match that checkpoint. Private acceptance stays outside Git/CI/cloud.
+
+This removes the native route's total property-byte allowance, not format-1
+identity/receipt/history constraints or platform capacity requirements. Larger
+identity formats, public/production/historical adoption, physical interruption
+and cloud cutover retain their separate gates.
+
 Expanded numeric property mapping integrates through
 [PR #132](https://github.com/bbruno84/GraphEvo/pull/132), directly from #131.
 P01 integrates through [PR #133](https://github.com/bbruno84/GraphEvo/pull/133),
@@ -40,7 +68,20 @@ capacity and public/historical/cloud migration gates remain open. TP01 remains r
 is production/historical source acceptance, public facade/bootstrap integration
 and production adoption of the cloud flow for the authoritative converted graph.
 
-## Latest integrated increment — MF10 authoritative cloud activation
+## Latest integrated increment — MF11 native staged v1 conversion
+
+The explicit native route uses Core Data schema migration with resumable library
+transformations. It retains source/backup protection, typed values, logical UUIDs,
+exclusive ownership and failed-detachment quarantine. Complete receipts recover
+without replaying later edits. A pre-publication seed protects admission even
+when metadata stamping fails. No new schema version or cloud work is introduced.
+
+Full reviewed checkpoint #381 passes both platforms and Swift 6 consumers on
+`22db0d67c6fff65d2665c64fbc53e20164db00d7`. The report records local private
+acceptance separately from synthetic CI and retains failed/time-out attempts.
+Source, beta, public and cloud gates keep their actual bounded scope.
+
+## Earlier integrated increment — MF10 authoritative cloud activation
 
 One durable cloud authority selects the converted seed before uploads. Native
 receipt/file/history identity, restart admission and session guards prevent

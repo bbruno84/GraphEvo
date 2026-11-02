@@ -92,6 +92,19 @@ no longer perform hundreds of preparatory fsync/history-decode cycles. The expor
 test uses a small vector PDF to test the same save/reopen contract without
 creating a PDF page from an image. Crash/journal/KVS/corruption cases are retained.
 
+The MF11 native-conversion suite and MF10 activation suite serialize independent
+fixture cases within each suite. Each case creates a backed-up native migration;
+running every fixture at once adds file/model work to the full runner's unrelated
+one-minute cases. This bounds fixture bursts, not production concurrency: explicit
+task-group migration/ownership tests retain their concurrent operations and all
+other suites can still run in parallel, following
+[Swift Testing's scoped serialization](https://developer.apple.com/documentation/testing/parallelization).
+Test counts, assertions, payload sizes,
+time allowances and profile selection remain unchanged. Hosted timeout/capacity
+failures remain recorded; reviewed full checkpoint #381 passes both platforms
+and Swift 6 consumers after this change. This is bounded acceptance, not a
+stack-level diagnosis of prior timeouts. See [MF11 evidence](results/native-v1-staged-migration-2026-11-02.md).
+
 ## Diagnostics and evidence
 
 Successful iOS runs print concise actual result counts and reject empty/failed

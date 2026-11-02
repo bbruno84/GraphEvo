@@ -1896,10 +1896,16 @@ See [P02](../design/graphevo-2-typed-properties.md#p02-hybrid-query-contract).
 
 ## MF09 package-only local v1 bootstrap
 
-`GraphContextManager.openGraph(convertingLocalV1: GraphStoreMigrationRequest,
-limits: GraphV1ConversionLimits = .init()) async throws -> GraphV1BootstrapResult`
-combines existing backed-up conversion/recovery with ordinary S04 opening under
-one admission. It does not change any public/default opener.
+`GraphContextManager.openGraph(convertingLocalV1: GraphStoreMigrationRequest)
+async throws -> GraphV1BootstrapResult` combines backed-up conversion/recovery
+with ordinary S04 opening under one admission. On iOS 17/macOS 14 and later, the
+production factory selects [MF11 native staged conversion](../design/graphevo-2-native-v1-migration.md),
+without a whole-database payload allowance. The explicit overload
+`openGraph(convertingLocalV1:limits:)` retains MF09's bounded atomic recipe;
+older systems and adapters without native support keep that recipe. The explicit
+package-only `openGraph(migratingNativeV1:)` requires iOS 17/macOS 14.
+Public legacy Graph/default openers remain unchanged; isolated working stores
+are refused even while their physical model still matches v1.
 
 The Sendable result separates `conversion: GraphV1ConversionResult` from
 `opening: Result<GraphStore, any Error>`. Errors before commit throw. After commit,

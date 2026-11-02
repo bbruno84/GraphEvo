@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreData
+import GraphEvoRuntime
 
 public enum GraphStoreMetadata {
     // Metadata keys (property-list safe).
@@ -23,6 +24,7 @@ public enum GraphStoreMetadata {
             ofType: NSSQLiteStoreType,
             at: storeURL
         )
+        guard metadata[StoreNativeContext.workspaceKey] == nil else { return false }
         return model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata)
     }
 

@@ -58,7 +58,8 @@ actor StoreResources {
         _ resolved: ResolvedStore,
         schema: StoreSchema,
         hooks: StoreLifecycleHooks,
-        owner: UUID
+        owner: UUID,
+        nativeMigration: StoreNativeMigration? = nil
     ) async throws -> StoreResources {
         try (hooks.processRole ?? StoreProcessRole.current).validate(resolved.configuration)
         let members = try resolved.resources
@@ -70,9 +71,14 @@ actor StoreResources {
               schema.requiredModelVersionIdentifier.map({ model.versionIdentifiers == [AnyHashable($0)] }) ?? true else {
             throw StoreRuntimeError.invalidModel(schema.identifier)
         }
+        if let nativeMigration {
+            try nativeMigration.seed(resolved)
+            try await prepareNativeMigration(nativeMigration, resolved: resolved, hooks: hooks, gateways: gateways)
+        }
         let descriptions = try members.map { member in
             try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier,
-                                 nativeMirroring: resolved.configuration.cloudKitContainerIdentifier != nil)
+                                 nativeMirroring: resolved.configuration.cloudKitContainerIdentifier != nil,
+                                 nativeMigration: nativeMigration)
         }
         let container: NSPersistentContainer
         if resolved.configuration.cloudKitContainerIdentifier != nil {
@@ -81,7 +87,10 @@ actor StoreResources {
         } else { container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model) }
         container.persistentStoreDescriptions = descriptions
         let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways)
-        do { try await resources.load() }
+        do {
+            try await resources.load()
+            if let nativeMigration { try await resources.finishNativeMigration(nativeMigration) }
+        }
         catch {
             let failure = StoreRuntimeError.loadFailed(resolved.url, underlying: error)
             do { try await resources.detach() }
@@ -95,7 +104,8 @@ actor StoreResources {
     }
 
     private static func storeDescription(_ resolved: ResolvedStore, model: NSManagedObjectModel,
-                                         requiredModelVersionIdentifier: String?, nativeMirroring: Bool) throws -> NSPersistentStoreDescription {
+                                         requiredModelVersionIdentifier: String?, nativeMirroring: Bool,
+                                         nativeMigration: StoreNativeMigration? = nil) throws -> NSPersistentStoreDescription {
         let description: NSPersistentStoreDescription
         switch resolved.configuration.location {
         case .sqlite(let url):
@@ -115,8 +125,13 @@ actor StoreResources {
                 if nativeMirroring && metadata[StoreNativeContext.historySyncGraphKey] != nil {
                     throw StoreRuntimeError.invalidConfiguration("A history-sync store cannot be opened by native CloudKit mirroring.")
                 }
-                guard model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata),
-                      requiredModelVersionIdentifier.map({ metadata[NSStoreModelVersionIdentifiersKey] as? [String] == [$0] }) ?? true else {
+                let targetMatches = model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) &&
+                    (requiredModelVersionIdentifier.map({ metadata[NSStoreModelVersionIdentifiersKey] as? [String] == [$0] }) ?? true)
+                let sourceMatches = nativeMigration.map {
+                    metadata[StoreNativeMigration.documentKey] is Data &&
+                    $0.sourceSchema.makeModel().isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata)
+                } ?? false
+                guard targetMatches || sourceMatches else {
                     throw StoreRuntimeError.incompatibleStore(url)
                 }
             } else if resolved.configuration.workspaceID != nil || resolved.configuration.access == .readOnly {
@@ -138,7 +153,40 @@ actor StoreResources {
         description.shouldAddStoreAsynchronously = true
         description.shouldMigrateStoreAutomatically = false
         description.shouldInferMappingModelAutomatically = false
+        if let nativeMigration { try nativeMigration.configure(description, model) }
         return description
+    }
+
+    private func finishNativeMigration(_ migration: StoreNativeMigration) throws {
+        try migration.finish(container)
+    }
+
+    private func performNativePreparation(_ body: @Sendable (NSPersistentContainer) throws -> Void) throws {
+        try body(container)
+    }
+
+    private static func prepareNativeMigration(_ migration: StoreNativeMigration, resolved: ResolvedStore,
+                                              hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease]) async throws {
+        guard let prepare = migration.prepare, let url = resolved.url else { return }
+        let model = migration.sourceSchema.makeModel()
+        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
+        if !model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) { return }
+        let description = try storeDescription(resolved, model: model,
+            requiredModelVersionIdentifier: migration.sourceSchema.requiredModelVersionIdentifier, nativeMirroring: false)
+        let container = NSPersistentContainer(name: migration.sourceSchema.identifier, managedObjectModel: model)
+        container.persistentStoreDescriptions = [description]
+        let staging = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways)
+        do {
+            try await staging.load()
+            try await staging.performNativePreparation(prepare)
+        } catch {
+            let failure = StoreRuntimeError.loadFailed(url, underlying: error)
+            do { try await staging.detach(releasing: false) }
+            catch { throw StoreOpenQuarantine(resources: staging, failure: StoreRuntimeError.shutdownFailed(url, underlying: error)) }
+            throw failure
+        }
+        do { try await staging.detach(releasing: false) }
+        catch { throw StoreOpenQuarantine(resources: staging, failure: StoreRuntimeError.shutdownFailed(url, underlying: error)) }
     }
 
     private func load() async throws {
