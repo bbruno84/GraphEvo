@@ -24,8 +24,13 @@ semantics. It is not integrated. Local checks pass 925 macOS functions, all thre
 independent consumers and manifest/diff validation. The
 [capacity report](results/s04-sort-capacity-2026-11-02.md) retains baseline and
 heap-only refusals, followed by five successful Release sorted pages at the
-unchanged allowance. Review finds no remaining blockers; the single full CI
-checkpoint is pending. Broader device/production capacity acceptance remains open.
+unchanged allowance. Full checkpoint #358 exposed the enclosing suite's inherited
+120-second test limit on the slower macOS runner. The test's five-minute limit
+did not override that shorter suite cap; the suite now allows the intended five
+minutes. Query budgets and shipping source remain unchanged. All eight corrected
+local query tests pass; corrective review finds no remaining blocker. The
+replacement checkpoint is pending. Broader device/production
+capacity acceptance remains open.
 Public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is production/historical source acceptance, public facade/bootstrap integration

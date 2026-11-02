@@ -33,10 +33,15 @@ a modified fixture. Raw logs, stores and disposable bridges stay outside Git/CI.
 | Integrated baseline query implementation | Five step-budget refusals | Reproduces P03 |
 | Heap merge alone | Five step-budget refusals | Retained insufficient intermediate result |
 | Heap plus direct reuse of merged order | Five complete successful pages | No budget refusals in any operation |
+| Final confirmation with every shipping source file aligned to the PR | Five complete successful pages | No budget refusals in any operation |
 
-Final sorted-page samples are 392.60, 387.45, 394.37, 403.33 and 392.35 ms
-(median 392.60 ms). These are one synthetic macOS Release fixture/process,
-with uncontrolled caches and concurrent local verification work. They demonstrate
+The initial successful P03 overlay measured 392.60, 387.45, 394.37, 403.33 and
+392.35 ms (median 392.60 ms). A final fresh-fixture confirmation aligns every
+shipping source file with the reviewed PR, including the later local-bootstrap
+changes outside query execution. Its samples are 374.15, 398.28, 378.43, 389.03
+and 384.95 ms (median 384.95 ms); all other operation assertions also pass.
+These are synthetic macOS Release fixtures/processes, with uncontrolled caches
+and concurrent local verification work. They demonstrate
 capacity at the existing allowance, not a production latency guarantee or a
 performance ratio against the refused baseline. The earlier P03 refusal remains
 historical evidence; disk/index, broad capacity and device envelopes remain open.
@@ -56,6 +61,15 @@ of duplicate/incomplete order inputs. Final local checks pass 925 macOS function
 (331 legacy, 488 store, 76 runtime, 30 model), all three independent consumers,
 manifest and diff validation. The reviewed CI checkpoint is recorded in
 development status before integration.
+
+Initial full checkpoint #358 fails the large regression at the enclosing suite's
+120-second wall-clock cap on the slower macOS runner. A longer individual test
+limit cannot override a shorter suite limit. The corrective change gives the
+suite the intended five-minute setup allowance, without changing shipping code,
+the 100,000-step acceptance or the explicit 30,000-step refusal. Preserve this
+failed checkpoint separately from the corrected verification.
+All eight corrected local query tests pass, including the large fixture; shipping
+source remains byte-identical to the original reviewed implementation.
 
 No physical CloudKit protocol is repeated for this local query-only change.
 P03's separate S04 sharing/asset/recovery evidence retains its original scope;

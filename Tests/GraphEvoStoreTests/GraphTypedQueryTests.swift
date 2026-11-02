@@ -14,7 +14,8 @@ private struct TypedQueryItem: GraphModel {
     func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
-@Suite(.timeLimit(.minutes(2))) struct GraphTypedQueryTests {
+// Suite limits also cap individual tests; include the larger fixture's setup.
+@Suite(.timeLimit(.minutes(5))) struct GraphTypedQueryTests {
     private struct Fixture {
         let root: URL, graph: GraphStore
         let manager: GraphContextManager
