@@ -276,6 +276,14 @@ package actor GraphContextManager {
             }
             let route = try await session.route(for: graphID)
             let binding = GraphCloudTransportBinding(identity: try await session.identity(), route: route)
+            if let opening = entries[graphID]?.opening, let activation = try await opening.value.activationDocument(), activation.phase == .published {
+                guard activation.binding == binding else { throw GraphCloudActivationError.authorityConflict }
+                let expected = activation.authority
+                try await session.activationControl { service, _ in
+                    guard let remote = try await service.fetch(configuration, route), remote.value.published,
+                          remote.value.matches(expected) else { throw GraphCloudActivationError.recoveryRequired }
+                }
+            }
             if binding.route.zone.scope == .shared {
                 try await self.refreshCloudMembership(graphID, configuration: configuration)
             }

@@ -494,4 +494,38 @@ private actor ActivationServer {
         _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: "Local")) }
         try await graph.close(); try await m.stopCloudSession(config)
     }
+
+    @Test func missingPublishedAuthorityBlocksOrdinarySendsWithoutRecreatingIt() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        try await publish(f)
+        await server.removeAuthority(f.route)
+        try await patch(f.graph, id: f.invoice)
+        await #expect(throws: GraphCloudActivationError.recoveryRequired) { _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config) }
+        #expect(await server.sends == 1)
+        #expect(try await server.fetch(f.route) == nil)
+        #expect(try await f.graph.collectSyncChanges() > 0)
+        try await close(f)
+    }
+
+    @Test func observedControlDeletionDurablyBlocksTheSessionSendBoundary() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        try await publish(f)
+        let session = try await f.manager.cloud(f.config)
+        let deletion = GraphCloudIncoming(kind: .recordDeleted, zone: f.zone, recordName: GraphCloudAuthorityCodec.recordName, recordType: GraphCloudAuthorityCodec.recordType)
+        await session.receive(.incoming([deletion]), scope: .private)
+        #expect(await session.pendingActivationIDs.contains(f.graph.id))
+        #expect(try await session.incoming(for: f.zone, limit: 100).isEmpty)
+        try await patch(f.graph, id: f.invoice)
+        let binding = GraphCloudTransportBinding(identity: try await session.identity(), route: f.route)
+        let batch = try await f.graph.prepareTransport(binding)
+        await #expect(throws: GraphCloudActivationError.recoveryRequired) { try await session.send(batch) }
+        try await close(f)
+        let next = manager()
+        _ = try await next.startCloudSession(f.config, adapter: server.adapter)
+        #expect(await (try next.cloud(f.config)).pendingActivationIDs.contains(f.graph.id))
+        try await next.stopCloudSession(f.config)
+        #expect(await server.sends == 1)
+    }
 }

@@ -261,6 +261,20 @@ actor GraphCloudSession {
         guard !stopped else { return }
         var event = received
         if case .incoming(let changes) = event {
+            if let failure, failure != .inboxLimit { return }
+            let lost = Set(changes.filter {
+                $0.valid && $0.zone.scope == scope &&
+                ($0.kind == .zoneDeleted || ($0.kind == .recordDeleted && GraphCloudAuthorityCodec.isControl($0)))
+            }.map(\.zone))
+            if document.activations.contains(where: { lost.contains($0.binding.zone) }) {
+                var next = document
+                next.activations = next.activations.map { entry in
+                    guard lost.contains(entry.binding.zone) else { return entry }
+                    return .init(binding: entry.binding, activationID: entry.activationID, published: false, peer: entry.peer)
+                }
+                do { try publish(next) }
+                catch { block(.persistence); return }
+            }
             if changes.contains(where: { change in
                 GraphLedgerCodec.isControl(change) && change.valid && change.zone.scope == scope &&
                 document.ledgers.contains(where: { $0.binding.zone == change.zone })
