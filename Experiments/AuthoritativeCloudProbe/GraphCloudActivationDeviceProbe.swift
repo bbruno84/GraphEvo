@@ -58,6 +58,16 @@ public actor GraphCloudActivationDeviceProbe {
             retainedGraph = graph
             guard try await graph.validateIntegrity() == 6,
                   try await graph.collectSyncChanges() == 0 else { throw Failure() }
+            if stage == "refresh-peer" || replica == "fresh" {
+                try await graph.read { scope in
+                    let retained = try scope.withContext { context, _ in
+                        let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
+                        guard let invoice = session.nodes.first(where: { $0.value.type == "Invoice" }) else { throw Failure() }
+                        return try session.snapshot(invoice.value, id: invoice.key)
+                    }
+                    guard retained.properties["later"] == .integer(2) else { throw Failure() }
+                }
+            }
             try await Self.checkCurrentServer(graph: graph, zone: zone, configuration: config)
             return ["A genuinely empty S04 peer recovered complete current IDs, bodies, topology and 2-MiB attachment.",
                     "Full integrity and empty outgoing work verified; owner must remain live on its independent device."]
