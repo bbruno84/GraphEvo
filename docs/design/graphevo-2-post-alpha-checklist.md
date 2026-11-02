@@ -881,12 +881,19 @@ fourteen physical stages and complete runtime measurements, without a cloud rese
 
 ## MF09 local conversion/opening checkpoint
 
-- [ ] Review/integrate explicit package-only bootstrap through backed-up S04
+- [x] Review/integrate explicit package-only bootstrap through backed-up S04
   conversion and ordinary opening, preserving committed outcomes after failure.
-- [ ] Record fresh physical local bootstrap/restart evidence separately from
+- [x] Record fresh physical local bootstrap/restart evidence separately from
   historical MF07 S03 and P03 S04 cloud fixtures.
 - [ ] Retain production/historical source acceptance, public facade/bootstrap,
   physical interruption, external-process exclusion, scale and authoritative
   cloud activation as open gates; local readiness does not close them.
 
 See [MF09](graphevo-2-local-v1-bootstrap.md).
+
+MF09 closes its bounded package-only local opening gate through
+[PR #136](https://github.com/bbruno84/GraphEvo/pull/136),
+[the six-stage local device result](results/local-v1-bootstrap-2026-11-02.md) and
+[full checkpoint #355](https://github.com/bbruno84/GraphEvo/actions/runs/41422586643).
+This does not close public bootstrap, production/historical source acceptance,
+physical interruption, cross-process writers, scale or new-cloud activation.

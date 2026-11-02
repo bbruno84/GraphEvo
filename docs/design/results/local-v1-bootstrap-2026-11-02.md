@@ -98,3 +98,13 @@ separate next route, with one selected converted graph/mapping.
 
 The S04 native-sort work-budget follow-up from P03 also remains open. No release,
 beta acceptance, alpha-store converter or new migration registry is introduced.
+
+## Reviewed checkpoint and integration
+
+[PR #136](https://github.com/bbruno84/GraphEvo/pull/136) integrates the bounded
+route after review and full [CI #355](https://github.com/bbruno84/GraphEvo/actions/runs/41422586643)
+on `39fb59afe65d6a55c9919e6d35489603afef68b1`: macOS suites and both consumers;
+921 passed iOS functions/1034 invocations, zero failures and one known legacy
+alias skip. Shipping source remains `9dc5cfa`. Final integration edits are
+documentation-only, with exact source/test/consumer/workflow equivalence to the
+reviewed checkpoint. No laboratory target or physical test is added to CI.

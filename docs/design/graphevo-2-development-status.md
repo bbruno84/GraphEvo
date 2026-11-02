@@ -15,14 +15,37 @@ directly into `codex/graphevo-2`. The [typed-property contract](graphevo-2-typed
 separates S04 storage, P02 hybrid query execution and P03 physical/measurement
 validation. P02 integrates through [PR #134](https://github.com/bbruno84/GraphEvo/pull/134).
 P03's [runtime/physical evidence](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md)
-records the completed validation checkpoint, with no source/test changes. MF09 is active on `codex/v2-local-v1-bootstrap`: the
-[local conversion/opening contract](graphevo-2-local-v1-bootstrap.md) connects the
-existing converter to package-only ordinary opening. This increment is not yet
-integrated. The measured sort-capacity follow-up and public/historical/cloud
-migration gates remain open. TP01 remains retained on
+records the completed validation checkpoint, with no source/test changes. MF09 integrates through [PR #136](https://github.com/bbruno84/GraphEvo/pull/136):
+[explicit local conversion/opening](graphevo-2-local-v1-bootstrap.md) is complete
+within its package-only scope. No next implementation branch is selected. The
+measured sort-capacity follow-up and public/historical/cloud migration gates
+remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
-is opt-in bootstrap, production/historical source acceptance and new-cloud
-activation of one authoritative converted graph.
+is production/historical source acceptance, public facade/bootstrap integration
+and new-cloud activation of one authoritative converted graph.
+
+## Latest integrated increment — MF09 local v1 bootstrap
+
+The existing converter is connected to ordinary S04 opening under one admission
+through consumer read availability. Successful conversion and failed opening are
+separate outcomes; receipt/map/backup survive cancellation or post-commit failure.
+Retry preserves later v2 edits. Same-ID/destination/symlink access and conflicting
+cloud setup are refused, while unrelated resources progress. Pending account
+startup returns busy without waiting for network work. No public/default opening,
+schema or durable document format changes.
+
+Local checks pass 923 macOS functions, iOS store/model and final focused suites,
+both independent consumers and manifest/diff validation. The
+[six-stage physical report](results/local-v1-bootstrap-2026-11-02.md) passes local
+conversion, portable v1 backup restore, restart and retained later edits on iPad/XR.
+The reviewed [full checkpoint #355](https://github.com/bbruno84/GraphEvo/actions/runs/41422586643)
+passes on `39fb59afe65d6a55c9919e6d35489603afef68b1`: macOS suites and both
+consumers; 921 passed iOS functions/1034 invocations, no failures and one known
+legacy alias skip. Shipping source is `9dc5cfa`; later commits add evidence and
+an alias test, followed by documentation-only integration notes. All source/test/
+consumer/workflow inputs match the checkpoint. Production/historical sources,
+public activation, physical interruption, external writers, scale and authoritative
+cloud cutover remain open; this is local readiness evidence only.
 
 ## Latest validation — P03 S04 runtime and CloudKit
 

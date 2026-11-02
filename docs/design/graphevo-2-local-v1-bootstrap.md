@@ -135,3 +135,10 @@ detach quarantine remains owned; a post-commit error cannot hide the receipt.
 The [six-stage physical report](results/local-v1-bootstrap-2026-11-02.md) records
 iPad/XR conversion, restart and final-source recovery. Final reviewed-source CI
 is recorded at integration.
+
+MF09 integrates through [PR #136](https://github.com/bbruno84/GraphEvo/pull/136).
+Reviewed `39fb59afe65d6a55c9919e6d35489603afef68b1` passes one full
+[checkpoint #355](https://github.com/bbruno84/GraphEvo/actions/runs/41422586643):
+macOS suites/both consumers, 921 passed iOS functions/1034 invocations, zero
+failures and one known legacy alias skip. Shipping code remains `9dc5cfa`; final
+integration notes are docs-only and all checkpoint inputs are unchanged.
