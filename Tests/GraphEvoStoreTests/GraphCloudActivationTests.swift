@@ -147,6 +147,9 @@ private actor ActivationServer {
         await #expect(throws: GraphCloudActivationError.recoveryRequired) {
             try await f.manager.bindCloudZone(f.zone, to: f.graph.id, configuration: f.config)
         }
+        let invitation = GraphCloudInvitation(container: f.config.containerIdentifier, environment: .development,
+            graphID: f.graph.id, owner: "foreign-owner", zoneName: "shared", recipient: "synthetic-activation-account", url: URL(string: "https://example.test/invitation")!)
+        await #expect(throws: GraphCloudActivationError.invalidRequest) { try await f.manager.acceptCloudInvitation(invitation, configuration: f.config) }
         let status = try await prepare(f)
         #expect(status.phase == .prepared && status.recordCount == 5)
         let alias = try await f.manager.openGraph(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"))
@@ -389,5 +392,46 @@ private actor ActivationServer {
         let original = try await next.openGraph(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"))
         #expect(try await original.validateIntegrity() == 5)
         try await original.close(); try await next.stopCloudSession(config)
+    }
+
+    @Test func changedNativeConversionReceiptIsRefusedBeforeExposingRecoveredHandles() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await prepare(f); try await close(f)
+        let registry = StoreRegistry()
+        let raw = try await registry.open(.init(location: .sqlite(f.root.appendingPathComponent("Target.sqlite")), exclusiveGraphID: f.graph.id.rawValue), schema: GraphRuntimeSchema.typedProperties)
+        let id = f.graph.id
+        try await raw.controlTransaction { context in
+            let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+            root[dynamicMember: GraphV1NativeConversion.receiptKey] = Data([0])
+            context.transactionAuthor = GraphSyncCheckpointAdapter.metadataAuthor
+        }
+        try await raw.close()
+        let next = manager()
+        await #expect(throws: GraphCloudActivationError.invalidState) { _ = try await next.openGraph(id: id, at: f.root.appendingPathComponent("Target.sqlite")) }
+        #expect(await server.sends == 0)
+        #expect(await next.registeredGraphCount == 0)
+    }
+
+    @Test func sameVolumeRelocationRetainsAuthorityButCopiedNativeStoreCannotTakeOver() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        let moved = f.root.deletingLastPathComponent().appendingPathComponent("Moved-" + UUID().uuidString)
+        let clone = f.root.deletingLastPathComponent().appendingPathComponent("RejectedClone-" + UUID().uuidString)
+        defer {
+            try? FileManager.default.removeItem(at: f.root)
+            try? FileManager.default.removeItem(at: moved)
+            try? FileManager.default.removeItem(at: clone)
+        }
+        _ = try await prepare(f); try await close(f)
+        try FileManager.default.moveItem(at: f.root, to: moved)
+        let next = manager(), graph = try await next.openGraph(id: f.graph.id, at: moved.appendingPathComponent("Target.sqlite"))
+        #expect(try await next.cloudActivationStatus(for: f.graph.id)?.activationID == f.operation)
+        await #expect(throws: GraphStoreError.self) { try await patch(graph, id: f.invoice) }
+        try await graph.close()
+        // Deliberate rejected clone, never a fresh-replica fixture. A native copy can retain UUID/PH metadata.
+        try FileManager.default.copyItem(at: moved, to: clone)
+        let other = manager()
+        await #expect(throws: GraphCloudActivationError.invalidState) { _ = try await other.openGraph(id: f.graph.id, at: clone.appendingPathComponent("Target.sqlite")) }
+        #expect(await server.sends == 0)
     }
 }

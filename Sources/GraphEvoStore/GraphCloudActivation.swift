@@ -123,18 +123,19 @@ package struct GraphCloudAuthority: Codable, Equatable, Sendable {
 }
 
 package struct GraphCloudActivationDocument: Codable, Equatable, Sendable {
-    package var format = 1
+    package var format = 2
     package let binding: GraphCloudTransportBinding
     package let storeID: String
+    package let fileIdentity: WorkspaceFileIdentity
     package let epoch: UUID
     package let authority: GraphCloudAuthority
     package let declaration: GraphCloudCutoverDeclaration?
     package let manifest: GraphCloudSeedManifest?
     package let limits: GraphCloudActivationLimits
     package var phase: GraphCloudActivationPhase
-    package init(binding: GraphCloudTransportBinding, storeID: String, epoch: UUID, authority: GraphCloudAuthority,
+    package init(binding: GraphCloudTransportBinding, storeID: String, fileIdentity: WorkspaceFileIdentity, epoch: UUID, authority: GraphCloudAuthority,
                  declaration: GraphCloudCutoverDeclaration?, manifest: GraphCloudSeedManifest?, limits: GraphCloudActivationLimits, phase: GraphCloudActivationPhase) {
-        self.binding = binding; self.storeID = storeID; self.epoch = epoch; self.authority = authority
+        self.binding = binding; self.storeID = storeID; self.fileIdentity = fileIdentity; self.epoch = epoch; self.authority = authority
         self.declaration = declaration; self.manifest = manifest; self.limits = limits; self.phase = phase
     }
     package var status: GraphCloudActivationStatus {
@@ -144,7 +145,7 @@ package struct GraphCloudActivationDocument: Codable, Equatable, Sendable {
     package var peer: Bool { declaration == nil }
     package func validate(graphID: GraphID) throws {
         try limits.validate()
-        guard format == 1, authority.format == 1, binding.route.graphID == graphID, authority.graphID == graphID,
+        guard format == 2, authority.format == 1, binding.route.graphID == graphID, authority.graphID == graphID,
               binding.route.zone.scope == .private, !storeID.isEmpty, authority.recordCount >= 0,
               authority.recordCount <= limits.maximumRecords, authority.seedDigest.count == 64,
               authority.conversionCommitment.count == 64 else { throw GraphCloudActivationError.invalidState }

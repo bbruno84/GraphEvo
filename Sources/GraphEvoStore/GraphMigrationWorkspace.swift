@@ -443,7 +443,7 @@ struct WorkspaceDirectoryIdentity: Sendable, Equatable {
 package struct WorkspaceFileIdentity: Codable, Sendable, Equatable {
     let device: UInt64
     let inode: UInt64
-    init(_ url: URL) throws {
+    package init(_ url: URL) throws {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         guard attributes[.type] as? FileAttributeType == .typeRegular,
               (attributes[.referenceCount] as? NSNumber)?.intValue == 1,

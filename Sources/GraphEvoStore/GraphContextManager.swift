@@ -123,6 +123,7 @@ package actor GraphContextManager {
         }
         let session = try await cloud(configuration)
         let route = GraphCloudBinding(zone: zone, graphID: graphID)
+        if let activation, try await session.identity() != activation.binding.identity { throw GraphCloudError.accountChanged }
         if await session.activationService != nil {
             let remote = try await session.activationControl { service, _ -> GraphCloudAuthorityRemote? in
                 do { return try await service.fetch(configuration, route) }
@@ -163,6 +164,9 @@ package actor GraphContextManager {
     package func acceptCloudInvitation(_ invitation: GraphCloudInvitation,
         configuration: GraphCloudConfiguration) async throws {
         guard !activatingCloudGraphs.contains(invitation.graphID) else { throw GraphCloudActivationError.busy }
+        if let opening = entries[invitation.graphID]?.opening, try await opening.value.requiresCloudActivation() {
+            throw GraphCloudActivationError.invalidRequest
+        }
         let graphID = invitation.graphID, permit = try admitSynchronization(invitation.graphID)
         defer { finishSynchronization(permit) }
         guard transportGraphs.insert(graphID).inserted else { throw GraphCloudError.busy }

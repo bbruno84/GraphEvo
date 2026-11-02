@@ -7,10 +7,16 @@ import GraphEvoStore
 
 /// Activation metadata is saved with the runtime's bookkeeping author, never uploaded as a primitive.
 enum GraphCloudActivationNative {
+    private struct Commitment: Encodable { let activation: UUID; let receipt: GraphV1ConversionReceipt }
     static let key = GraphTypedStoreAdapter.prefix + "cloudActivation"
     static let adapter = GraphCloudActivationAdapter(requiresActivation: { context, id in
         try GraphTypedStoreAdapter.controlRoot(context, id: id)[dynamicMember: GraphV1NativeConversion.receiptKey] != nil
     }, read: read, prepare: prepare, write: write, peer: peer)
+
+    private static func fileIdentity(_ context: NSManagedObjectContext) throws -> WorkspaceFileIdentity {
+        guard let url = context.persistentStoreCoordinator?.persistentStores.first?.url else { throw GraphCloudActivationError.invalidState }
+        return try WorkspaceFileIdentity(url)
+    }
 
     static func read(_ context: NSManagedObjectContext, _ id: GraphID) throws -> GraphCloudActivationDocument? {
         let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
@@ -19,8 +25,16 @@ enum GraphCloudActivationNative {
         let value = try JSONDecoder().decode(GraphCloudActivationDocument.self, from: data)
         try value.validate(graphID: id)
         let checkpoint = try GraphSyncCheckpointAdapter.load(context, id: id, limits: .init())
-        guard value.storeID == checkpoint.state.storeID, value.epoch == checkpoint.state.epoch else {
+        guard value.storeID == checkpoint.state.storeID, value.epoch == checkpoint.state.epoch,
+              try value.fileIdentity == fileIdentity(context) else {
             throw GraphCloudActivationError.invalidState
+        }
+        if !value.peer {
+            guard let bytes = root[dynamicMember: GraphV1NativeConversion.receiptKey] as? Data, bytes.count <= 4 * 1024 * 1024,
+                  let receipt = try? JSONDecoder().decode(GraphV1ConversionReceipt.self, from: bytes), receipt.targetStoreID == value.storeID,
+                  try GraphCloudFingerprint.of(Commitment(activation: value.authority.activationID, receipt: receipt)) == value.authority.conversionCommitment else {
+                throw GraphCloudActivationError.invalidState
+            }
         }
         return value
     }
@@ -28,7 +42,7 @@ enum GraphCloudActivationNative {
     static func write(_ context: NSManagedObjectContext, _ id: GraphID, _ value: GraphCloudActivationDocument) throws {
         try value.validate(graphID: id)
         let state = try GraphSyncCheckpointAdapter.load(context, id: id, limits: .init()).state
-        guard value.storeID == state.storeID, value.epoch == state.epoch else { throw GraphCloudActivationError.invalidState }
+        guard value.storeID == state.storeID, value.epoch == state.epoch, try value.fileIdentity == fileIdentity(context) else { throw GraphCloudActivationError.invalidState }
         if let prior = try read(context, id) {
             guard prior.binding == value.binding, prior.authority.matches(value.authority), prior.manifest == value.manifest,
                   prior.declaration == value.declaration, prior.limits == value.limits else { throw GraphCloudActivationError.authorityConflict }
@@ -78,10 +92,9 @@ enum GraphCloudActivationNative {
         let saves = Set(checkpoint.state.pending.filter { $0.operation == .save }.map(\.id))
         guard Set(session.nodes.keys).isSubset(of: saves) else { throw GraphSyncError.historyUnavailable }
         try GraphSyncCheckpointAdapter.persist(context, checkpoint)
-        struct Commitment: Encodable { let activation: UUID; let receipt: GraphV1ConversionReceipt }
         let authority = GraphCloudAuthority(graphID: id, activationID: operation, seedDigest: try manifest.digest,
             recordCount: manifest.entries.count, conversionCommitment: try GraphCloudFingerprint.of(Commitment(activation: operation, receipt: receipt)))
-        let result = GraphCloudActivationDocument(binding: binding, storeID: checkpoint.state.storeID, epoch: checkpoint.state.epoch,
+        let result = GraphCloudActivationDocument(binding: binding, storeID: checkpoint.state.storeID, fileIdentity: try fileIdentity(context), epoch: checkpoint.state.epoch,
             authority: authority, declaration: declaration, manifest: manifest, limits: limits, phase: .prepared)
         try write(context, id, result)
         return result
@@ -105,7 +118,7 @@ enum GraphCloudActivationNative {
         try GraphSyncCheckpointAdapter.reconcile(context, value: &checkpoint, limits: .init())
         guard checkpoint.state.pending.isEmpty else { throw GraphCloudActivationError.invalidRequest }
         try GraphSyncCheckpointAdapter.persist(context, checkpoint)
-        let result = GraphCloudActivationDocument(binding: binding, storeID: checkpoint.state.storeID, epoch: checkpoint.state.epoch,
+        let result = GraphCloudActivationDocument(binding: binding, storeID: checkpoint.state.storeID, fileIdentity: try fileIdentity(context), epoch: checkpoint.state.epoch,
             authority: authority, declaration: nil, manifest: nil, limits: limits, phase: .recovering)
         try write(context, id, result)
         return result
