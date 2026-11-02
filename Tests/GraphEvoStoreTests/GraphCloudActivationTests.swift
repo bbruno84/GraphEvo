@@ -1,0 +1,358 @@
+import CloudKit
+import CoreData
+import Foundation
+import Testing
+@testable import GraphEvo
+@testable import GraphEvoStore
+@testable import GraphEvoRuntime
+
+/// Deterministic CAS and transport faults; native first-create behavior is proven separately on device.
+private actor ActivationServer {
+    var authorities: [String: GraphCloudAuthorityRemote] = [:]
+    var records: [String: GraphCloudIncoming] = [:]
+    var sends = 0
+    var offline = false
+    var ambiguousClaim = false
+    var ambiguousPublication = false
+    var failRecordOnce = false
+    func configure(offline: Bool = false, claim: Bool = false, publication: Bool = false, record: Bool = false) {
+        self.offline = offline; ambiguousClaim = claim; ambiguousPublication = publication; failRecordOnce = record
+    }
+    func check() throws { if offline { throw URLError(.notConnectedToInternet) } }
+    func key(_ route: GraphCloudBinding) -> String { route.zone.name }
+    func fetch(_ route: GraphCloudBinding) throws -> GraphCloudAuthorityRemote? { try check(); return authorities[key(route)] }
+    func save(_ value: GraphCloudAuthority, route: GraphCloudBinding, base: GraphCloudAuthorityRemote?) throws -> GraphCloudAuthorityRemote {
+        try check()
+        let name = key(route)
+        guard authorities[name]?.value == base?.value else { throw CKError(.serverRecordChanged) }
+        let native = try GraphCloudAuthorityCodec.encode(value, binding: route, base: base)
+        let saved = try GraphCloudAuthorityCodec.decode(native, binding: route)
+        authorities[name] = saved
+        if !value.published && ambiguousClaim { ambiguousClaim = false; throw URLError(.timedOut) }
+        if value.published && ambiguousPublication { ambiguousPublication = false; throw URLError(.timedOut) }
+        return saved
+    }
+    func inventory(_ route: GraphCloudBinding) throws -> [GraphCloudIncoming] {
+        try check()
+        var result = records.values.filter { $0.zone == route.zone && $0.kind == .recordChanged }
+        if let authority = authorities[key(route)] {
+            result.append(try GraphCloudRecordCodec.archive(GraphCloudRecordCodec.restore(authority.archive), scope: .private))
+        }
+        return result
+    }
+    func send(_ batch: GraphCloudOutgoingBatch) throws -> GraphCloudSentReceipt {
+        try check(); sends += 1
+        var saved: [GraphCloudIncoming] = [], deleted: [String] = [], failed: [GraphCloudRecordFailure] = []
+        for item in batch.items {
+            if failRecordOnce { failRecordOnce = false; failed.append(.init(recordName: item.recordName, code: CKError.networkFailure.rawValue)); continue }
+            if let archive = item.recordArchive {
+                let record = try GraphCloudRecordCodec.restore(archive)
+                let value = try GraphCloudRecordCodec.archive(record, scope: .private, portableAsset: true)
+                records[batch.zone.name + item.recordName] = value; saved.append(value)
+            } else {
+                records.removeValue(forKey: batch.zone.name + item.recordName); deleted.append(item.recordName)
+            }
+        }
+        return .init(batchID: batch.id, graphID: batch.graphID, zone: batch.zone, saved: saved, deletedNames: deleted, failures: failed)
+    }
+    func removeAuthority(_ route: GraphCloudBinding) { authorities.removeValue(forKey: key(route)) }
+    func injectAuthority(_ value: GraphCloudAuthority, route: GraphCloudBinding) throws {
+        authorities[key(route)] = try GraphCloudAuthorityCodec.decode(GraphCloudAuthorityCodec.encode(value, binding: route, base: nil), binding: route)
+    }
+    func injectRecord(_ record: CKRecord, route: GraphCloudBinding) throws {
+        records[route.zone.name + record.recordID.recordName] = try GraphCloudRecordCodec.archive(record, scope: .private, portableAsset: true)
+    }
+    nonisolated var service: GraphCloudActivationService {
+        .init(ensureZone: { _, _ in try await self.check() }, fetch: { _, route in try await self.fetch(route) },
+              save: { _, route, value, base in try await self.save(value, route: route, base: base) },
+              inventory: { _, route, _ in try await self.inventory(route) })
+    }
+    nonisolated var adapter: GraphCloudAdapter {
+        .init(activation: service, account: { _ in "synthetic-activation-account" }, make: { _, _, _, callback in
+            GraphCloudDriver(fetch: { _ in }, cancel: {}, send: { batch in
+                await callback(.sent(try await self.send(batch)))
+            })
+        })
+    }
+}
+
+@Suite(.timeLimit(.minutes(2))) struct GraphCloudActivationTests {
+    private struct Fixture {
+        let root: URL
+        let manager: GraphContextManager
+        let graph: GraphStore
+        let config: GraphCloudConfiguration
+        let zone: GraphCloudZone
+        let invoice: GraphNodeID
+        let operation: UUID
+        let nodeIDs: Set<GraphNodeID>
+        var route: GraphCloudBinding { .init(zone: zone, graphID: graph.id) }
+    }
+    private var declaration: GraphCloudCutoverDeclaration {
+        .init(sourceSelection: "Synthetic selected source", completeness: "Exact fixture inventory",
+              stoppedWriters: "Fixture writer detached", returningClients: "No legacy writers in this fixture")
+    }
+    private func manager() -> GraphContextManager {
+        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+    }
+    private func fixture(_ server: ActivationServer, oversized: Bool = false, attachments: Bool = false, id: GraphID = GraphID(), container: String? = nil) async throws -> Fixture {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("Activation-" + UUID().uuidString)
+        let m = manager()
+        let source = root.appendingPathComponent("Legacy.sqlite"), target = root.appendingPathComponent("Target.sqlite")
+        let legacyIDs = try await seedConversionSource(source)
+        let bootstrap = try await m.openGraph(convertingLocalV1: .init(sourceURL: source, destinationURL: target,
+            graphID: id, operationID: UUID(), backupRoot: root.appendingPathComponent("Backups"), reason: "Synthetic activation"))
+        let graph = try bootstrap.opening.get()
+        let invoice = try #require(bootstrap.conversion.receipt.nodeIDs[legacyIDs[0]])
+        if !oversized {
+            // An explicit consumer edit prepares the fixture; MF10 itself never changes binary representation.
+            _ = try await graph.transaction { try $0.patch(.init(id: invoice, properties: ["binary": .set(.data(Data([1,2,3])))])) }
+        }
+        var nodeIDs = Set(bootstrap.conversion.receipt.nodeIDs.values)
+        if attachments {
+            let file = try GraphAttachmentPayload(id: graph.makeNodeID(), ownerID: invoice, fileName: "fixture.bin", contentType: "public.data", data: Data(repeating: 7, count: 2 * 1024 * 1024))
+            let fileID = try await graph.transaction { try $0.insert(file) }
+            nodeIDs.insert(fileID)
+        }
+        let config = GraphCloudConfiguration(containerIdentifier: container ?? "iCloud.activation." + UUID().uuidString,
+            environment: .development, directory: root.appendingPathComponent("Cloud"))
+        _ = try await m.startCloudSession(config, adapter: server.adapter)
+        return .init(root: root, manager: m, graph: graph, config: config,
+                     zone: .init(scope: .private, owner: "owner", name: "activation"), invoice: invoice, operation: UUID(),
+                     nodeIDs: nodeIDs)
+    }
+    private func prepare(_ f: Fixture) async throws -> GraphCloudActivationStatus {
+        try await f.manager.prepareCloudActivation(for: f.graph.id, activationID: f.operation, zone: f.zone,
+            configuration: f.config, declaration: declaration)
+    }
+    private func publish(_ f: Fixture) async throws {
+        _ = try await prepare(f)
+        for _ in 0..<5 {
+            let result = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+            if let error = result.operationError { throw error }
+            if result.status.phase == .published { return }
+        }
+        throw GraphCloudActivationError.recoveryRequired
+    }
+    private func close(_ f: Fixture) async throws {
+        try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
+    }
+    private func patch(_ graph: GraphStore, id: GraphNodeID) async throws {
+        _ = try await graph.transaction { try $0.patch(.init(id: id, properties: ["name": .set(.string("Later"))])) }
+    }
+
+    @Test func preparesImmutableSeedBlocksAliasesAndPublishesBeforeUnlocking() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let status = try await prepare(f)
+        #expect(status.phase == .prepared && status.recordCount == 5)
+        let alias = try await f.manager.openGraph(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"))
+        await #expect(throws: GraphStoreError.self) { try await patch(alias, id: f.invoice) }
+        #expect(try await alias.read { try $0.record(for: f.invoice)?.properties["name"] } == .string("Retained"))
+        await #expect(throws: GraphCloudActivationError.recoveryRequired) {
+            try await f.manager.bindCloudZone(f.zone, to: f.graph.id, configuration: f.config)
+        }
+        let sent = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(sent.status.phase == .seeding && sent.operationError == nil)
+        await #expect(throws: GraphStoreError.self) { try await patch(f.graph, id: f.invoice) }
+        let ready = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(ready.status.phase == .published && ready.operationError == nil)
+        try await patch(alias, id: f.invoice)
+        #expect(await server.sends == 1)
+        try await alias.close(); try await close(f)
+    }
+
+    @Test func oversizedDataIsRefusedLocallyAndDoesNotClaimOrLockGraph() async throws {
+        let server = ActivationServer(), f = try await fixture(server, oversized: true)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        await #expect(throws: GraphCloudNodeError.limitExceeded) { _ = try await prepare(f) }
+        #expect(try await f.manager.cloudActivationStatus(for: f.graph.id) == nil)
+        #expect(try await server.fetch(f.route) == nil)
+        try await patch(f.graph, id: f.invoice)
+        try await close(f)
+    }
+
+    @Test func ambiguousClaimAndPublicationRecoverTheSameAuthority() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await prepare(f)
+        await server.configure(claim: true)
+        let claim = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(claim.status.phase == .claiming && claim.operationError != nil)
+        #expect(await server.sends == 0)
+        let seed = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(seed.operationError == nil && seed.status.activationID == f.operation)
+        await server.configure(publication: true)
+        let publication = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(publication.status.phase == .publishing && publication.operationError != nil)
+        await #expect(throws: GraphStoreError.self) { try await patch(f.graph, id: f.invoice) }
+        let ready = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(ready.status.phase == .published && ready.operationError == nil)
+        #expect(await server.sends == 1)
+        try await close(f)
+    }
+
+    @Test func restartRestoresWriteGateWithoutStartingCloud() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await prepare(f)
+        try await close(f)
+        let next = manager(), graph = try await next.openGraph(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"))
+        await #expect(throws: GraphStoreError.self) { try await patch(graph, id: f.invoice) }
+        #expect(try await next.cloudActivationStatus(for: graph.id)?.activationID == f.operation)
+        _ = try await next.startCloudSession(f.config, adapter: server.adapter)
+        for _ in 0..<3 { _ = try await next.advanceCloudActivation(for: graph.id, configuration: f.config) }
+        try await patch(graph, id: f.invoice)
+        try await graph.close(); try await next.stopCloudSession(f.config)
+    }
+
+    @Test func foreignAuthorityPreservesLocalConversionAndReleasesOnlyItsGate() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await prepare(f)
+        let foreign = GraphCloudAuthority(graphID: f.graph.id, activationID: UUID(), seedDigest: String(repeating: "a", count: 64),
+            recordCount: 5, conversionCommitment: String(repeating: "b", count: 64))
+        try await server.injectAuthority(foreign, route: f.route)
+        let result = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(result.status.phase == .conflict && result.operationError as? GraphCloudActivationError == .authorityConflict)
+        try await patch(f.graph, id: f.invoice)
+        #expect(await server.sends == 0)
+        await #expect(throws: GraphCloudActivationError.recoveryRequired) { _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config) }
+        try await close(f)
+    }
+
+    @Test func partialSendResumesFrozenWorkAndNeverPublishesEarly() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await prepare(f); await server.configure(record: true)
+        let partial = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(partial.status.phase == .seeding && partial.operationError != nil)
+        #expect(try await server.fetch(f.route)?.value.published == false)
+        for _ in 0..<3 { _ = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config) }
+        #expect(try await f.manager.cloudActivationStatus(for: f.graph.id)?.phase == .published)
+        #expect(await server.sends == 2)
+        try await close(f)
+    }
+
+    @Test func emptyPeerRecoversExactIDsAndValuesWithoutUploadFeedback() async throws {
+        let server = ActivationServer(), f = try await fixture(server, attachments: true)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        try await publish(f)
+        try await patch(f.graph, id: f.invoice)
+        let later = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
+        #expect(later.transportError == nil && later.failures.isEmpty)
+        let expected = try await f.graph.read { scope in try f.nodeIDs.compactMap { try scope.record(for: $0) } }
+        let sends = await server.sends
+        try await close(f)
+        let next = manager()
+        let config = GraphCloudConfiguration(containerIdentifier: f.config.containerIdentifier, environment: .development,
+            directory: f.root.appendingPathComponent("PeerCloud"))
+        _ = try await next.startCloudSession(config, adapter: server.adapter)
+        let result = try await next.openCloudReplica(id: f.graph.id, at: f.root.appendingPathComponent("Peer.sqlite"), zone: f.zone, configuration: config)
+        let graph = try result.opening.get()
+        let actual = try await graph.read { scope in try f.nodeIDs.compactMap { try scope.record(for: $0) } }
+        #expect(Dictionary(uniqueKeysWithValues: actual.map { ($0.id, $0) }) == Dictionary(uniqueKeysWithValues: expected.map { ($0.id, $0) }))
+        #expect(try await graph.collectSyncChanges() == 0)
+        #expect(await server.sends == sends)
+        try await graph.close(); try await next.stopCloudSession(config)
+    }
+
+    @Test func missingAuthorityAfterClaimNeverRecreatesOrUnlocks() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await prepare(f)
+        _ = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        await server.removeAuthority(f.route)
+        let result = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(result.operationError as? GraphCloudActivationError == .recoveryRequired)
+        #expect(try await server.fetch(f.route) == nil)
+        await #expect(throws: GraphStoreError.self) { try await patch(f.graph, id: f.invoice) }
+        try await close(f)
+    }
+
+    @Test func separatelyConvertedStoreCannotPublishCompetingUUIDs() async throws {
+        let server = ActivationServer(), winner = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: winner.root) }
+        try await publish(winner)
+        let authority = try #require(try await server.fetch(winner.route))
+        try await close(winner)
+        let loser = try await fixture(server, id: winner.graph.id, container: winner.config.containerIdentifier)
+        defer { try? FileManager.default.removeItem(at: loser.root) }
+        #expect(winner.nodeIDs.isDisjoint(with: loser.nodeIDs))
+        _ = try await prepare(loser)
+        let result = try await loser.manager.advanceCloudActivation(for: loser.graph.id, configuration: loser.config)
+        #expect(result.operationError as? GraphCloudActivationError == .authorityConflict)
+        #expect(try await server.fetch(loser.route)?.value == authority.value)
+        #expect(await server.sends == 1)
+        try await close(loser)
+    }
+
+    @Test func unrelatedGraphProgressAndManualPauseSurvivePreparation() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        try await f.manager.pauseCloudSynchronization(for: f.graph.id)
+        _ = try await prepare(f)
+        #expect(try await f.manager.cloudSynchronizationState(for: f.graph.id) == .paused)
+        let other = try await f.manager.createGraph(id: .init(), at: f.root.appendingPathComponent("Other.sqlite"))
+        let nodeID = other.makeNodeID()
+        _ = try await other.transaction { try $0.insert(GraphRecord(id: nodeID, type: "Other")) }
+        #expect(try await other.read { try $0.record(for: nodeID) } != nil)
+        let stalled = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(stalled.operationError as? GraphCloudError == .graphPaused)
+        #expect(await server.sends == 0)
+        try await f.manager.resumeCloudSynchronization(for: f.graph.id)
+        for _ in 0..<3 { _ = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config) }
+        try await other.close(); try await close(f)
+    }
+
+    @Test func preexistingZoneBodiesAndChangedRequestsAreRefused() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await prepare(f)
+        await #expect(throws: GraphCloudActivationError.authorityConflict) {
+            _ = try await f.manager.prepareCloudActivation(for: f.graph.id, activationID: UUID(), zone: f.zone, configuration: f.config, declaration: declaration)
+        }
+        let foreign = try GraphCloudNodeCodec.encode(GraphRecord(id: .init(graphID: f.graph.id), type: "Foreign"), binding: f.route)
+        try await server.injectRecord(foreign, route: f.route)
+        let result = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(result.operationError as? GraphCloudActivationError == .zoneNotEmpty)
+        #expect(try await server.fetch(f.route) == nil)
+        #expect(await server.sends == 0)
+        try await close(f)
+    }
+
+    @Test func cancelledPreparationHasNoMarkerAndOfflineClaimRemainsRecoverable() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await prepare(f)
+        }
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+        #expect(try await f.manager.cloudActivationStatus(for: f.graph.id) == nil)
+        _ = try await prepare(f)
+        await server.configure(offline: true)
+        let result = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect(result.status.phase == .claiming && result.operationError != nil)
+        #expect(await server.sends == 0)
+        await server.configure()
+        for _ in 0..<3 { _ = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config) }
+        #expect(try await f.manager.cloudActivationStatus(for: f.graph.id)?.phase == .published)
+        try await close(f)
+    }
+
+    @Test func nativeAuthorityCodecAndManifestAreDeterministicAndRejectCorruption() throws {
+        let id = GraphID(), route = GraphCloudBinding(zone: .init(scope: .private, owner: "owner", name: "zone"), graphID: id)
+        let a = try GraphRecord(id: .init(graphID: id), type: "Item", properties: ["null": .null, "value": .integer(3)])
+        let b = try GraphRecord(id: .init(graphID: id), type: "Other", createdDate: nil)
+        let records = try [a,b].map { try GraphCloudNodeCodec.encode($0, binding: route) }
+        let manifest = try GraphCloudSeedManifest.make(records, binding: route, limits: .init())
+        #expect(try manifest == GraphCloudSeedManifest.make(records.reversed(), binding: route, limits: .init()))
+        let authority = GraphCloudAuthority(graphID: id, activationID: UUID(), seedDigest: try manifest.digest,
+            recordCount: 2, conversionCommitment: String(repeating: "a", count: 64))
+        let record = try GraphCloudAuthorityCodec.encode(authority, binding: route, base: nil)
+        #expect(try GraphCloudAuthorityCodec.decode(record, binding: route).value == authority)
+        record["unexpected"] = "refuse" as CKRecordValue
+        #expect(throws: GraphCloudActivationError.invalidState) { _ = try GraphCloudAuthorityCodec.decode(record, binding: route) }
+    }
+}

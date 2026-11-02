@@ -20,6 +20,7 @@ package actor GraphContextManager {
     var publishingMigrations = Set<GraphID>()
     var migratingStores = Set<GraphID>()
     struct LocalV1BootstrapAdmission { let token: UUID; let key: StoreKey }
+    var activatingCloudGraphs = Set<GraphID>()
     var localV1Bootstraps: [GraphID: LocalV1BootstrapAdmission] = [:]
     let registry: StoreRegistry
     let schema: StoreSchema
@@ -109,10 +110,14 @@ package actor GraphContextManager {
 
     package func bindCloudZone(_ zone: GraphCloudZone, to graphID: GraphID,
                                configuration: GraphCloudConfiguration) async throws {
+        guard !activatingCloudGraphs.contains(graphID) else { throw GraphCloudActivationError.busy }
         guard localV1Bootstraps[graphID] == nil else { throw GraphStoreMigrationError.busy }
         guard let entry = entries[graphID], entry.closing == nil else { throw GraphStoreError.missingGraph }
         let owner = try await entry.opening.value
         try await owner.validateCloudBinding(adapter.initialize)
+        if let activation = try await owner.activationDocument() {
+            guard activation.phase == .published, activation.binding.route.zone == zone else { throw GraphCloudActivationError.recoveryRequired }
+        }
         try await cloud(configuration).bind(GraphCloudBinding(zone: zone, graphID: graphID))
         automaticChanged()
     }
@@ -142,6 +147,7 @@ package actor GraphContextManager {
     /// The caller creates an empty graph with the invitation's identity at a current local URL first.
     package func acceptCloudInvitation(_ invitation: GraphCloudInvitation,
         configuration: GraphCloudConfiguration) async throws {
+        guard !activatingCloudGraphs.contains(invitation.graphID) else { throw GraphCloudActivationError.busy }
         let graphID = invitation.graphID, permit = try admitSynchronization(invitation.graphID)
         defer { finishSynchronization(permit) }
         guard transportGraphs.insert(graphID).inserted else { throw GraphCloudError.busy }
@@ -228,17 +234,24 @@ package actor GraphContextManager {
         }
     }
 
-    private func withTransport<Value: Sendable>(_ graphID: GraphID, configuration: GraphCloudConfiguration,
+    func withTransport<Value: Sendable>(_ graphID: GraphID, configuration: GraphCloudConfiguration, activationPermit: UUID? = nil,
         body: @Sendable (GraphCloudSession, GraphStore, GraphCloudTransportBinding, GraphCloudSyncPermit) async throws -> Value) async throws -> Value {
         let permit = try admitSynchronization(graphID)
         defer { finishSynchronization(permit) }
         guard transportGraphs.insert(graphID).inserted else { throw GraphCloudError.busy }
         defer { transportGraphs.remove(graphID) }
-        let session = try await cloud(configuration), route = try await session.route(for: graphID)
-        let binding = GraphCloudTransportBinding(identity: try await session.identity(), route: route)
+        let session = try await cloud(configuration)
         guard let location = locations[graphID] else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: graphID, at: location.url)
         do {
+            if let owner = entries[graphID]?.opening, let activation = try await owner.value.activationDocument(), activation.phase != .published {
+                guard activation.authority.activationID == activationPermit,
+                      (activation.peer && activation.phase == .recovering) || (!activation.peer && (activation.phase == .seeding || activation.phase == .publishing)) else {
+                    throw GraphCloudActivationError.recoveryRequired
+                }
+            }
+            let route = try await session.route(for: graphID)
+            let binding = GraphCloudTransportBinding(identity: try await session.identity(), route: route)
             if binding.route.zone.scope == .shared {
                 try await self.refreshCloudMembership(graphID, configuration: configuration)
             }
@@ -249,7 +262,7 @@ package actor GraphContextManager {
             let original = error; try? await graph.close(); throw original
         }
     }
-    private static func drainSent(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding) async throws -> GraphCloudSendReport {
+    static func drainSent(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding) async throws -> GraphCloudSendReport {
         let receipts = try await session.sentReceipts(for: graph.id)
         var succeeded = 0, failures: [GraphCloudRecordFailure] = [], cleanup = false, resolved = 0
         var retry = Set<GraphNodeID>()
@@ -302,7 +315,7 @@ package actor GraphContextManager {
                 resolvedConflicts: resolved, pendingRetry: !retry.isEmpty, retryAfter: retryAfter)
         }
     }
-    private static func drainIncoming(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding,
+    static func drainIncoming(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding,
                                       maximumEvents: Int) async throws -> GraphCloudApplyReport {
         var entries = try await session.incoming(for: binding.route.zone, limit: maximumEvents)
         if await session.supportsSharingOperations(), let member = try await session.membership(graph.id), member.role == .participant {
@@ -499,7 +512,7 @@ package actor GraphContextManager {
         return control.state == .active || (permit?.graphID == id && permit.map { control.operations.contains($0.id) } == true)
     }
 
-    private func admitSynchronization(_ id: GraphID, inheriting parent: GraphCloudSyncPermit? = nil) throws -> GraphCloudSyncPermit {
+    func admitSynchronization(_ id: GraphID, inheriting parent: GraphCloudSyncPermit? = nil) throws -> GraphCloudSyncPermit {
         guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
         guard canSynchronize(id, inheriting: parent) else { throw GraphCloudError.graphPaused }
         let permit = GraphCloudSyncPermit(graphID: id, id: UUID())
@@ -508,7 +521,7 @@ package actor GraphContextManager {
         return permit
     }
 
-    private func finishSynchronization(_ permit: GraphCloudSyncPermit) {
+    func finishSynchronization(_ permit: GraphCloudSyncPermit) {
         guard var control = synchronization[permit.graphID], control.operations.remove(permit.id) != nil else { return }
         var completed: [CheckedContinuation<Void, any Error>] = []
         if control.operations.isEmpty && control.state == .pauseRequested {
@@ -699,6 +712,10 @@ package actor GraphContextManager {
     func openBootstrappedGraph(id: GraphID, at url: URL, permit: UUID) async throws -> GraphStore {
         guard localV1Bootstraps[id]?.token == permit else { throw GraphStoreMigrationError.busy }
         return try await request(id: id, url: url, creating: false, bootstrapPermit: permit)
+    }
+    func openActivationReplica(id: GraphID, at url: URL, permit: UUID, creating: Bool) async throws -> GraphStore {
+        guard localV1Bootstraps[id]?.token == permit else { throw GraphCloudActivationError.busy }
+        return try await request(id: id, url: url, creating: creating, bootstrapPermit: permit)
     }
 
     /// Checks only sessions explicitly started by the caller; bootstrap never starts one.

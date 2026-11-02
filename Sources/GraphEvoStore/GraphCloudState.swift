@@ -79,7 +79,7 @@ package struct GraphCloudStatus: Sendable {
 }
 
 struct GraphCloudDocument: Codable, Sendable {
-    var format = 6
+    var format = 7
     var clientID = UUID()
     let container: String
     let environment: GraphCloudEnvironment
@@ -91,7 +91,8 @@ struct GraphCloudDocument: Codable, Sendable {
     var inbox: [GraphCloudInboxEntry] = []
     var sent: [GraphCloudSentReceipt] = []
     var ledgers: [GraphLedgerReplica] = []
-    var eventCount: Int { ledgers.count + memberships.count + shareAttempts.count + inbox.count + sent.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count + $1.failures.count } }
+    var activations: [GraphCloudActivationRoute] = []
+    var eventCount: Int { activations.count + ledgers.count + memberships.count + shareAttempts.count + inbox.count + sent.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count + $1.failures.count } }
 }
 
 /// A process-wide claim spans startup/account verification and failed cleanup.

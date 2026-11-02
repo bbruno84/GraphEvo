@@ -91,6 +91,10 @@ package actor StoreHandle {
         try await registry.setDataAvailable(key, generation: generation, token: token, value: value, terminal: terminal)
     }
     package func suspendWrites() async throws -> StoreReservation { try await reserve(.writes) }
+    package func restrictActivation(_ id: UUID, reads: Bool = false, release: Bool = false) async throws {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        try await registry.restrictActivation(key, generation: generation, token: token, id: id, reads: reads, release: release)
+    }
     package func reserveMaintenance() async throws -> StoreReservation { try await reserve(.all) }
     private func reserve(_ mode: StoreReservationMode) async throws -> StoreReservation {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
@@ -295,6 +299,10 @@ package actor StoreRegistry {
     fileprivate func setDataAvailable(_ key: StoreKey, generation: UUID, token: UUID, value: Bool, terminal: Bool) async throws {
         let entry = try entry(for: key, generation: generation, token: token)
         try await entry.opening.value.setDataAvailable(value, terminal: terminal)
+    }
+    fileprivate func restrictActivation(_ key: StoreKey, generation: UUID, token: UUID, id: UUID, reads: Bool, release: Bool) async throws {
+        let entry = try entry(for: key, generation: generation, token: token)
+        try await entry.opening.value.restrictActivation(id, reads: reads, release: release)
     }
     fileprivate func reserve(_ key: StoreKey, generation: UUID, token: UUID, id: UUID, mode: StoreReservationMode) async throws {
         let value = try entry(for: key, generation: generation, token: token)
