@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import CoreData
 import GraphEvoModel
@@ -115,10 +116,24 @@ package actor GraphContextManager {
         guard let entry = entries[graphID], entry.closing == nil else { throw GraphStoreError.missingGraph }
         let owner = try await entry.opening.value
         try await owner.validateCloudBinding(adapter.initialize)
-        if let activation = try await owner.activationDocument() {
+        let activation = try await owner.activationDocument()
+        if try await owner.requiresCloudActivation(), activation == nil { throw GraphCloudActivationError.recoveryRequired }
+        if let activation {
             guard activation.phase == .published, activation.binding.route.zone == zone else { throw GraphCloudActivationError.recoveryRequired }
         }
-        try await cloud(configuration).bind(GraphCloudBinding(zone: zone, graphID: graphID))
+        let session = try await cloud(configuration)
+        let route = GraphCloudBinding(zone: zone, graphID: graphID)
+        if await session.activationService != nil {
+            let remote = try await session.activationControl { service, _ -> GraphCloudAuthorityRemote? in
+                do { return try await service.fetch(configuration, route) }
+                catch let error as CKError where error.code == .zoneNotFound && activation == nil { return nil }
+            }
+            if let remote {
+                guard let activation, remote.value.published, remote.value.matches(activation.authority) else { throw GraphCloudActivationError.recoveryRequired }
+            } else if activation != nil { throw GraphCloudActivationError.recoveryRequired }
+        }
+        guard !activatingCloudGraphs.contains(graphID) else { throw GraphCloudActivationError.busy }
+        try await session.bind(route)
         automaticChanged()
     }
 
@@ -244,6 +259,10 @@ package actor GraphContextManager {
         guard let location = locations[graphID] else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: graphID, at: location.url)
         do {
+            if let opening = entries[graphID]?.opening {
+                let owner = try await opening.value
+                if try await owner.requiresCloudActivation(), try await owner.activationDocument() == nil { throw GraphCloudActivationError.recoveryRequired }
+            }
             if let owner = entries[graphID]?.opening, let activation = try await owner.value.activationDocument(), activation.phase != .published {
                 guard activation.authority.activationID == activationPermit,
                       (activation.peer && activation.phase == .recovering) || (!activation.peer && (activation.phase == .seeding || activation.phase == .publishing)) else {

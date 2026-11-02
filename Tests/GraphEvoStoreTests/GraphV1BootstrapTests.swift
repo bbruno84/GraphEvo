@@ -50,11 +50,13 @@ private struct BootstrapFault: Error {}
             receipt: conversion.receipt, apply: { context, intent, source in
                 let receipt = try conversion.apply(context, intent, source); try apply?(); return receipt
             })
-        return .init(graph: base.graph, sync: base.sync, v1Conversion: replacement, migrationSource: replacement.migrationSource,
+        var result = GraphCoordinatorAdapter(graph: base.graph, sync: base.sync, v1Conversion: replacement, migrationSource: replacement.migrationSource,
             initializePolicy: base.initializePolicy, publication: base.publication, workspace: base.workspace,
             prepareWorkspace: base.prepareWorkspace, validateBackup: base.validateBackup, initialize: { context, id, creating in
                 if !creating { try opening?() }; try base.initialize(context, id, creating)
             })
+        result.activation = base.activation
+        return result
     }
     private func digest(_ url: URL) throws -> Data { Data(SHA256.hash(data: try Data(contentsOf: url))) }
 
@@ -187,7 +189,7 @@ private struct BootstrapFault: Error {}
         #expect(!FileManager.default.fileExists(atPath: r.destinationURL.path) && !FileManager.default.fileExists(atPath: r.backupRoot.path))
     }
 
-    @Test func boundGraphIsRefusedButOtherCloudGraphsKeepTheirAdmission() async throws {
+    @Test func convertedGraphRequiresAuthorityButOtherCloudGraphsKeepTheirAdmission() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let r = request(root); _ = try await seedConversionSource(r.sourceURL)
         let m = manager(), other = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Other.sqlite"))
@@ -196,9 +198,13 @@ private struct BootstrapFault: Error {}
         _ = try await m.startCloudSession(config, adapter: fake)
         try await m.bindCloudZone(.init(scope: .private, owner: "owner", name: "other"), to: other.id, configuration: config)
         let result = try await m.openGraph(convertingLocalV1: r), graph = try result.opening.get()
-        try await m.bindCloudZone(.init(scope: .private, owner: "owner", name: "converted"), to: r.graphID, configuration: config)
+        await #expect(throws: GraphCloudActivationError.recoveryRequired) {
+            try await m.bindCloudZone(.init(scope: .private, owner: "owner", name: "converted"), to: r.graphID, configuration: config)
+        }
         try await graph.close()
-        await #expect(throws: GraphV1ConversionError.invalidRequest) { try await m.openGraph(convertingLocalV1: r) }
+        let recovered = try await m.openGraph(convertingLocalV1: r)
+        #expect(recovered.conversion.receipt == result.conversion.receipt)
+        try await recovered.opening.get().close()
         #expect(try await other.validateIntegrity() == 0)
         try await other.close(); try await m.stopCloudSession(config)
     }
@@ -264,7 +270,7 @@ private struct BootstrapFault: Error {}
         await #expect(throws: GraphV1ConversionError.busy) { try await m.bindCloudZone(zone, to: r.graphID, configuration: config) }
         gate.release()
         let result = try await operation.value, graph = try result.opening.get()
-        try await m.bindCloudZone(zone, to: r.graphID, configuration: config)
+        await #expect(throws: GraphCloudActivationError.recoveryRequired) { try await m.bindCloudZone(zone, to: r.graphID, configuration: config) }
         try await graph.close(); try await m.stopCloudSession(config)
     }
 
@@ -276,7 +282,8 @@ private struct BootstrapFault: Error {}
         let fake = GraphCloudAdapter(account: { _ in "bootstrap-account" }, make: { _, _, _, _ in .init(fetch: { _ in }, cancel: {}) })
         let prior = manager(), original = try await prior.openGraph(convertingLocalV1: r), opened = try original.opening.get()
         _ = try await prior.startCloudSession(config, adapter: fake)
-        try await prior.bindCloudZone(.init(scope: .private, owner: "owner", name: "existing"), to: r.graphID, configuration: config)
+        // Inject a stale pre-activation route; the normal manager binding now refuses converted stores.
+        try await prior.cloud(config).bind(.init(zone: .init(scope: .private, owner: "owner", name: "existing"), graphID: r.graphID))
         try await opened.close(); try await prior.stopCloudSession(config)
         let gate = BootstrapGate(), next = manager(adapter: adapter(snapshot: { gate.block() }))
         let operation = Task { try await next.openGraph(convertingLocalV1: r) }

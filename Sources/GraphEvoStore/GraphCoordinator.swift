@@ -83,6 +83,10 @@ package actor GraphCoordinator {
         guard let activation else { return nil }; let id = id
         return try await handle.controlRead { try activation.read($0, id) }
     }
+    func requiresCloudActivation() async throws -> Bool {
+        guard let activation else { return false }; let id = id
+        return try await handle.controlRead { try activation.requiresActivation($0, id) }
+    }
     func prepareActivation(_ binding: GraphCloudTransportBinding, operation: UUID, declaration: GraphCloudCutoverDeclaration,
                            limits: GraphCloudActivationLimits) async throws -> GraphCloudActivationDocument {
         guard let activation else { throw GraphCloudActivationError.unavailable }

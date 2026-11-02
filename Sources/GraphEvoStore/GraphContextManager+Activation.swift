@@ -14,6 +14,12 @@ package struct GraphCloudReplicaResult: Sendable {
     package let opening: Result<GraphStore, any Error>
 }
 
+package struct GraphCloudActivationCleanupFailure: Error {
+    package let status: GraphCloudActivationStatus?
+    package let operationError: (any Error)?
+    package let cleanupFailure: any Error
+}
+
 extension GraphContextManager {
     private func withActivationOwner<Value: Sendable>(_ id: GraphID,
         _ body: (isolated GraphContextManager, GraphCoordinator) async throws -> Value) async throws -> Value {
@@ -21,16 +27,19 @@ extension GraphContextManager {
         defer { activatingCloudGraphs.remove(id) }
         guard let location = locations[id] else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: id, at: location.url)
-        do {
-            guard let entry = entries[id], entry.closing == nil else { throw GraphStoreError.closed }
-            let result = try await body(self, entry.opening.value)
-            try await graph.close()
-            return result
-        } catch {
-            let original = error
-            try await graph.close()
-            throw original
+        guard let entry = entries[id], entry.closing == nil else { try await graph.close(); throw GraphStoreError.closed }
+        let owner = try await entry.opening.value
+        let outcome: Result<Value, any Error>
+        do { outcome = .success(try await body(self, owner)) }
+        catch { outcome = .failure(error) }
+        let status = try? await owner.activationDocument()?.status
+        do { try await graph.close() }
+        catch {
+            let operationError: (any Error)?
+            if case .failure(let failure) = outcome { operationError = failure } else { operationError = nil }
+            throw GraphCloudActivationCleanupFailure(status: status, operationError: operationError, cleanupFailure: error)
         }
+        return try outcome.get()
     }
 
     package func cloudActivationStatus(for id: GraphID) async throws -> GraphCloudActivationStatus? {

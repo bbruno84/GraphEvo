@@ -60,7 +60,9 @@ extension GraphCloudSession {
         return try await withScopeControl(.private) { session in
             let identity = try session.identity()
             try await session.verifyLedgerAccount()
-            return try await body(service, identity)
+            let result = try await body(service, identity)
+            try await session.verifyLedgerAccount()
+            return result
         }
     }
 }

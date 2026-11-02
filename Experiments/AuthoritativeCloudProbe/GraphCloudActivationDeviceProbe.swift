@@ -117,9 +117,10 @@ public actor GraphCloudActivationDeviceProbe {
         } while true
         let remoteRecords = Array(current.values)
         guard remoteRecords.count == 6, Set(remoteRecords.map(\.id)).count == 6 else { throw Failure() }
+        let graphID = graph.id
         try await graph.read { scope in
-            let actual = try scope.withContext { context, id in
-                let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
+            let actual = try scope.withContext { context, _ in
+                let session = try GraphTypedStoreAdapter.Session(context, graphID, database: true)
                 return try session.nodes.map { try session.snapshot($0.value, id: $0.key) }
             }
             guard Dictionary(uniqueKeysWithValues: actual.map { ($0.id, $0) }) == Dictionary(uniqueKeysWithValues: remoteRecords.map { ($0.id, $0) }) else { throw Failure() }

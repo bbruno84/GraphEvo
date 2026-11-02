@@ -8,7 +8,9 @@ import GraphEvoStore
 /// Activation metadata is saved with the runtime's bookkeeping author, never uploaded as a primitive.
 enum GraphCloudActivationNative {
     static let key = GraphTypedStoreAdapter.prefix + "cloudActivation"
-    static let adapter = GraphCloudActivationAdapter(read: read, prepare: prepare, write: write, peer: peer)
+    static let adapter = GraphCloudActivationAdapter(requiresActivation: { context, id in
+        try GraphTypedStoreAdapter.controlRoot(context, id: id)[dynamicMember: GraphV1NativeConversion.receiptKey] != nil
+    }, read: read, prepare: prepare, write: write, peer: peer)
 
     static func read(_ context: NSManagedObjectContext, _ id: GraphID) throws -> GraphCloudActivationDocument? {
         let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)

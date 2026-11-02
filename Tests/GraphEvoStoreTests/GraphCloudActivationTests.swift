@@ -144,6 +144,9 @@ private actor ActivationServer {
     @Test func preparesImmutableSeedBlocksAliasesAndPublishesBeforeUnlocking() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
+        await #expect(throws: GraphCloudActivationError.recoveryRequired) {
+            try await f.manager.bindCloudZone(f.zone, to: f.graph.id, configuration: f.config)
+        }
         let status = try await prepare(f)
         #expect(status.phase == .prepared && status.recordCount == 5)
         let alias = try await f.manager.openGraph(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"))
@@ -354,5 +357,37 @@ private actor ActivationServer {
         #expect(try GraphCloudAuthorityCodec.decode(record, binding: route).value == authority)
         record["unexpected"] = "refuse" as CKRecordValue
         #expect(throws: GraphCloudActivationError.invalidState) { _ = try GraphCloudAuthorityCodec.decode(record, binding: route) }
+    }
+
+    @Test(arguments: ["records", "payload", "declaration", "shared"])
+    func preflightRefusalsDoNotPublishOrRetainAdmission(_ mode: String) async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let zone = mode == "shared" ? GraphCloudZone(scope: .shared, owner: f.zone.owner, name: f.zone.name) : f.zone
+        let declared = mode == "declaration" ? GraphCloudCutoverDeclaration(sourceSelection: "", completeness: "", stoppedWriters: "", returningClients: "") : declaration
+        let limits = GraphCloudActivationLimits(maximumRecords: mode == "records" ? 1 : 10_000, maximumPayloadBytes: mode == "payload" ? 1 : 32 * 1024 * 1024)
+        await #expect(throws: GraphCloudActivationError.self) {
+            _ = try await f.manager.prepareCloudActivation(for: f.graph.id, activationID: f.operation, zone: zone,
+                configuration: f.config, declaration: declared, limits: limits)
+        }
+        #expect(try await f.manager.cloudActivationStatus(for: f.graph.id) == nil)
+        #expect(await server.sends == 0)
+        try await patch(f.graph, id: f.invoice)
+        try await close(f)
+    }
+
+    @Test func convertedOwnerCannotBeReusedAsAnEmptyPeer() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        try await publish(f); try await close(f)
+        let next = manager()
+        let config = GraphCloudConfiguration(containerIdentifier: f.config.containerIdentifier, environment: .development, directory: f.root.appendingPathComponent("PeerCloud"))
+        _ = try await next.startCloudSession(config, adapter: server.adapter)
+        await #expect(throws: GraphCloudActivationError.authorityConflict) {
+            _ = try await next.openCloudReplica(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"), zone: f.zone, configuration: config)
+        }
+        let original = try await next.openGraph(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"))
+        #expect(try await original.validateIntegrity() == 5)
+        try await original.close(); try await next.stopCloudSession(config)
     }
 }

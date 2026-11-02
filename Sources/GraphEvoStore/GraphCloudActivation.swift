@@ -213,14 +213,16 @@ enum GraphCloudAuthorityCodec {
 }
 
 package struct GraphCloudActivationAdapter: Sendable {
+    package let requiresActivation: @Sendable (NSManagedObjectContext, GraphID) throws -> Bool
     package let read: @Sendable (NSManagedObjectContext, GraphID) throws -> GraphCloudActivationDocument?
     package let prepare: @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, UUID, GraphCloudCutoverDeclaration, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument
     package let write: @Sendable (NSManagedObjectContext, GraphID, GraphCloudActivationDocument) throws -> Void
     package let peer: @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, GraphCloudAuthority, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument
-    package init(read: @escaping @Sendable (NSManagedObjectContext, GraphID) throws -> GraphCloudActivationDocument?,
+    package init(requiresActivation: @escaping @Sendable (NSManagedObjectContext, GraphID) throws -> Bool,
+                 read: @escaping @Sendable (NSManagedObjectContext, GraphID) throws -> GraphCloudActivationDocument?,
                  prepare: @escaping @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, UUID, GraphCloudCutoverDeclaration, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument,
                  write: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudActivationDocument) throws -> Void,
                  peer: @escaping @Sendable (NSManagedObjectContext, GraphCloudTransportBinding, GraphCloudAuthority, GraphCloudActivationLimits) throws -> GraphCloudActivationDocument) {
-        self.read = read; self.prepare = prepare; self.write = write; self.peer = peer
+        self.requiresActivation = requiresActivation; self.read = read; self.prepare = prepare; self.write = write; self.peer = peer
     }
 }
