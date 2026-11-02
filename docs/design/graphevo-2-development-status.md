@@ -22,10 +22,16 @@ within its package-only scope. The S04 sort-capacity follow-up integrates throug
 `codex/graphevo-2`. [CI profile streamlining](graphevo-2-ci-checkpoints.md) integrates directly through
 [PR #138](https://github.com/bbruno84/GraphEvo/pull/138).
 [MF10 authoritative new-cloud activation](graphevo-2-authoritative-cloud-bootstrap.md)
-is the next proposed contract, on documentation-only
-`codex/v2-authoritative-cloud-contract`; implementation is not started.
-It selects one converted seed before publication and requires empty-peer recovery,
-with explicit host cutover prerequisites and no independent random-ID uploads.
+has its contract integrated through #139 (`4d6a164`). Package-only implementation
+is on `codex/v2-authoritative-cloud-activation`, not yet integrated. It protects one
+converted seed, conditional cloud authority, restart admission and empty-peer
+recovery. Its [bounded evidence](results/authoritative-cloud-bootstrap-2026-11-02.md)
+records the native exclusion prerequisite and twelve passed same-account
+iPad/iPhone protocol reports: protected seed/restarts, publication, empty-peer
+recovery, ordinary later edits, independent-conversion refusal and another empty
+replica. Local full macOS passes 947 functions; focused iOS passes 109/117.
+Host v1 completeness/writer policy, production/historical acceptance, deployment
+and reviewed remote integration remain separate requirements.
 Broader
 capacity and public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
