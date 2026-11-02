@@ -10,9 +10,11 @@ integration into the main v2 branch or beta readiness.
 
 Expanded numeric property mapping integrates through
 [PR #132](https://github.com/bbruno84/GraphEvo/pull/132), directly from #131.
-No next implementation branch is open. Next: native-property schema/planner
-design, using TP01 retained on `codex/experiment-typed-properties`. The experiment
-is not an adopted schema or production query engine. Migration's remaining route
+The active branch is `codex/v2-typed-property-storage` (P01), directly from
+`codex/graphevo-2`. The [typed-property contract](graphevo-2-typed-properties.md)
+separates S04 storage, P02 hybrid query execution and P03 physical/measurement
+validation. P01 is not integrated yet. TP01 remains retained on
+`codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is opt-in bootstrap, production/historical source acceptance and new-cloud
 activation of one authoritative converted graph.
 

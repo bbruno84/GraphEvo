@@ -65,9 +65,9 @@ private final class V1ConversionGate: @unchecked Sendable {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true); return root
     }
     private func manager(registry: StoreRegistry = StoreRegistry(), adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) -> GraphContextManager {
-        .init(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: adapter)
+        .init(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
     }
-    @Test func convertsCompleteLegacyGraphIntoS03WithVerifiedPortableBackupAndFreshHistory() async throws {
+    @Test func convertsCompleteLegacyGraphIntoS04WithVerifiedPortableBackupAndFreshHistory() async throws {
         let root = try root(), source = root.appendingPathComponent("Legacy.sqlite"), target = root.appendingPathComponent("V2.sqlite")
         let old = try await seedConversionSource(source), id = GraphID(), operation = UUID(), m = manager()
         let originalBytes = Data(SHA256.hash(data: try Data(contentsOf: source)))

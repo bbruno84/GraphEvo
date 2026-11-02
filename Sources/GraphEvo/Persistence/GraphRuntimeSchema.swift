@@ -30,4 +30,14 @@ package enum GraphRuntimeSchema {
         return makeNativeModel()
     }
 
+    /// S04 is selected only by the custom-sync coordinator; historical public factories retain S03.
+    package static let typedProperties = StoreSchema(
+        identifier: GraphNativePropertyStorage.identifier,
+        entityVersionHashes: GraphNativePropertyStorage.makeModel().entityVersionHashesByName,
+        requiredModelVersionIdentifier: GraphNativePropertyStorage.identifier
+    ) {
+        GraphValueTransformer.register()
+        return GraphNativePropertyStorage.makeModel()
+    }
+
 }

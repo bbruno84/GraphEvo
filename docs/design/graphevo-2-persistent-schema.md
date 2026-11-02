@@ -180,3 +180,12 @@ adoption, supported performance envelopes and migration feasibility. Supported
 beta data requires a documented migration path for subsequent incompatible
 changes. Production CloudKit deployment and stable-release acceptance remain
 separate gates.
+
+## Subsequent custom-sync S04 work
+
+The package-only custom-sync runtime's
+[typed-property increment](graphevo-2-typed-properties.md) selects S04 from fresh
+alpha stores. It retains S03 identities and deletion history while changing
+application property storage. Historical nativeIdentity factories remain S03;
+this does not retroactively change the S01/S03 experiments or authorize implicit
+conversion. P02 query execution and P03 physical/measurement gates stay separate.

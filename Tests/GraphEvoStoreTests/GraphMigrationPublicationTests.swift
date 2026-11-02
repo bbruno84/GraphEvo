@@ -39,7 +39,7 @@ private final class PublicationGate: @unchecked Sendable {
         return root
     }
     private func manager(adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) -> GraphContextManager {
-        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: adapter)
+        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
     }
     private func create(_ m: GraphContextManager, _ root: URL) async throws -> GraphStore {
         try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
@@ -226,7 +226,7 @@ private final class PublicationGate: @unchecked Sendable {
         let intent = try await w.publicationIntent(seal, reason: "Recovery example")
         let backup = try await m.snapshotBackup(for: source.id, in: root.appendingPathComponent("Backups"), reason: intent.reason,
             artifacts: [.init(name: "__graphevo_publication.json", data: try intent.encoded())], backupID: intent.backupID, retentionOwner: w.id)
-        let raw = try await m.registry.open(.init(location: .sqlite(root.appendingPathComponent("Source.sqlite")), exclusiveGraphID: source.id.rawValue), schema: GraphRuntimeSchema.nativeIdentity)
+        let raw = try await m.registry.open(.init(location: .sqlite(root.appendingPathComponent("Source.sqlite")), exclusiveGraphID: source.id.rawValue), schema: GraphRuntimeSchema.typedProperties)
         let maintenance = try await raw.reserveMaintenance(), descriptor = w.descriptor
         let committed = try await raw.publicationTransaction(graphID: source.id.rawValue, reservation: maintenance) {
             try native.apply($0, descriptor, seal, intent, items)
@@ -251,7 +251,7 @@ private final class PublicationGate: @unchecked Sendable {
     @Test func cancellationAfterCommitReturnsReceiptAndOriginalWritesResume() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let gate = PublicationGate(), registry = StoreRegistry(hooks: .init(afterCommit: { gate.blockOnce() }))
-        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let source = try await create(m, root), w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working")), id = w.graph.makeNodeID()
         _ = try await w.graph.transaction { try $0.insert(GraphRecord(id: id, type: "Published")) }
         _ = try await w.seal(); gate.arm()

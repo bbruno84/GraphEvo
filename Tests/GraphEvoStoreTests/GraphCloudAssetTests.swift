@@ -70,7 +70,7 @@ private actor AssetBus {
     @available(iOS 17, macOS 14, *)
     private func fixture(_ bus: AssetBus, container: String = UUID().uuidString, id: GraphID = GraphID()) async throws -> Fixture {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("AssetTests-" + UUID().uuidString)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.nativeIdentity, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: id, at: directory.appendingPathComponent("Graph.sqlite"))
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.asset." + container, environment: .development, directory: directory.appendingPathComponent("Engine"))
         _ = try await manager.startCloudSession(config, adapter: bus.adapter)
