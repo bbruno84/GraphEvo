@@ -18,6 +18,21 @@ enum GraphCloudActivationNative {
         return try WorkspaceFileIdentity(url)
     }
 
+    /// Counts native detail/control rows as well as logical primitives before seed materialization.
+    static func validateInventory(_ context: NSManagedObjectContext, maximum: Int = 100_000) throws {
+        guard let entities = context.persistentStoreCoordinator?.managedObjectModel.entities, !entities.isEmpty else {
+            throw GraphCloudActivationError.invalidState
+        }
+        var remaining = maximum
+        for entity in entities {
+            try StoreNativeContext.cancellationCheck(in: context)()
+            guard let name = entity.name else { throw GraphCloudActivationError.invalidState }
+            let count = try context.count(for: NSFetchRequest<NSFetchRequestResult>(entityName: name))
+            guard count >= 0, count <= remaining else { throw GraphCloudActivationError.limitExceeded }
+            remaining -= count
+        }
+    }
+
     static func read(_ context: NSManagedObjectContext, _ id: GraphID) throws -> GraphCloudActivationDocument? {
         let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
         guard let raw = root[dynamicMember: key] else { return nil }
@@ -71,6 +86,7 @@ enum GraphCloudActivationNative {
               try GraphCloudAccessMetadata.access(context, id: id, value: nil) == nil else { throw GraphCloudActivationError.invalidRequest }
         let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
         guard root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] == nil else { throw GraphCloudActivationError.invalidRequest }
+        try validateInventory(context)
         var checkpoint = try GraphSyncCheckpointAdapter.load(context, id: id, limits: .init())
         try GraphSyncCheckpointAdapter.reconcile(context, value: &checkpoint, limits: .init())
         guard receipt.targetStoreID == checkpoint.state.storeID else { throw GraphCloudActivationError.invalidState }

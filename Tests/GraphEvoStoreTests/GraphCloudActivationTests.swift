@@ -528,4 +528,18 @@ private actor ActivationServer {
         try await next.stopCloudSession(f.config)
         #expect(await server.sends == 1)
     }
+
+    @Test func nativeInventoryBudgetIncludesPropertyAndControlRows() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        #expect(f.nodeIDs.count == 5)
+        try await f.graph.read { scope in
+            try scope.withContext { context, _ in
+                #expect(throws: GraphCloudActivationError.limitExceeded) { try GraphCloudActivationNative.validateInventory(context, maximum: 10) }
+                try GraphCloudActivationNative.validateInventory(context)
+            }
+        }
+        #expect(try await f.manager.cloudActivationStatus(for: f.graph.id) == nil)
+        try await close(f)
+    }
 }
