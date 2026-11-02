@@ -1,5 +1,6 @@
 import XCTest
 import PDFKit
+import CoreGraphics
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -60,8 +61,17 @@ final class GraphToolsTests: XCTestCase {
             try XCTUnwrap(GraphImageSupport.pngData(from: image))
         )
 
-        let document = PDFDocument()
-        document.insert(try XCTUnwrap(PDFPage(image: image)), at: 0)
+        // A vector fixture tests PDF export without PDFKit's image analysis path.
+        let pdfBytes = NSMutableData()
+        let consumer = try XCTUnwrap(CGDataConsumer(data: pdfBytes))
+        var page = CGRect(x: 0, y: 0, width: 2, height: 2)
+        let pdfContext = try XCTUnwrap(CGContext(consumer: consumer, mediaBox: &page, nil))
+        pdfContext.beginPDFPage(nil)
+        pdfContext.setFillColor(CGColor(gray: 0.5, alpha: 1))
+        pdfContext.fill(page)
+        pdfContext.endPDFPage()
+        pdfContext.closePDF()
+        let document = try XCTUnwrap(PDFDocument(data: pdfBytes as Data))
         let documentName = "GraphEvo-PDF-\(UUID().uuidString)"
         let documentURL = try XCTUnwrap(GraphTools.saveDocumentToDisk(document, named: documentName))
         defer { try? FileManager.default.removeItem(at: documentURL) }

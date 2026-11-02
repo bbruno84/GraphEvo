@@ -6,8 +6,8 @@ does not replace public `observe` or `publisher`. It uses the default model and
 current query adapter; C02b's alternative model is deliberately not combined.
 
 ```sh
-swift build -c release --product ObservationCostProbe
-swift build -c release --show-bin-path
+GRAPHEVO_BUILD_LABS=1 swift build -c release --product ObservationCostProbe
+GRAPHEVO_BUILD_LABS=1 swift build -c release --show-bin-path
 python3 Experiments/SharedObservation/run.py --executable /absolute/ObservationCostProbe \
   --output /tmp/new-c04-run
 ```

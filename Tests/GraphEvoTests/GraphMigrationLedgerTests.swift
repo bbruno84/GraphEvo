@@ -272,20 +272,52 @@ final class GraphMigrationLedgerTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), Data([0, 1, 2, 3]))
     }
 
-    func testHistoryRetentionCompactsOlderEvents() throws {
-        for index in 0..<500 {
-            _ = try GraphMigrationLedger.markStarted(
-                migrationID: "retention",
-                version: 1,
-                configuration: configuration,
-                operationID: "attempt-(index)-started"
-            )
-            _ = try GraphMigrationLedger.markFailed(migrationID: "retention", version: 1, error: NSError(domain: "test", code: index, userInfo: [NSLocalizedDescriptionKey: String(repeating: "x", count: 8_000)]), configuration: configuration)
+    // Prepare valid pre-retention history in one write, rather than benchmark
+    // hundreds of fsync/redecode cycles before exercising the same 2-MiB boundary.
+    private func seedRetentionHistory(migrationID: String, minimumBytes: Int) throws {
+        _ = try GraphMigrationLedger.markFailed(migrationID: migrationID, version: 1,
+            error: NSError(domain: "retention-fixture", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: String(repeating: "x", count: 8_000)]),
+            configuration: configuration)
+        let url = GraphMigrationLedger.historyURLForTesting(migrationID: migrationID, version: 1, configuration: configuration)
+        let line = try XCTUnwrap(try Data(contentsOf: url).split(separator: 0x0A).last)
+        var entry = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line)) as? [String: Any])
+        let originalDate = try XCTUnwrap(entry["date"] as? Double)
+        let failureMessage = entry["errorDescription"]
+        var data = Data(), count = 0
+        while data.count < minimumBytes || count % 2 != 0 {
+            count += 1
+            entry["state"] = count % 2 == 0 ? "failed" : "started"
+            entry["errorDescription"] = count % 2 == 0 ? failureMessage : nil
+            entry["operationID"] = "fixture-\(count)"
+            entry["generation"] = count
+            entry["date"] = originalDate + Double(count)
+            data.append(try JSONSerialization.data(withJSONObject: entry))
+            data.append(0x0A)
         }
+        try data.write(to: url, options: .atomic)
+        let projection = GraphMigrationLedger.fileURLForTesting(migrationID: migrationID, version: 1, configuration: configuration)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: projection)) as? [String: Any])
+        var current = try XCTUnwrap(json["current"] as? [String: Any])
+        current["updatedAt"] = entry["date"]
+        json["current"] = current
+        json["latestEntry"] = entry
+        json["latestGeneration"] = count
+        json["historyCount"] = count
+        try JSONSerialization.data(withJSONObject: json).write(to: projection, options: .atomic)
+        XCTAssertGreaterThan(data.count, minimumBytes - 1)
+        XCTAssertEqual(try GraphMigrationLedger.history(migrationID: migrationID, version: 1, configuration: configuration).count, count)
+    }
+
+    func testHistoryRetentionCompactsOlderEvents() throws {
+        try seedRetentionHistory(migrationID: "retention", minimumBytes: 2 * 1024 * 1024 + 16_384)
+        _ = try GraphMigrationLedger.markStarted(migrationID: "retention", version: 1,
+            configuration: configuration, operationID: "after-retention-fixture")
         let snapshot = GraphMigrationLedger.snapshot(migrationID: "retention", version: 1, configuration: configuration)
         XCTAssertNotNil(snapshot)
         XCTAssertGreaterThan(snapshot?.compactedEventCount ?? 0, 0)
         XCTAssertGreaterThanOrEqual(snapshot?.historyCount ?? 0, 2)
+        XCTAssertEqual(snapshot?.latestEntry?.operationID, "after-retention-fixture")
 
         let data = try Data(contentsOf: GraphMigrationLedger.fileURLForTesting(migrationID: "retention", version: 1, configuration: configuration))
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -381,26 +413,11 @@ final class GraphMigrationLedgerTests: XCTestCase {
     }
 
     func testRetentionLimitAppliesToTheWholeStoreScope() throws {
-        for index in 0..<90 {
-            for migrationID in ["aggregate-a", "aggregate-b"] {
-                _ = try GraphMigrationLedger.markStarted(
-                    migrationID: migrationID,
-                    version: 1,
-                    configuration: configuration,
-                    operationID: "attempt-(index)-(migrationID)-started"
-                )
-                _ = try GraphMigrationLedger.markFailed(
-                    migrationID: migrationID,
-                    version: 1,
-                    error: NSError(
-                        domain: "aggregate-retention",
-                        code: index,
-                        userInfo: [NSLocalizedDescriptionKey: String(repeating: migrationID, count: 1_500)]
-                    ),
-                    configuration: configuration
-                )
-            }
+        for migrationID in ["aggregate-a", "aggregate-b"] {
+            try seedRetentionHistory(migrationID: migrationID, minimumBytes: 1024 * 1024 + 16_384)
         }
+        _ = try GraphMigrationLedger.markStarted(migrationID: "aggregate-a", version: 1,
+            configuration: configuration, operationID: "after-aggregate-fixture")
 
         let ledgerDirectory = GraphMigrationLedger.fileURLForTesting(migrationID: "aggregate-a", version: 1, configuration: configuration).deletingLastPathComponent()
         let ledgerFiles = try FileManager.default.contentsOfDirectory(at: ledgerDirectory, includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" || $0.pathExtension == "jsonl" }

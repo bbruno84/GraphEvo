@@ -19,13 +19,35 @@ records the completed validation checkpoint, with no source/test changes. MF09 i
 [explicit local conversion/opening](graphevo-2-local-v1-bootstrap.md) is complete
 within its package-only scope. The S04 sort-capacity follow-up integrates through
 [PR #137](https://github.com/bbruno84/GraphEvo/pull/137), directly into
-`codex/graphevo-2`. No next implementation branch is selected. Broader
+`codex/graphevo-2`. [CI profile streamlining](graphevo-2-ci-checkpoints.md) integrates directly through
+[PR #138](https://github.com/bbruno84/GraphEvo/pull/138). No next implementation
+branch is selected. Broader
 capacity and public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is production/historical source acceptance, public facade/bootstrap integration
 and new-cloud activation of one authoritative converted graph.
 
-## Latest integrated increment — S04 sort capacity
+## Latest integrated increment — CI profiles and fixture costs
+
+Normal alpha checkpoints use v2 store/runtime/model tests on both platforms and
+Swift 6 consumers; full validation retains legacy and the large capacity fixture
+for shared/legacy changes, infrastructure and milestone/tag/release gates.
+Experimental executables compile only when explicitly enabled. Valid boundary
+fixtures replace hundreds of retention fsync cycles; PDF export retains a vector
+fixture. No library source, public API or schema changes.
+
+Local profiles pass 593 macOS/592 iOS v2 functions, complete 925 macOS and 923
+passed iOS functions with the known skip, six profile/result guards and all three
+consumers. Reviewed full
+[checkpoint #365](https://github.com/bbruno84/GraphEvo/actions/runs/41448941858)
+passes on `19275350aad6e0b450fecdc17dc2606790dd0429`, including all suites and both
+Swift 6 CI consumers. Job-log spans excluding queue fall from 425/837 seconds to
+279/768 seconds macOS/iOS. Full iOS remains costly; cold remote v2-profile timing
+is not measured. Final notes are docs-only and all tested inputs remain unchanged.
+The [CI policy](graphevo-2-ci-checkpoints.md) records exact scope, one-day text
+artifacts and opt-in native diagnostics; it does not close beta/release gates.
+
+## Earlier integrated increment — S04 sort capacity
 
 A budgeted heap merges native sort chunks and passes ordered IDs directly through
 residual filtering, avoiding a second comparison sort. Full validation of consulted

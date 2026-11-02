@@ -905,3 +905,14 @@ MF09 closes its bounded package-only local opening gate through
 [full checkpoint #355](https://github.com/bbruno84/GraphEvo/actions/runs/41422586643).
 This does not close public bootstrap, production/historical source acceptance,
 physical interruption, cross-process writers, scale or new-cloud activation.
+
+## CI checkpoint scope
+
+- [ ] Retain full macOS/iOS validation for legacy/shared foundations, test/CI
+  infrastructure, milestone/tag/release acceptance. A v2 profile checkpoint
+  verifies store/runtime/model and Swift 6 consumers, with the large capacity
+  fixture deferred to full/relevant local checks; it is not full beta acceptance.
+  See [CI profiles](graphevo-2-ci-checkpoints.md), integrated through #138 after
+  reviewed full checkpoint #365 on `1927535`. Keep historical full-run evidence
+  unchanged and record each new run's actual profile. Cold remote v2-profile
+  timing remains unmeasured; full iOS and runner-queue costs remain explicit.
