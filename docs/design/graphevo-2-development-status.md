@@ -23,7 +23,8 @@ within its package-only scope. The S04 sort-capacity follow-up integrates throug
 [PR #138](https://github.com/bbruno84/GraphEvo/pull/138).
 [MF10 authoritative new-cloud activation](graphevo-2-authoritative-cloud-bootstrap.md)
 has its contract integrated through #139 (`4d6a164`). Package-only implementation
-is on `codex/v2-authoritative-cloud-activation`, not yet integrated. It protects one
+is under review in [PR #140](https://github.com/bbruno84/GraphEvo/pull/140), directly
+from `codex/v2-authoritative-cloud-activation`, not yet integrated. It protects one
 converted seed, conditional cloud authority, restart admission and empty-peer
 recovery. Its [bounded evidence](results/authoritative-cloud-bootstrap-2026-11-02.md)
 records the native exclusion prerequisite and twelve passed same-account

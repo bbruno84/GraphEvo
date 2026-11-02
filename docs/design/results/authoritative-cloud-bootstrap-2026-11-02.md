@@ -4,7 +4,8 @@ Result: the bounded synthetic owner/peer protocol passes on same-account physica
 iPad/iPhone, including a rejected independent conversion and a second genuinely
 empty replica after ordinary edits. The standalone native first-create exclusion
 prerequisite also passes. Implementation remains package-only on the focused
-branch pending integration; broader production/historical cutover gates stay open.
+branch in [PR #140](https://github.com/bbruno84/GraphEvo/pull/140), pending
+integration; broader production/historical cutover gates stay open.
 
 ## Provenance and isolation
 
