@@ -234,7 +234,7 @@ package final class GraphQueryEvaluation {
         var value: GraphValue?, count = 0
         for record in matches {
             try step()
-            guard let next = record.properties[key], next != .null else { continue }
+            guard let next = try self.value(record, key: key), next != .null else { continue }
             try GraphQueryScalar.ordered(next)
             count += 1
             switch aggregate {

@@ -60,6 +60,11 @@ private struct TypedQueryItem: GraphModel {
             let b = try await old.graph.project(q, properties: ["i", "nullable"])
             #expect(a.rows.map(\.id) == b.rows.map(\.id)); #expect(a.rows.map(\.values) == b.rows.map(\.values))
         }
+        for aggregate in [GraphQueryAggregate.sum("i"), .minimum("decimal"), .maximum("date")] {
+            let first = try await native.graph.aggregate(query(), aggregate)
+            let second = try await old.graph.aggregate(query(), aggregate)
+            #expect(first.value == second.value && first.contributingCount == second.contributingCount)
+        }
         #expect(try await native.graph.count(query().where(.property("é", .equal, .integer(9)))).value == 8)
         #expect(try await native.graph.count(query().where(.exists("nul\u{0}key"))).value == 8)
         let result = try await native.graph.query(query().where(.property("i", .equal, .integer(4))))
@@ -157,6 +162,52 @@ private struct TypedQueryItem: GraphModel {
         #expect(try await f.graph.query(q).items.map(\.id) == [first])
         let count = try await f.graph.count(query().where(.property("i", .greaterThan, .integer(0))))
         #expect(count.value == 2 && count.diagnostics.strategy == .native && count.diagnostics.materializedRecords == 0)
+        try await f.close()
+    }
+
+    @Test func headerOnlySnapshotsDoNotRegisterApplicationPropertyObjects() async throws {
+        let f = try await fixture()
+        let records = try (0..<3).map { _ in
+            try GraphRecord(id: f.graph.makeNodeID(), type: TypedQueryItem.graphType,
+                properties: ["i": .integer(1), "body": .data(Data(repeating: 91, count: 1024 * 1024))])
+        }
+        try await f.graph.transaction { scope in for record in records { try scope.insert(record) } }
+        try await f.graph.read { scope in
+            try scope.withContext { context, _ in
+                let session = try GraphTypedStoreAdapter.Session(context, f.graph.id, database: true)
+                func registeredValues() -> Int {
+                    context.registeredObjects.filter {
+                        $0.entity.attributesByName[GraphNativePropertyStorage.kindKey] != nil &&
+                        $0.value(forKey: GraphNativePropertyStorage.kindKey) != nil
+                    }.count
+                }
+                #expect(registeredValues() == 0)
+                for (id, node) in session.nodes { _ = try session.snapshot(node, id: id, propertyKeys: []) }
+                #expect(registeredValues() == 0)
+            }
+        }
+        try await f.close()
+    }
+
+    @Test func aggregatesResolveLazyValuesAndPreserveOverflowAndCategoryErrors() async throws {
+        let f = try await fixture(), a = f.graph.makeNodeID(), b = f.graph.makeNodeID(), c = f.graph.makeNodeID()
+        try await f.graph.transaction {
+            try $0.insert(GraphRecord(id: a, type: TypedQueryItem.graphType, properties: ["i": .integer(1), "text": .string("Zulu"), "d": .decimal(3)]))
+            try $0.insert(GraphRecord(id: b, type: TypedQueryItem.graphType, properties: ["i": .integer(2), "text": .string("Alpha"), "d": .decimal(2)]))
+            try $0.insert(GraphRecord(id: c, type: TypedQueryItem.graphType, properties: ["i": .null]))
+        }
+        let q = try query()
+        let sum = try await f.graph.aggregate(q, .sum("i"))
+        #expect(sum.value == .integer(3) && sum.contributingCount == 2 && sum.diagnostics.materializedRecords == 0)
+        #expect(try await f.graph.aggregate(q, .minimum("text")).value == .string("Alpha"))
+        #expect(try await f.graph.aggregate(q, .maximum("d")).value == .decimal(3))
+        #expect(try await f.graph.aggregate(q.where(.property("i", .equal, .integer(2))), .sum("i")).value == .integer(2))
+        #expect(try await f.graph.aggregate(q.sorted(by: [.init(.property("text"))]), .sum("i")).value == .integer(3))
+        try await f.graph.transaction { _ = try $0.patch(.init(id: a, properties: ["i": .set(.integer(.max))])) }
+        await #expect(throws: GraphQueryError.arithmeticOverflow) { try await f.graph.aggregate(q, .sum("i")) }
+        try await f.graph.transaction { _ = try $0.patch(.init(id: a, properties: ["i": .set(.unsignedInteger(1))])) }
+        await #expect(throws: GraphQueryError.unsupportedComparison) { try await f.graph.aggregate(q, .sum("i")) }
+        await #expect(throws: GraphQueryError.incomparableValues) { try await f.graph.aggregate(q, .minimum("i")) }
         try await f.close()
     }
 

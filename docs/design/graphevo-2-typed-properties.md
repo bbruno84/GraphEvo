@@ -188,7 +188,7 @@ S04 schema and all persistent/cloud document formats remain unchanged by P02.
 
 ### P02 local review and checks (2026-11-02)
 
-Local macOS checks pass 906 functions (331 legacy, 470 store, 76 runtime,
+Local macOS checks pass 908 functions (331 legacy, 472 store, 76 runtime,
 29 model). iOS store/model suites and final focused query suites pass, as do both
 independent Swift 6 consumers and manifest/diff checks. Native-vs-S03 comparisons
 exercise numeric categories and extrema, null/missing, literal ASCII strings,
@@ -203,3 +203,14 @@ collapse SQL spellings), avoided serialize-on-read eligibility checks, kept sort
 out of count/aggregate execution and preserved the explicit integrity route.
 No remaining blocking P02 finding is known. Performance acceptance and physical
 S04 sharing/replica recovery still require P03; tests have no latency threshold.
+
+### P02 pre-merge corrections
+
+The initial full CI #349 passed on `cfaabc6`, but subsequent local laboratory
+semantic assertions exposed an untested lazy-aggregate route: the evaluator
+read the structural snapshot instead of its scoped property reader. This is
+corrected before merge, with sum/min/max, null/missing, overflow, mixed categories
+and S03/native aggregate comparisons. Query-header snapshots also no longer
+register application property objects before dictionary header discovery; a
+native registered-object regression test covers that boundary. These are source
+changes and require a new reviewed checkpoint, not a documentation-only waiver.

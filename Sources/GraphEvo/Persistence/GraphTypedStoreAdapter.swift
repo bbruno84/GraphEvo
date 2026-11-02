@@ -456,7 +456,9 @@ package enum GraphTypedStoreAdapter {
             try charging?(raw)
             if typed {
                 _ = try encodedKeys(node)
-                let properties = try GraphNativePropertyStorage.properties(node, keys: propertyKeys, charge: chargingBytes)
+                // Header-only snapshots must not fault property bodies. The S04 query
+                // source inventories headers separately with dictionary projections.
+                let properties = propertyKeys?.isEmpty == true ? [:] : try GraphNativePropertyStorage.properties(node, keys: propertyKeys, charge: chargingBytes)
                 return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: properties,
                                        tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
             }
