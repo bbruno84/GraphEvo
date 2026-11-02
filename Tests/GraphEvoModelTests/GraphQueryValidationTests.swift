@@ -39,4 +39,29 @@ private struct QueryShape: GraphModel {
         #expect(checks.withLock { $0 } == 3)
     }
 
+    @Test func nativeOrderSurvivesResidualFilteringAndRejectsIncompleteOrRepeatedIDs() throws {
+        let graph = GraphID(), budget = try GraphQueryBudget(maximumCandidates: 10)
+        let records = try (1...3).map { value in
+            try GraphRecord(id: GraphNodeID(graphID: graph), type: QueryShape.graphType,
+                properties: ["score": .integer(Int64(value))])
+        }
+        let query = GraphQuery<QueryShape>(budget: budget)
+            .where(.property("score", .greaterThanOrEqual, .integer(2)))
+            .sorted(by: [.init(.property("score"), direction: .descending)]).limit(1)
+        let order = records.reversed().map(\.id)
+        let first = try GraphQueryEvaluation(request: query.request, graphID: graph,
+            records: records, nativeOrder: order).execute(nativeCandidates: 3, propertyBytesCharged: 0)
+        #expect(first.records == [records[2]])
+        let cursor = try #require(first.cursor)
+        let second = try GraphQueryEvaluation(request: query.after(cursor).request, graphID: graph,
+            records: records, nativeOrder: order).execute(nativeCandidates: 3, propertyBytesCharged: 0)
+        #expect(second.records == [records[1]] && second.cursor == nil)
+        for invalid in [[order[0], order[0], order[1], order[2]], [order[0], order[2]]] {
+            #expect(throws: GraphQueryError.unsupportedStorage) {
+                try GraphQueryEvaluation(request: query.request, graphID: graph,
+                    records: records, nativeOrder: invalid).execute(nativeCandidates: 3, propertyBytesCharged: 0)
+            }
+        }
+    }
+
 }

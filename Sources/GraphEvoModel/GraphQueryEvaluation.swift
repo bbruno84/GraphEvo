@@ -136,14 +136,14 @@ package final class GraphQueryEvaluation {
     private let exists: ((GraphNodeID, String) throws -> Bool)?
     private let hydrate: ((GraphRecord) throws -> GraphRecord)?
     private let eligibleIDs: Set<GraphNodeID>?
-    private let nativeOrder: [GraphNodeID: Int]?
+    private let nativeOrder: [GraphNodeID]?
     private let checkCancellation: @Sendable () throws -> Void
     package init(request: GraphQueryRequest, graphID: GraphID, records: [GraphRecord], checkCancellation: @escaping @Sendable () throws -> Void = {},
                  work: GraphQueryWorkCounter? = nil,
                  property: ((GraphNodeID, String) throws -> GraphValue?)? = nil,
                  exists: ((GraphNodeID, String) throws -> Bool)? = nil,
                  hydrate: ((GraphRecord) throws -> GraphRecord)? = nil,
-                 eligibleIDs: Set<GraphNodeID>? = nil, nativeOrder: [GraphNodeID: Int]? = nil) throws {
+                 eligibleIDs: Set<GraphNodeID>? = nil, nativeOrder: [GraphNodeID]? = nil) throws {
         try GraphQueryValidation.request(request, graphID: graphID)
         guard records.allSatisfy({ $0.id.graphID == graphID }), Set(records.map(\.id)).count == records.count else { throw GraphQueryError.foreignGraph }
         self.request = request; self.graphID = graphID; self.records = records; self.checkCancellation = checkCancellation
@@ -313,13 +313,22 @@ package final class GraphQueryEvaluation {
                 }
             }
         }
-        var sorted = try matching.sorted {
-            if let nativeOrder {
+        var sorted: [GraphRecord]
+        if let nativeOrder {
+            // The native merger already established the complete order. Retain it
+            // after residual filtering instead of comparison-sorting ranks again.
+            var remaining: [GraphNodeID: GraphRecord] = [:]
+            for record in matching { try step(); remaining[record.id] = record }
+            var seen = Set<GraphNodeID>()
+            sorted = []
+            for id in nativeOrder {
                 try step()
-                guard let first = nativeOrder[$0.id], let second = nativeOrder[$1.id] else { throw GraphQueryError.unsupportedStorage }
-                return first < second
+                guard seen.insert(id).inserted else { throw GraphQueryError.unsupportedStorage }
+                if let record = remaining.removeValue(forKey: id) { sorted.append(record) }
             }
-            return try compare(values($0), $0.id, values($1), $1.id) < 0
+            guard remaining.isEmpty else { throw GraphQueryError.unsupportedStorage }
+        } else {
+            sorted = try matching.sorted { try compare(values($0), $0.id, values($1), $1.id) < 0 }
         }
         if let cursor = request.cursor {
             sorted = try sorted.filter { try compare(values($0), $0.id, cursor.values, cursor.lastID) > 0 }

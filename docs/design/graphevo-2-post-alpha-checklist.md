@@ -871,13 +871,21 @@ P03 closes the bounded validation protocol in the
 [S04 runtime/physical report](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md):
 fourteen physical stages and complete runtime measurements, without a cloud reset.
 
-- [ ] Before beta capacity acceptance, review the S04 2,000-record native sort
-  refusal at 100,000 steps (S03 succeeds with the same allowance). Preserve the
-  refusal and shared work accounting; evaluate preparation/merge/order costs
-  rather than silently raising budgets or falling back without diagnostics.
+- [x] Review and resolve the S04 2,000-record native-sort refusal at 100,000
+  steps, without raising budgets or hiding the refusal. The
+  [follow-up](results/s04-sort-capacity-2026-11-02.md) integrates through #137
+  after review and full checkpoint #362 on `b9fcd03`. It retains the original
+  and heap-only refusals, then passes Release and complete paginated regressions
+  with heap merge/direct order reuse. This closes the bounded refusal only.
+- [ ] Establish broader representative and device capacity acceptance before beta;
+  a successful 2,000-record desktop fixture is not a general production envelope.
 - [ ] Retain the measured +6.9% fixture disk/index cost and simple-count cost at
   400 records in the end-of-alpha cost review. The approximately 3x selected-row/
   page gain does not establish every supported production envelope.
+- [ ] Review repeated full adapter Session construction during bulk inserts.
+  The 2,000-record regression now prepares data with one confined session to
+  avoid starving unrelated CI tests; ordinary per-call insertion and its cost
+  remain unchanged in the external Release experiment and product API.
 
 ## MF09 local conversion/opening checkpoint
 

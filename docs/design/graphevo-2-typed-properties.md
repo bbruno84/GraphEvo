@@ -163,6 +163,11 @@ SUBQUERY dependency is introduced.
 
 A single complete homogeneous native property sort uses Core Data sort
 descriptors and UUID tie-breaking. Chunk results are merged before cursor/limit;
+the merger keeps one head per fetch in a binary heap, using O(N log K)
+comparisons for N rows across K chunks instead of scanning K heads per row.
+Heap comparisons and emitted rows consume the existing shared step allowance.
+The evaluator preserves the merged IDs through residual filtering rather than
+sorting their ranks again; it rejects duplicate IDs or missing matching records.
 missing/null/mixed/serialized/multi-key sorts remain residual. Scalar eligibility
 checks do not serialize a value just to decide whether it can be native. Counts
 with a complete native prefix use Core Data counts after duplicate validation;
