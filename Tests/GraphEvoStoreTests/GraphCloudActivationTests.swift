@@ -460,4 +460,38 @@ private actor ActivationServer {
         try await f.manager.setAutomaticCloudSynchronizationActive(false, configuration: f.config)
         try await close(f)
     }
+
+    @Test func ordinarySharedBindingDoesNotReadPrivateActivationControl() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ActivationScope-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let m = manager(), server = ActivationServer()
+        let graph = try await m.createGraph(id: .init(), at: root.appendingPathComponent("Shared.sqlite"))
+        let config = GraphCloudConfiguration(containerIdentifier: "iCloud.activation." + UUID().uuidString, environment: .development, directory: root.appendingPathComponent("Cloud"))
+        var adapter = server.adapter
+        let original = server.service
+        adapter.activation = .init(ensureZone: original.ensureZone, fetch: { _, _ in throw GraphCloudActivationError.unavailable }, save: original.save, inventory: original.inventory)
+        _ = try await m.startCloudSession(config, adapter: adapter)
+        let zone = GraphCloudZone(scope: .shared, owner: "foreign-owner", name: "shared-zone")
+        try await m.bindCloudZone(zone, to: graph.id, configuration: config)
+        #expect(try await m.cloudBinding(for: zone, configuration: config)?.graphID == graph.id)
+        try await graph.close(); try await m.stopCloudSession(config)
+    }
+
+    @Test func unmarkedOrdinaryGraphCannotBindAnAuthoritativePrivateZone() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ActivationBinding-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let m = manager(), server = ActivationServer()
+        let graph = try await m.createGraph(id: .init(), at: root.appendingPathComponent("Plain.sqlite"))
+        let config = GraphCloudConfiguration(containerIdentifier: "iCloud.activation." + UUID().uuidString, environment: .development, directory: root.appendingPathComponent("Cloud"))
+        let zone = GraphCloudZone(scope: .private, owner: "owner", name: "authoritative")
+        let route = GraphCloudBinding(zone: zone, graphID: graph.id)
+        try await server.injectAuthority(.init(graphID: graph.id, activationID: UUID(), seedDigest: String(repeating: "a", count: 64), recordCount: 1,
+            conversionCommitment: String(repeating: "b", count: 64), published: true), route: route)
+        _ = try await m.startCloudSession(config, adapter: server.adapter)
+        await #expect(throws: GraphCloudActivationError.recoveryRequired) { try await m.bindCloudZone(zone, to: graph.id, configuration: config) }
+        #expect(try await m.cloudBinding(for: zone, configuration: config) == nil)
+        let id = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: "Local")) }
+        try await graph.close(); try await m.stopCloudSession(config)
+    }
 }

@@ -124,7 +124,7 @@ package actor GraphContextManager {
         let session = try await cloud(configuration)
         let route = GraphCloudBinding(zone: zone, graphID: graphID)
         if let activation, try await session.identity() != activation.binding.identity { throw GraphCloudError.accountChanged }
-        if await session.activationService != nil {
+        if zone.scope == .private, await session.activationService != nil {
             let remote = try await session.activationControl { service, _ -> GraphCloudAuthorityRemote? in
                 do { return try await service.fetch(configuration, route) }
                 catch let error as CKError where error.code == .zoneNotFound && activation == nil { return nil }
