@@ -3,15 +3,18 @@
 Result: the bounded synthetic owner/peer protocol passes on same-account physical
 iPad/iPhone, including a rejected independent conversion and a second genuinely
 empty replica after ordinary edits. The standalone native first-create exclusion
-prerequisite also passes. Implementation remains package-only on the focused
-branch in [PR #140](https://github.com/bbruno84/GraphEvo/pull/140), pending
-integration; broader production/historical cutover gates stay open.
+prerequisite also passes. Package-only implementation integrates directly into
+`codex/graphevo-2` through [PR #140](https://github.com/bbruno84/GraphEvo/pull/140)
+after review and full checkpoint #371; broader production/historical cutover gates
+stay open.
 
 ## Provenance and isolation
 
 - Contract #139 integrates as `4d6a164`; implementation starts directly from it
   on `codex/v2-authoritative-cloud-activation`, returning to `codex/graphevo-2`.
-- Reviewed shipping/test head is `48a42345e0308cdaecf793b120fff5cbd67743b4`.
+- Earlier full local shipping/test head is `48a42345e0308cdaecf793b120fff5cbd67743b4`;
+  final reviewed source/full remote checkpoint head is
+  `ccd0d074cd65182b7fbed7a013f74ef84b4a83f9`.
   The physical protocol exercises `1adbd8d` production activation.
   Subsequent `5ade87a` and `1e9954e` extend only the external device laboratory;
   shipping Sources, tests, manifest and workflow remain identical through those
@@ -107,23 +110,31 @@ virtual-clock worker regression proves normal progress after publication without
 clearing failures. Per-operation control reads and metadata/manifest validation
 costs remain explicit production-capacity follow-ups.
 
-## Remaining gates
+## Final review and full checkpoint
 
 Final pre-CI review reproduced a stale-row bug after peer import committed but
 availability publication failed: a later full server cut could omit deleted rows
-while the retry retained those earlier local imports. The new parameterized
-regression fails before correction and passes afterward for one removed edge and
-an entirely emptied current server graph. Only the still-unexposed recovering
-peer reconciles absent rows from the complete validated cut; generic transport
+while the retry retained those earlier local imports. The single-edge regression
+fails before correction; its corrected parameterized version passes for one
+removed edge and an entirely emptied current server graph. Only the still-unexposed
+recovering peer reconciles absent rows from the complete validated cut; generic transport
 deletion evidence rules do not change. Focused correction checks pass 70 macOS
 functions and 24 iOS functions/28 invocations. The earlier full 950-function and
-physical checkpoints above retain their actual pins; final full CI follows the
-corrected reviewed head.
+physical checkpoints above retain their actual pins.
 
-Remote full CI is not requested yet. Under the checkpoint policy, the reviewed
-runtime/shared-foundation increment requires one `ci-full-checkpoint` immediately
-before an authorized merge. Earlier #365 remains historical evidence, not this
-increment's remote validation. No skipped job is counted as a passing checkpoint.
+Full [checkpoint #371](https://github.com/bbruno84/GraphEvo/actions/runs/41475912020)
+passes on reviewed head `ccd0d074cd65182b7fbed7a013f74ef84b4a83f9`: macOS passes
+951 functions (331 legacy and 620 store/runtime/model), while iOS passes 949 with
+zero failures and one known skip (950 total). Both Swift 6 model/process consumers
+pass. The initial iOS job was cancelled without acquiring a hosted runner; only
+that job was retried on the same source, preserving the successful macOS job.
+The master-only standalone package-consumer job is outside this v2 workflow
+scope; its earlier local result above is retained separately. No skipped job is
+counted as a passing checkpoint. The checkpoint label is removed before final
+documentation-only notes; library, tests, consumers, manifest, scripts and workflow
+remain identical to the tested head. Earlier #365 remains historical evidence.
+
+## Remaining gates
 
 The bounded MF10 protocol does not establish source completeness across real v1
 cloud stores, cessation of old writers, returning-client policy, historical codec

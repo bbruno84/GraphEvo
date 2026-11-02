@@ -1,8 +1,8 @@
 # MF10 — authoritative new-cloud activation after local v1 conversion
 
-Status: contract integrated through #139; package-only implementation on
-`codex/v2-authoritative-cloud-activation`, 2026-11-02. Not yet integrated or
-accepted for production cutover. This follows [MF09](graphevo-2-local-v1-bootstrap.md)
+Status: contract integrated through #139; package-only implementation integrates
+through #140 after review and full macOS/iOS checkpoint #371, 2026-11-02.
+Production cutover acceptance remains open. This follows [MF09](graphevo-2-local-v1-bootstrap.md)
 on the S04 custom-sync runtime. The synthetic physical owner/peer protocol passes;
 public activation and broader acceptance remain open. See the
 [bounded evidence](results/authoritative-cloud-bootstrap-2026-11-02.md).

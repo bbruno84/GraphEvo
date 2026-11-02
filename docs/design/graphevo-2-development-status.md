@@ -23,23 +23,43 @@ within its package-only scope. The S04 sort-capacity follow-up integrates throug
 [PR #138](https://github.com/bbruno84/GraphEvo/pull/138).
 [MF10 authoritative new-cloud activation](graphevo-2-authoritative-cloud-bootstrap.md)
 has its contract integrated through #139 (`4d6a164`). Package-only implementation
-is under review in [PR #140](https://github.com/bbruno84/GraphEvo/pull/140), directly
-from `codex/v2-authoritative-cloud-activation`, not yet integrated. It protects one
+integrates through [PR #140](https://github.com/bbruno84/GraphEvo/pull/140), directly
+from `codex/v2-authoritative-cloud-activation`. It protects one
 converted seed, conditional cloud authority, restart admission and empty-peer
 recovery. Its [bounded evidence](results/authoritative-cloud-bootstrap-2026-11-02.md)
 records the native exclusion prerequisite and twelve passed same-account
 iPad/iPhone protocol reports: protected seed/restarts, publication, empty-peer
 recovery, ordinary later edits, independent-conversion refusal and another empty
-replica. Local full macOS passes 950 functions; focused iOS passes 112/120.
+replica. Final reviewed full checkpoint #371 passes 951 macOS functions,
+949 passed iOS functions with one known skip and both Swift 6 consumers.
 Host v1 completeness/writer policy, production/historical acceptance, deployment
-and reviewed remote integration remain separate requirements.
+and public bootstrap remain separate requirements.
 Broader
 capacity and public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route
 is production/historical source acceptance, public facade/bootstrap integration
-and new-cloud activation of one authoritative converted graph.
+and production adoption of the cloud flow for the authoritative converted graph.
 
-## Latest integrated increment — CI profiles and fixture costs
+## Latest integrated increment — MF10 authoritative cloud activation
+
+One durable cloud authority selects the converted seed before uploads. Native
+receipt/file/history identity, restart admission and session guards prevent
+ordinary-binding bypass or copied-store takeover. Empty peers preserve existing
+cloud identities; an interrupted initial import reconciles a complete validated
+server cut before consumer availability, including rows removed since its first
+attempt. Native activation format is 2, control/manifest formats are 1 and session
+format is 7; S04 and primitive/asset formats remain unchanged.
+
+Reviewed source `ccd0d074cd65182b7fbed7a013f74ef84b4a83f9` passes full
+[checkpoint #371](https://github.com/bbruno84/GraphEvo/actions/runs/41475912020):
+951 macOS functions, 949 passed iOS functions with one known skip, and both Swift 6
+CI consumers. The initial iOS job never acquired a hosted runner; its sole retry
+passes on the same head, retaining the successful macOS job. Final integration
+notes change documentation only; library, tests, consumers and CI inputs match
+the reviewed checkpoint. The bounded device report and remaining production,
+public bootstrap and workload gates retain their actual scope.
+
+## Earlier integrated increment — CI profiles and fixture costs
 
 Normal alpha checkpoints use v2 store/runtime/model tests on both platforms and
 Swift 6 consumers; full validation retains legacy and the large capacity fixture
@@ -700,7 +720,7 @@ The maintainer selects [explicit CI checkpoints](graphevo-2-ci-checkpoints.md)
 instead of a full macOS/iOS run on every alpha PR and every integration push.
 Review and appropriate local verification still apply to each increment. Record
 whether remote checks ran or were skipped; only an actual successful run is a
-full checkpoint. Latest reviewed code checkpoint: #118, `2c61d40`, CI `41224009459`
+full checkpoint. Earlier reviewed code checkpoint: #118, `2c61d40`, CI `41224009459`
 (macOS/iOS green, after review). #117/#116/#115 remain the prior pause/asset/conflict
 checkpoints. The following #112 runs remain historical checkpoints.
 The policy is reviewed/merged through #113 as `31eac7c`; ordinary-alpha run

@@ -1397,7 +1397,8 @@ remain separate gates.
 ## V2 MF10 authoritative cloud activation
 
 [MF10](docs/design/graphevo-2-authoritative-cloud-bootstrap.md) has its contract
-integrated through #139 and a package-only implementation on its focused branch.
+integrated through #139 and package-only implementation through #140 after review
+and full macOS/iOS checkpoint #371 on `ccd0d07`.
 Read it before changing v1 new-cloud activation. Require one
 selected conversion/route, durable remote authority before uploads, immutable seed
 preflight and empty-peer recovery. Converted stores cannot bypass this admission
