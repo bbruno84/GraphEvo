@@ -27,9 +27,14 @@ heap-only refusals, followed by five successful Release sorted pages at the
 unchanged allowance. Full checkpoint #358 exposed the enclosing suite's inherited
 120-second test limit on the slower macOS runner. The test's five-minute limit
 did not override that shorter suite cap; the suite now allows the intended five
-minutes. Query budgets and shipping source remain unchanged. All eight corrected
-local query tests pass; corrective review finds no remaining blocker. The
-replacement checkpoint is pending. Broader device/production
+minutes. Query budgets and shipping source remain unchanged. Checkpoint #360
+passes macOS and both Swift 6 consumers, but the slow repeated-inventory fixture
+seed causes existing one-minute iOS suites to time out. Final test preparation
+reuses one confined adapter Session, as conversion does, followed by complete
+integrity validation. All query assertions remain and the original two-minute
+suite limit is restored. Corrected local checks pass all 925 macOS functions and
+517 iOS store/model functions; corrective review finds no remaining blocker.
+The replacement checkpoint is pending. Broader device/production
 capacity acceptance remains open.
 Public/historical/cloud migration gates remain open. TP01 remains retained on
 `codex/experiment-typed-properties`; its prototype is not merged. Migration's remaining route

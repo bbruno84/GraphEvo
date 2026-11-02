@@ -882,6 +882,10 @@ fourteen physical stages and complete runtime measurements, without a cloud rese
 - [ ] Retain the measured +6.9% fixture disk/index cost and simple-count cost at
   400 records in the end-of-alpha cost review. The approximately 3x selected-row/
   page gain does not establish every supported production envelope.
+- [ ] Review repeated full adapter Session construction during bulk inserts.
+  The 2,000-record regression now prepares data with one confined session to
+  avoid starving unrelated CI tests; ordinary per-call insertion and its cost
+  remain unchanged in the external Release experiment and product API.
 
 ## MF09 local conversion/opening checkpoint
 

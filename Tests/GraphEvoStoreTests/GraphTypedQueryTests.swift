@@ -14,8 +14,7 @@ private struct TypedQueryItem: GraphModel {
     func graphRecord(in graphID: GraphID) throws -> GraphRecord { record }
 }
 
-// Suite limits also cap individual tests; include the larger fixture's setup.
-@Suite(.timeLimit(.minutes(5))) struct GraphTypedQueryTests {
+@Suite(.timeLimit(.minutes(2))) struct GraphTypedQueryTests {
     private struct Fixture {
         let root: URL, graph: GraphStore
         let manager: GraphContextManager
@@ -118,7 +117,7 @@ private struct TypedQueryItem: GraphModel {
         await #expect(throws: GraphQueryError.self) { try await f.graph.query(self.query(steps: 5)) }
         try await f.close()
     }
-    @Test(.timeLimit(.minutes(5))) func twoThousandRecordNativeSortFitsTheUnchangedStepBudget() async throws {
+    @Test func twoThousandRecordNativeSortFitsTheUnchangedStepBudget() async throws {
         let f = try await fixture()
         let records: [GraphRecord] = try (0..<2_000).map { index in
             let values: [String: GraphValue] = [
@@ -133,7 +132,16 @@ private struct TypedQueryItem: GraphModel {
             return try GraphRecord(id: GraphNodeID(graphID: f.graph.id), type: TypedQueryItem.graphType,
                 properties: values, createdDate: Date(timeIntervalSince1970: 10))
         }
-        try await f.graph.transaction { scope in for record in records { try scope.insert(record) } }
+        let graphID = f.graph.id
+        // Reuse one confined adapter session for fixture creation, as conversion
+        // does. Per-call admission/inventory costs are not part of this query test.
+        try await f.graph.transaction { scope in
+            try scope.withContext { context, _ in
+                let session = try GraphTypedStoreAdapter.Session(context, graphID, database: true)
+                for record in records { try session.insert(record) }
+            }
+        }
+        #expect(try await f.graph.validateIntegrity() == records.count)
         let budget = try GraphQueryBudget(maximumCandidates: 2_010, maximumPropertyBytes: 32 * 1024 * 1024, maximumSteps: 100_000)
         for direction in [GraphQuerySortDirection.ascending, .descending] {
             let expected = records.sorted {

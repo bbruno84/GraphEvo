@@ -71,6 +71,22 @@ failed checkpoint separately from the corrected verification.
 All eight corrected local query tests pass, including the large fixture; shipping
 source remains byte-identical to the original reviewed implementation.
 
+Checkpoint #360 passes macOS (including the large regression in 195.90 seconds)
+and both Swift 6 consumers, but iOS exposes contention during that expensive seed:
+other existing one-minute suites time out while it repeatedly reconstructs the
+whole graph inventory for each inserted record. Do not raise those deadlines or
+drop the large regression. The final test fixture instead reuses one confined
+adapter Session for insertion inside the normal transaction, as native conversion
+already does, then performs complete integrity validation. All 2,000 records,
+eleven properties, query paths, page/direction assertions and work/byte budgets
+are retained. The original two-minute query-suite limit is restored.
+
+This change is fixture preparation only. The external Release experiment still
+uses ordinary per-call insertion and retains its setup cost; it is not rerun with
+the faster test seeding to claim improved product insertion performance.
+Final local verification passes all 925 macOS functions and 517 iOS store/model
+functions; the complete iOS regression takes 20.41 seconds on the local simulator.
+
 No physical CloudKit protocol is repeated for this local query-only change.
 P03's separate S04 sharing/asset/recovery evidence retains its original scope;
 this result does not certify cloud migration, source acceptance or beta readiness.
