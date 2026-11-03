@@ -8,6 +8,14 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+The selected [controlled-store consolidation](graphevo-2-controlled-store-access.md)
+is in progress on `codex/v2-controlled-graph-entry`, based directly on #141.
+Its first ownership work retains the manager gateway, adds cooperating process
+writer/presence exclusion and transaction-local mutation inventory reuse.
+Descriptor-first queries and reference-only asset queues with native permanent
+bodies remain separately reviewable implementation areas. Private research is
+not merged code or an integrated CI checkpoint. No beta/tag gate closes here.
+
 [MF11 native staged v1 conversion](graphevo-2-native-v1-migration.md) integrates
 through [PR #141](https://github.com/bbruno84/GraphEvo/pull/141), directly from
 integrated #140. Core Data owns the native schema hop; library handlers prepare

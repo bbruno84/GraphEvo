@@ -349,9 +349,9 @@ private actor SyncTestSignal {
             }
             #expect(!FileManager.default.fileExists(atPath: absent.path))
         }
-        let local = try await GraphDatabase.open(configuration: .init(location: .sqlite(f.url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
-        await #expect(throws: GraphStoreError.self) { try await local.createGraph() }
-        #expect(try await local.graphIDs() == [f.graph.id]); try await local.close()
+        await #expect(throws: GraphStoreError.self) {
+            try await GraphDatabase.open(configuration: .init(location: .sqlite(f.url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
+        }
         let reader = try await GraphDatabase.open(configuration: .init(location: .sqlite(f.url), access: .readOnly), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         let graph = try await reader.openGraph(f.graph.id)
         #expect(try await graph.fetchAll(ObservedItem.self).count == 1)

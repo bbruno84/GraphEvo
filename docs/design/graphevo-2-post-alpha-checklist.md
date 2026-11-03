@@ -30,6 +30,14 @@ creating this document.
 
 ## Consolidation evidence
 
+The maintainer selected [controlled-store access](graphevo-2-controlled-store-access.md)
+after private query/attachment/import/lock studies. Correct writer exclusion,
+query-local semantics and durable transport recovery are alpha implementation
+work; opening/listing latency tuning, batch-memory sizing and representative
+device/network performance envelopes remain beta measurement work. Retaining
+native attachment bodies does not certify temporary-spool recovery or quota
+acceptance. No broad release gate closes from the private performance results.
+
 A8 is reviewed/merged. [C01](results/c01-cost-baseline-2026-10-27.md) begins the
 cost review with 182 validated samples across eight local synthetic configurations.
 It measures identity/session overhead, file/query coupling and repeated observer

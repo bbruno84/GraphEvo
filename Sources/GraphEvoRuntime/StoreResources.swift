@@ -8,6 +8,7 @@ struct StoreLifecycleHooks: Sendable {
     var beforeLoad: (@Sendable () async throws -> Void)?
     var didReserveHandle: (@Sendable () async -> Void)?
     var afterCommit: (@Sendable () -> Void)?
+    var didContendProcessLock: (@Sendable () -> Void)?
     var didQueueWriter: (@Sendable () async -> Void)?
     var didRestrictWrites: (@Sendable () -> Void)?
     var didBeginClose: (@Sendable () async -> Void)?
@@ -25,6 +26,8 @@ actor StoreResources {
     private let container: NSPersistentContainer
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
+    private var maintenanceWriter: StoreProcessLock.Lease?
+    private var processPresence: StoreProcessLock.Lease?
     private var legacyMirroring: LegacyStoreMirroring?
     private var changeObservers: [NSObjectProtocol] = []
     nonisolated let invalidations = StoreInvalidationHub()
@@ -47,7 +50,8 @@ actor StoreResources {
     private var reservationWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private var drain: CheckedContinuation<Void, Never>?
 
-    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease]) {
+    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], processPresence: StoreProcessLock.Lease? = nil) {
+        self.processPresence = processPresence
         self.gateways = gateways
         self.container = container
         self.resolved = resolved
@@ -64,6 +68,16 @@ actor StoreResources {
         try (hooks.processRole ?? StoreProcessRole.current).validate(resolved.configuration)
         let members = try resolved.resources
         let gateways = try members.map { try StoreGatewayLease.acquire($0.configuration, owner: owner) }
+        // GraphContextManager's coordinated path is the single writable v2 owner gateway.
+        // Bootstrap holds the writer lock before native metadata/load. The shared presence
+        // lease prevents another cooperating process from replacing a live coordinator.
+        let processWriter = try await acquireProcessWriter(resolved, hooks: hooks)
+        defer { processWriter?.release() }
+        let presence: StoreProcessLock.Lease?
+        if processWriter != nil {
+            presence = try await StoreProcessLock.acquire(resolved, purpose: "owners",
+                mode: nativeMigration == nil ? .shared : .exclusive, wait: false)
+        } else { presence = nil }
         try await hooks.beforeLoad?()
         let model = schema.makeModel()
         guard !schema.identifier.isEmpty, !schema.entityVersionHashes.isEmpty,
@@ -73,7 +87,7 @@ actor StoreResources {
         }
         if let nativeMigration {
             try nativeMigration.seed(resolved)
-            try await prepareNativeMigration(nativeMigration, resolved: resolved, hooks: hooks, gateways: gateways)
+            try await prepareNativeMigration(nativeMigration, resolved: resolved, hooks: hooks, gateways: gateways, presence: presence)
         }
         let descriptions = try members.map { member in
             try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier,
@@ -86,10 +100,13 @@ actor StoreResources {
                 descriptions: descriptions, configuration: resolved.configuration)
         } else { container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model) }
         container.persistentStoreDescriptions = descriptions
-        let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways)
+        let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways, processPresence: presence)
         do {
             try await resources.load()
-            if let nativeMigration { try await resources.finishNativeMigration(nativeMigration) }
+            if let nativeMigration {
+                try await resources.finishNativeMigration(nativeMigration)
+                try await presence?.downgradeToShared(resolved, purpose: "owners")
+            }
         }
         catch {
             let failure = StoreRuntimeError.loadFailed(resolved.url, underlying: error)
@@ -121,6 +138,11 @@ actor StoreResources {
                     }
                 } else if resolved.configuration.workspaceID != nil {
                     throw StoreRuntimeError.invalidConfiguration("The migration workspace marker is missing.")
+                }
+                if metadata[StoreNativeContext.historySyncGraphKey] != nil, resolved.configuration.access == .readWrite {
+                    guard resolved.configuration.exclusiveGraphID != nil else {
+                        throw StoreRuntimeError.invalidConfiguration("A coordinated graph requires its exclusive manager entry point for writing.")
+                    }
                 }
                 if nativeMirroring && metadata[StoreNativeContext.historySyncGraphKey] != nil {
                     throw StoreRuntimeError.invalidConfiguration("A history-sync store cannot be opened by native CloudKit mirroring.")
@@ -166,7 +188,7 @@ actor StoreResources {
     }
 
     private static func prepareNativeMigration(_ migration: StoreNativeMigration, resolved: ResolvedStore,
-                                              hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease]) async throws {
+                                              hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], presence: StoreProcessLock.Lease?) async throws {
         guard let prepare = migration.prepare, let url = resolved.url else { return }
         let model = migration.sourceSchema.makeModel()
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
@@ -175,7 +197,7 @@ actor StoreResources {
             requiredModelVersionIdentifier: migration.sourceSchema.requiredModelVersionIdentifier, nativeMirroring: false)
         let container = NSPersistentContainer(name: migration.sourceSchema.identifier, managedObjectModel: model)
         container.persistentStoreDescriptions = [description]
-        let staging = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways)
+        let staging = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways, processPresence: presence)
         do {
             try await staging.load()
             try await staging.performNativePreparation(prepare)
@@ -259,6 +281,7 @@ actor StoreResources {
     func transaction<Value: Sendable>(control: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
+        try Self.checkProcessReentry(resolved)
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
         guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
         try admit(write: true, control: control)
@@ -268,19 +291,28 @@ actor StoreResources {
         return try await withTaskCancellationHandler {
             try await acquireWriter(request, cancellation: cancellation)
             defer { releaseWriter() }
+            let processWriter = try await acquireOwnedWriter()
+            defer { processWriter?.release() }
             let hooks = hooks, configuration = resolved.configuration, container = container
-            return try await container.performBackgroundTask { @Sendable context in
-                Self.prepare(context, configuration: configuration, container: container)
-                let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
-                context.userInfo[StoreNativeContext.cancellationKey] = check
-                defer { context.rollback(); context.reset() }
-                try cancellation.check()
-                let value = try body(context)
-                try cancellation.check()
-                if context.hasChanges { try context.save() }
-                // A completed save is success even if cancellation arrives during save.
-                hooks.afterCommit?()
-                return value
+            let held = processWriter == nil ? StoreProcessLock.held : StoreProcessLock.held.union([resolved.key])
+            return try await StoreProcessLock.$held.withValue(held) {
+                try await container.performBackgroundTask { @Sendable context in
+                    Self.prepare(context, configuration: configuration, container: container)
+                    context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
+                    let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
+                    context.userInfo[StoreNativeContext.cancellationKey] = check
+                    defer {
+                        StoreNativeContext.clearMutationSession(in: context)
+                        context.rollback(); context.reset()
+                    }
+                    try cancellation.check()
+                    let value = try body(context)
+                    try cancellation.check()
+                    if context.hasChanges { try context.save() }
+                    // A completed save is success even if cancellation arrives during save.
+                    hooks.afterCommit?()
+                    return value
+                }
             }
         } onCancel: {
             cancellation.cancel()
@@ -292,6 +324,7 @@ actor StoreResources {
     func nativeOperation<Value: Sendable>(
         _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
     ) async throws -> Value {
+        try Self.checkProcessReentry(resolved)
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
         try admit(write: true)
         defer { finish(write: true) }
@@ -299,13 +332,63 @@ actor StoreResources {
         return try await withTaskCancellationHandler {
             try await acquireWriter(request, cancellation: cancellation)
             defer { releaseWriter() }
+            let processWriter = try await acquireOwnedWriter()
+            defer { processWriter?.release() }
             try cancellation.check()
             // Native APIs own their cancellation semantics once started. Await their real outcome.
             defer { invalidations.publish(.nativeOperation) }
-            return try await body(container)
+            let held = processWriter == nil ? StoreProcessLock.held : StoreProcessLock.held.union([resolved.key])
+            return try await StoreProcessLock.$held.withValue(held) { try await body(container) }
         } onCancel: {
             cancellation.cancel()
             Task { await self.cancelWriter(request) }
+        }
+    }
+
+    private static func checkProcessReentry(_ resolved: ResolvedStore) throws {
+        guard !StoreProcessLock.held.contains(resolved.key) else {
+            throw StoreRuntimeError.invalidConfiguration("A native operation cannot reenter its owned store while holding writer admission.")
+        }
+    }
+
+    private static func acquireProcessWriter(_ resolved: ResolvedStore, hooks: StoreLifecycleHooks,
+                                             cancellable: Bool = true) async throws -> StoreProcessLock.Lease? {
+        try checkProcessReentry(resolved)
+        guard let url = resolved.url, !resolved.configuration.legacyReadOnly,
+              resolved.configuration.cloudKitContainerIdentifier == nil,
+              resolved.configuration.sharedStoreURL == nil else { return nil }
+        do {
+            if resolved.configuration.access == .readOnly {
+                guard FileManager.default.fileExists(atPath: url.path) else { throw StoreRuntimeError.missingStore(url) }
+                // Preserve read-only unmarked/archive sources without requiring a writable
+                // directory. Coordinated replicas participate in the live-owner protocol.
+                let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType,
+                    at: url, options: [NSReadOnlyPersistentStoreOption: true])
+                guard metadata[StoreNativeContext.historySyncGraphKey] != nil else { return nil }
+            }
+            return try await StoreProcessLock.acquire(resolved, cancellable: cancellable,
+                                                       contended: hooks.didContendProcessLock)
+        } catch is CancellationError { throw CancellationError() }
+        catch let error as StoreRuntimeError { throw error }
+        catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
+    }
+
+    private func acquireOwnedWriter(cancellable: Bool = true) async throws -> StoreProcessLock.Lease? {
+        try Self.checkProcessReentry(resolved)
+        if let borrowed = maintenanceWriter?.retained() { return borrowed }
+        return try await Self.acquireProcessWriter(resolved, hooks: hooks, cancellable: cancellable)
+    }
+
+    /// Called under the process writer lock. Never destroy a store with another live coordinator.
+    /// Failure restores our shared claim, retaining ownership for a safe later close/retry.
+    private func requireSoleProcessOwner() async throws {
+        guard processPresence != nil else { return }
+        processPresence?.release(); processPresence = nil
+        do {
+            processPresence = try await StoreProcessLock.acquire(resolved, purpose: "owners", wait: false, cancellable: false)
+        } catch {
+            processPresence = try await StoreProcessLock.acquire(resolved, purpose: "owners", mode: .shared, cancellable: false)
+            throw error
         }
     }
 
@@ -346,6 +429,7 @@ actor StoreResources {
     }
 
     func reserve(_ id: UUID, mode: StoreReservationMode) async throws {
+        try Self.checkProcessReentry(resolved)
         try Task.checkCancellation()
         guard !closing else { throw StoreRuntimeError.closedHandle }
         if mode == .all, reservations.values.contains(.all) { throw StoreRuntimeError.resourceReserved }
@@ -360,6 +444,14 @@ actor StoreResources {
                 }
                 try Task.checkCancellation()
                 guard !closing else { throw StoreRuntimeError.closedHandle }
+                if mode == .all {
+                    let lock = try await Self.acquireProcessWriter(resolved, hooks: hooks)
+                    do {
+                        try Task.checkCancellation()
+                        guard !closing, reservations[id] == .all else { throw StoreRuntimeError.closedHandle }
+                        maintenanceWriter = lock
+                    } catch { lock?.release(); throw error }
+                }
             } onCancel: { Task { await self.cancelReservation(id) } }
         } catch { releaseReservation(id); throw error }
     }
@@ -372,7 +464,10 @@ actor StoreResources {
     func releaseReservation(_ id: UUID) {
         let mode = reservations.removeValue(forKey: id)
         reservationWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
-        if mode == .all { invalidations.publish(.storeChange) }
+        if mode == .all {
+            maintenanceWriter?.release(); maintenanceWriter = nil
+            invalidations.publish(.storeChange)
+        }
     }
 
     /// Independent of sharing availability and caller-owned maintenance reservations.
@@ -386,12 +481,18 @@ actor StoreResources {
 
     /// Native detachment precedes deletion; gateway claims are released only after owned cleanup.
     func discardWorkspace(_ body: @escaping @Sendable () throws -> Void) async throws {
+        try Self.checkProcessReentry(resolved)
         guard resolved.configuration.workspaceID != nil else { throw StoreRuntimeError.invalidConfiguration("Only a workspace can use detached workspace cleanup.") }
         closing = true; invalidations.finish()
         if admitted > 0 { await withCheckedContinuation { drain = $0 } }
+        let processWriter = try await acquireOwnedWriter(cancellable: false)
+        defer { processWriter?.release() }
+        try await requireSoleProcessOwner()
         do { try await detach(releasing: false) }
         catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
         try body()
+        processPresence?.release(); processPresence = nil
+        maintenanceWriter?.release(); maintenanceWriter = nil
         for gateway in gateways { gateway.release() }
     }
 
@@ -419,15 +520,22 @@ actor StoreResources {
 
     private func reservedMigrationTransaction<Value: Sendable>(reservation: UUID,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        try Self.checkProcessReentry(resolved)
         guard dataAvailable, reservations[reservation] == .all, admitted == 0 else { throw StoreRuntimeError.resourceReserved }
         try admit(write: true, reservation: reservation)
         defer { finish(write: true) }
         let cancellation = OperationCancellation(), container = container, configuration = resolved.configuration, hooks = hooks
         return try await withTaskCancellationHandler {
-            try await container.performBackgroundTask { @Sendable context in
+            let processWriter = try await acquireOwnedWriter()
+            defer { processWriter?.release() }
+            return try await container.performBackgroundTask { @Sendable context in
                 Self.prepare(context, configuration: configuration, container: container)
+                context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
                 context.userInfo[StoreNativeContext.cancellationKey] = { @Sendable in try cancellation.check() } as StoreNativeContext.CancellationCheck
-                defer { context.rollback(); context.reset() }
+                defer {
+                    StoreNativeContext.clearMutationSession(in: context)
+                    context.rollback(); context.reset()
+                }
                 try cancellation.check()
                 let result = try body(context)
                 try cancellation.check()
@@ -438,6 +546,7 @@ actor StoreResources {
     }
 
     func copyStore(to destination: URL, reservation: UUID) async throws {
+        try Self.checkProcessReentry(resolved)
         guard dataAvailable else { throw StoreRuntimeError.dataUnavailable }
         guard let source = resolved.url,
               (resolved.configuration.exclusiveGraphID != nil || resolved.configuration.access == .readOnly),
@@ -447,6 +556,21 @@ actor StoreResources {
         }
         try admit(reservation: reservation)
         defer { finish() }
+        let sourceFence = maintenanceWriter?.retained()
+        defer { sourceFence?.release() }
+        let destinationResource = try ResolvedStore(.init(location: .sqlite(destination)))
+        guard destinationResource.key != resolved.key else { throw StoreRuntimeError.configurationConflict(destination) }
+        let lockedResources = (processPresence == nil || sourceFence != nil ? [destinationResource] : [resolved, destinationResource]).sorted {
+            guard case .sqlite(let left) = $0.key, case .sqlite(let right) = $1.key else { return false }
+            return left < right
+        }
+        var locks: [StoreProcessLock.Lease] = []
+        defer { for lock in locks.reversed() { lock.release() } }
+        for resource in lockedResources { locks.append(try await StoreProcessLock.acquire(resource)) }
+        // An existing destination must not be replaced while another coordinator owns it.
+        let destinationOwner = try await StoreProcessLock.acquire(destinationResource, purpose: "owners", wait: false)
+        defer { destinationOwner.release() }
+        guard !FileManager.default.fileExists(atPath: destination.path) else { throw StoreRuntimeError.configurationConflict(destination) }
         let container = container, readOnly = resolved.configuration.access == .readOnly
         try await container.performBackgroundTask { _ in
             let copier = NSPersistentStoreCoordinator(managedObjectModel: container.managedObjectModel)
@@ -476,12 +600,15 @@ actor StoreResources {
 
     /// The registry invokes shutdown only once and retains ownership if detachment fails.
     func close() async throws {
+        try Self.checkProcessReentry(resolved)
         closing = true
         invalidations.finish()
         await hooks.didBeginClose?()
         if admitted > 0 {
             await withCheckedContinuation { drain = $0 }
         }
+        let processWriter = try await acquireOwnedWriter(cancellable: false)
+        defer { processWriter?.release() }
         do { try await detach() }
         catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
     }
@@ -495,6 +622,7 @@ actor StoreResources {
 
     /// Invalidate every lease, drain admitted work, and retain claims until native destruction succeeds.
     func destroy(graphID: UUID, storeID: String) async throws {
+        try Self.checkProcessReentry(resolved)
         guard resolved.configuration.exclusiveGraphID == graphID,
               resolved.configuration.access == .readWrite,
               resolved.configuration.cloudKitContainerIdentifier == nil,
@@ -503,6 +631,9 @@ actor StoreResources {
         }
         closing = true; invalidations.finish()
         if admitted > 0 { await withCheckedContinuation { drain = $0 } }
+        let processWriter = try await acquireOwnedWriter(cancellable: false)
+        defer { processWriter?.release() }
+        try await requireSoleProcessOwner()
         if !destructionIssued, FileManager.default.fileExists(atPath: url.path) {
             // Temporary Core Data metadata readers must release their SQLite connections before destruction.
             try autoreleasepool {
@@ -542,6 +673,8 @@ actor StoreResources {
             destructionArtifacts?.removeValue(forKey: artifact)
         }
         try await hooks.didDestroy?()
+        processPresence?.release(); processPresence = nil
+        maintenanceWriter?.release(); maintenanceWriter = nil
         for gateway in gateways { gateway.release() }
     }
 
@@ -572,7 +705,10 @@ actor StoreResources {
         for observer in changeObservers { NotificationCenter.default.removeObserver(observer) }
         changeObservers.removeAll()
         invalidations.finish()
-        if releasing { for gateway in gateways { gateway.release() } }
+        if releasing {
+            processPresence?.release(); processPresence = nil
+            for gateway in gateways { gateway.release() }
+        }
     }
 }
 

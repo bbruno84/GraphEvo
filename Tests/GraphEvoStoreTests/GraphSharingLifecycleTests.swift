@@ -122,7 +122,11 @@ private actor RemovalGate {
         #expect(!FileManager.default.fileExists(atPath: f.url.path), Comment(rawValue: diagnostic))
         #expect(try Data(contentsOf: exported) == Data([1,2,3]))
         let files = try FileManager.default.contentsOfDirectory(atPath: f.root.path)
-        #expect(Set(files) == ["Engine", "consumer-export.bin"])
+        let resource = try ResolvedStore(.init(location: .sqlite(f.url)))
+        let writerSidecar = try StoreProcessLock.sidecar(resource, purpose: "writer").lastPathComponent
+        let ownerSidecar = try StoreProcessLock.sidecar(resource, purpose: "owners").lastPathComponent
+        // Location-bound lock identities survive data purge; no attachment content remains.
+        #expect(Set(files) == ["Engine", "consumer-export.bin", writerSidecar, ownerSidecar])
         await #expect(throws: (any Error).self) { try await alias.read { _ in () } }
         var changes = observation.makeAsyncIterator()
         while await changes.next() != nil {}

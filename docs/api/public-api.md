@@ -1019,6 +1019,12 @@ backed up and preserves application IDs. `GraphStoreError.missingGraph` means
 that the requested graph is not in the current local catalog. Closed/configuration
 errors use the same public translation as `GraphStore`.
 
+Files marked for the package-only coordinated v2 owner cannot be reopened for
+writing through the generic GraphDatabase factory. Their writable entry remains
+GraphContextManager; no new public coordinator opener is introduced here.
+Read-only native access remains separate. See
+[controlled store access](../design/graphevo-2-controlled-store-access.md).
+
 The mirrored factory opens an owner-private native resource with no local
 fallback. Share preparation sends no invitation and requires an owner-only
 share. `GraphMirrorBoundary: Sendable, Equatable` contains read-only

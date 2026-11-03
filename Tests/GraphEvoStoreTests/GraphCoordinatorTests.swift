@@ -198,7 +198,10 @@ private actor CoordinatorGate {
             try await Task.sleep(for: .milliseconds(1))
         }
         #expect(await manager.registeredGraphCount == 0)
-        let next = try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
+        await #expect(throws: GraphStoreError.self) {
+            try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
+        }
+        let next = try await GraphDatabase.open(configuration: .init(location: .sqlite(url), access: .readOnly), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         try await next.close()
     }
 
