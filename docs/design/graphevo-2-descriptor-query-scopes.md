@@ -72,7 +72,10 @@ behavior, pending insertion, canonical types, descriptor-specific topology,
 traversal origins and scalar count without application facades/unrequested bodies.
 Existing P02 parity, payload budget, sorting/paging and capacity cases remain.
 Private F's narrow timings do not establish the generalized path's performance.
-Matched performance measurement and reviewed integration remain pending.
+The [matched local comparison](results/descriptor-query-scopes-2026-11-03.md)
+retains complete result equality and improves the selected query from roughly
+263–267 to 41–43 ms. This supports the generalized source, not a promise of F's
+hardcoded timings or broad device performance. Reviewed integration remains pending.
 
 Local checks on `954e6ba6da5ffd43ab02cf92954890b4fe0c1c23` pass 980 macOS
 functions (331 legacy, 527 store, 92 runtime, 30 model), 23 focused iOS 18.5

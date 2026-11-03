@@ -52,8 +52,10 @@ external writers.
 
 The [descriptor-first query candidate](graphevo-2-descriptor-query-scopes.md)
 separates query-local inputs from explicit auditing without changing S04 storage.
-Its generalized correctness and matched performance still require their own
-reviewed evidence; the narrow private F timing is not that checkpoint.
+Its [matched local comparison](results/descriptor-query-scopes-2026-11-03.md)
+retains complete results with approximately sixfold query improvement. Reviewed
+integration and broader acceptance remain open; private F's timing is not a
+generalized or device checkpoint.
 
 A8 is reviewed/merged. [C01](results/c01-cost-baseline-2026-10-27.md) begins the
 cost review with 182 validated samples across eight local synthetic configurations.

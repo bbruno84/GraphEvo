@@ -14,7 +14,9 @@ progress in [PR #143](https://github.com/bbruno84/GraphEvo/pull/143), on
 The existing evaluator receives descriptor-local inputs; explicit integrity
 audits retain their separate contract. Local checks pass 980 macOS functions,
 23 focused iOS query functions (including capacity) and both Swift 6 consumers.
-Matched performance, final review and remote integration remain pending.
+The [matched local comparison](results/descriptor-query-scopes-2026-11-03.md)
+retains complete result equality and reduces the measured query from roughly
+263–267 to 41–43 ms. Final review and remote integration remain pending.
 
 The selected [controlled-store consolidation](graphevo-2-controlled-store-access.md)
 continues with descriptor-first queries and reference-only asset queues. Its first
