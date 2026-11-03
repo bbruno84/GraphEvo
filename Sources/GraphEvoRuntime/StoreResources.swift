@@ -317,6 +317,72 @@ actor StoreResources {
         }
     }
 
+    /// File preparation stays outside native callbacks while the same admitted writer owns
+    /// its pending context. Only Sendable values cross phases; consumers never receive this API.
+    func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
+        prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
+        materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
+    ) async throws -> Value {
+        try Self.checkProcessReentry(resolved)
+        guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
+        guard resolved.url != nil, !resolved.configuration.legacyReadOnly,
+              resolved.configuration.cloudKitContainerIdentifier == nil, resolved.configuration.sharedStoreURL == nil else {
+            throw StoreRuntimeError.invalidConfiguration("File preparation requires a plain writable SQLite store.")
+        }
+        try admit(write: true, control: true)
+        defer { self.finish(write: true) }
+        let cancellation = OperationCancellation(), request = UUID()
+        return try await withTaskCancellationHandler {
+            try await acquireWriter(request, cancellation: cancellation)
+            defer { releaseWriter() }
+            let processWriter = try await acquireOwnedWriter()
+            defer { processWriter?.release() }
+            let held = StoreProcessLock.held.union([resolved.key])
+            let configuration = resolved.configuration, container = container, hooks = hooks
+            return try await StoreProcessLock.$held.withValue(held) {
+                let context = container.newBackgroundContext()
+                let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
+                do {
+                    let snapshot = try await context.perform {
+                        Self.prepare(context, configuration: configuration, container: container)
+                        context.userInfo[StoreNativeContext.cancellationKey] = check
+                        context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
+                        try check()
+                        return try prepare(context)
+                    }
+                    let prepared = try await materialize(snapshot, check)
+                    let value = try await context.perform {
+                        try check()
+                        let value = try finish(context, prepared)
+                        try check()
+                        if context.hasChanges { try context.save(); hooks.afterCommit?() }
+                        return value
+                    }
+                    await Self.resetPreparedContext(context)
+                    return value
+                } catch {
+                    await Self.resetPreparedContext(context)
+                    throw error
+                }
+            }
+        } onCancel: {
+            cancellation.cancel()
+            Task { await self.cancelWriter(request) }
+        }
+    }
+
+    private static func resetPreparedContext(_ context: NSManagedObjectContext) async {
+        // Cleanup is queued and awaited even when the initiating task is cancelled.
+        await withCheckedContinuation { continuation in
+            context.perform {
+                StoreNativeContext.clearMutationSession(in: context)
+                context.rollback(); context.reset()
+                continuation.resume()
+            }
+        }
+    }
+
     /// Privileged framework work; the completion must settle before this owner can detach.
     func nativeOperation<Value: Sendable>(
         _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value

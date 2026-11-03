@@ -96,14 +96,14 @@ extension GraphContextManager {
                 let expected = document.authority
                 let claiming = document.phase == .claiming
                 let limits = document.limits
-                let remote = try await session.activationControl { service, _ -> GraphCloudAuthorityRemote in
+                let remote = try await session.activationControl { service, identity -> GraphCloudAuthorityRemote in
                     if claiming { try await service.ensureZone(configuration, route) }
                     if let existing = try await service.fetch(configuration, route) {
                         guard existing.value.matches(expected) else { throw GraphCloudActivationError.authorityConflict }
                         return existing
                     }
                     guard claiming else { throw GraphCloudActivationError.recoveryRequired }
-                    let inventory = try await service.inventory(configuration, route, limits)
+                    let inventory = try await service.inventory(configuration, identity, route, limits)
                     guard inventory.isEmpty else { throw GraphCloudActivationError.zoneNotEmpty }
                     return try await service.save(configuration, route, expected, nil)
                 }
@@ -126,14 +126,14 @@ extension GraphContextManager {
                 document.phase = .publishing
                 try await owner.persistActivation(document)
                 guard let manifest = document.manifest else { throw GraphCloudActivationError.invalidState }
-                let published = try await session.activationControl { service, _ -> GraphCloudAuthorityRemote in
+                let published = try await session.activationControl { service, identity -> GraphCloudAuthorityRemote in
                     guard let current = try await service.fetch(configuration, route), current.value.matches(expected) else {
                         throw GraphCloudActivationError.recoveryRequired
                     }
                     if current.value.published { return current }
-                    let inventory = try await service.inventory(configuration, route, limits)
-                    let records = try Self.seedRecords(inventory, binding: route, authority: expected)
-                    guard try GraphCloudSeedManifest.make(records, binding: route, limits: limits) == manifest else {
+                    let inventory = try await service.inventory(configuration, identity, route, limits)
+                    guard try await Self.seedManifest(inventory, session: session, binding: route,
+                                                      authority: expected, limits: limits) == manifest else {
                         throw GraphCloudActivationError.recoveryRequired
                     }
                     var ready = current.value; ready.published = true
@@ -205,23 +205,24 @@ extension GraphContextManager {
                 let binding = current.binding
                 let retained = try await session.incoming(for: zone, limit: configuration.maximumEvents)
                 if !retained.isEmpty { _ = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: configuration.maximumEvents) }
-                var events = try await session.activationControl { service, _ in
+                try await session.activationControl { service, identity in
                     guard let latest = try await service.fetch(configuration, route), latest.value.published,
                           latest.value.matches(remote.value) else { throw GraphCloudActivationError.recoveryRequired }
-                    let inventory = try await service.inventory(configuration, route, limits)
-                    _ = try Self.seedRecords(inventory, binding: route, authority: remote.value)
-                    return inventory.filter { !GraphCloudAuthorityCodec.isControl($0) }
-                }
-                // Only this unexposed replica may be reconciled against a complete verified zone cut.
-                // A retry can otherwise retain an earlier import whose row was subsequently deleted remotely.
-                let present = Set(events.compactMap(\.recordName))
-                for nodeID in try await owner.activationReplicaIDs().sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
-                    let name = try GraphCloudNodeCodec.recordID(for: nodeID, binding: route).recordName
-                    if !present.contains(name) {
-                        events.append(.init(kind: .recordDeleted, zone: zone, recordName: name, recordType: GraphCloudNodeCodec.recordType))
+                    let inventory = try await service.inventory(configuration, identity, route, limits)
+                    _ = try await Self.seedManifest(inventory, session: session, binding: route,
+                                                    authority: remote.value, limits: limits)
+                    var events = inventory.filter { !GraphCloudAuthorityCodec.isControl($0) }
+                    // Only this unexposed replica may be reconciled against a complete verified zone cut.
+                    // A retry can otherwise retain an earlier import whose row was subsequently deleted remotely.
+                    let present = Set(events.compactMap(\.recordName))
+                    for nodeID in try await owner.activationReplicaIDs().sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+                        let name = try GraphCloudNodeCodec.recordID(for: nodeID, binding: route).recordName
+                        if !present.contains(name) {
+                            events.append(.init(kind: .recordDeleted, zone: zone, recordName: name, recordType: GraphCloudNodeCodec.recordType))
+                        }
                     }
+                    try await session.stageActivationSnapshot(events, for: route, activationID: remote.value.activationID)
                 }
-                try await session.stageActivationSnapshot(events, for: route, activationID: remote.value.activationID)
                 _ = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: configuration.maximumEvents)
                 guard try await graph.collectSyncChanges() == 0 else { throw GraphSyncError.pendingImport }
                 _ = try await owner.validateActivationReplica()
@@ -262,15 +263,20 @@ extension GraphContextManager {
         }
     }
 
-    private static func seedRecords(_ inventory: [GraphCloudIncoming], binding: GraphCloudBinding,
-                                    authority: GraphCloudAuthority) throws -> [CKRecord] {
-        var records: [CKRecord] = []
+    private static func seedManifest(_ inventory: [GraphCloudIncoming], session: GraphCloudSession,
+                                     binding: GraphCloudBinding, authority: GraphCloudAuthority,
+                                     limits: GraphCloudActivationLimits) async throws -> GraphCloudSeedManifest {
+        var entries: [GraphCloudSeedEntry] = []
+        var remaining = limits.maximumPayloadBytes
         var controls = 0
         for event in inventory {
             guard event.kind == .recordChanged, event.zone == binding.zone, let bytes = event.recordArchive else {
                 throw GraphCloudActivationError.invalidState
             }
             let record = try GraphCloudRecordCodec.restore(bytes)
+            if let data = try await session.assetData(for: event, binding: binding) {
+                record["asset"] = data as CKRecordValue
+            }
             if GraphCloudAuthorityCodec.isControl(event) {
                 guard try GraphCloudAuthorityCodec.decode(record, binding: binding).value.matches(authority) else {
                     throw GraphCloudActivationError.authorityConflict
@@ -278,10 +284,14 @@ extension GraphContextManager {
                 controls += 1
             } else {
                 _ = try GraphCloudNodeCodec.decode(record, binding: binding)
-                records.append(record)
+                guard let payload = record["payload"] as? Data, payload.count <= remaining else {
+                    throw GraphCloudActivationError.limitExceeded
+                }
+                remaining -= payload.count
+                entries.append(try GraphCloudSeedManifest.entry(record, binding: binding))
             }
         }
         guard controls == 1 else { throw GraphCloudActivationError.recoveryRequired }
-        return records
+        return try GraphCloudSeedManifest.make(entries: entries, binding: binding, limits: limits)
     }
 }

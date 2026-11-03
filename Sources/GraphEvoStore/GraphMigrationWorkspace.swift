@@ -354,7 +354,7 @@ extension GraphContextManager {
             try workspaceID.uuidString.data(using: .utf8)!.write(to: staging.appendingPathComponent("owner"), options: .withoutOverwriting)
             let store = staging.appendingPathComponent("Graph.sqlite")
             maintenance = try await owner.reserveMaintenance()
-            try await owner.copyStore(to: store, reservation: maintenance!)
+            try await owner.copyStore(to: store, reservation: maintenance!, storeID: source.storeID)
             await maintenance?.release(); maintenance = nil
             try Task.checkCancellation()
             // Only detached, private staging files are marked through the native metadata API.

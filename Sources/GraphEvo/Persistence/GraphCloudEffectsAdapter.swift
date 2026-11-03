@@ -8,7 +8,7 @@ import GraphEvoStore
 extension GraphSyncCheckpointAdapter {
     static let transportKey = GraphTypedStoreAdapter.prefix + "cloudTransport"
     private struct Transport: Codable {
-        var format = 2
+        var format = 3
         let binding: GraphCloudTransportBinding
         let storeID: String
         let epoch: UUID
@@ -27,7 +27,7 @@ extension GraphSyncCheckpointAdapter {
             do { state = try JSONDecoder().decode(Transport.self, from: bytes) }
             catch { throw GraphCloudError.invalidState }
         } else { state = Transport(binding: binding, storeID: value.state.storeID, epoch: value.state.epoch) }
-        guard state.format == 2, state.binding == binding, state.storeID == value.state.storeID,
+        guard state.format == 3, state.binding == binding, state.storeID == value.state.storeID,
               state.epoch == value.state.epoch, state.metadata.count <= 100_000, state.receipts.count <= 4096,
               state.metadata.keys.allSatisfy({ UUID(uuidString: $0)?.uuidString == $0 }),
               state.receipts.allSatisfy({ UUID(uuidString: $0.key)?.uuidString == $0.key && $0.value.utf8.count == 64 &&
@@ -43,12 +43,22 @@ extension GraphSyncCheckpointAdapter {
                       item.recordName == (try GraphCloudNodeCodec.recordID(for: item.change.id, binding: binding.route)).recordName,
                       ["ManagedEntity", "ManagedRelationship", "ManagedAction"].contains(item.change.nativeKind) else { throw GraphCloudError.invalidState }
                 if item.change.operation == .save {
-                    let record = try original(item, route: binding.route)
-                    guard record.id == item.change.id else { throw GraphCloudError.invalidState }
-                    let kind: String
-                    switch record.endpoints { case .entity: kind = "ManagedEntity"; case .relationship: kind = "ManagedRelationship"; case .action: kind = "ManagedAction" }
-                    guard kind == item.change.nativeKind else { throw GraphCloudError.invalidState }
-                } else { guard item.recordArchive == nil else { throw GraphCloudError.invalidState } }
+                    if let reference = item.assetReference {
+                        try reference.validate(role: .outgoing, identity: binding.identity, binding: binding.route,
+                                               recordName: item.recordName, storeID: state.storeID, epoch: state.epoch)
+                        guard let archive = item.recordArchive else { throw GraphCloudError.invalidState }
+                        let native = try GraphCloudRecordCodec.restore(archive)
+                        try GraphCloudNodeCodec.validateReferenceArchive(native, reference: reference, binding: binding.route)
+                        guard item.change.nativeKind == "ManagedEntity" else { throw GraphCloudError.invalidState }
+                    } else {
+                        let record = try original(item, route: binding.route)
+                        guard record.type != GraphAttachmentPayload.graphType else { throw GraphCloudError.invalidState }
+                        guard record.id == item.change.id else { throw GraphCloudError.invalidState }
+                        let kind: String
+                        switch record.endpoints { case .entity: kind = "ManagedEntity"; case .relationship: kind = "ManagedRelationship"; case .action: kind = "ManagedAction" }
+                        guard kind == item.change.nativeKind else { throw GraphCloudError.invalidState }
+                    }
+                } else { guard item.recordArchive == nil, item.assetReference == nil else { throw GraphCloudError.invalidState } }
             }
         }
         return state
@@ -76,8 +86,13 @@ extension GraphSyncCheckpointAdapter {
         }
         return result
     }
-    private static func originalNode(_ item: GraphCloudOutgoingNode, route: GraphCloudBinding) throws -> GraphCloudDecodedNode {
+    private static func originalNode(_ item: GraphCloudOutgoingNode, route: GraphCloudBinding,
+                                     resolvedAssets: [String: Data] = [:]) throws -> GraphCloudDecodedNode {
         guard let bytes = item.recordArchive, let native = try? GraphCloudRecordCodec.restore(bytes) else { throw GraphCloudError.invalidState }
+        if item.assetReference != nil {
+            guard let data = resolvedAssets[item.recordName] else { throw GraphCloudError.invalidState }
+            native["asset"] = data as CKRecordValue
+        }
         return try GraphCloudNodeCodec.decode(native, binding: route)
     }
 
@@ -166,23 +181,54 @@ extension GraphSyncCheckpointAdapter {
             if !value.state.pending.isEmpty || state.attempt != nil {
                 try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
             }
-            if let attempt = state.attempt { return attempt }
+            if let attempt = state.attempt { return GraphCloudPreparedOutgoing(batch: attempt, storeID: state.storeID, epoch: state.epoch) }
             var items: [GraphSyncItem] = [], dates: [GraphNodeID: Date] = [:]
+            var remainingAssetBytes = 32 * 1024 * 1024
             let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
             for change in value.state.pending.sorted(by: ordered).filter({ onlyIDs?.contains($0.id) ?? true }).prefix(maximum) {
                 let record = change.operation == .save ? try session.record(change.id) : nil
                 guard change.operation == .delete || record != nil else { throw GraphSyncError.unresolvedChange }
+                if let record, record.type == GraphAttachmentPayload.graphType {
+                    let count = try GraphAttachmentPayload(graphRecord: record).content.data.count
+                    if count > remainingAssetBytes { break }
+                    remainingAssetBytes -= count
+                }
                 if let node = try session.node(change.id), let date = try GraphMutationMetadata.modifiedAt(node) { dates[change.id] = date }
                 items.append(GraphSyncItem(change: change, record: record))
             }
             let batch = GraphSyncBatch(id: UUID(), graphID: id, items: items, epoch: value.state.epoch)
             let metadata = Dictionary(uniqueKeysWithValues: state.metadata.map { (GraphNodeID(graphID: id, rawValue: UUID(uuidString: $0.key)!), $0.value) })
             let encoded = try GraphCloudNodeCodec.encode(batch, binding: binding.route, systemFields: metadata, modifiedDates: dates)
-            if !encoded.items.isEmpty { state.attempt = encoded }
-            try persist(context, value); try persistTransport(context, root: value.root, state: state)
-            return encoded
+            // The provisional archive is detached; only the reference-only result is persisted in finishPrepared.
+            try persist(context, value)
+            return GraphCloudPreparedOutgoing(batch: encoded, storeID: state.storeID, epoch: state.epoch)
         }
-    }, sent: { context, id, binding, receipts, limits in
+    }, finishPrepared: { context, id, binding, batch, limits in
+        let value = try load(context, id: id, limits: limits)
+        var state = try loadTransport(value, binding: binding)
+        if let old = state.attempt {
+            guard old.id == batch.id, old.graphID == batch.graphID, old.zone == batch.zone,
+                  old.items.count == batch.items.count,
+                  zip(old.items, batch.items).allSatisfy({ $0.change == $1.change && $0.recordName == $1.recordName }) else {
+                throw GraphCloudError.invalidState
+            }
+        } else {
+            if batch.items.isEmpty {
+                try persistTransport(context, root: value.root, state: state)
+                return
+            }
+            let pending = Set(value.state.pending.map(\.id))
+            guard batch.graphID == id, batch.zone == binding.route.zone,
+                  Set(batch.items.map { $0.change.id }).count == batch.items.count,
+                  batch.items.allSatisfy({ pending.contains($0.change.id) }) else { throw GraphCloudError.invalidState }
+        }
+        state.attempt = batch
+        try persistTransport(context, root: value.root, state: state)
+    }, currentAttempt: { context, id, binding, limits in
+        let value = try load(context, id: id, limits: limits)
+        let state = try loadTransport(value, binding: binding)
+        return state.attempt.map { GraphCloudPreparedOutgoing(batch: $0, storeID: state.storeID, epoch: state.epoch) }
+    }, sent: { context, id, binding, receipts, resolvedAssets, remoteAssets, limits in
         try GraphValueDecodingDiagnostics.checking {
             var value = try load(context, id: id, limits: limits)
             try reconcile(context, value: &value, limits: limits)
@@ -208,8 +254,9 @@ extension GraphSyncCheckpointAdapter {
                 guard receipt.graphID == id, receipt.zone == binding.route.zone, receipt.batchID == attempt.id else { throw GraphSyncError.staleBatch }
                 for incoming in receipt.saved {
                     guard incoming.zone == receipt.zone, let name = incoming.recordName, let item = sent[name], item.change.operation == .save,
-                          case .save(let decoded) = try GraphCloudNodeCodec.decode(incoming, binding: binding.route), seen.insert(name).inserted else { throw GraphCloudError.invalidState }
-                    let original = try originalNode(item, route: binding.route)
+                          case .save(let decoded) = try GraphCloudNodeCodec.decode(incoming, binding: binding.route,
+                                                                                   assetData: remoteAssets[name]), seen.insert(name).inserted else { throw GraphCloudError.invalidState }
+                    let original = try originalNode(item, route: binding.route, resolvedAssets: resolvedAssets)
                     guard decoded.record == original.record, decoded.modifiedAt == original.modifiedAt else { throw GraphCloudError.invalidState }
                     state.metadata[item.change.id.rawValue.uuidString] = decoded.systemFields; succeeded.insert(name)
                 }
@@ -220,10 +267,11 @@ extension GraphSyncCheckpointAdapter {
                 for failure in receipt.failures {
                     guard let item = sent[failure.recordName], seen.insert(failure.recordName).inserted else { throw GraphCloudError.invalidState }
                     if failure.code == CKError.Code.serverRecordChanged.rawValue, item.change.operation == .save, let server = failure.serverRecord {
-                        guard server.recordName == item.recordName, case .save(let remote) = try GraphCloudNodeCodec.decode(server, binding: binding.route), remote.record.id == item.change.id else { throw GraphCloudError.invalidState }
+                        guard server.recordName == item.recordName, case .save(let remote) = try GraphCloudNodeCodec.decode(server, binding: binding.route,
+                                                                                                                        assetData: remoteAssets[item.recordName]), remote.record.id == item.change.id else { throw GraphCloudError.invalidState }
                         events[item.change.id] = .save(remote)
                     } else if failure.code == CKError.Code.unknownItem.rawValue, item.change.operation == .save,
-                              try GraphCloudNodeCodec.changeTag(originalNode(item, route: binding.route).systemFields, for: item.change.id, binding: binding.route) != nil {
+                              try GraphCloudNodeCodec.changeTag(originalNode(item, route: binding.route, resolvedAssets: resolvedAssets).systemFields, for: item.change.id, binding: binding.route) != nil {
                         events[item.change.id] = .delete(item.change.id)
                     } else { failures.append(failure) }
                 }

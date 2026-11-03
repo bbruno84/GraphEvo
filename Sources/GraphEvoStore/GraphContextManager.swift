@@ -303,7 +303,21 @@ package actor GraphContextManager {
         for batch in batches {
             let group = receipts.filter { $0.batchID == batch }, ids = Set(group.map(\.id))
             _ = try await session.identity()
-            let result = try await graph.commitTransport(binding, receipts: group)
+            var remoteAssets: [String: Data] = [:]
+            for receipt in group {
+                for record in receipt.saved {
+                    if let data = try await session.assetData(for: record, binding: binding.route), let name = record.recordName {
+                        remoteAssets[name] = data
+                    }
+                }
+                for failure in receipt.failures {
+                    if let record = failure.serverRecord,
+                       let data = try await session.assetData(for: record, binding: binding.route), let name = record.recordName {
+                        remoteAssets[name] = data
+                    }
+                }
+            }
+            let result = try await graph.commitTransport(binding, receipts: group, remoteAssets: remoteAssets)
             try await session.consume(ids)
             do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
             succeeded += group.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count }
@@ -380,7 +394,11 @@ package actor GraphContextManager {
             entries.removeAll { GraphCloudShareControl.isControl($0.change) }
             if entries.isEmpty { return GraphCloudApplyReport(applied: controls.count, cleanupPending: false) }
         }
-        let effects = try entries.map { try GraphCloudEffect($0, binding: binding.route) }
+        var effects: [GraphCloudEffect] = []
+        for entry in entries {
+            let data = try await session.assetData(for: entry.change, binding: binding.route)
+            effects.append(try GraphCloudEffect(entry, binding: binding.route, assetData: data))
+        }
         _ = try await session.identity()
         let result = try await graph.applyTransport(binding, effects: effects)
         let ids = Set(entries.map(\.id))

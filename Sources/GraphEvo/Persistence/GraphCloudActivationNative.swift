@@ -100,18 +100,21 @@ enum GraphCloudActivationNative {
         guard receipt.targetStoreID == checkpoint.state.storeID else { throw GraphCloudActivationError.invalidState }
         let session = try GraphTypedStoreAdapter.Session(context, id, database: true, maximumCandidates: 100_000)
         guard session.nodes.count <= limits.maximumRecords else { throw GraphCloudActivationError.limitExceeded }
-        var records: [CloudKit.CKRecord] = []
+        var entries: [GraphCloudSeedEntry] = []
         var remaining = limits.maximumPayloadBytes
         for (nodeID, node) in session.nodes {
             try StoreNativeContext.cancellationCheck(in: context)()
-            let value = try session.snapshot(node, id: nodeID, chargingBytes: { count in
-                guard count <= remaining else { throw GraphCloudActivationError.limitExceeded }
-                remaining -= count
-            })
+            let value = try session.snapshot(node, id: nodeID)
             try session.validate(value)
-            records.append(try GraphCloudNodeCodec.encode(value, binding: binding.route, modifiedAt: GraphMutationMetadata.modifiedAt(node)))
+            let record = try GraphCloudNodeCodec.encode(value, binding: binding.route,
+                                                        modifiedAt: GraphMutationMetadata.modifiedAt(node))
+            guard let payload = record["payload"] as? Data, payload.count <= remaining else {
+                throw GraphCloudActivationError.limitExceeded
+            }
+            remaining -= payload.count
+            entries.append(try GraphCloudSeedManifest.entry(record, binding: binding.route))
         }
-        let manifest = try GraphCloudSeedManifest.make(records, binding: binding.route, limits: limits)
+        let manifest = try GraphCloudSeedManifest.make(entries: entries, binding: binding.route, limits: limits)
         // Every current seed row must be discoverable; a consumed or missing baseline cannot be guessed.
         let saves = Set(checkpoint.state.pending.filter { $0.operation == .save }.map(\.id))
         guard Set(session.nodes.keys).isSubset(of: saves) else { throw GraphSyncError.historyUnavailable }

@@ -40,13 +40,20 @@ private actor ActivationServer {
         }
         return result
     }
-    func send(_ batch: GraphCloudOutgoingBatch) throws -> GraphCloudSentReceipt {
+    func send(_ batch: GraphCloudOutgoingBatch) async throws -> GraphCloudSentReceipt {
         try check(); sends += 1
         var saved: [GraphCloudIncoming] = [], deleted: [String] = [], failed: [GraphCloudRecordFailure] = []
         for item in batch.items {
             if failRecordOnce { failRecordOnce = false; failed.append(.init(recordName: item.recordName, code: CKError.networkFailure.rawValue)); continue }
             if let archive = item.recordArchive {
                 let record = try GraphCloudRecordCodec.restore(archive)
+                if let reference = item.assetReference {
+                    guard let root = batch.assetRoot else { throw GraphCloudError.invalidState }
+                    let spool = try GraphCloudAssetSpool(root: root)
+                    record["asset"] = try await spool.read(reference, role: .outgoing, identity: reference.identity,
+                        binding: reference.binding, recordName: item.recordName,
+                        storeID: reference.storeID, epoch: reference.epoch) as CKRecordValue
+                }
                 let value = try GraphCloudRecordCodec.archive(record, scope: .private, portableAsset: true)
                 records[batch.zone.name + item.recordName] = value; saved.append(value)
             } else {
@@ -66,7 +73,7 @@ private actor ActivationServer {
     nonisolated var service: GraphCloudActivationService {
         .init(ensureZone: { _, _ in try await self.check() }, fetch: { _, route in try await self.fetch(route) },
               save: { _, route, value, base in try await self.save(value, route: route, base: base) },
-              inventory: { _, route, _ in try await self.inventory(route) })
+              inventory: { _, _, route, _ in try await self.inventory(route) })
     }
     nonisolated var adapter: GraphCloudAdapter {
         .init(activation: service, account: { _ in "synthetic-activation-account" }, make: { _, _, _, callback in
@@ -263,6 +270,32 @@ private actor ActivationServer {
         #expect(Dictionary(uniqueKeysWithValues: actual.map { ($0.id, $0) }) == Dictionary(uniqueKeysWithValues: expected.map { ($0.id, $0) }))
         #expect(try await graph.collectSyncChanges() == 0)
         #expect(await server.sends == sends)
+        try await graph.close(); try await next.stopCloudSession(config)
+    }
+
+    @Test func activationAndEmptyPeerAcceptAssetBytesBeyondInlinePayloadAllowance() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        var attachments: [GraphAttachmentMetadata] = []
+        for index in 0..<4 {
+            let payload = try GraphAttachmentPayload(id: f.graph.makeNodeID(), ownerID: f.invoice,
+                fileName: "part-\(index).bin", contentType: "public.data", data: Data(repeating: UInt8(index + 1), count: 9 * 1024 * 1024))
+            _ = try await f.graph.transaction { try $0.insert(payload) }
+            attachments.append(payload.content.metadata)
+        }
+        try await publish(f)
+        #expect(await server.sends >= 2)
+        try await close(f)
+        let next = manager()
+        let config = GraphCloudConfiguration(containerIdentifier: f.config.containerIdentifier, environment: .development,
+            directory: f.root.appendingPathComponent("LargePeerCloud"))
+        _ = try await next.startCloudSession(config, adapter: server.adapter)
+        let result = try await next.openCloudReplica(id: f.graph.id,
+            at: f.root.appendingPathComponent("LargePeer.sqlite"), zone: f.zone, configuration: config)
+        let graph = try result.opening.get()
+        for metadata in attachments {
+            #expect(try await graph.attachment(metadata.id)?.metadata == metadata)
+        }
         try await graph.close(); try await next.stopCloudSession(config)
     }
 

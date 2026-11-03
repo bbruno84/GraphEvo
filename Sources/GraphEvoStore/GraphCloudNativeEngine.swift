@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import GraphEvoModel
 
 @available(iOS 17, macOS 14, *)
 extension GraphCloudAdapter {
@@ -128,7 +129,7 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
                     }
                     // An ambiguous previous success is recoverable only when the complete server body equals the frozen intent.
                     if let server,
-                       let item = candidates[name], GraphCloudNodeCodec.matchesFrozenServer(server, item: item, binding: route) {
+                       let item = candidates[name], await outbox.matchesFrozenServer(server, item: item, binding: route) {
                         saved.append(try GraphCloudRecordCodec.archive(server, scope: scope))
                         syncEngine.state.remove(pendingRecordZoneChanges: [.saveRecord(server.recordID)])
                     } else {
@@ -156,6 +157,24 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
 
 /// Local secure archive codec, independent of engine availability and consumer formats.
 package enum GraphCloudRecordCodec {
+    static func freeze(_ incoming: GraphCloudIncoming, identity: GraphCloudSessionIdentity,
+                       binding: GraphCloudBinding, spool: GraphCloudAssetSpool,
+                       namespace: UUID) throws -> GraphCloudIncoming {
+        guard incoming.kind == .recordChanged, incoming.assetReference == nil,
+              let archive = incoming.recordArchive, let name = incoming.recordName else { return incoming }
+        let record = try restore(archive)
+        guard record["asset"] != nil else { return incoming }
+        let data = try GraphCloudAsset.bytes(record["asset"])
+        let reference = try spool.stageBlocking(data, role: .incoming, namespace: namespace,
+            identity: identity, binding: binding, recordName: name)
+        record["asset"] = Data() as CKRecordValue
+        try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding, matchMetadata: false)
+        return GraphCloudIncoming(kind: .recordChanged, zone: incoming.zone, recordName: name,
+            recordType: incoming.recordType,
+            recordArchive: try NSKeyedArchiver.archivedData(withRootObject: record, requiringSecureCoding: true),
+            assetReference: reference)
+    }
+
     static func archive(_ record: CKRecord, scope: GraphCloudScope, portableAsset: Bool = false) throws -> GraphCloudIncoming {
         let record = try GraphCloudAsset.portable(record, allowBytes: portableAsset)
         return GraphCloudIncoming(kind: .recordChanged,
@@ -181,5 +200,21 @@ package enum GraphCloudRecordCodec {
         guard checked.zone == incoming.zone, checked.recordName == incoming.recordName, checked.recordType == incoming.recordType else {
             throw GraphCloudError.invalidState
         }
+        if let reference = incoming.assetReference {
+            guard let name = incoming.recordName else { throw GraphCloudError.invalidState }
+            try reference.validate(role: .incoming, identity: reference.identity, binding: reference.binding,
+                                   recordName: name)
+            try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: reference.binding,
+                                                              matchMetadata: false)
+        }
+    }
+
+    static func validateDurable(_ incoming: GraphCloudIncoming) throws {
+        try validate(incoming)
+        guard incoming.kind == .recordChanged, let archive = incoming.recordArchive else { return }
+        let record = try restore(archive)
+        let attachment = record.recordType == GraphCloudNodeCodec.recordType &&
+            record["type"] as? String == GraphAttachmentPayload.graphType
+        guard (incoming.assetReference != nil) == attachment else { throw GraphCloudError.invalidState }
     }
 }

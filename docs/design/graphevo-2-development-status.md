@@ -8,6 +8,22 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+The third controlled-store increment integrates through
+[PR #144](https://github.com/bbruno84/GraphEvo/pull/144), directly from
+integrated #143. Its
+[durable spool contract](graphevo-2-durable-asset-spool.md) retains permanent
+Core Data attachment bodies and moves frozen, inbox and sent CKAsset bodies to
+owned temporary files with durable references. The runtime retains the
+interprocess writer across preparation and file publication before its one
+native save. Local targeted tests include a 36 MiB attachment seed and empty
+replica, reference-only restart/cleanup and missing-file refusal. Reviewed
+[full checkpoint #41715897139](https://github.com/bbruno84/GraphEvo/actions/runs/41715897139)
+passes on `ae0d50ef688bb0ca5d7088abb12ebfcc0e21f50a`: 993 macOS functions,
+990 passed iOS functions with one known skip, and both Swift 6 consumers. Final
+integration notes are documentation-only; shipping, test, consumer and workflow
+inputs match that checkpoint. Physical cloud/device acceptance and beta gates
+remain open.
+
 Descriptor-first [query scopes](graphevo-2-descriptor-query-scopes.md) integrate
 through [PR #143](https://github.com/bbruno84/GraphEvo/pull/143), directly from
 integrated #142.
@@ -30,8 +46,8 @@ ownership increment integrates through
 [PR #142](https://github.com/bbruno84/GraphEvo/pull/142), directly from #141.
 It retains the manager gateway, adds cooperating process
 writer/presence exclusion and transaction-local mutation inventory reuse.
-Query scopes integrate separately through #143; reference-only asset queues with
-native permanent bodies remain to implement. Private research is
+Query scopes integrate separately through #143; reference-only asset queues
+integrate through #144 with native permanent bodies. Private research is
 not merged code or an integrated CI checkpoint. No beta/tag gate closes here.
 
 Reviewed [full checkpoint #387](https://github.com/bbruno84/GraphEvo/actions/runs/41692421379)

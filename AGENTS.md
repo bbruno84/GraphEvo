@@ -47,6 +47,15 @@ registration on detach failure, including initialization/partial-load quarantine
 Public opening remains later work; package-only foreground orchestration follows
 [T06](docs/design/graphevo-2-automatic-sync.md), and manual transport follows [T01](docs/design/graphevo-2-record-transport.md).
 
+For temporary CKAsset transport, read the
+[durable spool contract](docs/design/graphevo-2-durable-asset-spool.md).
+Keep permanent attachment bodies in Core Data, preserve serialized ordinary
+payloads, and retain the process writer through preparation, file staging and
+the single native save. Frozen/inbox/sent queues store verified owned-file
+references, never SDK URLs or asset bytes. Session format 8 and graph transport
+format 3 refuse older alpha operational state unchanged. Do not use the 32 MiB
+inline payload allowance as a total asset/database byte cap.
+
 ## Selected v2 native schema
 
 Read [S03](docs/design/graphevo-2-history-schema.md) before native model work.
