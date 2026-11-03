@@ -254,8 +254,8 @@ private final class TransportFailureSwitch: @unchecked Sendable {
 
     @Test func serverSuccessBeforeLocalCommitIsRecoveredWithoutAnotherSend() async throws {
         let bus = TransportBus(), fault = TransportFailureSwitch()
-        let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, sent: { context, id, binding, receipt, limits in
-            let result = try base.sent(context, id, binding, receipt, limits); try fault.failOnce(); return result
+        let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, finishPrepared: base.finishPrepared, currentAttempt: base.currentAttempt, sent: { context, id, binding, receipt, resolvedAssets, remoteAssets, limits in
+            let result = try base.sent(context, id, binding, receipt, resolvedAssets, remoteAssets, limits); try fault.failOnce(); return result
         }, apply: base.apply, trim: base.trim) }
         let f = try await fixture(bus: bus, adapter: adapter)
         defer { try? FileManager.default.removeItem(at: f.directory) }
@@ -327,7 +327,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
 
     @Test func incomingPreSaveFailureRollsBackBothDataAndReceipt() async throws {
         let bus = TransportBus(), fault = TransportFailureSwitch()
-        let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, sent: base.sent, apply: { context, id, binding, effects, limits in
+        let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, finishPrepared: base.finishPrepared, currentAttempt: base.currentAttempt, sent: base.sent, apply: { context, id, binding, effects, limits in
             let result = try base.apply(context, id, binding, effects, limits); try fault.failOnce(); return result
         }, trim: base.trim) }
         let f = try await fixture(bus: bus, adapter: adapter)
@@ -383,7 +383,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
 
     @Test func cleanupFailureIsReportedAndPrunedOnNextOperation() async throws {
         let bus = TransportBus(), fault = TransportFailureSwitch()
-        let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, sent: base.sent, apply: base.apply, trim: { context, id, binding, cleanup in
+        let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, finishPrepared: base.finishPrepared, currentAttempt: base.currentAttempt, sent: base.sent, apply: base.apply, trim: { context, id, binding, cleanup in
             if case .consumed = cleanup { try fault.failOnce() }
             try base.trim(context, id, binding, cleanup)
         }) }

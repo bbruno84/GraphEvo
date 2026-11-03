@@ -45,9 +45,9 @@ package struct GraphCloudEffect: Sendable {
     package let fingerprint: String
     package let route: GraphCloudBinding
     package let event: GraphCloudDecodedEvent
-    package init(_ entry: GraphCloudInboxEntry, binding: GraphCloudBinding) throws {
+    package init(_ entry: GraphCloudInboxEntry, binding: GraphCloudBinding, assetData: Data? = nil) throws {
         id = entry.id; fingerprint = try GraphCloudFingerprint.of(entry); route = binding
-        event = try GraphCloudNodeCodec.decode(entry.change, binding: binding)
+        event = try GraphCloudNodeCodec.decode(entry.change, binding: binding, assetData: assetData)
     }
 }
 package struct GraphCloudSendReport: Sendable {
@@ -76,17 +76,31 @@ package enum GraphCloudFingerprint {
 }
 package enum GraphCloudReceiptCleanup: Sendable { case consumed(Set<UUID>), retain(Set<UUID>) }
 
+package struct GraphCloudPreparedOutgoing: Sendable {
+    package let batch: GraphCloudOutgoingBatch
+    package let storeID: String
+    package let epoch: UUID
+    package init(batch: GraphCloudOutgoingBatch, storeID: String, epoch: UUID) {
+        self.batch = batch; self.storeID = storeID; self.epoch = epoch
+    }
+}
+
 package struct GraphCloudStoreAdapter: Sendable {
-    package let prepare: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Int, GraphSyncLimits, Set<GraphNodeID>?) throws -> GraphCloudOutgoingBatch
-    package let sent: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudSentReceipt], GraphSyncLimits) throws -> GraphCloudResolution
+    package let prepare: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Int, GraphSyncLimits, Set<GraphNodeID>?) throws -> GraphCloudPreparedOutgoing
+    package let finishPrepared: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphCloudOutgoingBatch, GraphSyncLimits) throws -> Void
+    package let currentAttempt: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphSyncLimits) throws -> GraphCloudPreparedOutgoing?
+    package let sent: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudSentReceipt], [String: Data], [String: Data], GraphSyncLimits) throws -> GraphCloudResolution
     package let apply: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudEffect], GraphSyncLimits) throws -> GraphCloudResolution
     package let trim: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphCloudReceiptCleanup) throws -> Void
     package init(
-        prepare: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Int, GraphSyncLimits, Set<GraphNodeID>?) throws -> GraphCloudOutgoingBatch,
-        sent: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudSentReceipt], GraphSyncLimits) throws -> GraphCloudResolution,
+        prepare: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Int, GraphSyncLimits, Set<GraphNodeID>?) throws -> GraphCloudPreparedOutgoing,
+        finishPrepared: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphCloudOutgoingBatch, GraphSyncLimits) throws -> Void,
+        currentAttempt: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphSyncLimits) throws -> GraphCloudPreparedOutgoing?,
+        sent: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudSentReceipt], [String: Data], [String: Data], GraphSyncLimits) throws -> GraphCloudResolution,
         apply: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, [GraphCloudEffect], GraphSyncLimits) throws -> GraphCloudResolution,
         trim: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, GraphCloudReceiptCleanup) throws -> Void
-    ) { self.prepare = prepare; self.sent = sent; self.apply = apply; self.trim = trim }
+    ) { self.prepare = prepare; self.finishPrepared = finishPrepared; self.currentAttempt = currentAttempt
+        self.sent = sent; self.apply = apply; self.trim = trim }
 }
 
 package struct GraphCloudApplyReport: Sendable {
@@ -121,7 +135,18 @@ actor GraphCloudNativeOutbox {
     func current() throws -> GraphCloudOutgoingBatch {
         guard let batch else { throw GraphCloudError.unexpectedUpload }; return batch
     }
-    func next(_ options: CloudKit.CKSyncEngine.SendChangesOptions) throws -> CloudKit.CKSyncEngine.RecordZoneChangeBatch? {
+    func matchesFrozenServer(_ server: CloudKit.CKRecord, item: GraphCloudOutgoingNode,
+                             binding: GraphCloudBinding) async -> Bool {
+        guard let reference = item.assetReference else {
+            return GraphCloudNodeCodec.matchesFrozenServer(server, item: item, binding: binding)
+        }
+        guard let root = batch?.assetRoot, let spool = try? GraphCloudAssetSpool(root: root),
+              let data = try? await spool.read(reference, role: .outgoing, identity: reference.identity,
+                                               binding: binding, recordName: item.recordName,
+                                               storeID: reference.storeID, epoch: reference.epoch) else { return false }
+        return GraphCloudNodeCodec.matchesFrozenServer(server, item: item, binding: binding, originalData: data)
+    }
+    func next(_ options: CloudKit.CKSyncEngine.SendChangesOptions) async throws -> CloudKit.CKSyncEngine.RecordZoneChangeBatch? {
         guard !offered, let batch else { return nil }
         offered = true
         var saves: [CloudKit.CKRecord] = [], deletes: [CloudKit.CKRecord.ID] = []
@@ -133,15 +158,26 @@ actor GraphCloudNativeOutbox {
             if let bytes = item.recordArchive {
                 let record = try GraphCloudRecordCodec.restore(bytes)
                 guard record.recordID == id else { throw GraphCloudError.invalidState }
-                _ = try GraphCloudNodeCodec.decode(record, binding: route)
-                if record["asset"] != nil {
+                if let reference = item.assetReference {
+                    guard let root = batch.assetRoot else { throw GraphCloudError.invalidState }
+                    let spool = try GraphCloudAssetSpool(root: root)
+                    try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: route)
+                    let data = try await spool.read(reference, role: .outgoing, identity: reference.identity,
+                                                    binding: route, recordName: item.recordName,
+                                                    storeID: reference.storeID, epoch: reference.epoch)
+                    record["asset"] = data as CKRecordValue
+                    _ = try GraphCloudNodeCodec.decode(record, binding: route)
+                    let path = root.appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
+                    record["asset"] = CKAsset(fileURL: path)
+                } else if record["asset"] != nil {
+                    _ = try GraphCloudNodeCodec.decode(record, binding: route)
                     if staging == nil {
                         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvoAssetSend-" + UUID().uuidString)
                         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
                         staging = directory
                     }
                     try GraphCloudAsset.materialize(record, directory: staging!)
-                }
+                } else { _ = try GraphCloudNodeCodec.decode(record, binding: route) }
                 saves.append(record)
             } else { deletes.append(id) }
         }

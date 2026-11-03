@@ -79,6 +79,13 @@ enum GraphBackupPackage {
             while index < manifest.files.count && output == nil {
                 let target = directory.appendingPathComponent(manifest.files[index].path)
                 try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if manifest.files[index].path.hasPrefix("payload/GraphEvoCloudAssets/") {
+                    var owned = directory.appendingPathComponent("payload")
+                    for component in manifest.files[index].path.split(separator: "/").dropFirst().dropLast() {
+                        owned.appendPathComponent(String(component), isDirectory: true)
+                        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: owned.path)
+                    }
+                }
                 output = try exclusiveFile(target); offset = 0
                 if manifest.files[index].bytes != 0 { return }
                 try output!.close(); output = nil; index += 1

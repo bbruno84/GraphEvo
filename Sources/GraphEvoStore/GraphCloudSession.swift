@@ -87,7 +87,7 @@ actor GraphCloudSession {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 7, doc.container == config.containerIdentifier, doc.environment == config.environment,
+                guard doc.format == 8, doc.container == config.containerIdentifier, doc.environment == config.environment,
                       doc.account == account else { throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -108,14 +108,30 @@ actor GraphCloudSession {
                 guard Set(doc.sent.map(\.id)).count == doc.sent.count else { throw GraphCloudError.invalidState }
                 for receipt in doc.sent {
                     guard doc.bindings.contains(where: { $0.graphID == receipt.graphID && $0.zone == receipt.zone }) else { throw GraphCloudError.invalidState }
-                    for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
-                    for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
+                    for record in receipt.saved { try GraphCloudRecordCodec.validateDurable(record) }
+                    let route = GraphCloudBinding(zone: receipt.zone, graphID: receipt.graphID)
+                    let identity = GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account)
+                    for record in receipt.saved where record.assetReference != nil {
+                        guard record.assetReference?.identity == identity, record.assetReference?.binding == route else { throw GraphCloudError.invalidState }
+                    }
+                    for failure in receipt.failures {
+                        try Self.validateFailure(failure, zone: receipt.zone)
+                        if let reference = failure.serverRecord?.assetReference {
+                            guard reference.identity == identity, reference.binding == route else { throw GraphCloudError.invalidState }
+                        }
+                    }
                 }
                 for entry in doc.inbox {
                     if let member = doc.memberships.first(where: { $0.role == .participant && $0.binding.zone == entry.change.zone }) {
                         guard entry.membershipGeneration == member.generation else { throw GraphCloudError.invalidState }
                     }
-                    try GraphCloudRecordCodec.validate(entry.change)
+                    try GraphCloudRecordCodec.validateDurable(entry.change)
+                    if let reference = entry.change.assetReference {
+                        guard reference.identity == GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account),
+                              doc.bindings.contains(reference.binding), reference.binding.zone == entry.change.zone else {
+                            throw GraphCloudError.invalidState
+                        }
+                    }
                 }
                 for receipt in doc.sent {
                     if let member = doc.memberships.first(where: { $0.role == .participant && $0.binding.graphID == receipt.graphID }) {
@@ -141,6 +157,13 @@ actor GraphCloudSession {
                 let bytes = try JSONEncoder().encode(doc)
                 guard bytes.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 try disk.write(url, bytes)
+            }
+            let spool = try GraphCloudAssetSpool(root: config.directory.appendingPathComponent("GraphEvoCloudAssets"))
+            try await spool.reconcile(retaining: doc.assetReferences)
+            for reference in doc.assetReferences {
+                try await spool.presence(reference, role: .incoming,
+                    identity: GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account),
+                    binding: reference.binding, recordName: reference.recordName)
             }
             let session = GraphCloudSession(configuration: config, owner: owner, adapter: adapter, disk: disk, lease: lease, document: doc)
             // Restoring shared state also restores shared engine ownership, even before a graph reopens.
@@ -182,7 +205,7 @@ actor GraphCloudSession {
         if let record = failure.serverRecord {
             guard failure.code == 14, record.kind == .recordChanged, record.zone == zone,
                   record.recordName == failure.recordName else { throw GraphCloudError.invalidState }
-            try GraphCloudRecordCodec.validate(record)
+            try GraphCloudRecordCodec.validateDurable(record)
         }
     }
 
@@ -224,6 +247,20 @@ actor GraphCloudSession {
         try publish(next); try enable(.private)
     }
     func activationRoute(for id: GraphID) -> GraphCloudActivationRoute? { document.activations.first { $0.binding.graphID == id } }
+    func pruneUnpublishedAssets() async {
+        guard let spool = try? GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets")) else { return }
+        try? await spool.reconcile(retaining: document.assetReferences)
+    }
+    func assetData(for change: GraphCloudIncoming, binding: GraphCloudBinding) async throws -> Data? {
+        try check()
+        guard let reference = change.assetReference else { return nil }
+        let identity = GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
+        let spool = try GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets"))
+        let data = try await spool.read(reference, role: .incoming, identity: identity,
+                                        binding: binding, recordName: change.recordName ?? "")
+        try check()
+        return data
+    }
     var pendingActivationIDs: Set<GraphID> { Set(document.activations.filter { !$0.published }.map { $0.binding.graphID }) }
     func stageActivationSnapshot(_ events: [GraphCloudIncoming], for binding: GraphCloudBinding, activationID: UUID) throws {
         try check()
@@ -234,9 +271,17 @@ actor GraphCloudSession {
             throw GraphCloudActivationError.busy
         }
         var next = document
+        let spool = try GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets"))
+        let identity = GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
         for event in events {
-            try GraphCloudRecordCodec.validate(event)
-            next.inbox.append(.init(id: UUID(), change: event))
+            let frozen = try GraphCloudRecordCodec.freeze(event, identity: identity, binding: binding,
+                                                           spool: spool, namespace: activationID)
+            try GraphCloudRecordCodec.validateDurable(frozen)
+            if let reference = frozen.assetReference {
+                try reference.validate(role: .incoming, identity: identity, binding: binding,
+                                       recordName: frozen.recordName ?? "")
+            }
+            next.inbox.append(.init(id: UUID(), change: frozen))
         }
         try publish(next)
     }
@@ -295,9 +340,28 @@ actor GraphCloudSession {
                 var next = document; next.states[scope.rawValue] = state; try publish(next, reservingControl: true)
             case .incoming(let incoming):
                 let removed = Set(document.memberships.filter { $0.role == .participant && $0.terminal }.map { $0.binding.zone })
-                let changes = incoming.filter { !removed.contains($0.zone) }
+                let candidates = incoming.filter { !removed.contains($0.zone) }
+                let spool = try GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets"))
+                let identity = GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
+                let namespace = UUID()
+                let changes = try candidates.map { change -> GraphCloudIncoming in
+                    guard change.kind == .recordChanged, let archive = change.recordArchive,
+                          let record = try? GraphCloudRecordCodec.restore(archive), record["asset"] != nil else { return change }
+                    guard let binding = document.bindings.first(where: { $0.zone == change.zone }) else { throw GraphCloudError.invalidState }
+                    return try GraphCloudRecordCodec.freeze(change, identity: identity, binding: binding,
+                                                            spool: spool, namespace: namespace)
+                }
                 guard changes.allSatisfy({ $0.valid && $0.zone.scope == scope }) else { throw GraphCloudError.invalidState }
-                for change in changes { try GraphCloudRecordCodec.validate(change) }
+                for change in changes {
+                    try GraphCloudRecordCodec.validateDurable(change)
+                    if let reference = change.assetReference {
+                        guard let binding = document.bindings.first(where: { $0.zone == change.zone }) else {
+                            throw GraphCloudError.invalidState
+                        }
+                        try reference.validate(role: .incoming, identity: identity, binding: binding,
+                                               recordName: change.recordName ?? "")
+                    }
+                }
                 guard changes.count <= configuration.maximumEvents - document.eventCount else { throw GraphCloudError.inboxLimit }
                 var next = document
                 next.inbox += changes.compactMap { change in
@@ -317,8 +381,32 @@ actor GraphCloudSession {
                       receipt.saved.allSatisfy({ $0.kind == .recordChanged && $0.zone == batch.zone && $0.recordName.flatMap { items[$0] } == .save }),
                       receipt.deletedNames.allSatisfy({ items[$0] == .delete }),
                       receipt.failures.allSatisfy({ items[$0.recordName] != nil }) else { throw GraphCloudError.invalidState }
-                for record in receipt.saved { try GraphCloudRecordCodec.validate(record) }
-                for failure in receipt.failures { try Self.validateFailure(failure, zone: receipt.zone) }
+                let route = GraphCloudBinding(zone: receipt.zone, graphID: receipt.graphID)
+                let identity = GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
+                let spool = try GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets"))
+                let saved = try receipt.saved.map { try GraphCloudRecordCodec.freeze($0, identity: identity,
+                    binding: route, spool: spool, namespace: receipt.id) }
+                let failures = try receipt.failures.map { failure -> GraphCloudRecordFailure in
+                    let server = try failure.serverRecord.map { try GraphCloudRecordCodec.freeze($0, identity: identity,
+                        binding: route, spool: spool, namespace: receipt.id) }
+                    return GraphCloudRecordFailure(recordName: failure.recordName, code: failure.code, serverRecord: server)
+                }
+                receipt = GraphCloudSentReceipt(id: receipt.id, batchID: receipt.batchID, graphID: receipt.graphID,
+                    zone: receipt.zone, saved: saved, deletedNames: receipt.deletedNames, failures: failures)
+                for record in receipt.saved {
+                    try GraphCloudRecordCodec.validateDurable(record)
+                    if let reference = record.assetReference {
+                        try reference.validate(role: .incoming, identity: identity, binding: route,
+                                               recordName: record.recordName ?? "")
+                    }
+                }
+                for failure in receipt.failures {
+                    try Self.validateFailure(failure, zone: receipt.zone)
+                    if let reference = failure.serverRecord?.assetReference {
+                        try reference.validate(role: .incoming, identity: identity, binding: route,
+                                               recordName: failure.recordName)
+                    }
+                }
                 if let member {
                     receipt.membershipGeneration = member.generation
                 }
@@ -500,11 +588,15 @@ actor GraphCloudSession {
         return Set(document.inbox.filter { zones.contains($0.change.zone) }.map(\.id))
             .union(document.sent.filter { $0.graphID == graph }.map(\.id))
     }
-    func consume(_ ids: Set<UUID>) throws {
+    func consume(_ ids: Set<UUID>) async throws {
         try check()
+        let prior = document.assetReferences
         var next = document
         next.inbox.removeAll { ids.contains($0.id) }; next.sent.removeAll { ids.contains($0.id) }
         do { try publish(next) } catch { block(error as? GraphCloudError ?? .persistence); throw error }
+        if !prior.isEmpty, let spool = try? GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets")) {
+            await spool.remove(prior, retaining: next.assetReferences)
+        }
     }
     func route(for graph: GraphID) throws -> GraphCloudBinding {
         try check()

@@ -142,15 +142,53 @@ actor GraphSyncSession {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        let result = try await handle.controlTransaction { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) }
+        let location = try await handle.snapshot().location
+        guard case .sqlite(let storeURL) = location else { throw GraphCloudError.invalidConfiguration }
+        let result = try await handle.preparedControlTransaction(
+            prepare: { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) },
+            materialize: { prepared, check in
+                let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL,
+                                                                                              storeID: prepared.storeID))
+                return try await spool.freeze(prepared, identity: binding.identity, check: check)
+            },
+            finish: { context, batch in
+                try cloud.finishPrepared(context, id, binding, batch, limits)
+                return batch
+            })
         guard !retired else { throw GraphStoreError.closed }
         return result
     }
-    func commitTransport(_ binding: GraphCloudTransportBinding, receipts: [GraphCloudSentReceipt], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
+    func commitTransport(_ binding: GraphCloudTransportBinding, receipts: [GraphCloudSentReceipt],
+                         remoteAssets: [String: Data], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        return try await handle.controlTransaction { try cloud.sent($0, id, binding, receipts, limits) }
+        let attempt = try await handle.controlRead { try cloud.currentAttempt($0, id, binding, limits) }
+        var resolvedAssets: [String: Data] = [:]
+        if let attempt, attempt.batch.items.contains(where: { $0.assetReference != nil }) {
+            guard case .sqlite(let storeURL) = try await handle.snapshot().location else { throw GraphCloudError.invalidConfiguration }
+            let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL,
+                                                                                          storeID: attempt.storeID))
+            for item in attempt.batch.items {
+                guard let reference = item.assetReference else { continue }
+                resolvedAssets[item.recordName] = try await spool.read(reference, role: .outgoing,
+                    identity: binding.identity, binding: binding.route, recordName: item.recordName,
+                    storeID: attempt.storeID, epoch: attempt.epoch)
+            }
+        }
+        let captured = resolvedAssets
+        let result = try await handle.controlTransaction { try cloud.sent($0, id, binding, receipts, captured, remoteAssets, limits) }
+        if let attempt, attempt.batch.items.contains(where: { $0.assetReference != nil }),
+           case .sqlite(let storeURL) = try await handle.snapshot().location,
+           let spool = try? GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL,
+                                                                                          storeID: attempt.storeID)) {
+            do {
+                let current = try await handle.controlRead { try cloud.currentAttempt($0, id, binding, limits) }
+                await spool.remove(attempt.batch.items.compactMap(\.assetReference),
+                                   retaining: current?.batch.items.compactMap(\.assetReference) ?? [])
+            } catch { /* A later verified preparation can prune the orphan. */ }
+        }
+        return result
     }
     func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
         try begin(); defer { busy = false }

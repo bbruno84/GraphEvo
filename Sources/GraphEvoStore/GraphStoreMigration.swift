@@ -162,6 +162,10 @@ extension GraphContextManager {
                         in: request.backupRoot, reason: request.reason, artifacts: [.init(name: artifact, data: encoded)],
                         backupID: request.operationID, retentionOwner: request.operationID, immutableArtifact: artifact) { url in
                             try await input.copyStore(to: url, reservation: reservation)
+                            let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: sourceURL,
+                                                                                                          storeID: state.storeID))
+                            try await spool.copyOwnedRoot(to: GraphCloudAssetSpool.outgoingRoot(storeURL: url,
+                                                                                                  storeID: state.storeID))
                         }
                     await reservation.release()
                 } catch { await reservation.release(); throw error }

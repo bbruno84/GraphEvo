@@ -8,6 +8,17 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+The third controlled-store increment is in progress on
+`codex/v2-durable-asset-spool`, directly from integrated #143. Its
+[candidate contract](graphevo-2-durable-asset-spool.md) retains permanent
+Core Data attachment bodies and moves frozen, inbox and sent CKAsset bodies to
+owned temporary files with durable references. The runtime retains the
+interprocess writer across preparation and file publication before its one
+native save. Local targeted tests include a 36 MiB attachment seed and empty
+replica, reference-only restart/cleanup and missing-file refusal. Review, full
+remote checkpoint, physical cloud/device acceptance and integration are still
+open; no beta or release gate closes from local tests.
+
 Descriptor-first [query scopes](graphevo-2-descriptor-query-scopes.md) integrate
 through [PR #143](https://github.com/bbruno84/GraphEvo/pull/143), directly from
 integrated #142.

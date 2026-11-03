@@ -33,14 +33,15 @@ package struct GraphCoordinatorAdapter: Sendable {
 package actor GraphCoordinator {
     package nonisolated let id: GraphID
     private let handle: StoreHandle
+    private let storeURL: URL
     private let adapter: GraphStoreAdapter
     private let syncSession: GraphSyncSession?
     private let workspace: GraphMigrationWorkspaceAdapter?
     private let activation: GraphCloudActivationAdapter?
     private let publication: GraphMigrationPublicationAdapter?
 
-    private init(id: GraphID, handle: StoreHandle, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil) {
-        self.id = id; self.handle = handle; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation
+    private init(id: GraphID, handle: StoreHandle, storeURL: URL, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil) {
+        self.id = id; self.handle = handle; self.storeURL = storeURL; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation
         self.syncSession = sync.map { GraphSyncSession(graphID: id, handle: handle, adapter: $0) }
     }
 
@@ -52,7 +53,9 @@ package actor GraphCoordinator {
         if creating && exists { throw GraphStoreError.duplicateIdentity }
         if !creating && !exists { throw GraphStoreError.missingStore }
         let handle = try await registry.open(configuration, schema: schema)
-        let owner = GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication, activation: adapter.activation)
+        let owner = GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
+            adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace,
+            publication: adapter.publication, activation: adapter.activation)
         do {
             if creating {
                 try await handle.transaction {
@@ -116,9 +119,11 @@ package actor GraphCoordinator {
 
     static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, registry: StoreRegistry,
                                 schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
+        guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
         let handle = try await registry.open(configuration, schema: schema)
         try await handle.setDataAvailable(false, terminal: true)
-        return GraphCoordinator(id: id, handle: handle, adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication)
+        return GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
+            adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication)
     }
     func publicationReceipt(for workspace: UUID) async throws -> GraphMigrationPublicationReceipt? {
         guard let publication else { return nil }
@@ -159,7 +164,12 @@ package actor GraphCoordinator {
     func blockSharingData() async throws { try await handle.setDataAvailable(false, terminal: true) }
     func suspendLocalWrites() async throws -> StoreReservation { try await handle.suspendWrites() }
     func reserveMaintenance() async throws -> StoreReservation { try await handle.reserveMaintenance() }
-    func copyStore(to url: URL, reservation: StoreReservation) async throws { try await handle.copyStore(to: url, reservation: reservation) }
+    func copyStore(to url: URL, reservation: StoreReservation, storeID: String? = nil) async throws {
+        try await handle.copyStore(to: url, reservation: reservation)
+        guard let storeID else { return }
+        let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL, storeID: storeID))
+        try await spool.copyOwnedRoot(to: GraphCloudAssetSpool.outgoingRoot(storeURL: url, storeID: storeID))
+    }
     func participantAccess(_ value: GraphCloudParticipantAccess? = nil) async throws -> GraphCloudParticipantAccess? {
         guard let access = adapter.participantAccess else { throw GraphCloudSharingError.unavailable }
         let id = id

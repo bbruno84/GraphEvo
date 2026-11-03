@@ -93,6 +93,101 @@ private actor AssetBus {
         return payload.content
     }
     @available(iOS 17, macOS 14, *)
+    @Test func incomingAssetUsesSmallDurableInboxAndSurvivesSessionRestart() async throws {
+        let bus = AssetBus(), container = UUID().uuidString, graphID = GraphID()
+        let owner = try await fixture(bus, container: container, id: graphID)
+        let content = try await seed(owner, count: GraphAttachmentPayload.maximumByteCount)
+        _ = try await owner.manager.sendCloudChanges(for: graphID, configuration: owner.config)
+        try await owner.manager.stopCloudSession(owner.config)
+        let peer = try await fixture(bus, container: container, id: graphID)
+        try await peer.manager.fetchCloudChanges(.private, configuration: peer.config)
+        let session = try await peer.manager.cloud(peer.config)
+        let inbox = try await session.incoming(for: peer.binding.zone, limit: 10)
+        let reference = try #require(inbox.compactMap { $0.change.assetReference }.first)
+        let path = peer.config.directory.appendingPathComponent("GraphEvoCloudAssets")
+            .appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
+        #expect(FileManager.default.fileExists(atPath: path.path))
+        let document = peer.config.directory.appendingPathComponent("session.json")
+        #expect(try Data(contentsOf: document).count < 128 * 1024)
+        try await peer.manager.stopCloudSession(peer.config)
+        _ = try await peer.manager.startCloudSession(peer.config, adapter: bus.adapter)
+        _ = try await peer.manager.applyCloudInbox(for: graphID, configuration: peer.config)
+        #expect(try await peer.graph.attachment(content.metadata.id) == content)
+        #expect(!FileManager.default.fileExists(atPath: path.path))
+        try await close(peer); try await close(owner)
+    }
+    @available(iOS 17, macOS 14, *)
+    @Test func missingSpoolFileRefusesRestartAndPreservesInboxDocument() async throws {
+        let bus = AssetBus(), container = UUID().uuidString, graphID = GraphID()
+        let owner = try await fixture(bus, container: container, id: graphID)
+        _ = try await seed(owner, count: 1024)
+        _ = try await owner.manager.sendCloudChanges(for: graphID, configuration: owner.config)
+        try await owner.manager.stopCloudSession(owner.config)
+        let peer = try await fixture(bus, container: container, id: graphID)
+        try await peer.manager.fetchCloudChanges(.private, configuration: peer.config)
+        let session = try await peer.manager.cloud(peer.config)
+        let reference = try #require(try await session.incoming(for: peer.binding.zone, limit: 10)
+            .compactMap { $0.change.assetReference }.first)
+        let path = peer.config.directory.appendingPathComponent("GraphEvoCloudAssets")
+            .appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
+        let document = peer.config.directory.appendingPathComponent("session.json")
+        let saved = try Data(contentsOf: document)
+        try await peer.manager.stopCloudSession(peer.config)
+        try FileManager.default.removeItem(at: path)
+        await #expect(throws: GraphCloudError.invalidState) {
+            try await peer.manager.startCloudSession(peer.config, adapter: bus.adapter)
+        }
+        #expect(try Data(contentsOf: document) == saved)
+        try await peer.graph.close()
+        try FileManager.default.removeItem(at: peer.directory)
+        try await close(owner)
+    }
+    @available(iOS 17, macOS 14, *)
+    @Test func outgoingAssetAttemptReopensFromOwnedFileAndCleansUpAfterReceipt() async throws {
+        let bus = AssetBus(), graphID = GraphID()
+        let first = try await fixture(bus, id: graphID)
+        _ = try await seed(first, count: GraphAttachmentPayload.maximumByteCount)
+        let route = GraphCloudTransportBinding(identity: try await first.manager.cloud(first.config).identity(),
+                                               route: first.binding)
+        let prepared = try await first.graph.prepareTransport(route)
+        let reference = try #require(prepared.items.compactMap(\.assetReference).first)
+        let root = try #require(prepared.assetRoot)
+        let path = root.appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
+        #expect(FileManager.default.fileExists(atPath: path.path))
+        #expect(try JSONEncoder().encode(prepared).count < 128 * 1024)
+        try await first.graph.close()
+        try await first.manager.stopCloudSession(first.config)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+                                          adapter: GraphCoordinatorFactory.adapter)
+        let reopened = try await manager.openGraph(id: graphID, at: first.directory.appendingPathComponent("Graph.sqlite"))
+        _ = try await manager.startCloudSession(first.config, adapter: bus.adapter)
+        let again = try await reopened.prepareTransport(route)
+        #expect(again == prepared)
+        #expect(again.assetRoot == root)
+        let result = try await manager.sendCloudChanges(for: graphID, configuration: first.config)
+        #expect(result.succeeded == 2 && result.failures.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: path.path))
+        try await reopened.close(); try await manager.stopCloudSession(first.config)
+        try FileManager.default.removeItem(at: first.directory)
+    }
+    @available(iOS 17, macOS 14, *)
+    @Test func backupPackageIncludesFrozenOutgoingAssetFile() async throws {
+        let bus = AssetBus(), f = try await fixture(bus)
+        let content = try await seed(f, count: 1024 * 1024)
+        let route = GraphCloudTransportBinding(identity: try await f.manager.cloud(f.config).identity(), route: f.binding)
+        let batch = try await f.graph.prepareTransport(route)
+        let reference = try #require(batch.items.compactMap(\.assetReference).first)
+        let backup = try await f.manager.createBackup(for: f.graph.id, in: f.directory.appendingPathComponent("Backups"))
+        #expect(backup.manifest.files.contains { $0.path.hasSuffix("/" + reference.file.uuidString) })
+        let restored = try await f.manager.backups.restore(at: backup.url, to: f.directory.appendingPathComponent("Restored"))
+        let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: restored.storeURL,
+                                                                                      storeID: reference.storeID!))
+        #expect(try await spool.read(reference, role: .outgoing, identity: route.identity, binding: route.route,
+                                     recordName: reference.recordName, storeID: reference.storeID,
+                                     epoch: reference.epoch) == content.data)
+        try await close(f)
+    }
+    @available(iOS 17, macOS 14, *)
     @Test(arguments: [0, 512, GraphAttachmentPayload.maximumByteCount])
     func assetRoundTripAndEmptyReplicaHaveExactBytes(_ count: Int) async throws {
         let bus = AssetBus(), container = UUID().uuidString, id = GraphID()
@@ -148,6 +243,7 @@ private actor AssetBus {
         let incoming = try GraphCloudRecordCodec.archive(native, scope: .private)
         try FileManager.default.removeItem(at: directory)
         try GraphCloudRecordCodec.validate(incoming)
+        #expect(throws: GraphCloudError.invalidState) { try GraphCloudRecordCodec.validateDurable(incoming) }
         guard case .save(let decoded) = try GraphCloudNodeCodec.decode(incoming, binding: route) else { Issue.record("Missing save"); return }
         #expect(try GraphAttachmentPayload(graphRecord: decoded.record).content == payload.content)
         #expect(incoming.recordArchive?.range(of: Data(directory.path.utf8)) == nil)

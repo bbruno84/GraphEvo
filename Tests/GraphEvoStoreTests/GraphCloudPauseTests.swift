@@ -295,7 +295,7 @@ private actor PauseBus {
         let barrier = PauseNativeBarrier()
         defer { barrier.release() }
         let base = GraphCoordinatorFactory.adapter, originalSync = try #require(base.sync), originalCloud = try #require(originalSync.cloud)
-        let cloud = GraphCloudStoreAdapter(prepare: originalCloud.prepare, sent: originalCloud.sent, apply: { context, id, binding, effects, limits in
+        let cloud = GraphCloudStoreAdapter(prepare: originalCloud.prepare, finishPrepared: originalCloud.finishPrepared, currentAttempt: originalCloud.currentAttempt, sent: originalCloud.sent, apply: { context, id, binding, effects, limits in
             let result = try originalCloud.apply(context, id, binding, effects, limits)
             try barrier.wait()
             if fail { throw GraphCloudError.invalidState }

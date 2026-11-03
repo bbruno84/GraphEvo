@@ -87,6 +87,17 @@ package actor StoreHandle {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         return try await registry.transaction(key, generation: generation, token: token, control: true, body)
     }
+    /// Library preparation may perform awaited file work between synchronous native phases.
+    /// The runtime retains writer admission, owns the sole save and always drains cleanup.
+    package func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
+        prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
+        materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
+    ) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.preparedControlTransaction(key, generation: generation, token: token,
+            prepare: prepare, materialize: materialize, finish: finish)
+    }
     package func setDataAvailable(_ value: Bool, terminal: Bool = false) async throws {
         try await registry.setDataAvailable(key, generation: generation, token: token, value: value, terminal: terminal)
     }
@@ -301,6 +312,17 @@ package actor StoreRegistry {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
         return try await resources.transaction(control: control, body)
+    }
+
+    fileprivate func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
+        _ key: StoreKey, generation: UUID, token: UUID,
+        prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
+        materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
+    ) async throws -> Value {
+        let entry = try entry(for: key, generation: generation, token: token)
+        let resources = try await entry.opening.value
+        return try await resources.preparedControlTransaction(prepare: prepare, materialize: materialize, finish: finish)
     }
 
     fileprivate func setDataAvailable(_ key: StoreKey, generation: UUID, token: UUID, value: Bool, terminal: Bool) async throws {

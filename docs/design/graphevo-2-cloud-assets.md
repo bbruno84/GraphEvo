@@ -4,6 +4,9 @@ Status: package-only increment on `codex/v2-cloud-assets`, directly from reviewe
 merged #115 (`8d88532`). Native S03, logical attachment identity/ownership and
 public opening paths remain unchanged. Read with [A6](graphevo-2-attachments.md),
 [T01](graphevo-2-record-transport.md) and [T03](graphevo-2-conflict-policies.md).
+The later [durable spool](graphevo-2-durable-asset-spool.md) supersedes this
+increment's inline archive and total asset-byte budget behavior; the historical
+T04 implementation and evidence below retain their original scope.
 
 ## Selected behavior
 

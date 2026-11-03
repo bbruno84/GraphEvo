@@ -50,7 +50,7 @@ extension GraphContextManager {
             }
             let result = try await backups.create(for: id, storeID: storeID, schema: schema.identifier,
                 in: root, reason: reason, artifacts: captured, backupID: backupID, retentionOwner: retentionOwner) { url in
-                    try await owner.copyStore(to: url, reservation: held)
+                    try await owner.copyStore(to: url, reservation: held, storeID: storeID)
                     await held.release(); await cloudReservation.release()
                 }
             await localHold?.release(); await cloudHold?.release(); try await graph.close()

@@ -48,18 +48,20 @@ package struct GraphCloudIncoming: Codable, Equatable, Sendable {
     package let recordName: String?
     package let recordType: String?
     package let recordArchive: Data?
+    package let assetReference: GraphCloudAssetReference?
     package let deletionReason: String?
     package init(kind: Kind, zone: GraphCloudZone, recordName: String? = nil, recordType: String? = nil,
-                 recordArchive: Data? = nil, deletionReason: String? = nil) {
+                 recordArchive: Data? = nil, assetReference: GraphCloudAssetReference? = nil,
+                 deletionReason: String? = nil) {
         self.kind = kind; self.zone = zone; self.recordName = recordName; self.recordType = recordType
-        self.recordArchive = recordArchive; self.deletionReason = deletionReason
+        self.recordArchive = recordArchive; self.assetReference = assetReference; self.deletionReason = deletionReason
     }
     var valid: Bool {
         guard !zone.owner.isEmpty, !zone.name.isEmpty else { return false }
         switch kind {
-        case .zoneChanged, .zoneDeleted: return recordName == nil && recordType == nil && recordArchive == nil
+        case .zoneChanged, .zoneDeleted: return recordName == nil && recordType == nil && recordArchive == nil && assetReference == nil
         case .recordChanged: return recordName?.isEmpty == false && recordType?.isEmpty == false && recordArchive != nil
-        case .recordDeleted: return recordName?.isEmpty == false && recordType?.isEmpty == false && recordArchive == nil
+        case .recordDeleted: return recordName?.isEmpty == false && recordType?.isEmpty == false && recordArchive == nil && assetReference == nil
         }
     }
 }
@@ -79,7 +81,7 @@ package struct GraphCloudStatus: Sendable {
 }
 
 struct GraphCloudDocument: Codable, Sendable {
-    var format = 7
+    var format = 8
     var clientID = UUID()
     let container: String
     let environment: GraphCloudEnvironment
@@ -93,6 +95,11 @@ struct GraphCloudDocument: Codable, Sendable {
     var ledgers: [GraphLedgerReplica] = []
     var activations: [GraphCloudActivationRoute] = []
     var eventCount: Int { activations.count + ledgers.count + memberships.count + shareAttempts.count + inbox.count + sent.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count + $1.failures.count } }
+    var assetReferences: [GraphCloudAssetReference] {
+        inbox.compactMap { $0.change.assetReference }
+        + sent.flatMap { $0.saved.compactMap(\.assetReference)
+            + $0.failures.compactMap { $0.serverRecord?.assetReference } }
+    }
 }
 
 /// A process-wide claim spans startup/account verification and failed cleanup.

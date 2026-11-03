@@ -127,14 +127,44 @@ package enum GraphCloudNodeCodec {
         guard record.recordID == (try recordID(for: id, binding: binding)), record.recordType == recordType else { throw GraphCloudNodeError.invalidSystemFields }
         return record.recordChangeTag
     }
-    package static func matchesFrozenServer(_ server: CKRecord, item: GraphCloudOutgoingNode, binding: GraphCloudBinding) -> Bool {
+    package static func matchesFrozenServer(_ server: CKRecord, item: GraphCloudOutgoingNode, binding: GraphCloudBinding,
+                                            originalData: Data? = nil) -> Bool {
         guard let bytes = item.recordArchive,
-              let original = try? GraphCloudRecordCodec.restore(bytes),
+              let original = try? GraphCloudRecordCodec.restore(bytes) else { return false }
+        if item.assetReference != nil {
+            guard let originalData else { return false }
+            original["asset"] = originalData as CKRecordValue
+        }
+        guard
               let wanted = try? decode(original, binding: binding), let actual = try? decode(server, binding: binding) else { return false }
         return wanted.record == actual.record && wanted.modifiedAt == actual.modifiedAt
     }
     package static func sameServerVersion(_ left: String?, _ right: String?) -> Bool {
         guard let left, let right else { return false }; return left == right
+    }
+
+    /// Checks the frozen transport envelope without opening its separately retained body.
+    package static func validateReferenceArchive(_ native: CKRecord, reference: GraphCloudAssetReference,
+                                                  binding: GraphCloudBinding, matchMetadata: Bool = true) throws {
+        let id = try logicalID(native.recordID, binding: binding)
+        guard native.recordType == recordType, Set(native.allKeys()) == keys.union(["asset"]),
+              native.encryptedValues.allKeys().isEmpty,
+              native["format"] as? NSNumber == NSNumber(value: 3),
+              native["graphID"] as? String == binding.graphID.rawValue.uuidString.lowercased(),
+              native["nodeID"] as? String == id.rawValue.uuidString.lowercased(),
+              native["kind"] as? String == "entity",
+              native["type"] as? String == GraphAttachmentPayload.graphType,
+              native["asset"] as? Data == Data(),
+              let bytes = native["payload"] as? Data, bytes.count <= GraphCloudNodeLimits().maximumPayloadBytes,
+              let body = try? JSONDecoder().decode(Body.self, from: bytes),
+              let metadata = body.attachment?.metadata,
+              metadata.id == id else { throw GraphCloudError.invalidState }
+        if matchMetadata && (metadata.byteCount != reference.byteCount || metadata.sha256 != reference.sha256) {
+            throw GraphCloudError.invalidState
+        }
+        guard reference.binding == binding, reference.recordName == native.recordID.recordName else {
+            throw GraphCloudError.invalidState
+        }
     }
 
     package static func encode(_ record: GraphRecord, binding: GraphCloudBinding, systemFields: Data? = nil, modifiedAt: Date? = nil,
@@ -234,7 +264,7 @@ package enum GraphCloudNodeCodec {
 
     /// Scope comes from the durable route, never from untrusted record fields.
     package static func decode(_ incoming: GraphCloudIncoming, binding: GraphCloudBinding,
-                               limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudDecodedEvent {
+                               assetData: Data? = nil, limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudDecodedEvent {
         try limits.validate()
         guard incoming.valid, incoming.zone == binding.zone else { throw GraphCloudNodeError.foreignZone }
         switch incoming.kind {
@@ -247,6 +277,10 @@ package enum GraphCloudNodeCodec {
             try GraphCloudRecordCodec.validate(incoming)
             guard let data = incoming.recordArchive,
                   let record = try? GraphCloudRecordCodec.restore(data) else { throw GraphCloudNodeError.invalidRecord }
+            if let reference = incoming.assetReference {
+                guard reference.binding == binding, let assetData else { throw GraphCloudNodeError.invalidRecord }
+                record["asset"] = assetData as CKRecordValue
+            }
             return .save(try decode(record, binding: binding, limits: limits))
         }
     }
@@ -257,8 +291,11 @@ package struct GraphCloudOutgoingNode: Codable, Equatable, Sendable {
     package let change: GraphSyncChange
     package let recordName: String
     package let recordArchive: Data?
-    package init(change: GraphSyncChange, recordName: String, recordArchive: Data?) {
+    package let assetReference: GraphCloudAssetReference?
+    package init(change: GraphSyncChange, recordName: String, recordArchive: Data?,
+                 assetReference: GraphCloudAssetReference? = nil) {
         self.change = change; self.recordName = recordName; self.recordArchive = recordArchive
+        self.assetReference = assetReference
     }
 }
 package struct GraphCloudOutgoingBatch: Codable, Equatable, Sendable {
@@ -266,8 +303,27 @@ package struct GraphCloudOutgoingBatch: Codable, Equatable, Sendable {
     package let graphID: GraphID
     package let zone: GraphCloudZone
     package let items: [GraphCloudOutgoingNode]
-    package init(id: UUID, graphID: GraphID, zone: GraphCloudZone, items: [GraphCloudOutgoingNode]) {
-        self.id = id; self.graphID = graphID; self.zone = zone; self.items = items
+    /// The current native owner's directory is supplied at runtime and never serialized.
+    package let assetRoot: URL?
+    private enum CodingKeys: String, CodingKey { case id, graphID, zone, items }
+    package init(id: UUID, graphID: GraphID, zone: GraphCloudZone, items: [GraphCloudOutgoingNode], assetRoot: URL? = nil) {
+        self.id = id; self.graphID = graphID; self.zone = zone; self.items = items; self.assetRoot = assetRoot
+    }
+    package init(from decoder: Decoder) throws {
+        let value = try decoder.container(keyedBy: CodingKeys.self)
+        id = try value.decode(UUID.self, forKey: .id)
+        graphID = try value.decode(GraphID.self, forKey: .graphID)
+        zone = try value.decode(GraphCloudZone.self, forKey: .zone)
+        items = try value.decode([GraphCloudOutgoingNode].self, forKey: .items)
+        assetRoot = nil
+    }
+    package func encode(to encoder: Encoder) throws {
+        var value = encoder.container(keyedBy: CodingKeys.self)
+        try value.encode(id, forKey: .id); try value.encode(graphID, forKey: .graphID)
+        try value.encode(zone, forKey: .zone); try value.encode(items, forKey: .items)
+    }
+    package static func == (left: Self, right: Self) -> Bool {
+        left.id == right.id && left.graphID == right.graphID && left.zone == right.zone && left.items == right.items
     }
 }
 

@@ -87,11 +87,18 @@ package struct GraphCloudSeedManifest: Codable, Equatable, Sendable {
         for record in records {
             try Task.checkCancellation()
             guard let payload = record["payload"] as? Data else { throw GraphCloudActivationError.invalidState }
-            let asset = try record["asset"].map { try GraphCloudAsset.bytes($0).count } ?? 0
-            guard payload.count <= remaining, asset <= remaining - payload.count else { throw GraphCloudActivationError.limitExceeded }
-            remaining -= payload.count + asset
+            guard payload.count <= remaining else { throw GraphCloudActivationError.limitExceeded }
+            remaining -= payload.count
             entries.append(try entry(record, binding: binding))
         }
+        return try make(entries: entries, binding: binding, limits: limits)
+    }
+
+    package static func make(entries: [GraphCloudSeedEntry], binding: GraphCloudBinding,
+                             limits: GraphCloudActivationLimits) throws -> Self {
+        try limits.validate()
+        guard entries.count <= limits.maximumRecords else { throw GraphCloudActivationError.limitExceeded }
+        var entries = entries
         entries.sort { $0.nodeID.uuidString < $1.nodeID.uuidString }
         guard Set(entries.map(\.nodeID)).count == entries.count else { throw GraphCloudActivationError.invalidState }
         let result = Self(format: 1, graphID: binding.graphID, entries: entries)
