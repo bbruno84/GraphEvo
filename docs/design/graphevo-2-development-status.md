@@ -1,6 +1,6 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-02. This is the single entry point for **integrated work,
+Updated: 2026-11-03. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
@@ -9,7 +9,8 @@ integration into the main v2 branch or beta readiness.
 ## Current focused work
 
 The selected [controlled-store consolidation](graphevo-2-controlled-store-access.md)
-is in progress on `codex/v2-controlled-graph-entry`, based directly on #141.
+is in progress in [PR #142](https://github.com/bbruno84/GraphEvo/pull/142),
+on `codex/v2-controlled-graph-entry`, based directly on #141.
 Its first ownership work retains the manager gateway, adds cooperating process
 writer/presence exclusion and transaction-local mutation inventory reuse.
 Descriptor-first queries and reference-only asset queues with native permanent

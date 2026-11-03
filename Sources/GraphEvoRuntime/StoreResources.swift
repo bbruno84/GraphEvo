@@ -69,14 +69,14 @@ actor StoreResources {
         let members = try resolved.resources
         let gateways = try members.map { try StoreGatewayLease.acquire($0.configuration, owner: owner) }
         // GraphContextManager's coordinated path is the single writable v2 owner gateway.
-        // Bootstrap holds the writer lock before native metadata/load. The shared presence
-        // lease prevents another cooperating process from replacing a live coordinator.
+        // Bootstrap holds the writer lock before native metadata/load. Presence prevents
+        // replacement of a live coordinator; workspaces retain an exclusive claim.
         let processWriter = try await acquireProcessWriter(resolved, hooks: hooks)
         defer { processWriter?.release() }
         let presence: StoreProcessLock.Lease?
         if processWriter != nil {
             presence = try await StoreProcessLock.acquire(resolved, purpose: "owners",
-                mode: nativeMigration == nil ? .shared : .exclusive, wait: false)
+                mode: resolved.configuration.workspaceID == nil ? .shared : .exclusive, wait: false)
         } else { presence = nil }
         try await hooks.beforeLoad?()
         let model = schema.makeModel()
@@ -103,10 +103,7 @@ actor StoreResources {
         let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways, processPresence: presence)
         do {
             try await resources.load()
-            if let nativeMigration {
-                try await resources.finishNativeMigration(nativeMigration)
-                try await presence?.downgradeToShared(resolved, purpose: "owners")
-            }
+            if let nativeMigration { try await resources.finishNativeMigration(nativeMigration) }
         }
         catch {
             let failure = StoreRuntimeError.loadFailed(resolved.url, underlying: error)
@@ -380,14 +377,15 @@ actor StoreResources {
     }
 
     /// Called under the process writer lock. Never destroy a store with another live coordinator.
-    /// Failure restores our shared claim, retaining ownership for a safe later close/retry.
+    /// Failure restores our presence mode, retaining ownership for a safe later close/retry.
     private func requireSoleProcessOwner() async throws {
         guard processPresence != nil else { return }
         processPresence?.release(); processPresence = nil
         do {
             processPresence = try await StoreProcessLock.acquire(resolved, purpose: "owners", wait: false, cancellable: false)
         } catch {
-            processPresence = try await StoreProcessLock.acquire(resolved, purpose: "owners", mode: .shared, cancellable: false)
+            processPresence = try await StoreProcessLock.acquire(resolved, purpose: "owners",
+                mode: resolved.configuration.workspaceID == nil ? .shared : .exclusive, cancellable: false)
             throw error
         }
     }

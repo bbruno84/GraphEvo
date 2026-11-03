@@ -89,8 +89,10 @@ ownership. Close only detaches its own coordinator. Backups lock a coordinated
 source and the new destination; an owned destination is not replaced. Native
 workspace bootstrap remains supported under its destination writer fence and
 requires exclusive presence before seeding, preparation and native schema load.
-Only successful migration completion downgrades it to a shared live-owner claim;
-failed native detachment retains its exclusive claim in quarantine. Existing
+Every workspace retains exclusive presence until final detachment, including a
+resumed, sealed or already converted workspace. It does not downgrade while its
+working graph is live. Failed detachment retains that claim in quarantine. A
+later ordinary coordinator opening the published graph uses shared presence. Existing
 stopped-writer source and migration publication prerequisites remain mandatory.
 
 This protocol requires all writers to participate. Old binaries, direct external
@@ -132,13 +134,20 @@ The ownership implementation passes 974 macOS functions (331 legacy, 521 store,
 92 runtime and 30 model) and 44 selected iOS 18.5 Simulator functions, 46 expanded
 executions, with no failures/skips. The latter covers lock admission/cancellation,
 owner maintenance exclusion, migration bootstrap, coordinated operations and
-native v1 migration. Both Swift 6 consumers pass locally. This is local evidence;
-reviewed remote CI and integration remain pending.
+native v1 migration. Both Swift 6 consumers pass locally. The corrected workspace
+ownership passes the complete macOS suite and all 13 lock regressions. All nine
+iOS query functions also pass five repetitions (45 executions); the remote
+timeout is not reproduced in that bounded run. This is local evidence; reviewed
+remote CI and integration remain pending. Initial full checkpoint #384 passed macOS but
+iOS timed out in sqliteReopenAndExactCandidateBoundaryPreserveOrderingAndMissingPlacement
+(795 passed functions, one failure and one known skip). That failure is retained
+without attribution to the workspace-ownership correction or a weakened timeout.
 
 Review found that native schema bootstrap initially acquired shared presence.
-It now requires exclusive presence before any seed/preparation/load and only
-downgrades after completion. A regression verifies refusal leaves the destination
-absent when another live owner exists, and success permits subsequent shared
-presence. Other regressions cover actual child-process lock release, namespace
+It now requires exclusive presence before any seed/preparation/load and retains
+it throughout the workspace's lifetime. A regression verifies refusal leaves the
+destination absent when another live owner exists. Shared presence remains
+refused until workspace close; resuming without a schema change still requires
+exclusivity. Other regressions cover actual child-process lock release, namespace
 replacement refusal, reserved-fence borrowing, idle-owner destruction refusal,
 generic writable admission refusal and pending mutation/cascade/rollback behavior.

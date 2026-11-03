@@ -23,22 +23,6 @@ enum StoreProcessLock {
         private init(_ value: Descriptor) { descriptor = OSAllocatedUnfairLock(initialState: value) }
         /// An admitted maintenance operation retains its fence even if the reservation is released.
         func retained() -> Lease? { descriptor.withLock { $0.map(Lease.init) } }
-        /// Bootstrap converts migration's exclusive presence to a normal live-owner claim.
-        /// Its writer fence remains held and no consumer handle has been published yet.
-        func downgradeToShared(_ resolved: ResolvedStore, purpose: String) async throws {
-            guard let owned = descriptor.withLock({ $0 }) else { throw StoreRuntimeError.closedHandle }
-            let path = try StoreProcessLock.sidecar(resolved, purpose: purpose).path
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                io.async {
-                    do {
-                        try verify(owned.value, path: path)
-                        guard flock(owned.value, LOCK_SH | LOCK_NB) == 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
-                        try verify(owned.value, path: path)
-                        continuation.resume()
-                    } catch { continuation.resume(throwing: error) }
-                }
-            }
-        }
         func release() {
             let previous = descriptor.withLock { value in let old = value; value = nil; return old }
             withExtendedLifetime(previous) {}

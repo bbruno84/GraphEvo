@@ -158,7 +158,7 @@ import Testing
         try await handle.close()
     }
 
-    @Test func nativeMigrationRefusesOtherLiveOwnersBeforeSeedingAndDowngradesAfterSuccess() async throws {
+    @Test func workspaceOwnershipIsExclusiveBeforeMigrationAndUntilFinalDetach() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let sourceURL = root.appendingPathComponent("Source.sqlite")
@@ -180,10 +180,20 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: targetURL.path))
         idleOwner.release()
         let target = try await StoreRegistry().open(configuration, schema: fixtureSchema(), nativeMigration: migration)
-        let followingOwner = try await StoreProcessLock.acquire(resolved, purpose: "owners", mode: .shared, wait: false)
+        await #expect(throws: StoreRuntimeError.self) {
+            try await StoreProcessLock.acquire(resolved, purpose: "owners", mode: .shared, wait: false)
+        }
         #expect(try await target.read { try $0.count(for: NSFetchRequest<NSFetchRequestResult>(entityName: "RuntimeFixture")) } == 1)
-        followingOwner.release()
         try await target.close()
+        let followingOwner = try await StoreProcessLock.acquire(resolved, purpose: "owners", mode: .shared, wait: false)
+        // Resuming an already converted workspace also requires exclusive ownership.
+        await #expect(throws: StoreRuntimeError.self) { try await StoreRegistry().open(configuration, schema: fixtureSchema()) }
+        followingOwner.release()
+        let resumed = try await StoreRegistry().open(configuration, schema: fixtureSchema())
+        await #expect(throws: StoreRuntimeError.self) {
+            try await StoreProcessLock.acquire(resolved, purpose: "owners", mode: .shared, wait: false)
+        }
+        try await resumed.close()
     }
 
     @Test func unmarkedReadOnlyArchiveDoesNotRequireSourceSidecars() async throws {
