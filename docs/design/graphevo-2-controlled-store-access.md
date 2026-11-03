@@ -1,9 +1,10 @@
 # Controlled graph access and performance consolidation
 
-Status: selected direction, implementation in progress on
-`codex/v2-controlled-graph-entry`. This is not an integrated checkpoint or a
-public opening API. Native S04 and ordinary serialized application values stay
-unchanged.
+Status: selected direction. The first ownership increment integrates through
+[PR #142](https://github.com/bbruno84/GraphEvo/pull/142) into `codex/graphevo-2`.
+Descriptor-first queries and reference-only asset queues remain subsequent
+implementation areas. No public opening API is added. Native S04 and ordinary
+serialized application values stay unchanged.
 
 ## Selected configuration
 
@@ -137,11 +138,21 @@ owner maintenance exclusion, migration bootstrap, coordinated operations and
 native v1 migration. Both Swift 6 consumers pass locally. The corrected workspace
 ownership passes the complete macOS suite and all 13 lock regressions. All nine
 iOS query functions also pass five repetitions (45 executions); the remote
-timeout is not reproduced in that bounded run. This is local evidence; reviewed
-remote CI and integration remain pending. Initial full checkpoint #384 passed macOS but
+timeout is not reproduced in that bounded run. The complete local iOS suite
+passes 971 functions, zero failures and one known skip (1,089 expanded passing
+executions). Initial full checkpoint #384 passed macOS but
 iOS timed out in sqliteReopenAndExactCandidateBoundaryPreserveOrderingAndMissingPlacement
 (795 passed functions, one failure and one known skip). That failure is retained
 without attribution to the workspace-ownership correction or a weakened timeout.
+
+Reviewed [full checkpoint #387](https://github.com/bbruno84/GraphEvo/actions/runs/41692421379)
+passes on `2e0d2b171c46661560646482b65ac974b4a50278`: 974 macOS functions,
+971 passed iOS functions with one known skip and both Swift 6 consumers. The
+first iOS job acquired no runner and executed no steps; its sole retry passes
+without source changes or rerunning the successful macOS job. Final integration
+notes change documentation only; shipping/test/consumer/workflow inputs match
+the reviewed checkpoint. This does not establish physical-device, cloud transport
+or beta performance acceptance.
 
 Review found that native schema bootstrap initially acquired shared presence.
 It now requires exclusive presence before any seed/preparation/load and retains

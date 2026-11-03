@@ -38,6 +38,18 @@ device/network performance envelopes remain beta measurement work. Retaining
 native attachment bodies does not certify temporary-spool recovery or quota
 acceptance. No broad release gate closes from the private performance results.
 
+The first ownership increment integrates through
+[PR #142](https://github.com/bbruno84/GraphEvo/pull/142), with reviewed full
+[checkpoint #387](https://github.com/bbruno84/GraphEvo/actions/runs/41692421379)
+on `2e0d2b171c46661560646482b65ac974b4a50278`: 974 macOS functions,
+971 passed iOS functions with the known skip and both Swift 6 consumers.
+The manager remains the coordinated writable gateway; transaction-local reuse
+requires protected contexts, and workspace ownership stays exclusive until
+detach. This closes that narrow implementation increment. Descriptor-first
+query adoption, reference-only transport recovery and broader release gates
+remain open. Cooperating-process regression evidence does not certify old or
+external writers.
+
 A8 is reviewed/merged. [C01](results/c01-cost-baseline-2026-10-27.md) begins the
 cost review with 182 validated samples across eight local synthetic configurations.
 It measures identity/session overhead, file/query coupling and repeated observer
