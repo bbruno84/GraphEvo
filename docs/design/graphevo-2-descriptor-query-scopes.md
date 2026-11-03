@@ -73,3 +73,9 @@ traversal origins and scalar count without application facades/unrequested bodie
 Existing P02 parity, payload budget, sorting/paging and capacity cases remain.
 Private F's narrow timings do not establish the generalized path's performance.
 Matched performance measurement and reviewed integration remain pending.
+
+Local checks on `954e6ba6da5ffd43ab02cf92954890b4fe0c1c23` pass 980 macOS
+functions (331 legacy, 527 store, 92 runtime, 30 model), 23 focused iOS 18.5
+Simulator query functions with no failures/skips, both Swift 6 consumers and
+manifest/diff checks. The focused set includes the unchanged capacity case.
+This is not a remote checkpoint, physical-device or cloud acceptance result.

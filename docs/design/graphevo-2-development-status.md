@@ -9,10 +9,12 @@ integration into the main v2 branch or beta readiness.
 ## Current focused work
 
 Descriptor-first [query scopes](graphevo-2-descriptor-query-scopes.md) are in
-progress on `codex/v2-descriptor-query-scope`, directly from integrated #142.
+progress in [PR #143](https://github.com/bbruno84/GraphEvo/pull/143), on
+`codex/v2-descriptor-query-scope`, directly from integrated #142.
 The existing evaluator receives descriptor-local inputs; explicit integrity
-audits retain their separate contract. Matched performance, final local checks
-and reviewed integration remain pending.
+audits retain their separate contract. Local checks pass 980 macOS functions,
+23 focused iOS query functions (including capacity) and both Swift 6 consumers.
+Matched performance, final review and remote integration remain pending.
 
 The selected [controlled-store consolidation](graphevo-2-controlled-store-access.md)
 continues with descriptor-first queries and reference-only asset queues. Its first
