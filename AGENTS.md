@@ -594,6 +594,14 @@ No internal external-storage paths or fake progress/streaming states are public.
 
 ## V2 bounded queries
 
+The non-mirrored S04 continuation uses
+[descriptor-first scopes](docs/design/graphevo-2-descriptor-query-scopes.md):
+retain the resource-wide candidate count, query-local structural/property inputs,
+source-order consultation and shared step/byte allowances. Complete integrity
+auditing stays explicit. Validate returned identities/direct references and
+traversal origins/visits. Historical schema/mirroring paths retain their previous
+inventory contracts; do not silently fall back to their global audit on S04.
+
 Read the [A7 contract](docs/design/graphevo-2-queries.md) before changing query
 execution. Descriptors require explicit candidate allowance; current encoded
 properties use bounded native inventory plus memory evaluation, never a silent

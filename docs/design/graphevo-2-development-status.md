@@ -8,14 +8,30 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+Descriptor-first [query scopes](graphevo-2-descriptor-query-scopes.md) integrate
+through [PR #143](https://github.com/bbruno84/GraphEvo/pull/143), directly from
+integrated #142.
+The existing evaluator receives descriptor-local inputs; explicit integrity
+audits retain their separate contract. Local checks pass 980 macOS functions,
+23 focused iOS query functions (including capacity) and both Swift 6 consumers.
+The [matched local comparison](results/descriptor-query-scopes-2026-11-03.md)
+retains complete result equality and reduces the measured query from roughly
+263–267 to 41–43 ms. Reviewed
+[v2 checkpoint #392](https://github.com/bbruno84/GraphEvo/actions/runs/41702479602)
+passes on `5e258fdfc5564cf128aaf4ad6f82a7f4f1ddb1a2`: 648 macOS and
+646 iOS functions without failures/skips, plus both Swift 6 consumers. Capacity
+retains its local passing evidence. Final notes are documentation-only with
+unchanged shipping/test/consumer/workflow inputs. Reference-only asset queues
+remain the next separate increment; no release/device/cloud gate closes.
+
 The selected [controlled-store consolidation](graphevo-2-controlled-store-access.md)
-continues with descriptor-first queries and reference-only asset queues. Its first
+continues with reference-only asset queues. Its first
 ownership increment integrates through
 [PR #142](https://github.com/bbruno84/GraphEvo/pull/142), directly from #141.
 It retains the manager gateway, adds cooperating process
 writer/presence exclusion and transaction-local mutation inventory reuse.
-Descriptor-first queries and reference-only asset queues with native permanent
-bodies remain separately reviewable implementation areas. Private research is
+Query scopes integrate separately through #143; reference-only asset queues with
+native permanent bodies remain to implement. Private research is
 not merged code or an integrated CI checkpoint. No beta/tag gate closes here.
 
 Reviewed [full checkpoint #387](https://github.com/bbruno84/GraphEvo/actions/runs/41692421379)

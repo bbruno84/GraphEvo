@@ -10,6 +10,12 @@ its merge commit. The original stack has been reconciled without rewriting histo
 
 ## Descriptor and execution contract
 
+The [descriptor-first continuation](graphevo-2-descriptor-query-scopes.md)
+replaces the full Session inventory on the non-mirrored S04 path. Its candidate
+cap stays resource-wide; structural inputs and property headers become
+query-local, with complete integrity checking retained as an explicit operation.
+Historical schema/mirroring paths keep the bounded inventory described below.
+
 The subsequent [S01 schema review](graphevo-2-persistent-schema.md) retains this
 bounded execution strategy and selective property materialization, with native
 graph/node identity indexes for point lookup. It selects no scalar-query table

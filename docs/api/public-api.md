@@ -1881,6 +1881,14 @@ sharing/recovery validation remain separate checkpoints.
 
 ## S04 adaptive query execution
 
+The non-mirrored S04 adapter uses [descriptor-first query scopes](../design/graphevo-2-descriptor-query-scopes.md).
+Queries do not run the complete integrity audit. `nativeCandidates` still counts
+all native rows in the resource group; `scopedNodes` describes the descriptor's
+structural domain. Property headers load on consultation; full returned records
+retain complete property decoding and byte charges. Returned identities/direct
+references and traversal origins/visits remain checked. Native fetch diagnostics
+are instrumented query operations, not a count of all native SQL/validation work.
+
 On the package-only S04 path, queries validate consulted fields and returned
 records; they do not read every discarded body. Presence checks read headers.
 `explain()` returns predictive `GraphQueryPlan.strategy == .adaptiveCoreData` and

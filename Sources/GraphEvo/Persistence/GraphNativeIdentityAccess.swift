@@ -205,7 +205,7 @@ struct GraphNativeIdentityAccess: Sendable {
 
     /// Batch every endpoint identity across all node kinds; duplicate IDs must not hide behind a kind filter.
     private func references(_ context: NSManagedObjectContext, node: Node, id: GraphNodeID,
-                                   root: Entity, membership: Action) throws -> [GraphNodeID: Node] {
+                                   root: Entity, membership: Action, projectMetadata: Bool = false) throws -> [GraphNodeID: Node] {
         let entities: [Entity]
         if let edge = node as? Relationship { entities = [edge.subject, edge.object].compactMap { $0 } }
         else if let action = node as? Action { entities = action.subjects + action.objects }
@@ -227,9 +227,59 @@ struct GraphNativeIdentityAccess: Sendable {
                 guard result.updateValue(candidate, forKey: key) == nil else { throw GraphStoreError.duplicateIdentity }
             }
         }
-        let metadata = try GraphRuntimeMetadata(nodes: Array(result.values),
-            keys: [GraphTypedStoreAdapter.graphKey, GraphTypedStoreAdapter.idKey, GraphTypedStoreAdapter.stageKey], context: context)
+        let keys: Set<String> = [GraphTypedStoreAdapter.graphKey, GraphTypedStoreAdapter.idKey, GraphTypedStoreAdapter.stageKey]
+        let metadata = try projectMetadata
+            ? GraphRuntimeMetadata(nodes: Array(result.values), keys: keys, context: context, minimumPersistedOwners: 0)
+            : GraphRuntimeMetadata(nodes: Array(result.values), keys: keys, context: context)
         for (key, candidate) in result { try validateNode(candidate, id: key, root: root, membership: membership, metadata: metadata) }
+        return result
+    }
+
+    /// Query-local candidates, including pending edits. No whole-resource identity audit.
+    func queryNodes(_ context: NSManagedObjectContext, graphID: GraphID) throws -> [Node] {
+        try fetch(context, graphID: graphID)
+    }
+
+    /// Validate only selected identities, their owned metadata and direct endpoints.
+    /// Missing native routing outside this selection remains an explicit audit concern.
+    func queryHeaders(_ context: NSManagedObjectContext, graphID: GraphID, ids: Set<GraphNodeID>) throws -> [GraphRecord] {
+        guard !ids.isEmpty else { return [] }
+        let check = StoreNativeContext.cancellationCheck(in: context)
+        try check()
+        let (root, membership) = try anchors(context, graphID: graphID)
+        let ordered = ids.sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
+        var result: [GraphRecord] = [], found = Set<GraphNodeID>()
+        for offset in stride(from: 0, to: ordered.count, by: 128) {
+            try check()
+            let selected = Array(ordered[offset..<min(offset + 128, ordered.count)])
+            let nodes = try fetch(context, graphID: graphID, nodeIDs: selected.map(\.rawValue))
+            let metadata = try GraphRuntimeMetadata(nodes: nodes,
+                keys: [GraphTypedStoreAdapter.graphKey, GraphTypedStoreAdapter.idKey,
+                       GraphTypedStoreAdapter.stageKey, GraphTypedStoreAdapter.formatsKey], context: context, minimumPersistedOwners: 0)
+            for node in nodes {
+                try check()
+                guard let text = node.node.value(forKey: nodeAttribute) as? String, let uuid = UUID(uuidString: text) else {
+                    throw GraphStoreError.corruptIdentity
+                }
+                let id = GraphNodeID(graphID: graphID, rawValue: uuid)
+                guard ids.contains(id), found.insert(id).inserted else { throw GraphStoreError.duplicateIdentity }
+                try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: uuid)
+                try validateNode(node, id: id, root: root, membership: membership, metadata: metadata)
+                guard let formats = metadata.value(for: node, key: GraphTypedStoreAdapter.formatsKey) as? [String],
+                      formats.isEmpty else { throw GraphStoreError.corruptIdentity }
+                let endpoints = try references(context, node: node, id: id, root: root, membership: membership, projectMetadata: true)
+                result.append(try GraphRecordMapper.snapshot(node, id: id, excludingRoot: root,
+                    propertyKeys: [], projectedProperties: [:]) { entity in
+                    guard let text = entity.node.value(forKey: self.nodeAttribute) as? String,
+                          let uuid = UUID(uuidString: text) else { throw GraphStoreError.unresolvedReference }
+                    let reference = GraphNodeID(graphID: graphID, rawValue: uuid)
+                    guard let target = endpoints[reference], target is Entity,
+                          target.sharesBackingObject(with: entity) else { throw GraphStoreError.unresolvedReference }
+                    return reference
+                })
+            }
+        }
+        guard found == ids else { throw GraphStoreError.corruptIdentity }
         return result
     }
 

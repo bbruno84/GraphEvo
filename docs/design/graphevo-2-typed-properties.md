@@ -149,6 +149,10 @@ not bodies. Unrelated discarded bodies do not constitute an integrity certificat
 the existing native validator, on an admitted pinned read. The existing public
 GraphDatabase integrity API retains its contract.
 
+The [descriptor-first continuation](graphevo-2-descriptor-query-scopes.md)
+replaces the query Session on non-mirrored S04 stores while preserving P02's
+translator/evaluator. The original P02 evidence below retains its historical scope.
+
 A SQLite context without pending changes can translate a **source-order AND
 prefix**. Structural guards narrow the scoped candidates; presence and safe
 native scalar comparisons use NSPredicate fetches on property entities. Null and
