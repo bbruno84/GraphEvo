@@ -1,6 +1,8 @@
 # GraphEvo 2 — durable temporary CKAsset spool
 
-Status: focused alpha implementation candidate on `codex/v2-durable-asset-spool`.
+Status: integrated through [PR #144](https://github.com/bbruno84/GraphEvo/pull/144),
+with reviewed [full checkpoint #41715897139](https://github.com/bbruno84/GraphEvo/actions/runs/41715897139)
+on `ae0d50ef688bb0ca5d7088abb12ebfcc0e21f50a`.
 Read with [T04](graphevo-2-cloud-assets.md), [T01](graphevo-2-record-transport.md),
 [MF10](graphevo-2-authoritative-cloud-bootstrap.md) and
 [controlled store access](graphevo-2-controlled-store-access.md).

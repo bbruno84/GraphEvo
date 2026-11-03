@@ -959,9 +959,11 @@ physical interruption, cross-process writers, scale or new-cloud activation.
 
 ## CI checkpoint scope
 
-- [ ] Review and integrate the durable CKAsset spool increment with a full
-  macOS/iOS checkpoint. Local reference/restart and 36 MiB seed tests do not
-  certify physical CloudKit delivery, process interruption, disk exhaustion,
+- [x] Review and integrate the durable CKAsset spool increment with
+  [full macOS/iOS checkpoint #41715897139](https://github.com/bbruno84/GraphEvo/actions/runs/41715897139)
+  on `ae0d50e`: 993 macOS functions, 990 passed iOS functions with one known
+  skip, and both Swift 6 consumers. Local reference/restart and 36 MiB seed
+  tests do not certify physical CloudKit delivery, process interruption, disk exhaustion,
   production-scale activation memory or network latency. Preserve S04 native
   attachment placement and ordinary serialized consumer payloads. See the
   [spool contract](graphevo-2-durable-asset-spool.md).
