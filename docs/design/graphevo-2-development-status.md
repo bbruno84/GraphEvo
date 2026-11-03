@@ -8,6 +8,12 @@ integration into the main v2 branch or beta readiness.
 
 ## Current focused work
 
+Descriptor-first [query scopes](graphevo-2-descriptor-query-scopes.md) are in
+progress on `codex/v2-descriptor-query-scope`, directly from integrated #142.
+The existing evaluator receives descriptor-local inputs; explicit integrity
+audits retain their separate contract. Matched performance, final local checks
+and reviewed integration remain pending.
+
 The selected [controlled-store consolidation](graphevo-2-controlled-store-access.md)
 continues with descriptor-first queries and reference-only asset queues. Its first
 ownership increment integrates through

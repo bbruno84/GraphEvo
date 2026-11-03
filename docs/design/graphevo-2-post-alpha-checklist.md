@@ -50,6 +50,11 @@ query adoption, reference-only transport recovery and broader release gates
 remain open. Cooperating-process regression evidence does not certify old or
 external writers.
 
+The [descriptor-first query candidate](graphevo-2-descriptor-query-scopes.md)
+separates query-local inputs from explicit auditing without changing S04 storage.
+Its generalized correctness and matched performance still require their own
+reviewed evidence; the narrow private F timing is not that checkpoint.
+
 A8 is reviewed/merged. [C01](results/c01-cost-baseline-2026-10-27.md) begins the
 cost review with 182 validated samples across eight local synthetic configurations.
 It measures identity/session overhead, file/query coupling and repeated observer

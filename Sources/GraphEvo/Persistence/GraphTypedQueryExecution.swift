@@ -7,7 +7,10 @@ import GraphEvoStore
 /// One pinned query scope. No header, decoded value or managed object survives it.
 final class GraphTypedQueryExecution {
     private struct Header { let row: NSManagedObjectID; let name: String; let kind: Int16?; let encoding: Int16? }
-    private let session: GraphTypedStoreAdapter.Session
+    private let session: GraphTypedStoreAdapter.Session?
+    private let source: GraphTypedQuerySource?
+    private let context: NSManagedObjectContext
+    private let graphID: GraphID
     private let request: GraphQueryRequest
     private let work: GraphQueryWorkCounter
     private let check: @Sendable () throws -> Void
@@ -22,16 +25,35 @@ final class GraphTypedQueryExecution {
     private var lastNativeKey: String?
     private var reasons: [GraphQueryDiagnostics.FallbackReason] = []
     private var nativeSort = false
+    private var indexedKeys = Set<String>()
+    private var indexedRecords = Set<GraphNodeID>()
     private let canUseNative: Bool
 
     init(session: GraphTypedStoreAdapter.Session, request: GraphQueryRequest) {
-        self.session = session; self.request = request
+        self.session = session; source = nil; context = session.context; graphID = session.graphID; self.request = request
         check = StoreNativeContext.cancellationCheck(in: session.context)
         work = GraphQueryWorkCounter(maximum: request.budget.maximumSteps, checkCancellation: check)
         remaining = request.budget.maximumPropertyBytes
         canUseNative = !session.context.hasChanges && session.context.persistentStoreCoordinator?.persistentStores.allSatisfy { $0.type == NSSQLiteStoreType } == true
         if session.context.hasChanges { reasons.append(.pendingChanges) }
         else if !canUseNative { reasons.append(.inMemory) }
+    }
+    init(context: NSManagedObjectContext, graphID: GraphID, request: GraphQueryRequest) throws {
+        session = nil; self.context = context; self.graphID = graphID; self.request = request
+        check = StoreNativeContext.cancellationCheck(in: context)
+        work = GraphQueryWorkCounter(maximum: request.budget.maximumSteps, checkCancellation: check)
+        remaining = request.budget.maximumPropertyBytes
+        canUseNative = !context.hasChanges && context.persistentStoreCoordinator?.persistentStores.allSatisfy { $0.type == NSSQLiteStoreType } == true
+        if context.hasChanges { reasons.append(.pendingChanges) }
+        else if !canUseNative { reasons.append(.inMemory) }
+        source = try GraphTypedQuerySource(context: context, graphID: graphID, request: request, work: work)
+    }
+    private var nodes: [GraphNodeID: Node] { source?.nodes ?? session!.nodes }
+    private var nativeCandidateCount: Int { source?.nativeCandidateCount ?? session!.nativeCandidateCount }
+    private func kind(_ id: GraphNodeID) throws -> GraphNodeKind {
+        if let source, let kind = source.kindsByID[id] { return kind }
+        guard let session, let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
+        return session.kind(node)
     }
     private func charge(_ count: Int) throws { try GraphQueryStoredCost.charge(count, remaining: &remaining) }
     private func entityName(_ kind: GraphNodeKind) -> String {
@@ -44,39 +66,74 @@ final class GraphTypedQueryExecution {
         return stride(from: 0, to: sorted.count, by: 128).map { Array(sorted[$0..<min($0 + 128, sorted.count)]) }
     }
     private func objectIDs(_ ids: [GraphNodeID]) throws -> [NSManagedObjectID] {
-        try ids.map { guard let node = session.nodes[$0] else { throw GraphStoreError.corruptIdentity }; return node.runtimeObjectID }
+        try ids.map {
+            if let source, let objectID = source.objectIDs[$0] { return objectID }
+            guard let node = nodes[$0] else { throw GraphStoreError.corruptIdentity }; return node.runtimeObjectID
+        }
     }
     // Dictionary projections deliberately omit object and all value slots.
     // Full property blobs are not fetched simply to discover keys/ownership.
-    private func indexHeaders() throws {
+    private func indexHeaders(key requestedKey: String? = nil, ids selectedIDs: Set<GraphNodeID>? = nil) throws {
         if !canUseNative {
-            for (id, node) in session.nodes {
+            for (id, node) in nodes where selectedIDs?.contains(id) ?? true {
                 for row in node.node.propertySet {
                     try work.consume()
-                    let key = try GraphNativePropertyStorage.logicalKey(row)
-                    if key.hasPrefix(GraphTypedStoreAdapter.prefix) { continue }
-                    headers[id, default: [:]][key, default: []].append(Header(row: row.objectID, name: row.name,
-                        kind: (row.value(forKey: GraphNativePropertyStorage.kindKey) as? NSNumber)?.int16Value,
-                        encoding: (row.value(forKey: GraphNativePropertyStorage.encodingKey) as? NSNumber)?.int16Value))
+                    let key: String
+                    if let requestedKey {
+                        guard let logical = try? GraphNativePropertyStorage.logicalKey(row), logical == requestedKey else { continue }
+                        key = logical
+                    } else { key = try GraphNativePropertyStorage.logicalKey(row) }
+                    if key.hasPrefix(GraphTypedStoreAdapter.prefix) {
+                        guard row.value(forKey: GraphNativePropertyStorage.kindKey) == nil else { throw GraphStoreError.corruptIdentity }
+                        continue
+                    }
+                    if headers[id]?[key]?.contains(where: { $0.row == row.objectID }) != true {
+                        headers[id, default: [:]][key, default: []].append(Header(row: row.objectID, name: row.name,
+                            kind: (row.value(forKey: GraphNativePropertyStorage.kindKey) as? NSNumber)?.int16Value,
+                            encoding: (row.value(forKey: GraphNativePropertyStorage.encodingKey) as? NSNumber)?.int16Value))
+                    }
                 }
             }
             return
         }
-        let reverse = Dictionary(uniqueKeysWithValues: session.nodes.map { ($0.value.runtimeObjectID, $0.key) })
+        let idsByObject = source?.objectIDs ?? nodes.mapValues(\.runtimeObjectID)
+        let reverse = Dictionary(uniqueKeysWithValues: idsByObject.map { ($0.value, $0.key) })
         for kind in [GraphNodeKind.entity, .relationship, .action] {
-            let ids = Set(session.nodes.filter { session.kind($0.value) == kind }.map(\.key))
+            let ids = try Set(idsByObject.keys.filter {
+                guard selectedIDs?.contains($0) ?? true else { return false }
+                return try self.kind($0) == kind
+            })
             for chunk in chunks(ids) {
                 try check()
+                let ownerScope = NSPredicate(format: "node IN %@", try objectIDs(chunk))
+                var predicate = ownerScope
+                if let requestedKey {
+                    // Resolve physical key spellings without reading values. Distinct native
+                    // names stay in an Array so canonical Swift equality cannot collapse them.
+                    let names = NSFetchRequest<NSDictionary>(entityName: entityName(kind))
+                    names.resultType = .dictionaryResultType; names.propertiesToFetch = ["name", GraphNativePropertyStorage.kindKey]
+                    names.predicate = ownerScope; names.returnsDistinctResults = true; names.includesPendingChanges = false
+                    names.fetchLimit = request.budget.maximumSteps - work.steps + 1
+                    fetches += 1
+                    var physical: [String] = []
+                    for row in try context.fetch(names) {
+                        try work.consume()
+                        guard let name = row["name"] as? String else { continue }
+                        if let logical = try? GraphNativePropertyStorage.logicalKey(name: name, typed: row[GraphNativePropertyStorage.kindKey] != nil),
+                           logical == requestedKey { physical.append(name) }
+                    }
+                    predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [ownerScope, NSPredicate(format: "name IN %@", physical)])
+                }
                 let fetch = NSFetchRequest<NSDictionary>(entityName: entityName(kind))
                 fetch.resultType = .dictionaryResultType
                 let expression = NSExpressionDescription(); expression.name = "rowID"
                 expression.expression = NSExpression.expressionForEvaluatedObject(); expression.expressionResultType = .objectIDAttributeType
                 fetch.propertiesToFetch = ["name", "node", GraphNativePropertyStorage.kindKey, GraphNativePropertyStorage.encodingKey, expression]
-                fetch.predicate = NSPredicate(format: "node IN %@", try objectIDs(chunk))
+                fetch.predicate = predicate
                 fetch.includesPendingChanges = false
                 fetch.fetchLimit = request.budget.maximumSteps - work.steps + 1
                 fetches += 1
-                for row in try session.context.fetch(fetch) {
+                for row in try context.fetch(fetch) {
                     try work.consume()
                     guard let owner = row["node"] as? NSManagedObjectID, let id = reverse[owner],
                           let rowID = row["rowID"] as? NSManagedObjectID, let name = row["name"] as? String else { throw GraphStoreError.corruptIdentity }
@@ -86,13 +143,18 @@ final class GraphTypedQueryExecution {
                         guard kind == nil else { throw GraphStoreError.corruptIdentity }
                         continue
                     }
-                    headers[id, default: [:]][key, default: []].append(Header(row: rowID, name: name,
-                        kind: kind?.int16Value, encoding: (row[GraphNativePropertyStorage.encodingKey] as? NSNumber)?.int16Value))
+                    if headers[id]?[key]?.contains(where: { $0.row == rowID }) != true {
+                        headers[id, default: [:]][key, default: []].append(Header(row: rowID, name: name,
+                            kind: kind?.int16Value, encoding: (row[GraphNativePropertyStorage.encodingKey] as? NSNumber)?.int16Value))
+                    }
                 }
             }
         }
     }
     private func header(_ id: GraphNodeID, _ key: String) throws -> Header? {
+        if source != nil, !indexedRecords.contains(id), indexedKeys.insert(key).inserted {
+            try indexHeaders(key: key)
+        }
         try work.consume()
         let rows = headers[id]?[key] ?? []
         guard rows.count <= 1 else { throw GraphStoreError.corruptIdentity }
@@ -106,7 +168,7 @@ final class GraphTypedQueryExecution {
     private func value(_ id: GraphNodeID, _ key: String) throws -> GraphValue? {
         if loaded[id]?.contains(key) == true { return cached[id]?[key] }
         let row = try header(id, key)
-        let value = try row.map { try GraphNativePropertyStorage.read(session.context.existingObject(with: $0.row), charge: charge) }
+        let value = try row.map { try GraphNativePropertyStorage.read(context.existingObject(with: $0.row), charge: charge) }
         loaded[id, default: []].insert(key)
         if let value { cached[id, default: [:]][key] = value }
         return value
@@ -115,7 +177,10 @@ final class GraphTypedQueryExecution {
         materialized += 1
         let keys: Set<String>
         if case .projection(let selected) = request.operation { keys = selected }
-        else { keys = Set(headers[raw.id]?.keys.map { $0 } ?? []) }
+        else {
+            if source != nil, indexedRecords.insert(raw.id).inserted { try indexHeaders(ids: [raw.id]) }
+            keys = Set(headers[raw.id]?.keys.map { $0 } ?? [])
+        }
         var properties: [String: GraphValue] = [:]
         for key in keys.sorted() { if let value = try value(raw.id, key) { properties[key] = value } }
         return try GraphRecord(id: raw.id, type: raw.type, endpoints: raw.endpoints, properties: properties,
@@ -142,7 +207,7 @@ final class GraphTypedQueryExecution {
     }
     private func select(_ predicate: NSPredicate, key: String, ids: Set<GraphNodeID>, sort: [NSSortDescriptor] = []) throws -> [[GraphNodeID]] {
         var result: [[GraphNodeID]] = []
-        let reverse = Dictionary(uniqueKeysWithValues: ids.compactMap { id in session.nodes[id].map { ($0.runtimeObjectID, id) } })
+        let reverse = Dictionary(uniqueKeysWithValues: try ids.map { (try objectIDs([$0])[0], $0) })
         for chunk in chunks(ids) {
             let fetch = NSFetchRequest<NSDictionary>(entityName: entityName(request.definition.kind))
             fetch.resultType = .dictionaryResultType; fetch.propertiesToFetch = ["node"]
@@ -153,7 +218,7 @@ final class GraphTypedQueryExecution {
             fetch.fetchLimit = request.budget.maximumSteps - work.steps + 1
             fetches += 1
             var group: [GraphNodeID] = []
-            for row in try session.context.fetch(fetch) {
+            for row in try context.fetch(fetch) {
                 try work.consume()
                 guard let owner = row["node"] as? NSManagedObjectID, let id = reverse[owner] else { throw GraphStoreError.corruptIdentity }
                 group.append(id)
@@ -269,29 +334,35 @@ final class GraphTypedQueryExecution {
             let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: entityName(request.definition.kind))
             fetch.predicate = NSPredicate(format: "name IN %@ AND node IN %@", Array(names), try objectIDs(chunk))
             fetch.includesPendingChanges = false; fetches += 1
-            let count = try session.context.count(for: fetch)
+            let count = try context.count(for: fetch)
             guard count == chunk.count else { throw GraphStoreError.corruptIdentity }
             result += count
         }
         return result
     }
     private func diagnostics(_ strategy: GraphQueryDiagnostics.Strategy, nodes: Int) -> GraphQueryDiagnostics {
-        GraphQueryDiagnostics(nativeCandidates: session.nativeCandidateCount, scopedNodes: nodes,
+        GraphQueryDiagnostics(nativeCandidates: nativeCandidateCount, scopedNodes: nodes,
             propertyBytesCharged: request.budget.maximumPropertyBytes - remaining, evaluationSteps: work.steps,
-            strategy: strategy, nativeFetchCount: fetches, nativePredicateCount: nativePredicates,
+            strategy: strategy, nativeFetchCount: fetches + (source?.fetches ?? 0), nativePredicateCount: nativePredicates,
             materializedRecords: materialized, nativeSortApplied: nativeSort, fallbackReasons: reasons)
     }
     func execute() throws -> GraphQueryOutput {
         var records: [GraphRecord] = []
-        for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+        let inputs: [GraphRecord]
+        if let source { inputs = source.records }
+        else if let session {
+            inputs = try session.nodes.keys.sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }.map { id in
+                guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
+                return try session.snapshot(node, id: id, propertyKeys: [])
+            }
+        } else { throw GraphStoreError.corruptIdentity }
+        for raw in inputs.sorted(by: { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }) {
             try work.consume()
-            guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
-            let raw = try session.snapshot(node, id: id, propertyKeys: [])
             try charge(raw.type.utf8.count)
             for name in raw.tags.union(raw.groups) { try charge(name.utf8.count + 1) }
             records.append(raw)
         }
-        try indexHeaders()
+        if source == nil { try indexHeaders() }
         if request.isTraversal { note(.unsupportedPredicate) }
         var eligible: Set<GraphNodeID>?, order: [GraphNodeID]?
         if canUseNative, !request.isTraversal {
@@ -318,8 +389,9 @@ final class GraphTypedQueryExecution {
                 }
             }
         }
-        let result = try GraphQueryEvaluation(request: request, graphID: session.graphID, records: records, checkCancellation: check,
-            work: work, property: value, exists: { try self.header($0, $1) != nil }, hydrate: full, eligibleIDs: eligible, nativeOrder: order).execute(nativeCandidates: session.nativeCandidateCount, propertyBytesCharged: 0)
+        let result = try GraphQueryEvaluation(request: request, graphID: graphID, records: records, checkCancellation: check,
+            work: work, property: value, exists: { try self.header($0, $1) != nil }, hydrate: full, eligibleIDs: eligible, nativeOrder: order).execute(nativeCandidates: nativeCandidateCount, propertyBytesCharged: 0)
+        try source?.validateResults(result)
         let diagnostics = diagnostics(nativePredicates > 0 || nativeSort ? .hybrid : .memory, nodes: records.count)
         return GraphQueryOutput(records: result.records, cursor: result.cursor, count: result.count, aggregate: result.aggregate, diagnostics: diagnostics, visits: result.visits)
     }

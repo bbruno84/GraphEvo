@@ -47,6 +47,12 @@ enum GraphNativeIdentityDatabaseAdapter {
                 return try list(context, graphID)
             }, query: { context, graphID, request in
                 try access.checkGraph(context, graphID: graphID)
+                if GraphNativePropertyStorage.enabled(context), !allowsMirroring {
+                    return try GraphValueDecodingDiagnostics.checking {
+                        try GraphQueryValidation.request(request, graphID: graphID)
+                        return try GraphTypedQueryExecution(context: context, graphID: graphID, request: request).execute()
+                    }
+                }
                 guard let query = base.graph.query else { throw GraphStoreError.unsupportedLayout }
                 return try query(context, graphID, request)
             })
