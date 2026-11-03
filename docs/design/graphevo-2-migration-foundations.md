@@ -22,6 +22,19 @@ participant-origin execution and mandatory v1 acceptance remain open.
 route through #129 after local/device review and full CI #331. Public bootstrap,
 historical/production source coverage and new-cloud activation are distinct gates. Future branches start from `codex/graphevo-2`.
 
+## Subsequent integrated work — audited 2026-11-03
+
+The opening status records the MF01–MF07 checkpoints. MF08/#130 adds the
+[concrete internal migration definitions](graphevo-2-store-migrations.md);
+MF09/#136 connects [local conversion/opening](graphevo-2-local-v1-bootstrap.md);
+MF10/#140 adds [authoritative new-cloud activation](graphevo-2-authoritative-cloud-bootstrap.md);
+and MF11/#141 adds [Core Data staged v1 conversion](graphevo-2-native-v1-migration.md).
+#142 protects the working-copy lifetime across cooperating processes; #144
+includes outgoing asset spool files in native backup/workspace copies. Ordered
+prerequisites below describe responsibilities, not six unimplemented increments.
+Public execution/bootstrap, production/historical source coverage and host
+old-client cutover remain open. See the [roadmap audit](results/roadmap-audit-2026-11-03.md).
+
 ## Responsibility boundary
 
 The consumer defines the transformation, application compatibility and

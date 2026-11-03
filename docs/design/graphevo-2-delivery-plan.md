@@ -1,5 +1,41 @@
 # GraphEvo 2 — delivery plan
 
+## Current delivery position — audited 2026-11-03
+
+The audit is pinned to integrated `38f24f6` (PR #144). See the
+[audit and evidence map](results/roadmap-audit-2026-11-03.md) for source/test
+anchors and remaining gates. Dated milestones below retain their original scope.
+
+| Workstream | Integrated implementation | Remaining delivery work |
+|---|---|---|
+| Local ownership and models | A1–A3, S04 typed storage, coordinated gateway and cooperating-process locks (#142) | Supported public opening surface, complete Swift 6/distribution audit and final platform/process contract |
+| Query and observation | A7/A8, P02 native planning, descriptor-local inputs (#143), async state and Combine | Final capability/cost contract, O04 live processing versus durable replay decision, observer/device envelope |
+| Custom CloudKit sync and sharing | PH pending work, shared engines, transport/conflicts/pause/foreground scheduling (T01–T06), zone sharing and lifecycle (T07/T08) | Public host/invitation integration, account/cache policy, structural conflict scope and interruption/restore acceptance |
+| Attachments | Native permanent content, local lifecycle and reference-only durable CKAsset spool (#144) | Physical acceptance of the new spool and supported device/resource envelope |
+| Migration and backups | MF01–MF08 protection/packages/ledger/workspace/publication/internal executor, MF09 local bootstrap, MF10 authoritative new-cloud bootstrap, MF11 Core Data staged v1 conversion | Public bootstrap/execution, production/historical source matrix, host v1 cutover policy and full recovery acceptance |
+
+These are implemented alpha capabilities with bounded evidence. They do not
+close the complete beta gates. Package-only coordination is not an available
+public custom-sync opening API.
+
+Proposed delivery order:
+
+1. Finish bounded physical acceptance of #142–#144, especially the new spool.
+2. Define and integrate one supported public opening/migration/cloud host flow,
+   preserving the existing owner, backup and recovery boundaries.
+3. Resolve remaining beta decisions: app/widget roles and first launch,
+   account/cache handling, O04 processing semantics, conflict scope, supported
+   platforms/processes and API/schema reconciliation. Background scheduling
+   needs an explicit scope; foreground T06 does not supply it.
+4. Review representative end-to-end v1 conversion and independent cloud recovery
+   against the beta gate; enumerate remaining stable-release validation.
+5. Enter beta only after the checklist's B gates are accepted. During beta,
+   complete R acceptance, real application adoption, stress/performance and
+   distribution checks before stable 2.0.
+
+This order is an audit recommendation, not release authorization, a new schema
+decision or a change to B/R requirements.
+
 2026-11-02 implementation update: [S04/P01–P03](graphevo-2-typed-properties.md)
 selects typed local properties on the package-only custom-sync runtime, with
 recorded physical/cost bounds. [MF09](graphevo-2-local-v1-bootstrap.md) connects
@@ -89,7 +125,11 @@ this historical table is not an outstanding branch-promotion instruction.
 | Migration | [SM01–SM03](results/schema-migration-2026-10-30.md) adds bounded additive local/cloud schema migration evidence, including final staged-handler data recovered before normal post-open saves. Explicit local adoption/upgrades exist; complete v1 conversion and coordinated cloud cutover do not. Representative end-to-end feasibility is required before beta; full tooling/application validation must pass before stable |
 | Beta | Not declared. Eight implementation candidates do not alone satisfy the entry gate below |
 
-## Alpha sequence
+## Historical alpha implementation sequence
+
+The stage descriptions below preserve the original incremental scope. Use the
+current delivery position above for work selection; old stacked-PR, mirroring
+and pending-implementation wording does not reopen completed work.
 
 The first [A1 local ownership increment](graphevo-2-store-runtime.md) now lives
 in an internal Swift 6 target, using the current schema. It has awaited
@@ -283,8 +323,10 @@ current destructive operation. Track delivery in the post-alpha checklist.
 The current [migration foundations roadmap](graphevo-2-migration-foundations.md)
 orders reversible local write admission, a central verified BackupManager with
 caller-supplied reasons, independent shared graph-control metadata, an isolated
-working graph/PH baseline and recoverable publication. These are planned on top
-of reviewed #120; neither the foundations nor mandatory v1 conversion are complete.
+working graph/PH baseline and recoverable publication. Package-only foundations
+integrate through MF01–MF08, followed by local bootstrap, authoritative new-cloud
+activation and native staged conversion in MF09–MF11. Public activation and
+full mandatory-v1 acceptance remain open.
 Consumer-defined compatibility and cross-device coordination remain consumer policy.
 
 The [M1–M6 plan](graphevo-2-migration-manager.md) renews the manager alongside

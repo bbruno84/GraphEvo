@@ -15,8 +15,11 @@ into `codex/graphevo-2` before the next implementation branch:
    operations against S03 with the same budgets, then test fresh CloudKit,
    sharing and recovery fixtures on owner/participant devices. No container reset.
 
-This document defines P01. P02 and P03 remain open until their implementation and
-recorded evidence exist. TP01 is experimental evidence, not production adoption.
+P01 integrates through #133, P02 through #134 and P03 has its bounded
+[runtime/physical evidence](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md).
+Sort capacity follows in #137, protected mutation reuse in #142 and descriptor-local
+query preparation in #143. Broader capacity/device acceptance remains open.
+TP01 is retained experimental evidence, not the adopted implementation.
 
 ## Model and opening
 

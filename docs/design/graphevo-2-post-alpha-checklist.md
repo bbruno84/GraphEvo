@@ -28,6 +28,30 @@ review and the migration feasibility review precede consolidation; they are not 
 calling this a post-alpha checklist. No release branch or tag follows from
 creating this document.
 
+## Current gate interpretation — audited 2026-11-03
+
+The [audit and evidence map](results/roadmap-audit-2026-11-03.md) is pinned to
+integrated #144. Unchecked B/R items below are broad acceptance obligations;
+they must not be read as proof that their implementation is absent. Dated S01,
+S03, native-mirroring and early T01 text retains its historical tested scope.
+The selected custom-sync store uses S04; old-model device evidence is not
+transferred automatically to a newer transport or schema.
+
+| Remaining gate group | Existing implementation | Evidence or decision still needed |
+|---|---|---|
+| PA01/PA02/PA10: public API and supported runtime | Typed scopes/models, package-only ContextManager, cooperating-process locks | Public coordinated opening/bootstrap, complete Swift 6 audit, OS/process matrix, API/schema reconciliation |
+| PA02: app/widget | Read-only/process safeguards and bounded earlier App Group evidence | Current custom-sync app/widget roles, interactive-write scope, first-launch/migration and physical multiprocess acceptance |
+| PA03/PA04: cloud lifecycle | T01–T08 transport, conflicts, pause, foreground scheduling, sharing and lifecycle | Account/cache policy, public invitation integration, structural conflict scope, broader interruption/restore and new-spool device acceptance |
+| PA05/PA06: supported costs | S04/P01–P03, #142 inventory reuse, #143 descriptor queries, #144 spool | Publish supported limits; broader device/capacity acceptance and beta performance measurements |
+| PA07: observation/processing | A8 async state, Combine and live rescan hints | O04 live processing versus durable replay, recovery contract and current-backend acceptance |
+| PA08/PA09: migration/recovery | MF01–MF11 bounded protected execution, backups, conversion and authoritative new-cloud bootstrap | Public flow, historical/production source matrix, host old-client cutover, interruption and restoration acceptance |
+| PA10: stable release | Independent consumers and reviewed CI checkpoints | Real application adoption, full production acceptance, distribution and release evidence (R) |
+
+No broad B/R gate closes solely through this audit. Background scheduling and
+interactive widget writes require explicit scope decisions; this audit neither
+adds them as mandatory features nor excludes them. Real application adoption
+remains R; a pre-beta application pilot is a recommendation, not a moved gate.
+
 ## Consolidation evidence
 
 The maintainer selected [controlled-store access](graphevo-2-controlled-store-access.md)
@@ -45,8 +69,8 @@ on `2e0d2b171c46661560646482b65ac974b4a50278`: 974 macOS functions,
 971 passed iOS functions with the known skip and both Swift 6 consumers.
 The manager remains the coordinated writable gateway; transaction-local reuse
 requires protected contexts, and workspace ownership stays exclusive until
-detach. This closes that narrow implementation increment. Descriptor-first
-query adoption, reference-only transport recovery and broader release gates
+detach. This closes that narrow implementation increment. Query adoption
+follows in #143 and reference-only transport in #144; broader release gates
 remain open. Cooperating-process regression evidence does not certify old or
 external writers.
 
@@ -59,8 +83,8 @@ reviewed [v2 checkpoint #392](https://github.com/bbruno84/GraphEvo/actions/runs/
 on `5e258fdfc5564cf128aaf4ad6f82a7f4f1ddb1a2`: 648 macOS and 646 iOS
 functions without failures/skips and both Swift 6 consumers. The capacity case
 passes locally on both platforms. This closes query-source adoption only;
-broader acceptance and asset transport remain open. Private F's timing is not a
-generalized or device checkpoint.
+broader acceptance remains open; asset transport subsequently integrates through
+#144. Private F's timing is not a generalized or device checkpoint.
 
 A8 is reviewed/merged. [C01](results/c01-cost-baseline-2026-10-27.md) begins the
 cost review with 182 validated samples across eight local synthetic configurations.
@@ -166,6 +190,14 @@ Sources: [A1](graphevo-2-store-runtime.md),
   or a prerequisite for migration. See [the roadmap](graphevo-2-delivery-plan.md#complete-graph-deletion--planned-lifecycle-work).
 
 ## PA03 — graph separation, accounts and native sharing
+
+Current implementation correction: #106/#108/#109 and T01–T08 implement the
+coordinator, PH processing, engines, record effects, conflicts, foreground sync
+and zone sharing/lifecycle. Their bounded reports are linked under the T03–T08
+follow-ups below. References within the early bullets to missing upload/import,
+conflict resolution, scheduling or sharing describe the earlier foundation,
+not the integrated implementation. The broad boxes stay open for the public,
+account/process, interruption and recovery acceptance specified above.
 
 M17 replaces automatic native mirroring with explicit CloudKit sync. Existing
 native-sharing evidence remains historical. The
@@ -283,10 +315,12 @@ are not resolved by that result.
   identity and ownership model as its starting point. Measure envelope decoding,
   full-content listing, copies, peak memory, latency and storage with representative
   content/sizes/graph counts; select representation and supported size envelope.
-- [ ] **B** Complete C03a split-file acceptance: native participant insertion and
-  two-value replacement/recovery, partial import/conflicting values, mixed old/new
-  stores and coordinated legacy conversion. Metadata listing is not a body
-  availability certificate. See the [experiment](graphevo-2-attachment-metadata-experiment.md).
+- [ ] **B** Reconcile C03a's split metadata/content requirements with the
+  selected S04/custom-sync attachment path: participant insertion, replacement,
+  partial import/conflicts and legacy conversion. Retain the native-mirroring
+  [experiment](graphevo-2-attachment-metadata-experiment.md) as historical evidence;
+  do not transfer its acceptance to the new spool. Metadata listing does not
+  certify body availability.
 - [ ] **B** Decide whether query/list costs require metadata separation or schema
   changes. Document actual availability and unsupported streaming/progress/
   eviction/selective-download behavior rather than promising these capabilities.
@@ -305,10 +339,11 @@ Sources: [A6 contract](graphevo-2-attachments.md),
 
 ## PA06 — query semantics, execution costs and pagination
 
-- [ ] **B** Review A7's bounded native inventory plus memory strategy with many
-  graphs, selective queries and file-heavy records. Measure decoding of unrelated
-  scoped properties, native candidate amplification and index opportunities;
-  choose a supported production envelope and explicit capability matrix.
+- [ ] **B** Finalize the supported query envelope/capability matrix after P02
+  native planning and #143 descriptor-local hydration. Their bounded review and
+  measurements are complete; representative selective/file-heavy workloads and
+  candidate amplification still need acceptance. Retain A7 memory evaluation
+  where explicitly selected; do not restart a planner already integrated.
 - [ ] **B** Finalize AND composition, literal strings, null/missing, numeric
   precision, ordering, count/projection/aggregate and traversal semantics with
   application adaptation examples. Decide scope of optional grouped aggregates,
@@ -366,9 +401,11 @@ close O04 or mark the wider beta/stable items above complete.
 - [x] M16 supersedes M2b.1 application-version contracts and the proposed format
   registry with [consumer-owned data](graphevo-2-data-formats.md). S02 removes the
   native version column and global format refusal. Historical results retain scope.
-- [ ] **B** Validate the selected [S03](graphevo-2-history-schema.md) sharing and independent
-  recovery on explicitly prepared physical/cloud fixtures. S01's previous device
-  result does not close this revised-schema gate.
+- [ ] **B** Reconcile selected S04/custom-sync sharing and independent recovery
+  acceptance with [P03's bounded physical result](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md)
+  and subsequent transport changes, including #144's new spool. Historical
+  S01/native-mirroring results do not certify the current complete path; do not
+  require obsolete S03 fixtures as a substitute for current-model acceptance.
 - [ ] **B** Complete consumer-defined migration execution with resource/process
   readiness, protected-source backups, retention, recovery and activation. Keep
   the exact M2a fixture isolated; no public format registry is required.
@@ -427,10 +464,10 @@ isolation. Current one-graph/store backups must preserve other graphs' shared
 engine/session state and must not roll back the cloud control ledger. Historical
 paired-store evidence below retains its original backend scope.
 
-- [ ] **B** Complete compressed local packages with manifest-based filesystem
-  discovery, async export/import and bounded extraction; select the format from
-  database/media measurements. Verify coherent copy, atomic publication and
-  interruption recovery separately. Validate transfer between devices and
+- [ ] **B** Accept MF02's implemented `.geb` packages, manifest discovery,
+  async export/import and bounded extraction for the supported production
+  envelope; the format and implementation are already selected. Verify coherent
+  copy, atomic publication and interruption recovery separately. Validate transfer between devices and
   independent cross-user import without inherited sharing/transport ownership.
   See [backup roadmap](graphevo-2-migration-foundations.md#compressed-local-packages-and-portability--next-backup-increment).
   [MF02](graphevo-2-backup-packages.md) integrates the `.geb` package-only baseline
@@ -809,6 +846,11 @@ when closing any gate; do not infer success from an unrun or skipped workflow.
 
 ## T04 asset follow-ups
 
+#144 supersedes the original inline durable-body representation with owned-file
+references. The rewrite/copy measurement item below applies to that current
+representation; it must not trigger reimplementation of already integrated
+staging/restart recovery. New-spool physical acceptance remains open.
+
 - [ ] **R** Measure durable portable asset copies in frozen attempts and engine
   envelopes, whole-document rewriting, memory/I/O and send staging cleanup under
   realistic concurrency/media, including additional asset-conflict record fetches. Keep 10MiB/file and 32MiB encoded state bounds;
@@ -914,10 +956,13 @@ fourteen physical stages and complete runtime measurements, without a cloud rese
 - [ ] Retain the measured +6.9% fixture disk/index cost and simple-count cost at
   400 records in the end-of-alpha cost review. The approximately 3x selected-row/
   page gain does not establish every supported production envelope.
-- [ ] Review repeated full adapter Session construction during bulk inserts.
-  The 2,000-record regression now prepares data with one confined session to
-  avoid starving unrelated CI tests; ordinary per-call insertion and its cost
-  remain unchanged in the external Release experiment and product API.
+- [x] Review repeated full adapter Session construction during bulk inserts.
+  [Controlled-store access](graphevo-2-controlled-store-access.md), #142, adopts
+  transaction-local inventory reuse only under the coordinated writer/process
+  fence, with rollback/refusal invalidation and final-detach protection. Full
+  checkpoint #387 on `2e0d2b1` passes macOS/iOS and both Swift 6 consumers.
+  Generic/unprotected adapters retain their separate path; broader device/batch
+  performance measurement remains R work.
 
 ## MF09 local conversion/opening checkpoint
 

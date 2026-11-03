@@ -6,6 +6,15 @@ delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
+## Roadmap audit — 2026-11-03
+
+The [audit](results/roadmap-audit-2026-11-03.md) reconciles integrated #144
+(`38f24f6`) with the delivery plan, checklist, code and retained reports. The
+[current delivery position](graphevo-2-delivery-plan.md#current-delivery-position--audited-2026-11-03)
+separates implemented alpha work, remaining public integration and beta/stable
+acceptance. It supersedes pending-work summaries in historical sections below;
+no new implementation, acceptance result or release is implied by this audit.
+
 ## Current focused work
 
 The third controlled-store increment integrates through
@@ -37,8 +46,8 @@ retains complete result equality and reduces the measured query from roughly
 passes on `5e258fdfc5564cf128aaf4ad6f82a7f4f1ddb1a2`: 648 macOS and
 646 iOS functions without failures/skips, plus both Swift 6 consumers. Capacity
 retains its local passing evidence. Final notes are documentation-only with
-unchanged shipping/test/consumer/workflow inputs. Reference-only asset queues
-remain the next separate increment; no release/device/cloud gate closes.
+unchanged shipping/test/consumer/workflow inputs. Reference-only asset queues subsequently integrate through #144; no
+release/device/cloud gate closes from the query checkpoint.
 
 The selected [controlled-store consolidation](graphevo-2-controlled-store-access.md)
 continues with reference-only asset queues. Its first
@@ -795,9 +804,9 @@ proves its original S01 sharing/file/recovery fixture, not revised S02 or broade
 | M1 journal | Package-only checkpoint/intent foundation, no production consumer executor |
 | M2a conversion | Isolated package-only model; atomic data/version/marker publication and native reopen/recovery tested; no public activation or CloudKit admission |
 | Historical identity/observation alternatives | Retained probes and reports, not selected by default public opening paths |
-| Complete M2 | **Not implemented**: protected-source lifecycle, process readiness, consumer-plan scheduling and public activation. The proposed application format registry is withdrawn |
-| M3–M5 | **Not implemented** end to end: v1 source/codec matrix, full data/topology/file conversion, recovery and evaluated optional API adapter |
-| M6 | **Not implemented**: durable discovery and later incompatible/partial/old cloud updates with bounded convergence |
+| Complete M2 | Protected admission, backups, working-copy preparation and publication now exist through MF01–MF08. Public consumer scheduling/activation and full acceptance remain open; the application format registry stays withdrawn |
+| M3–M5 | MF07/MF11 implement bounded v1 conversion; MF09/MF10 connect local and authoritative new-cloud bootstrap internally. Historical/production source acceptance, host cutover, public integration and optional API-adapter evaluation remain open |
+| M6 | Transport has durable discovery/inbox/effect recovery; consumer compatibility and later incompatible application updates remain a distinct unresolved scope, without a library format registry |
 
 See the [manager sequence](graphevo-2-migration-manager.md) and
 [M2a](graphevo-2-data-migration-local.md). Consumers migrate application data;
@@ -819,7 +828,10 @@ The policy is reviewed/merged through #113 as `31eac7c`; ordinary-alpha run
 tests. Stable/v1/release automatic checks remain enabled. The #112 integration
 run `41192922760` also passed on `30f7089` before the new policy took effect.
 
-## Next steps and operating rule
+## Historical sequencing notes and operating rule
+
+For current sequencing use the audited delivery position above. The list below
+records the earlier T06 checkpoint; T07/T08 and MF01–MF11 are now integrated.
 
 1. T03 conflict policies, T04 CKAsset transport, T05 per-graph pause and T06
    foreground automatic orchestration are integrated through #115/#116/#117/#118

@@ -8,11 +8,14 @@ Consumers own application compatibility and cross-device coordination. Native
 mirroring/import-version assumptions below retain historical scope and must not
 be implemented as current requirements. M1/M2a evidence remains unchanged.
 
-Status: M1 implements the package-only Swift 6 checkpoint foundation; M2a adds
-isolated local execution. No public migration executor, production source
-conversion, runtime admission, import compatibility pipeline or cloud cutover is
-activated. The existing v1 manager and registered application migrations retain
-their behavior. See specification section 11 and PA08 in the post-alpha checklist.
+Current status (2026-11-03): M1/M2a are historical foundations. MF01–MF08
+now implement package-only protected admission, verified backups, working-copy
+execution and recoverable publication. MF09–MF11 add local opening, authoritative
+new-cloud bootstrap and native staged v1 conversion. Public execution/bootstrap,
+production/historical source acceptance, host v1 cutover and later incompatible
+consumer-update policy remain open. See the
+[roadmap audit](results/roadmap-audit-2026-11-03.md). The existing v1 manager
+and registered application migrations retain their behavior. See specification section 11 and PA08 in the post-alpha checklist.
 
 The subsequent [M2a local vertical slice](graphevo-2-data-migration-local.md)
 adds declared data versions, prepared pure consumer transformations, atomic
