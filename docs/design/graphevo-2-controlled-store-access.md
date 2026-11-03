@@ -3,7 +3,8 @@
 Status: selected direction. The first ownership increment integrates through
 [PR #142](https://github.com/bbruno84/GraphEvo/pull/142) into `codex/graphevo-2`.
 [Descriptor-first query scopes](graphevo-2-descriptor-query-scopes.md) integrate
-through #143; reference-only asset queues remain subsequent work. No public
+through #143; [durable reference-only asset queues](graphevo-2-durable-asset-spool.md)
+integrate through #144. No public
 opening API is added. Native S04 and ordinary
 serialized application values stay unchanged.
 
@@ -19,8 +20,9 @@ permanent attachment ownership is not moved to a second filesystem library.
 
 These are separate implementation areas. #142 implements the controlled writer
 boundary and mutation inventory lifetime. #143 adopts descriptor-local general
-query execution after matched comparison and review. Reference-only durable asset
-transport still requires its own format, budget and recovery review before adoption.
+query execution after matched comparison and review. #144 adopts reference-only
+durable asset transport after review and full checkpoint #41715897139; physical
+acceptance of that new spool remains open.
 Opening latency, metadata-list tuning, batch-size/device profiling and broader
 performance envelopes belong to beta validation, not additional prerequisites
 for this ownership increment.
