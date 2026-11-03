@@ -40,9 +40,9 @@ package enum GraphTypedStoreAdapter {
                     return try session.snapshot(node, id: id)
                 }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
             },
-            insert: { context, graphID, record in try Session(context, graphID, database: database).insert(record) },
-            patch: { context, graphID, patch in try Session(context, graphID, database: database).patch(patch) },
-            delete: { context, graphID, id in try Session(context, graphID, database: database).delete(id) },
+            insert: { context, graphID, record in try withMutationSession(context, graphID, database: database) { try $0.insert(record) } },
+            patch: { context, graphID, patch in try withMutationSession(context, graphID, database: database) { try $0.patch(patch) } },
+            delete: { context, graphID, id in try withMutationSession(context, graphID, database: database) { try $0.delete(id) } },
             attachmentMetadata: { context, graphID in
                 let session = try Session(context, graphID, database: database)
                 return try session.nodes.compactMap { id, node -> GraphAttachmentMetadata? in
@@ -111,6 +111,31 @@ package enum GraphTypedStoreAdapter {
             }
         }
         return adapter
+    }
+
+    /// Reuse is admitted only by the runtime's protected transaction. Legacy/mirrored and
+    /// uncoordinated contexts retain fresh validation. No state survives its native context.
+    private static func withMutationSession<Value>(_ context: NSManagedObjectContext, _ graphID: GraphID,
+        database: Bool, _ body: (Session) throws -> Value) throws -> Value {
+        guard let holder = context.userInfo[StoreNativeContext.mutationSessionKey] as? StoreMutationSession else {
+            return try body(Session(context, graphID, database: database))
+        }
+        do {
+            let session: Session
+            if let current = holder.value as? Session, current.graphID == graphID, current.database == database {
+                session = current
+            } else {
+                session = try Session(context, graphID, database: database)
+                holder.value = session
+            }
+            let result = try body(session)
+            session.reconcilePendingState()
+            return result
+        } catch {
+            // The consumer may catch a refusal and continue editing in the same transaction.
+            holder.value = nil
+            throw error
+        }
     }
 
     private static func catalog(_ context: NSManagedObjectContext) throws -> [GraphID] {
@@ -398,7 +423,14 @@ package enum GraphTypedStoreAdapter {
         }
 
         private func metadataValue(_ node: Node, _ key: String) -> Any? {
-            metadata?.value(for: node, key: key)
+            if let metadata { return metadata.value(for: node, key: key) }
+            return node[dynamicMember: key]
+        }
+
+        fileprivate func reconcilePendingState() {
+            nodes = nodes.filter { !$0.value.node.isDeleted }
+            // Native objects carry inverses and new values; frozen metadata indexes do not.
+            metadata = nil
         }
 
         var isShared: Bool { StoreNativeContext.isShared(root?.runtimeObjectID.persistentStore, in: context) }

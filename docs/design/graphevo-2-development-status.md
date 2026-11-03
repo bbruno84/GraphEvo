@@ -1,12 +1,30 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-02. This is the single entry point for **integrated work,
+Updated: 2026-11-03. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
 ## Current focused work
+
+The selected [controlled-store consolidation](graphevo-2-controlled-store-access.md)
+continues with descriptor-first queries and reference-only asset queues. Its first
+ownership increment integrates through
+[PR #142](https://github.com/bbruno84/GraphEvo/pull/142), directly from #141.
+It retains the manager gateway, adds cooperating process
+writer/presence exclusion and transaction-local mutation inventory reuse.
+Descriptor-first queries and reference-only asset queues with native permanent
+bodies remain separately reviewable implementation areas. Private research is
+not merged code or an integrated CI checkpoint. No beta/tag gate closes here.
+
+Reviewed [full checkpoint #387](https://github.com/bbruno84/GraphEvo/actions/runs/41692421379)
+passes on `2e0d2b171c46661560646482b65ac974b4a50278`: 974 macOS functions,
+971 passed iOS functions with one known skip, and both Swift 6 consumers.
+The first iOS job acquired no runner and executed no steps; its sole retry passes
+on the same head, retaining the successful macOS job. Earlier #384 retains its
+actual iOS test-timeout failure, whose cause is unproven. Final integration notes
+are documentation-only; shipping/test/consumer/workflow inputs match #387.
 
 [MF11 native staged v1 conversion](graphevo-2-native-v1-migration.md) integrates
 through [PR #141](https://github.com/bbruno84/GraphEvo/pull/141), directly from

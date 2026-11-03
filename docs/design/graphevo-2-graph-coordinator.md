@@ -8,6 +8,12 @@ as `32ae83f` after exact-head iOS/macOS CI `41119977677` passed.
 
 ## Ownership and entry points
 
+The [controlled-access continuation](graphevo-2-controlled-store-access.md)
+retains this manager as the coordinated writable gateway. Generic writable
+runtime admission of a purpose-marked coordinated file is refused; read-only
+local access remains separate. Stable interprocess writer locks and lifetime
+presence claims extend the original process-local ownership described below.
+
 `GraphCoordinatorFactory.shared` is the single internal production
 `GraphContextManager`. The store target compiles its manager/coordinator and
 consumer lease lifecycle in Swift 6; the legacy target supplies only the

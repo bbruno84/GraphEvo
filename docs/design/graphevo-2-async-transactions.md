@@ -1,5 +1,10 @@
 # GraphEvo 2 — A2 async operations and transactions
 
+The [controlled-store continuation](graphevo-2-controlled-store-access.md) adds
+cooperating interprocess locks for plain local runtime stores and bounds mutation
+inventory reuse to a protected coordinated transaction. The historical A2
+checkpoint below retains its original in-process scope.
+
 Status: local runtime implementation, 2026-10-26. Read with the
 [specification](graphevo-2-specification.md) and
 [A1 ownership contract](graphevo-2-store-runtime.md). The current schema stays
