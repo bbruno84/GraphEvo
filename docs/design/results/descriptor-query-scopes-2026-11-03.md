@@ -1,6 +1,7 @@
 # Descriptor-first query comparison — 2026-11-03
 
-Status: bounded local comparison, not a remote integration, device or cloud gate.
+Status: bounded local comparison with reviewed integration evidence below,
+not a device or cloud gate.
 See the [query-scope contract](../graphevo-2-descriptor-query-scopes.md).
 
 ## Matched inputs
@@ -73,3 +74,14 @@ These measurements cover one local full-record scalar query. Sort/cursor,
 related/traversal, pending/memory and error behavior derive from committed tests,
 not this timing cohort. Broader datasets, devices, network, opening/listing,
 memory envelopes and release acceptance retain their own gates.
+
+## Reviewed integration
+
+[PR #143](https://github.com/bbruno84/GraphEvo/pull/143) integrates the generalized
+source directly into `codex/graphevo-2`. Reviewed
+[v2 checkpoint #392](https://github.com/bbruno84/GraphEvo/actions/runs/41702479602)
+passes on `5e258fdfc5564cf128aaf4ad6f82a7f4f1ddb1a2`: 648 macOS and 646 iOS
+functions without failures/skips, and both Swift 6 consumers. Complete local
+macOS validation passes 980 functions; focused iOS passes 23, including capacity.
+Final integration notes are documentation-only; shipping/test/consumer/workflow
+inputs match the reviewed checkpoint. Private fixtures and logs are excluded.

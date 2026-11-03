@@ -50,11 +50,16 @@ query adoption, reference-only transport recovery and broader release gates
 remain open. Cooperating-process regression evidence does not certify old or
 external writers.
 
-The [descriptor-first query candidate](graphevo-2-descriptor-query-scopes.md)
+The [descriptor-first query increment](graphevo-2-descriptor-query-scopes.md)
 separates query-local inputs from explicit auditing without changing S04 storage.
 Its [matched local comparison](results/descriptor-query-scopes-2026-11-03.md)
-retains complete results with approximately sixfold query improvement. Reviewed
-integration and broader acceptance remain open; private F's timing is not a
+retains complete results with approximately sixfold query improvement. It
+integrates through [PR #143](https://github.com/bbruno84/GraphEvo/pull/143), with
+reviewed [v2 checkpoint #392](https://github.com/bbruno84/GraphEvo/actions/runs/41702479602)
+on `5e258fdfc5564cf128aaf4ad6f82a7f4f1ddb1a2`: 648 macOS and 646 iOS
+functions without failures/skips and both Swift 6 consumers. The capacity case
+passes locally on both platforms. This closes query-source adoption only;
+broader acceptance and asset transport remain open. Private F's timing is not a
 generalized or device checkpoint.
 
 A8 is reviewed/merged. [C01](results/c01-cost-baseline-2026-10-27.md) begins the

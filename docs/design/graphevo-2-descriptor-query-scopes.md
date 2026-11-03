@@ -1,7 +1,7 @@
 # Descriptor-first local query scopes
 
-Status: candidate on `codex/v2-descriptor-query-scope`, directly from integrated
-#142. Read with [controlled access](graphevo-2-controlled-store-access.md),
+Status: integrates through [PR #143](https://github.com/bbruno84/GraphEvo/pull/143),
+directly from integrated #142. Read with [controlled access](graphevo-2-controlled-store-access.md),
 [A7](graphevo-2-queries.md) and [P02](graphevo-2-typed-properties.md). No native
 schema, stored envelope, cloud document or public signature changes.
 
@@ -75,10 +75,18 @@ Private F's narrow timings do not establish the generalized path's performance.
 The [matched local comparison](results/descriptor-query-scopes-2026-11-03.md)
 retains complete result equality and improves the selected query from roughly
 263–267 to 41–43 ms. This supports the generalized source, not a promise of F's
-hardcoded timings or broad device performance. Reviewed integration remains pending.
+hardcoded timings or broad device performance. Reviewed integration evidence is
+recorded with that result.
 
 Local checks on `954e6ba6da5ffd43ab02cf92954890b4fe0c1c23` pass 980 macOS
 functions (331 legacy, 527 store, 92 runtime, 30 model), 23 focused iOS 18.5
 Simulator query functions with no failures/skips, both Swift 6 consumers and
 manifest/diff checks. The focused set includes the unchanged capacity case.
 This is not a remote checkpoint, physical-device or cloud acceptance result.
+
+Reviewed [v2 checkpoint #392](https://github.com/bbruno84/GraphEvo/actions/runs/41702479602)
+passes on `5e258fdfc5564cf128aaf4ad6f82a7f4f1ddb1a2`: 648 macOS and
+646 iOS functions, zero failures/skips, and both Swift 6 consumers. The capacity
+case is excluded by that profile and retains its passing local macOS/iOS result.
+Final integration notes are documentation-only; shipping/test/consumer/workflow
+inputs match the checkpoint. No broad release/device/cloud gate closes.
