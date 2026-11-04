@@ -35,6 +35,15 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+[H01 public coordinated entry](graphevo-2-public-entry.md) is the selected
+contract integrating through PR #149. It proposes an explicitly constructed,
+application-owned context, leased cloud connections and an explicit supported
+local/v1/private-cloud/peer flow. Synchronized local opens retain identity checks
+and account observation even without a transport connection; local-only stores
+remain independent of iCloud availability. Cross-context ownership stays guarded. Foreground activity belongs to the context.
+Implementation follows on a focused branch; public invitation onboarding remains
+a subsequent increment. This contract integration changes no shipping code.
+
 The [account-isolation contract](graphevo-2-cloud-account-isolation.md) integrates
 through [PR #147](https://github.com/bbruno84/GraphEvo/pull/147), directly from
 integrated #146. The selected default retains data separately, notifies consumers,
