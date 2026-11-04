@@ -177,3 +177,18 @@ public typealias GraphCloudActivationError = GraphEvoStore.GraphCloudActivationE
 public typealias GraphCloudActivationCleanupFailure = GraphEvoStore.GraphCloudActivationCleanupFailure
 
 public typealias GraphV1BootstrapError = GraphEvoStore.GraphStoreMigrationError
+
+public typealias GraphCloudSharePermission = GraphEvoStore.GraphCloudSharePermission
+public typealias GraphCloudSharingStatus = GraphEvoStore.GraphCloudSharingStatus
+public typealias GraphCloudSharingPhase = GraphEvoStore.GraphCloudSharingPhase
+public typealias GraphCloudSharingRole = GraphEvoStore.GraphCloudSharingRole
+public typealias GraphCloudRemovalReason = GraphEvoStore.GraphCloudRemovalReason
+public typealias GraphCloudParticipant = GraphEvoStore.GraphCloudParticipant
+public typealias GraphCloudParticipantIdentity = GraphEvoStore.GraphCloudParticipantIdentity
+public typealias GraphCloudDiscoveryError = GraphEvoStore.GraphCloudDiscoveryError
+public typealias GraphCloudSharingError = GraphEvoStore.GraphCloudSharingError
+public typealias GraphCloudJoinState = GraphEvoStore.GraphCloudJoinState
+@available(iOS 17, macOS 14, *)
+public typealias GraphCloudJoin = GraphEvoStore.GraphCloudJoin
+@available(iOS 17, macOS 14, *)
+public typealias GraphCloudSharingPresentation = GraphEvoStore.GraphCloudSharingPresentation

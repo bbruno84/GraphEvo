@@ -30,7 +30,11 @@ ownership, interrupted acceptance, observable permissions and destructive
 leave/recovery. The maintainer selects native invitations plus a fixed system
 record containing GraphID and descriptor format version. Descriptor compatibility,
 pre-GraphID join recovery and native UI implementation/evidence are still required
-before closing PA03's B gate. All acceptance boxes remain unchanged.
+before closing PA03's B gate. All acceptance boxes remain unchanged. The H02 implementation candidate adds a
+validated explicit session-8 upgrade and initial-save participant markers; public
+injected/local evidence does not close native UI/two-account acceptance. The new
+cloud record type requires Production deployment and stopping old alpha writers;
+it is not a distributed old-client fence.
 
 ## How to close an item
 

@@ -1,7 +1,8 @@
 # H02 — public sharing through the coordinated context
 
-Status: proposed contract, 2026-11-04. No H02 implementation or acceptance is
-claimed. Base: integrated H01/#151 (`a1097ff1`) and companion demo PR #2.
+Status: selected direction and implementation candidate, 2026-11-04.
+Implementation is under local verification on codex/v2-public-sharing; it is not
+yet reviewed/integrated or physically accepted. Base: integrated H01/#151 (`a1097ff1`) and companion demo PR #2.
 Read with [H01](graphevo-2-public-entry.md), [T07](graphevo-2-zone-sharing.md),
 [T08](graphevo-2-sharing-lifecycle.md),
 [account isolation](graphevo-2-cloud-account-isolation.md) and the
@@ -45,8 +46,8 @@ not application payload versions, native Core Data schema or sync completion.
 Do not add account credentials, device-specific state, synchronization progress
 or an application-format registry. Additional metadata is future work, not a set
 of speculative fields to implement now. Define unknown-optional-field tolerance
-and reject unsupported required semantics before use. Exact record/type/key names
-and size bounds must be recorded with the implementation.
+and reject unsupported required semantics before use. The implementation uses type GraphEvoGraph, fixed record name graphevo.graph,
+format 1, graphID and a 16 KiB archived-record limit.
 
 Publish and validate the descriptor before exposing a new share. Read it directly
 by its fixed ID under the existing session scope gate, without fetching application
@@ -80,7 +81,9 @@ All additions target iOS 17/macOS 14 and remain in the GraphEvo product. Names
 below are proposed signatures, not implemented declarations. Supporting values
 have documented consumer fields and initializers where construction is meaningful;
 runtime routes, membership journals and native share archives stay internal.
-The sketch covers lifecycle operations only. Native presentation, acceptance and
+The historical sketch below covers lifecycle operations only; the implemented
+[API reference](../api/public-api.md#h02--native-sharing-and-graph-discovery-v2-alpha)
+and [guide](../guides/public-sharing.md) define the complete candidate surface. Native presentation, acceptance and
 post-discovery replica opening need separate reviewed signatures; they must not
 require the host to know GraphID before native acceptance. Platform invitation
 bridges may accept CloudKit types where needed, as allowed by M17.

@@ -74,6 +74,9 @@ public actor GraphStore {
     public nonisolated let id: GraphID
     let handle: StoreHandle
     private var publicContextLifetime: (any Sendable)?
+    package private(set) var publicCoordinatorGeneration: UUID?
+    package var publicLeaseIsOpen: Bool { publicContextLifetime != nil }
+    package func setCoordinatorGeneration(_ value: UUID) { publicCoordinatorGeneration = value }
     package private(set) var publicContextIdentity: UUID?
     package func retainPublicContext(_ lifetime: any Sendable, identity: UUID) {
         publicContextLifetime = lifetime; publicContextIdentity = identity

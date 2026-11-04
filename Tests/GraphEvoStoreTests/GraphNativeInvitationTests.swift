@@ -1,0 +1,262 @@
+import CloudKit
+import Foundation
+import Testing
+@testable import GraphEvo
+@testable import GraphEvoStore
+@testable import GraphEvoRuntime
+
+private actor NativeInvitationServer {
+    let graphID = GraphID()
+    let url = URL(string: "https://www.icloud.com/share/native-fixture")!
+    var descriptorAvailable = false
+    var accepted = false
+    var acceptWrites = 0
+    var discarded = false
+    func available() { descriptorAvailable = true }
+    func accept() { if !accepted { acceptWrites += 1; accepted = true } }
+    func discover() throws -> GraphID {
+        guard descriptorAvailable else { throw GraphCloudDiscoveryError.metadataPending }
+        return graphID
+    }
+    func discard() { discarded = true }
+    func invitation() -> GraphCloudNativeInvitation {
+        .init(url: url, zone: .init(scope: .shared, owner: "owner", name: "native-zone"), owner: "owner", permission: .readOnly, accepted: accepted)
+    }
+    nonisolated var adapter: GraphCloudAdapter {
+        let operations = GraphCloudSharingOperations(inspect: { _, _, _ in
+            .init(identity: GraphCloudShareIdentity.of(self.url), role: .participant, permission: .readOnly, participants: [])
+        }, execute: { _, _, _, _ in })
+        return GraphCloudAdapter(nativeSharing: .init(prepare: { _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
+            inspect: { _, _, _ in await self.invitation() }, accept: { _, _, _ in await self.accept() },
+            discover: { _, _ in try await self.discover() }, discard: { _, _, _ in await self.discard() }),
+            sharing: .init(operations: operations, invite: { _, _, _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
+                accept: { _, _, _ in .readOnly }),
+            account: { _ in "participant" }, make: { _, _, _, _ in .init(fetch: { _ in }, cancel: {}) })
+    }
+}
+
+private actor NativeInviteGate {
+    var opened = false
+    var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async { if !opened { await withCheckedContinuation { waiters.append($0) } } }
+    func release() { opened = true; let values = waiters; waiters.removeAll(); for value in values { value.resume() } }
+}
+
+@Suite(.serialized, .timeLimit(.minutes(2))) struct GraphNativeInvitationTests {
+    private func config() -> GraphCloudConfiguration {
+        .init(containerIdentifier: "iCloud.native." + UUID().uuidString, environment: .development,
+              directory: FileManager.default.temporaryDirectory.appendingPathComponent("NativeInvite-" + UUID().uuidString), allowsSessionUpgradeFromV8: true)
+    }
+    @Test func descriptorIsIndependentOfNodePayloadAndSupportsEmptyGraphs() throws {
+        let binding = GraphCloudBinding(zone: .init(scope: .shared, owner: "owner", name: "empty"), graphID: GraphID())
+        let record = GraphCloudGraphDescriptor.encode(binding)
+        #expect(try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) == binding.graphID)
+        record["futureOptional"] = "small" as CKRecordValue
+        #expect(try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) == binding.graphID)
+        record["format"] = NSNumber(value: 2)
+        #expect(throws: GraphCloudDiscoveryError.unsupportedDescriptor) { try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) }
+        record["format"] = NSNumber(value: true)
+        #expect(throws: GraphCloudDiscoveryError.invalidDescriptor) { try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) }
+    }
+    @Test func descriptorRejectsForeignZoneOversizeAndNoncanonicalIdentity() throws {
+        let binding = GraphCloudBinding(zone: .init(scope: .shared, owner: "owner", name: "empty"), graphID: GraphID())
+        let record = GraphCloudGraphDescriptor.encode(binding)
+        #expect(throws: (any Error).self) { try GraphCloudGraphDescriptor.decode(record, zone: .init(scope: .shared, owner: "other", name: "empty")) }
+        record["graphID"] = binding.graphID.rawValue.uuidString.uppercased() as CKRecordValue
+        #expect(throws: (any Error).self) { try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) }
+        record["graphID"] = binding.graphID.rawValue.uuidString.lowercased() as CKRecordValue
+        record["extra"] = Data(repeating: 0, count: 17 * 1024) as CKRecordValue
+        #expect(throws: (any Error).self) { try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) }
+    }
+    @Test func acceptanceBeforeDiscoverySurvivesRestartWithoutAReplica() async throws {
+        let config = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let session = try await GraphCloudSession.open(config, adapter: server.adapter)
+        let first = try await session.nativeBeginJoin(server.url)
+        await #expect(throws: GraphCloudDiscoveryError.metadataPending) { try await session.nativeAdvanceJoin(first.id) }
+        #expect(try await session.nativeJoin(first.id).phase == .discoveringGraph)
+        #expect(await server.acceptWrites == 1)
+        try await session.stop()
+        await server.available()
+        let recovered = try await GraphCloudSession.open(config, adapter: server.adapter)
+        let duplicate = try await recovered.nativeBeginJoin(server.url)
+        #expect(duplicate.id == first.id)
+        try await recovered.nativeAdvanceJoin(first.id)
+        #expect(try await recovered.nativeJoin(first.id).graphID == server.graphID)
+        #expect(try await recovered.nativeJoin(first.id).phase == .ready)
+        #expect(await server.acceptWrites == 1)
+        #expect(try await recovered.routes(in: .shared).isEmpty)
+        try await recovered.stop()
+    }
+    @Test func discardUsesExactAcceptedIntentAndPersistsTerminalState() async throws {
+        let config = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let session = try await GraphCloudSession.open(config, adapter: server.adapter)
+        let join = try await session.nativeBeginJoin(server.url)
+        await #expect(throws: (any Error).self) { try await session.nativeAdvanceJoin(join.id) }
+        try await session.nativeDiscardJoin(join.id)
+        #expect(await server.discarded)
+        #expect(try await session.nativeJoin(join.id).phase == .discarded)
+        try await session.stop()
+    }
+    @Test func formatEightUpgradePreservesOpaqueEngineStateAndRejectsMalformedJoin() async throws {
+        let config = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        try FileManager.default.createDirectory(at: config.directory, withIntermediateDirectories: true)
+        var doc = GraphCloudDocument(container: config.containerIdentifier, environment: config.environment, account: "participant")
+        doc.format = 8; doc.states["private"] = Data([4, 7, 9])
+        let path = config.directory.appendingPathComponent("session.json")
+        try JSONEncoder().encode(doc).write(to: path)
+        let refused = GraphCloudConfiguration(containerIdentifier: config.containerIdentifier, environment: config.environment, directory: config.directory)
+        let original = try Data(contentsOf: path)
+        await #expect(throws: GraphCloudDiscoveryError.sessionUpgradeRequired) { try await GraphCloudSession.open(refused, adapter: server.adapter) }
+        #expect(try Data(contentsOf: path) == original)
+        let session = try await GraphCloudSession.open(config, adapter: server.adapter)
+        let upgraded = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: path))
+        #expect(upgraded.format == 9 && upgraded.states == doc.states)
+        try await session.stop()
+        doc.format = 8
+        doc.joins = [.init(id: UUID(), invitation: await server.invitation())]
+        let bad = try JSONEncoder().encode(doc); try bad.write(to: path)
+        await #expect(throws: (any Error).self) { try await GraphCloudSession.open(config, adapter: server.adapter) }
+        #expect(try Data(contentsOf: path) == bad)
+    }
+    @available(iOS 17, macOS 14, *)
+    @Test func publicNativeJoinOpensAnEmptyReadOnlyReplicaAndCanReopenIt() async throws {
+        let native = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: native.directory) }
+        await server.available()
+        let context = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()), adapter: server.adapter)
+        let config = try GraphCloudConnectionConfiguration(containerIdentifier: native.containerIdentifier, environment: native.environment, directory: native.directory)
+        let connection = try await context.connectCloud(using: config)
+        for _ in 0..<2000 {
+            if try await connection.state == .ready { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        let join = try await connection.acceptInvitation(at: server.url)
+        #expect(try await join.state.phase == .ready)
+        let url = native.directory.appendingPathComponent("Replica.sqlite")
+        let graph = try await connection.openReplica(for: join, at: url)
+        #expect(graph.id == server.graphID)
+        #expect(try await join.state.phase == .joined)
+        await #expect(throws: (any Error).self) { try await graph.transaction { _ in () } }
+        try await connection.pauseSynchronization(for: graph.id)
+        try await connection.resumeSynchronization(for: graph.id)
+        try await graph.close()
+        let reopened = try await connection.openReplica(for: join, at: url)
+        #expect(reopened.id == graph.id)
+        let removed = try await connection.leaveSharedGraph(reopened)
+        #expect(removed.phase == .removed && !removed.remoteOperationPending)
+        await #expect(throws: (any Error).self) { try await reopened.read { _ in () } }
+        try await reopened.close()
+        let reinvited = try await connection.acceptInvitation(at: server.url)
+        #expect(reinvited.id != join.id)
+        let second = try await connection.openReplica(for: reinvited, at: native.directory.appendingPathComponent("Rejoined.sqlite"))
+        #expect(second.id == graph.id)
+        await #expect(throws: GraphStoreError.self) { try await connection.leaveSharedGraph(reopened) }
+        #expect(try await connection.sharingStatus(for: second.id).phase == .active)
+        try await second.close(); try await connection.close()
+    }
+    @available(iOS 17, macOS 14, *)
+    @Test func firstLocalSaveCarriesARecoverableJoinMarkerBeforeMembershipPublication() async throws {
+        let native = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: native.directory) }
+        await server.available()
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID())
+        _ = try await manager.startCloudSession(native, adapter: server.adapter)
+        let session = try await manager.cloud(native)
+        var intent = try await session.nativeBeginJoin(server.url)
+        try await session.nativeAdvanceJoin(intent.id)
+        intent = try await session.nativeJoin(intent.id)
+        intent.phase = .openingReplica; try await session.updateJoin(intent)
+        let id = try #require(intent.graphID), identity = try await session.identity()
+        let access = GraphCloudParticipantAccess(binding: .init(zone: intent.invitation.zone, graphID: id), account: identity.account,
+            permission: nil, accepted: false, identity: identity, generation: intent.id)
+        let url = native.directory.appendingPathComponent("Interrupted.sqlite")
+        let prepared = try await manager.createJoiningGraph(id: id, at: url, access: access)
+        #expect(try await prepared.participantAccess() == access)
+        await #expect(throws: (any Error).self) { try await prepared.read { _ in () } }
+        #expect(try await session.membership(id) == nil)
+        try await prepared.close(); try await manager.stopCloudSession(native)
+        let recovered = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID())
+        _ = try await recovered.startCloudSession(native, adapter: server.adapter)
+        let graph = try await recovered.openNativeReplica(intent.id, at: url, configuration: native)
+        #expect(graph.id == id)
+        #expect(try await graph.read { try $0.record(for: GraphNodeID(graphID: id)) } == nil)
+        #expect(try await recovered.cloud(native).nativeJoin(intent.id).phase == .joined)
+        try await graph.close(); try await recovered.stopCloudSession(native)
+    }
+    @Test func failedIntentPublicationPreventsAcceptance() async throws {
+        let config = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let session = try await GraphCloudSession.open(config, adapter: server.adapter,
+            disk: .init(read: { _ in nil }, write: { _, bytes in
+                let value = try JSONDecoder().decode(GraphCloudDocument.self, from: bytes)
+                if value.joins?.isEmpty == false { throw GraphCloudError.persistence }
+            }))
+        await #expect(throws: GraphCloudError.persistence) { try await session.nativeBeginJoin(server.url) }
+        #expect(await server.acceptWrites == 0)
+        #expect(try await session.nativeJoins().isEmpty)
+        try await session.stop()
+    }
+    @Test func descriptorControlsAreValidatedBeforeApplicationImport() async throws {
+        let config = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let id = await server.graphID
+        let graph = try await manager.createGraph(id: id, at: config.directory.appendingPathComponent("Control.sqlite"))
+        _ = try await manager.startCloudSession(config, adapter: server.adapter)
+        let zone = GraphCloudZone(scope: .private, owner: CKCurrentUserDefaultName, name: "control")
+        try await manager.bindCloudZone(zone, to: id, configuration: config)
+        let session = try await manager.cloud(config), binding = GraphCloudBinding(zone: zone, graphID: id)
+        let descriptor = try GraphCloudRecordCodec.archive(GraphCloudGraphDescriptor.encode(binding), scope: .private)
+        await session.receive(.incoming([descriptor]), scope: .private)
+        _ = try await manager.applyCloudInbox(for: id, configuration: config)
+        #expect(try await session.incoming(for: zone, limit: 1).isEmpty)
+        let wrong = GraphCloudGraphDescriptor.encode(.init(zone: zone, graphID: GraphID()))
+        await session.receive(.incoming([try GraphCloudRecordCodec.archive(wrong, scope: .private)]), scope: .private)
+        await #expect(throws: GraphCloudDiscoveryError.invalidDescriptor) { try await manager.applyCloudInbox(for: id, configuration: config) }
+        #expect(try await session.incoming(for: zone, limit: 1).count == 1)
+        try await graph.close(); try await manager.stopCloudSession(config)
+    }
+    @Test func busyNativePreparationCannotReplaceAnotherGraphsCreateReservation() async throws {
+        let config = config(), server = NativeInvitationServer(), entered = NativeInviteGate(), proceed = NativeInviteGate()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        var adapter = server.adapter
+        adapter.nativeSharing = .init(prepare: { _, _, _, mayCreate, reserve in
+            #expect(mayCreate)
+            await entered.release(); await proceed.wait()
+            try await reserve()
+            return Data([1])
+        }, inspect: { _, _, _ in await server.invitation() }, accept: { _, _, _ in }, discover: { _, _ in await server.graphID }, discard: { _, _, _ in })
+        let session = try await GraphCloudSession.open(config, adapter: adapter)
+        let first = GraphCloudBinding(zone: .init(scope: .private, owner: CKCurrentUserDefaultName, name: "first"), graphID: GraphID())
+        let other = GraphCloudBinding(zone: .init(scope: .private, owner: CKCurrentUserDefaultName, name: "other"), graphID: GraphID())
+        try await session.bind(first); try await session.bind(other)
+        let preparing = Task { try await session.nativePrepareShare(first, title: "First") }
+        await entered.wait()
+        await #expect(throws: GraphCloudError.busy) { try await session.nativePrepareShare(other, title: "Other") }
+        await proceed.release()
+        #expect(try await preparing.value == Data([1]))
+        let document = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: config.directory.appendingPathComponent("session.json")))
+        #expect(document.shareAttempts == [first.zone])
+        try await session.stop()
+    }
+    @Test func replicaOpeningCannotOverwriteAnInterveningDiscardIntent() async throws {
+        let config = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        await server.available()
+        let session = try await GraphCloudSession.open(config, adapter: server.adapter)
+        let join = try await session.nativeBeginJoin(server.url)
+        try await session.nativeAdvanceJoin(join.id)
+        var stale = try await session.nativeJoin(join.id)
+        try await session.nativeDiscardJoin(join.id)
+        stale.phase = .openingReplica
+        await #expect(throws: GraphCloudDiscoveryError.busy) { try await session.updateJoin(stale, expectedPhase: .ready) }
+        #expect(try await session.nativeJoin(join.id).phase == .discarded)
+        try await session.stop()
+    }
+}

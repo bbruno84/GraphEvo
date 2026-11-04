@@ -41,10 +41,10 @@ The maintainer selects native invitation/acceptance followed by one fixed system
 record containing GraphID and descriptor format version. Future metadata can
 extend that record; no separate invitation file or advance account identity
 exchange is required. The [discovery investigation](results/public-sharing-graph-discovery-2026-11-04.md)
-records source/documentation feasibility. Descriptor/control compatibility,
-pre-GraphID join recovery and native presentation adapters remain implementation
-design work; no H02 source change, physical acceptance or beta-gate closure is
-claimed. Existing T07/T08 ownership, permissions and destructive leave safeguards
+records source/documentation feasibility. The implementation candidate on codex/v2-public-sharing adds descriptor/control
+handling, explicit session-8 conversion, pre-GraphID joining and native presentation
+adapters. Local verification/review is in progress; it is not integrated, physical
+acceptance or beta-gate closure. Existing T07/T08 ownership, permissions and destructive leave safeguards
 remain the basis of the public lifecycle.
 
 [H01 public coordinated entry](graphevo-2-public-entry.md) was selected through

@@ -8,10 +8,12 @@ public struct GraphCloudConnectionConfiguration: Sendable, Equatable {
     public let directory: URL
     public let maximumEvents: Int
     public let maximumBytes: Int
+    /// Explicitly permits a validated, lossless session-document upgrade; never resets engine state.
+    public let allowsSessionUpgradeFromV8: Bool
 
     /// Creates a configuration without creating directories or starting account verification.
     public init(containerIdentifier: String, environment: GraphCloudEnvironment, directory: URL,
-                maximumEvents: Int = 4096, maximumBytes: Int = 32 * 1024 * 1024) throws {
+                maximumEvents: Int = 4096, maximumBytes: Int = 32 * 1024 * 1024, allowsSessionUpgradeFromV8: Bool = false) throws {
         guard !containerIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               directory.isFileURL, directory.query == nil, directory.fragment == nil,
               directory.path.hasPrefix("/"), maximumEvents > 0, maximumBytes > 0 else {
@@ -20,10 +22,11 @@ public struct GraphCloudConnectionConfiguration: Sendable, Equatable {
         self.containerIdentifier = containerIdentifier; self.environment = environment
         self.directory = URL(fileURLWithPath: directory.standardizedFileURL.resolvingSymlinksInPath().path, isDirectory: true)
         self.maximumEvents = maximumEvents; self.maximumBytes = maximumBytes
+        self.allowsSessionUpgradeFromV8 = allowsSessionUpgradeFromV8
     }
     var native: GraphCloudConfiguration {
         .init(containerIdentifier: containerIdentifier, environment: environment, directory: directory,
-              maximumEvents: maximumEvents, maximumBytes: maximumBytes)
+              maximumEvents: maximumEvents, maximumBytes: maximumBytes, allowsSessionUpgradeFromV8: allowsSessionUpgradeFromV8)
     }
 }
 
@@ -38,7 +41,7 @@ public struct GraphCloudConnectionFailure: Sendable, Equatable {
         case GraphCloudError.invalidConfiguration, GraphCloudConnectionError.invalidConfiguration, GraphCloudNodeError.limitExceeded, GraphCloudActivationError.limitExceeded: category = .configuration
         case GraphCloudError.ownershipConflict, GraphCloudConnectionError.ownershipConflict, GraphStoreError.ownershipConflict, GraphStoreError.foreignGraph: category = .ownership
         case GraphCloudError.persistence: category = .persistence
-        case GraphCloudError.invalidState, GraphCloudActivationError.recoveryRequired, GraphCloudActivationError.authorityConflict, GraphCloudActivationError.zoneNotEmpty, GraphCloudActivationError.invalidState: category = .recoveryRequired
+        case GraphCloudDiscoveryError.invalidDescriptor, GraphCloudDiscoveryError.unsupportedDescriptor, GraphCloudDiscoveryError.invalidJoin, GraphCloudDiscoveryError.sessionUpgradeRequired, GraphCloudError.invalidState, GraphCloudActivationError.recoveryRequired, GraphCloudActivationError.authorityConflict, GraphCloudActivationError.zoneNotEmpty, GraphCloudActivationError.invalidState: category = .recoveryRequired
         default: category = .transport
         }
     }

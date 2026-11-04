@@ -11,21 +11,25 @@ extension GraphContextManager {
     package func observeCloudSharing(for id: GraphID, configuration: GraphCloudConfiguration) async throws -> AsyncStream<GraphCloudSharingStatus> {
         try await cloud(configuration).observeSharing(id)
     }
-    package func cloudParticipants(for id: GraphID, configuration: GraphCloudConfiguration) async throws -> [GraphCloudParticipant] {
+    package func cloudParticipants(for id: GraphID, configuration: GraphCloudConfiguration, publicOwner: UUID? = nil) async throws -> [GraphCloudParticipant] {
+        try checkPublicSharingOwner(id, generation: publicOwner)
         let session = try await cloud(configuration), route = try await session.route(for: id)
         guard let snapshot = try await session.inspectSharing(route), snapshot.role == .owner else { throw GraphCloudSharingError.ownerRequired }
         return snapshot.participants
     }
     package func setCloudParticipantPermission(_ permission: GraphCloudSharePermission, participant: String,
-        for id: GraphID, configuration: GraphCloudConfiguration) async throws -> GraphCloudSharingStatus {
-        try await ownerSharingCommand(.permission(participant, permission), id: id, configuration: configuration)
+        for id: GraphID, configuration: GraphCloudConfiguration, publicOwner: UUID? = nil) async throws -> GraphCloudSharingStatus {
+        try checkPublicSharingOwner(id, generation: publicOwner)
+        return try await ownerSharingCommand(.permission(participant, permission), id: id, configuration: configuration)
     }
     package func removeCloudParticipant(_ participant: String, from id: GraphID,
-        configuration: GraphCloudConfiguration) async throws -> GraphCloudSharingStatus {
-        try await ownerSharingCommand(.remove(participant), id: id, configuration: configuration)
+        configuration: GraphCloudConfiguration, publicOwner: UUID? = nil) async throws -> GraphCloudSharingStatus {
+        try checkPublicSharingOwner(id, generation: publicOwner)
+        return try await ownerSharingCommand(.remove(participant), id: id, configuration: configuration)
     }
-    package func stopCloudSharing(for id: GraphID, configuration: GraphCloudConfiguration) async throws -> GraphCloudSharingStatus {
-        try await ownerSharingCommand(.stop, id: id, configuration: configuration)
+    package func stopCloudSharing(for id: GraphID, configuration: GraphCloudConfiguration, publicOwner: UUID? = nil) async throws -> GraphCloudSharingStatus {
+        try checkPublicSharingOwner(id, generation: publicOwner)
+        return try await ownerSharingCommand(.stop, id: id, configuration: configuration)
     }
     private func ownerSharingCommand(_ command: GraphCloudShareCommand, id: GraphID,
         configuration: GraphCloudConfiguration) async throws -> GraphCloudSharingStatus {
@@ -66,7 +70,8 @@ extension GraphContextManager {
     }
 
     /// Destructive even offline: remove local work before attempting the retained remote command.
-    package func leaveCloudShare(for id: GraphID, configuration: GraphCloudConfiguration) async throws -> GraphCloudSharingStatus {
+    package func leaveCloudShare(for id: GraphID, configuration: GraphCloudConfiguration, publicOwner: UUID? = nil) async throws -> GraphCloudSharingStatus {
+        try checkPublicSharingOwner(id, generation: publicOwner)
         guard sharingGraphs.insert(id).inserted else { throw GraphCloudError.busy }
         defer { sharingGraphs.remove(id) }
         let session = try await cloud(configuration)

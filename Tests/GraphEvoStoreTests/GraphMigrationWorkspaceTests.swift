@@ -144,7 +144,7 @@ private actor WorkspaceOpenFailure {
     }
 
     @Test(arguments: [GraphCloudSharePermission.readOnly, .readWrite])
-    func participantsAreRefusedWithoutRemovingTheirAuthority(permission: GraphCloudSharePermission) async throws {
+    func participantsAreRefusedWithoutRemovingTheirAuthority(permission: GraphEvoStore.GraphCloudSharePermission) async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), source = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("A.sqlite"))
         let identity = GraphCloudSessionIdentity(container: "iCloud.workspace." + UUID().uuidString, environment: .development, account: "participant")

@@ -16,11 +16,13 @@ package struct GraphCloudConfiguration: Equatable, Sendable {
     package let directory: URL
     package let maximumEvents: Int
     package let maximumBytes: Int
+    package let allowsSessionUpgradeFromV8: Bool
     package init(containerIdentifier: String, environment: GraphCloudEnvironment, directory: URL,
-                 maximumEvents: Int = 4096, maximumBytes: Int = 32 * 1024 * 1024) {
+                 maximumEvents: Int = 4096, maximumBytes: Int = 32 * 1024 * 1024, allowsSessionUpgradeFromV8: Bool = false) {
         self.containerIdentifier = containerIdentifier; self.environment = environment
         self.directory = URL(fileURLWithPath: directory.standardizedFileURL.resolvingSymlinksInPath().path, isDirectory: true)
         self.maximumEvents = maximumEvents; self.maximumBytes = maximumBytes
+        self.allowsSessionUpgradeFromV8 = allowsSessionUpgradeFromV8
     }
     var namespace: String { environment.rawValue + ":" + containerIdentifier }
 }
@@ -81,7 +83,7 @@ package struct GraphCloudStatus: Sendable {
 }
 
 struct GraphCloudDocument: Codable, Sendable {
-    var format = 8
+    var format = 9
     var accountResetRequired: Bool? = nil
     var clientID = UUID()
     let container: String
@@ -90,12 +92,13 @@ struct GraphCloudDocument: Codable, Sendable {
     var states: [String: Data] = [:]
     var bindings: [GraphCloudBinding] = []
     var memberships: [GraphCloudMembership] = []
+    var joins: [GraphCloudJoinIntent]? = nil
     var shareAttempts: [GraphCloudZone] = []
     var inbox: [GraphCloudInboxEntry] = []
     var sent: [GraphCloudSentReceipt] = []
     var ledgers: [GraphLedgerReplica] = []
     var activations: [GraphCloudActivationRoute] = []
-    var eventCount: Int { activations.count + ledgers.count + memberships.count + shareAttempts.count + inbox.count + sent.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count + $1.failures.count } }
+    var eventCount: Int { (joins?.count ?? 0) + activations.count + ledgers.count + memberships.count + shareAttempts.count + inbox.count + sent.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count + $1.failures.count } }
     var assetReferences: [GraphCloudAssetReference] {
         inbox.compactMap { $0.change.assetReference }
         + sent.flatMap { $0.saved.compactMap(\.assetReference)

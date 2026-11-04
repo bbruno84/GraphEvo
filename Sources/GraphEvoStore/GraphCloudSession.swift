@@ -1,4 +1,5 @@
 import Foundation
+import CloudKit
 import GraphEvoModel
 
 /// Native delegates convert to detached events before calling the session.
@@ -30,6 +31,7 @@ struct GraphCloudSendOutcome: Sendable {
 }
 
 struct GraphCloudAdapter: Sendable {
+    var nativeSharing: GraphCloudNativeSharingService? = nil
     var sharing: GraphCloudSharingService? = nil
     var ledger: GraphLedgerService? = nil
     var activation: GraphCloudActivationService? = nil
@@ -55,6 +57,8 @@ actor GraphCloudSession {
     private var directoryLease: GraphCloudDirectoryLease?
     private var document: GraphCloudDocument
     var activationService: GraphCloudActivationService? { adapter.activation }
+    private var joinObservers: [UUID: [UUID: AsyncStream<GraphCloudJoinState>.Continuation]] = [:]
+    private var activeJoins = Set<UUID>()
     private var sharingObservers: [GraphID: [UUID: AsyncStream<GraphCloudSharingStatus>.Continuation]] = [:]
     private var ledgerObservers: [GraphID: [UUID: AsyncStream<GraphLedgerStatus>.Continuation]] = [:]
     private var ledgerSignals: [UUID: AsyncStream<Void>.Continuation] = [:]
@@ -105,7 +109,8 @@ actor GraphCloudSession {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 8, doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
+                if doc.format == 8, !config.allowsSessionUpgradeFromV8 { throw GraphCloudDiscoveryError.sessionUpgradeRequired }
+                guard (doc.format == 8 || doc.format == 9), doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
                 guard doc.account == account else { await accountSignal(.differentAccount); throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -123,6 +128,11 @@ actor GraphCloudSession {
                         && ($0.role == .owner || $0.storeID?.isEmpty == false)
                         && ($0.phase != .removed || !doc.bindings.contains($0.binding))
                       }) else { throw GraphCloudError.invalidState }
+                guard doc.format != 8 || doc.joins == nil else { throw GraphCloudError.invalidState }
+                let joins = doc.joins ?? []
+                guard Set(joins.map(\.id)).count == joins.count,
+                      Set(joins.filter { $0.phase != .discarded }.map { $0.invitation.zone }).count == joins.filter({ $0.phase != .discarded }).count else { throw GraphCloudError.invalidState }
+                for join in joins { try join.validate() }
                 guard Set(doc.sent.map(\.id)).count == doc.sent.count else { throw GraphCloudError.invalidState }
                 for receipt in doc.sent {
                     guard doc.bindings.contains(where: { $0.graphID == receipt.graphID && $0.zone == receipt.zone }) else { throw GraphCloudError.invalidState }
@@ -187,6 +197,12 @@ actor GraphCloudSession {
                     identity: GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account),
                     binding: reference.binding, recordName: reference.recordName)
             }
+            if doc.format == 8 {
+                doc.format = 9
+                let encoded = try JSONEncoder().encode(doc)
+                guard encoded.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
+                try disk.write(url, encoded)
+            }
             let session = GraphCloudSession(configuration: config, owner: owner, adapter: adapter, disk: disk, lease: lease, document: doc, accountSignal: accountSignal)
             // Restoring shared state also restores shared engine ownership, even before a graph reopens.
             do { try await session.start(restoringShared: doc.states[GraphCloudScope.shared.rawValue] != nil || doc.bindings.contains { $0.zone.scope == .shared }) }
@@ -250,6 +266,9 @@ actor GraphCloudSession {
         do { try disk.write(url, data) } catch { throw GraphCloudError.persistence }
         document = candidate
         publishLedgerObservers()
+        for join in candidate.joins ?? [] {
+            for observer in joinObservers[join.id]?.values ?? [:].values { observer.yield(join.status) }
+        }
         for member in candidate.memberships {
             for observer in sharingObservers[member.binding.graphID]?.values ?? [:].values { observer.yield(member.status) }
         }
@@ -630,9 +649,9 @@ actor GraphCloudSession {
         let deletion = document.inbox.filter { $0.change.zone == zone && $0.change.kind == .zoneDeleted }
         if !deletion.isEmpty { return Array(deletion.prefix(limit)) }
         // Access controls must not be hidden by a bounded, potentially undecodable application prefix.
-        let controls = document.inbox.filter { $0.change.zone == zone && GraphCloudShareControl.isControl($0.change) }
+        let controls = document.inbox.filter { $0.change.zone == zone && (GraphCloudShareControl.isControl($0.change) || GraphCloudGraphDescriptor.isControl($0.change)) }
         let selected = Array(controls.prefix(limit))
-        let application = document.inbox.lazy.filter { $0.change.zone == zone && !GraphCloudShareControl.isControl($0.change) }
+        let application = document.inbox.lazy.filter { $0.change.zone == zone && !GraphCloudShareControl.isControl($0.change) && !GraphCloudGraphDescriptor.isControl($0.change) }
         return selected + application.prefix(limit - selected.count)
     }
     func retainedReceiptIDs(for graph: GraphID) throws -> Set<UUID> {
@@ -692,6 +711,7 @@ actor GraphCloudSession {
         if fetches > 0 { await withCheckedContinuation { drains.append($0) } }
         stopped = true
         drivers.removeAll(); driverGenerations.removeAll(); directoryLease = nil
+        for values in joinObservers.values { for value in values.values { value.finish() } }; joinObservers.removeAll()
         for values in sharingObservers.values { for value in values.values { value.finish() } }; sharingObservers.removeAll()
         for values in ledgerObservers.values { for value in values.values { value.finish() } }; ledgerObservers.removeAll()
         for value in ledgerSignals.values { value.finish() }; ledgerSignals.removeAll()
@@ -725,7 +745,7 @@ extension GraphCloudSession {
         var next = document; next.memberships.removeAll { $0.binding.graphID == value.binding.graphID }; next.memberships.append(value)
         try publish(next)
     }
-    func beginMembership(_ binding: GraphCloudBinding, storeID: String, shareIdentity: String) async throws -> GraphCloudMembership {
+    func beginMembership(_ binding: GraphCloudBinding, storeID: String, shareIdentity: String, generation: UUID? = nil) async throws -> GraphCloudMembership {
         try check()
         if let existing = try membership(binding.graphID) {
             guard existing.binding == binding else { throw GraphCloudError.ownershipConflict }
@@ -736,7 +756,7 @@ extension GraphCloudSession {
             guard existing.pending == nil, existing.storeID != storeID else { throw GraphCloudError.busy }
             try await resetSharedDriver()
         }
-        let member = GraphCloudMembership(binding: binding, identity: try identity(), generation: UUID(), role: .participant,
+        let member = GraphCloudMembership(binding: binding, identity: try identity(), generation: generation ?? UUID(), role: .participant,
             phase: .joining, permission: nil, storeID: storeID, shareIdentity: shareIdentity)
         var next = document; next.memberships.removeAll { $0.binding.graphID == binding.graphID }; next.memberships.append(member)
         next.inbox.removeAll { $0.change.zone == binding.zone }
@@ -928,4 +948,170 @@ extension GraphCloudSession {
     }
     private func removeLedgerSignal(_ token: UUID) { ledgerSignals.removeValue(forKey: token) }
     private func signalLedgerControl() { for value in ledgerSignals.values { value.yield(()) } }
+}
+
+extension GraphCloudSession {
+    func nativePrepareShare(_ binding: GraphCloudBinding, title: String) async throws -> Data {
+        try check()
+        guard document.bindings.contains(binding), binding.zone.scope == .private,
+              let service = adapter.nativeSharing else { throw GraphCloudSharingError.ownerRequired }
+        guard !activeFetches.contains(.private) else { throw GraphCloudError.busy }
+        let operation = UUID(), config = configuration
+        shareCreation = operation
+        defer { if shareCreation == operation { shareCreation = nil } }
+        let mayCreate = !document.shareAttempts.contains(binding.zone)
+        return try await withScopeControl(.private) { session in
+            let result = try await service.prepare(config, binding, title, mayCreate) {
+                try await self.recordShareCreation(binding, operation: operation)
+            }
+            try await session.verifyLedgerAccount()
+            return result
+        }
+    }
+
+    func nativeBeginJoin(_ url: URL) async throws -> GraphCloudJoinIntent {
+        try Task.checkCancellation()
+        try check(control: true)
+        guard let service = adapter.nativeSharing else { throw GraphCloudSharingError.unavailable }
+        let config = configuration, account = document.account
+        let invitation = try await withScopeControl(.shared, allowingDataLimit: true) { _ in
+            try await service.inspect(config, url, account)
+        }
+        try Task.checkCancellation()
+        if let prior = (document.joins ?? []).first(where: { $0.invitation.zone == invitation.zone && $0.phase != .discarded }) {
+            guard prior.invitation.url == invitation.url else { throw GraphCloudDiscoveryError.invalidInvitation }
+            if prior.phase == .joined, let id = prior.graphID,
+               let member = try membership(id), member.phase == .removed, member.pending == nil {
+                var retired = prior; retired.phase = .discarded; try updateJoin(retired)
+            } else { return prior }
+        }
+        guard !document.bindings.contains(where: { $0.zone == invitation.zone }) else { throw GraphCloudError.ownershipConflict }
+        let value = GraphCloudJoinIntent(id: UUID(), invitation: invitation)
+        try value.validate(); try updateJoin(value)
+        return value
+    }
+    func nativeJoins() throws -> [GraphCloudJoinIntent] { try check(control: true); return document.joins ?? [] }
+    func nativeJoin(_ id: UUID) throws -> GraphCloudJoinIntent {
+        try check(control: true)
+        guard let join = (document.joins ?? []).first(where: { $0.id == id }) else { throw GraphCloudDiscoveryError.invalidJoin }
+        return join
+    }
+    func updateJoin(_ value: GraphCloudJoinIntent, expectedPhase: GraphCloudJoinState.Phase? = nil) throws {
+        try check(control: true); try value.validate()
+        var next = document, joins = next.joins ?? []
+        if let index = joins.firstIndex(where: { $0.id == value.id }) {
+            let previous = joins[index]
+            if let expectedPhase, previous.phase != expectedPhase { throw GraphCloudDiscoveryError.busy }
+            guard previous.invitation == value.invitation,
+                  previous.graphID == nil || previous.graphID == value.graphID else { throw GraphCloudDiscoveryError.invalidJoin }
+            joins[index] = value
+        } else { joins.append(value) }
+        next.joins = joins; try publish(next)
+    }
+    func nativeAdvanceJoin(_ id: UUID) async throws {
+        try check(control: true)
+        guard activeJoins.insert(id).inserted else { throw GraphCloudDiscoveryError.busy }
+        defer { activeJoins.remove(id) }
+        var join = try nativeJoin(id)
+        guard ![.joined, .discarded].contains(join.phase) else { return }
+        guard let service = adapter.nativeSharing else { throw GraphCloudSharingError.unavailable }
+        let config = configuration, account = document.account, invitation = join.invitation
+        do {
+            if join.phase == .discarding {
+                try await withScopeControl(.shared, allowingDataLimit: true) { _ in
+                    try await service.discard(config, invitation, account)
+                }
+                join.phase = .discarded; join.failure = false; try updateJoin(join); return
+            }
+            guard join.phase != .openingReplica else { throw GraphCloudDiscoveryError.invalidJoin }
+            try await withScopeControl(.shared, allowingDataLimit: true) { _ in
+                try await service.accept(config, invitation, account)
+            }
+            join.phase = .discoveringGraph; join.failure = false; try updateJoin(join)
+            let graphID = try await withScopeControl(.shared, allowingDataLimit: true) { _ in
+                try await service.discover(config, invitation.zone)
+            }
+            guard join.graphID == nil || join.graphID == graphID,
+                  !document.bindings.contains(where: { ($0.graphID == graphID || $0.zone == join.invitation.zone) && $0 != .init(zone: join.invitation.zone, graphID: graphID) }) else {
+                throw GraphCloudError.ownershipConflict
+            }
+            join.graphID = graphID; join.phase = .ready; join.failure = false; try updateJoin(join)
+        } catch {
+            join.failure = true
+            try updateJoin(join)
+            // The durable intent is queryable even if native acceptance already committed.
+            throw error
+        }
+    }
+    func nativeDiscardJoin(_ id: UUID) async throws {
+        var join = try nativeJoin(id)
+        guard !activeJoins.contains(id), ![.openingReplica, .joined].contains(join.phase) else { throw GraphCloudDiscoveryError.busy }
+        if join.phase == .discarded { return }
+        join.phase = .discarding; try updateJoin(join)
+        try await nativeAdvanceJoin(id)
+    }
+    func observeJoin(_ id: UUID) throws -> AsyncStream<GraphCloudJoinState> {
+        let value = try nativeJoin(id), token = UUID()
+        let pair = AsyncStream<GraphCloudJoinState>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        joinObservers[id, default: [:]][token] = pair.continuation
+        pair.continuation.yield(value.status)
+        pair.continuation.onTermination = { [weak self] _ in Task { await self?.removeJoinObserver(id, token: token) } }
+        return pair.stream
+    }
+    private func removeJoinObserver(_ id: UUID, token: UUID) { joinObservers[id]?.removeValue(forKey: token) }
+}
+
+extension GraphCloudSession {
+    func nativeRecordOwnerShare(_ binding: GraphCloudBinding, archive: Data) throws {
+        guard let share = try GraphCloudRecordCodec.restore(archive) as? CKShare, let url = share.url else { throw GraphCloudDiscoveryError.metadataPending }
+        var member = try membership(binding.graphID) ?? GraphCloudMembership(binding: binding, identity: identity(),
+            generation: UUID(), role: .owner, phase: .active, permission: .readWrite, hadAccess: true)
+        guard member.role == .owner, member.pending == nil else { throw GraphCloudError.busy }
+        member.shareIdentity = GraphCloudShareIdentity.of(url); try updateMembership(member)
+    }
+    func nativeReconcileOwnerShare(_ binding: GraphCloudBinding, stopped: Bool) async throws {
+        guard var member = try membership(binding.graphID), member.role == .owner else { throw GraphCloudSharingError.ownerRequired }
+        let snapshot = try await inspectSharing(binding)
+        if let snapshot {
+            member.shareIdentity = snapshot.identity; member.failure = nil
+            try updateMembership(member)
+        } else {
+            guard stopped else { throw GraphCloudSharingError.metadataPending }
+            member.shareIdentity = nil; member.failure = nil
+            var next = document
+            next.shareAttempts.removeAll { $0 == binding.zone }
+            next.memberships.removeAll { $0.binding.graphID == binding.graphID }; next.memberships.append(member)
+            try publish(next)
+        }
+    }
+}
+
+extension GraphCloudSession {
+    func verifyNativeJoinDescriptor(_ id: UUID) async throws {
+        let join = try nativeJoin(id)
+        guard let service = adapter.nativeSharing, let expected = join.graphID else { throw GraphCloudDiscoveryError.invalidJoin }
+        let config = configuration
+        let actual = try await withScopeControl(.shared) { _ in try await service.discover(config, join.invitation.zone) }
+        guard actual == expected else { throw GraphCloudDiscoveryError.invalidDescriptor }
+    }
+}
+
+extension GraphCloudSession {
+    func nativeBindAcceptedJoin(_ id: UUID) async throws -> GraphCloudParticipantAccess {
+        let join = try nativeJoin(id)
+        guard let graphID = join.graphID, join.phase == .openingReplica,
+              let service = adapter.nativeSharing, let member = try membership(graphID),
+              member.generation == id, !member.terminal else { throw GraphCloudDiscoveryError.invalidJoin }
+        let config = configuration, account = document.account
+        let current = try await withScopeControl(.shared) { _ in try await service.inspect(config, join.invitation.url, account) }
+        guard current.accepted, current.zone == join.invitation.zone, current.url == join.invitation.url else {
+            throw GraphCloudDiscoveryError.invalidInvitation
+        }
+        let binding = GraphCloudBinding(zone: current.zone, graphID: graphID)
+        try bind(binding)
+        var updated = member; updated.permission = current.permission
+        try updateMembership(updated)
+        return .init(binding: binding, account: account, permission: current.permission, accepted: true,
+                     identity: try identity(), generation: id)
+    }
 }

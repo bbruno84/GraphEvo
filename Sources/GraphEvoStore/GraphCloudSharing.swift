@@ -2,8 +2,8 @@ import CloudKit
 import Foundation
 import GraphEvoModel
 
-package enum GraphCloudSharePermission: String, Codable, Sendable { case readOnly, readWrite }
-package enum GraphCloudSharingError: Error, Equatable {
+public enum GraphCloudSharePermission: String, Codable, Sendable { case readOnly, readWrite }
+public enum GraphCloudSharingError: Error, Equatable {
     case invalidInvitation, invalidParticipant, ownerRequired, metadataPending, nonemptyReplica, unavailable, superseded
 }
 

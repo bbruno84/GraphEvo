@@ -52,8 +52,9 @@ For temporary CKAsset transport, read the
 Keep permanent attachment bodies in Core Data, preserve serialized ordinary
 payloads, and retain the process writer through preparation, file staging and
 the single native save. Frozen/inbox/sent queues store verified owned-file
-references, never SDK URLs or asset bytes. Session format 8 and graph transport
-format 3 refuse older alpha operational state unchanged. Do not use the 32 MiB
+references, never SDK URLs or asset bytes. Session format 9 and graph transport
+format 3 refuse incompatible alpha operational state unchanged; H02 permits
+explicit validated session-8 conversion as described below. Do not use the 32 MiB
 inline payload allowance as a total asset/database byte cap.
 
 ## Selected v2 native schema
@@ -1488,3 +1489,18 @@ cloud connection, while local-only stores never query accounts. Foreground state
 belongs to the context. Native staged conversion preserves Data/serialized payloads;
 attachment optimization is consumer-owned. Do not expose native executors/adapters
 or treat connection readiness as graph, activation or peer completion.
+
+## H02 native public sharing
+
+Read [H02](docs/design/graphevo-2-public-sharing.md) and its
+[guide](docs/guides/public-sharing.md). The selected descriptor is GraphEvoGraph /
+graphevo.graph with format 1 and canonical GraphID, distinct from nodes and MF10.
+Classify it as bounded control metadata, never an application payload. Session
+format 9 records pre-GraphID join intent; format 8 upgrades only with explicit
+allowsSessionUpgradeFromV8 after validation, preserving opaque state and work.
+Create participant markers/account binding in the initial graph transaction and
+retain exact generation/store checks for recovery before membership publication.
+Native UI adapters retain independent leases, reserve same-graph sharing and
+reconcile server state; no scope lock or Core Data transaction spans UI input.
+Never use a descriptor edit, network error or account loss as purge authority.
+Native UI/two-account device acceptance remains separate from injected tests.

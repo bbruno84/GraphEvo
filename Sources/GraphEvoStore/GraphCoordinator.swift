@@ -50,7 +50,7 @@ package actor GraphCoordinator {
 
     static func open(id: GraphID, configuration: StoreConfiguration, creating: Bool,
                      registry: StoreRegistry, schema: StoreSchema, adapter: GraphCoordinatorAdapter,
-                     conflictPolicy: GraphConflictPolicy = .lastEditWins, initiallyBlocked: Bool = false) async throws -> GraphCoordinator {
+                     conflictPolicy: GraphConflictPolicy = .lastEditWins, initiallyBlocked: Bool = false, initialParticipant: GraphCloudParticipantAccess? = nil) async throws -> GraphCoordinator {
         guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
         let exists = FileManager.default.fileExists(atPath: url.path)
         if creating && exists { throw GraphStoreError.duplicateIdentity }
@@ -64,11 +64,17 @@ package actor GraphCoordinator {
                 try await handle.transaction {
                     try adapter.initialize($0, id, true)
                     try adapter.initializePolicy?($0, id, conflictPolicy)
+                    if let initialParticipant {
+                        guard let write = adapter.graph.participantAccess, let claim = adapter.account?.claim,
+                              let identity = initialParticipant.identity else { throw GraphCloudError.invalidConfiguration }
+                        _ = try write($0, id, initialParticipant)
+                        try claim($0, id, identity)
+                    }
                 }
             } else {
                 try await handle.read { try adapter.initialize($0, id, false) }
             }
-            if initiallyBlocked { try await handle.setDataAvailable(false) }
+            if initiallyBlocked || initialParticipant != nil { try await handle.setDataAvailable(false) }
             if !creating, let access = adapter.graph.participantAccess {
                 if let value = try await handle.controlRead({ try access($0, id, nil) }) {
                     try await handle.setDataAvailable(false, terminal: value.blocked)
@@ -171,6 +177,13 @@ package actor GraphCoordinator {
     }
     func migrationBoundary() async throws -> GraphMigrationBoundary {
         try await handle.controlRead { try GraphMigrationBoundary.capture($0) }
+    }
+    func validateUntouchedJoin(_ expected: GraphCloudParticipantAccess) async throws {
+        guard let read = adapter.participantAccess, let validate = adapter.validateIntegrity else { throw GraphCloudError.invalidState }
+        let id = id
+        try await handle.controlRead { context in
+            guard try read(context, id, nil) == expected, try validate(context, id) == 0 else { throw GraphCloudDiscoveryError.invalidJoin }
+        }
     }
     func storeIdentity() async throws -> String {
         let id = id
