@@ -35,6 +35,14 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+The [physical App Group control](results/app-group-presence-control-2026-11-04.md),
+recorded through [documentation PR #155](https://github.com/bbruno84/GraphEvo/pull/155),
+identifies lifetime shared-presence flock as the cause of observed iOS app/widget
+0xdead10cc terminations. Short Apple-coordinated bidirectional writes pass only
+in an experimental fd-only control that refuses destructive maintenance. No
+runtime replacement is adopted; PA02 retains the suspension-compatible presence
+and maintenance exclusion requirement.
+
 The H02 continuation also exposed an idle context claim retained after settled
 participant removal. The [correction #154](https://github.com/bbruno84/GraphEvo/pull/154)
 releases it only after purge and

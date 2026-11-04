@@ -1512,6 +1512,14 @@ reconcile server state; no scope lock or Core Data transaction spans UI input.
 Never use a descriptor edit, network error or account loss as purge authority.
 Native UI/two-account device acceptance remains separate from injected tests.
 
+The 2026-11-04 physical App Group control reproduces 0xdead10cc while a
+lifetime shared presence flock is retained. See
+`docs/design/results/app-group-presence-control-2026-11-04.md`. The experimental
+fd-only variant refuses destructive maintenance and must not ship. Preserve
+native-detachment and exclusive-maintenance guarantees while selecting a
+suspension-compatible replacement; short Apple-coordinated writes alone do not
+close PA02 or authorize a global lock substitution.
+
 After settled participant purge, release an idle public context graph claim only
 after the durable remote intent is cleared. Pending leave and failed detachment
 retain ownership. Retired contexts remain blocked; fresh-workspace consumers
