@@ -59,6 +59,7 @@ package actor GraphContextManager {
     var accountControls: [GraphID: StoreAccountControl] = [:]
     var accountRevision: UInt64 = 1
     var accountRefreshTasks: [String: Task<Void, Never>] = [:]
+    var accountRefreshPending: Set<String> = []
     var accountAutomaticActivity: [String: Bool] = [:]
     var accountAutomaticClocks: [String: GraphAutomaticClock] = [:]
     private let attachmentRefresh = GraphCloudAttachmentRefresh<Void>()

@@ -214,6 +214,29 @@ private actor AccountQueryGate {
         observation.cancel(); try await close(f)
     }
 
+    @Test func notificationDuringVerificationInvalidatesItsResultAndChecksAgain() async throws {
+        let name = Notification.Name("GraphEvo.AccountOverlap." + UUID().uuidString)
+        let driver = AccountDriver(notificationName: name), f = try await fixture(driver: driver)
+        try await f.manager.stopCloudSession(f.configuration)
+        let gate = AccountQueryGate()
+        driver.hook { await gate.enter(); return .available("account-A") }
+        await f.manager.scheduleAccountRefresh(f.configuration.namespace)
+        await gate.wait()
+        driver.hook(nil); driver.set(.signedOut)
+        // Delivery while the original query is pending must enqueue another verification.
+        await f.manager.scheduleAccountRefresh(f.configuration.namespace)
+        await gate.release()
+        while await f.manager.accountRefreshTasks[f.configuration.namespace] != nil {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(try await f.graph.cloudAccountState == .isolated(.signedOut))
+        await #expect { try await f.graph.read { _ in () } } throws: { isAccountIsolation($0) }
+        driver.set(.available("account-A"))
+        try await f.manager.refreshCloudAccount(f.configuration)
+        #expect(try await f.graph.cloudAccountState == .available)
+        try await close(f)
+    }
+
     @Test func temporaryStatusCannotUndoRestrictionsOrLogoutAndStaleExportsAreRefused() async throws {
         let f = try await fixture(), check = try await f.graph.accountCheck()
         f.driver.set(.restricted)

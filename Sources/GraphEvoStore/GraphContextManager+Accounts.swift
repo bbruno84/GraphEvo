@@ -40,7 +40,13 @@ extension GraphContextManager {
     }
 
     func scheduleAccountRefresh(_ namespace: String) {
-        guard accountRefreshTasks[namespace] == nil else { return }
+        if accountRefreshTasks[namespace] != nil {
+            // A notification during a query must invalidate its result and trigger a fresh query.
+            accountAuthorities[namespace]?.query = UUID()
+            accountAuthorities[namespace]?.verification = nil
+            accountRefreshPending.insert(namespace)
+            return
+        }
         accountRefreshTasks[namespace] = Task { [weak self] in
             guard let self else { return }
             await self.runAccountRefresh(namespace)
@@ -49,8 +55,11 @@ extension GraphContextManager {
     private func runAccountRefresh(_ namespace: String) async {
         defer { accountRefreshTasks.removeValue(forKey: namespace) }
         guard let configuration = accountAuthorities[namespace]?.configuration else { return }
-        // Availability/access state is published even if CloudKit startup cannot complete.
-        try? await refreshCloudAccount(configuration)
+        repeat {
+            accountRefreshPending.remove(namespace)
+            // Availability/access state is published even if CloudKit startup cannot complete.
+            try? await refreshCloudAccount(configuration)
+        } while accountRefreshPending.contains(namespace)
     }
 
     func verifyAccountForStart(_ configuration: GraphCloudConfiguration, adapter: GraphCloudAdapter,
