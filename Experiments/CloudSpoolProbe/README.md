@@ -10,7 +10,8 @@ Read the [spool contract](../../docs/design/graphevo-2-durable-asset-spool.md).
 python3 Experiments/CloudSpoolProbe/prepare_demo.py ../GraphEvoDemo /tmp/new-spool-host
 xcodebuild build -project /tmp/new-spool-host/GraphEvoDemo.xcodeproj \
   -scheme GraphEvoDemo -configuration Debug -destination 'generic/platform=iOS' \
-  -derivedDataPath /tmp/new-spool-build -allowProvisioningUpdates IPHONEOS_DEPLOYMENT_TARGET=17.0
+  -derivedDataPath /tmp/new-spool-build -allowProvisioningUpdates IPHONEOS_DEPLOYMENT_TARGET=17.0 \
+  PRODUCT_BUNDLE_IDENTIFIER=com.valerioburiani.GraphCKDemo.SpoolProbe
 ```
 
 Verify the signed app uses only the retained laboratory Development container.
@@ -20,7 +21,8 @@ production data, copied store or previous consumed-stage replay is permitted.
 Old laboratory stores remain untouched. Account stages write a salted digest
 privately; compare the two digests before running a mutation and never log them.
 
-Launch with `PublicMirroredProbe/launch_probe.py`; arguments after the ticket are
+The separate `com.valerioburiani.GraphCKDemo.SpoolProbe` bundle preserves any
+existing demo installation and owners. Launch with this directory's `launch_probe.py`; arguments after the ticket are
 `--cloud-spool <stage> <run-UUID> owner|peer|fresh`. Collect each unique report with
 this directory's `collect_report.py`. App-relative evidence is under
 `Library/Application Support/GraphEvoLaboratory/CloudSpool/<run>/<replica>/`.

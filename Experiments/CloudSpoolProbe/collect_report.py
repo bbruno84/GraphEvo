@@ -23,7 +23,7 @@ source = f"Library/Application Support/GraphEvoLaboratory/CloudSpool/{str(args.r
 deadline = time.monotonic() + 300
 while time.monotonic() < deadline:
     result = subprocess.run(["xcrun", "devicectl", "device", "copy", "from", "--timeout", "15", "--device", args.device,
-        "--domain-type", "appDataContainer", "--domain-identifier", "com.valerioburiani.GraphCKDemo",
+        "--domain-type", "appDataContainer", "--domain-identifier", "com.valerioburiani.GraphCKDemo.SpoolProbe",
         "--source", source, "--destination", str(output / "report.json")], capture_output=True, text=True, timeout=20)
     (output / "copy.log").write_text(result.stdout + result.stderr)
     if result.returncode == 0:
