@@ -44,8 +44,10 @@ retains a real metadata-first history failure and the candidate's same-workspace
 recovery. The correction integrates through [#153](https://github.com/bbruno84/GraphEvo/pull/153)
 with reviewed full checkpoint #41872809620 on 012b5083; source inputs remain
 unchanged in the final documentation commit. Native acceptance/discovery, one owner-to-participant
-note and read-only enforcement are observed; later lifecycle stages and final
-pin acceptance remain open. No PA03 box closes from this partial result.
+note, read-only enforcement, reverse transfer, participant restart and settled
+leave are observed. Reinvitation recovered after restarting the participant app.
+The workspace/idle-claim follow-up covers normal/deferred leave and revocation
+locally; restart-free final-pin acceptance remains open. No PA03 box closes from this partial result.
 
 ## How to close an item
 

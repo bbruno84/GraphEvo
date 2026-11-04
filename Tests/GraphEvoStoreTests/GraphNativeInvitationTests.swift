@@ -18,6 +18,10 @@ private actor NativeInvitationServer {
     var discarded = false
     var currentAccount = "participant"
     var switchAfterAccept = false
+    var revoked = false
+    func setRevoked(_ value: Bool) { revoked = value }
+    var failLeave = false
+    func setLeaveFailure(_ value: Bool) { failLeave = value }
     var sharedFetches = 0
     var inspectHook: (@Sendable () async -> Void)?
     func setInspectHook(_ hook: (@Sendable () async -> Void)?) { inspectHook = hook }
@@ -41,8 +45,11 @@ private actor NativeInvitationServer {
     }
     nonisolated var adapter: GraphCloudAdapter {
         let operations = GraphCloudSharingOperations(inspect: { _, _, _ in
-            .init(identity: GraphCloudShareIdentity.of(self.url), role: .participant, permission: self.permission, participants: [])
-        }, execute: { _, _, _, _ in })
+            if await self.revoked { return nil }
+            return .init(identity: GraphCloudShareIdentity.of(self.url), role: .participant, permission: self.permission, participants: [])
+        }, execute: { _, _, _, _ in
+            if await self.failLeave { throw GraphCloudError.transportUnavailable }
+        })
         return GraphCloudAdapter(nativeSharing: .init(prepare: { _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
             inspect: { _, _, _ in await self.inspectInvitation() }, accept: { _, _, _ in await self.accept() },
             discover: { _, _ in try await self.discover() }, discard: { _, _, _ in await self.discard() }),
@@ -185,6 +192,77 @@ private actor NativeInviteGate {
         #expect(try await connection.sharingStatus(for: second.id).phase == .active)
         try await second.close(); try await connection.close()
     }
+    enum RemovalPath: String, CaseIterable, Sendable { case leave, deferredLeave, revocation }
+
+    @available(iOS 17, macOS 14, *)
+    @Test(arguments: RemovalPath.allCases)
+    func settledLeaveReleasesThePurgedGraphForANewWorkspaceContext(path: RemovalPath) async throws {
+        let native = config(), server = NativeInvitationServer(), registry = StoreRegistry()
+        defer { try? FileManager.default.removeItem(at: native.directory) }
+        await server.available()
+        func context() -> GraphContext {
+            GraphContext(manager: GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
+                adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()), adapter: server.adapter)
+        }
+        func ready(_ connection: GraphCloudConnection) async throws {
+            for _ in 0..<2000 {
+                if try await connection.state == .ready { return }
+                try await Task.sleep(for: .milliseconds(2))
+            }
+            throw GraphCloudError.invalidState
+        }
+        let oldContext = context()
+        let oldConfiguration = try GraphCloudConnectionConfiguration(containerIdentifier: native.containerIdentifier,
+            environment: .development, directory: native.directory.appendingPathComponent("OldSession"))
+        let oldConnection = try await oldContext.connectCloud(using: oldConfiguration)
+        try await ready(oldConnection)
+        let oldJoin = try await oldConnection.acceptInvitation(at: server.url)
+        let oldURL = native.directory.appendingPathComponent("Old.sqlite")
+        let oldGraph = try await oldConnection.openReplica(for: oldJoin, at: oldURL)
+        let newContext = context()
+        if path == .revocation {
+            await server.setRevoked(true)
+            do {
+                _ = try await oldConnection.refreshSharing(for: oldGraph.id)
+                Issue.record("Revoked access unexpectedly remained active.")
+            } catch GraphCloudConnectionError.operationFailed(_, let underlying) {
+                #expect(underlying as? GraphCloudError == .zoneUnavailable)
+            }
+            for _ in 0..<2000 {
+                if try await oldConnection.sharingStatus(for: oldGraph.id).phase == .removed { break }
+                try await Task.sleep(for: .milliseconds(2))
+            }
+            #expect(try await oldConnection.sharingStatus(for: oldGraph.id).phase == .removed)
+            await server.setRevoked(false)
+        } else {
+            await server.setLeaveFailure(path == .deferredLeave)
+            let removal = try await oldConnection.leaveSharedGraph(oldGraph)
+            #expect(removal.phase == .removed && removal.remoteOperationPending == (path == .deferredLeave))
+        }
+        if path == .deferredLeave {
+            let forbidden = native.directory.appendingPathComponent("PendingLeave.sqlite")
+            await #expect(throws: GraphStoreError.self) { try await newContext.createGraph(id: oldGraph.id, at: forbidden) }
+            #expect(!FileManager.default.fileExists(atPath: forbidden.path))
+            await server.setLeaveFailure(false)
+            let session = try await oldContext.manager.cloud(oldConfiguration.native)
+            let member = try #require(try await session.membership(oldGraph.id))
+            #expect(try await oldContext.manager.executeSharingIntent(member, session: session).remoteOperationPending == false)
+        }
+        try await oldGraph.close(); try await oldConnection.close()
+        let newConfiguration = try GraphCloudConnectionConfiguration(containerIdentifier: native.containerIdentifier,
+            environment: .development, directory: native.directory.appendingPathComponent("NewSession"))
+        let newConnection = try await newContext.connectCloud(using: newConfiguration)
+        try await ready(newConnection)
+        let join = try await newConnection.acceptInvitation(at: server.url)
+        let graph = try await newConnection.openReplica(for: join, at: native.directory.appendingPathComponent("New.sqlite"))
+        #expect(graph.id == oldGraph.id)
+        #expect(try await graph.validateIntegrity() == 0)
+        await #expect(throws: GraphCloudError.zoneUnavailable) { try await oldContext.openGraph(id: graph.id, at: oldURL) }
+        await #expect(throws: GraphStoreError.self) { try await newConnection.leaveSharedGraph(oldGraph) }
+        #expect(try await newConnection.sharingStatus(for: graph.id).phase == .active)
+        try await graph.close(); try await newConnection.close()
+    }
+
     @available(iOS 17, macOS 14, *)
     @Test func firstLocalSaveCarriesARecoverableJoinMarkerBeforeMembershipPublication() async throws {
         let native = config(), server = NativeInvitationServer()

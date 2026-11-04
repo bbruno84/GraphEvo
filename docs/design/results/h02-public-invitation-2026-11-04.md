@@ -56,9 +56,21 @@ The participant was then force-quit and reopened through the same public
 workspace/connection/join. Both notes remained visible. Leave shared graph was
 confirmed through the demo's destructive dialog: the participant became empty,
 the owner retained both notes, and the durable membership reported removed/left
-with no pending remote command. The owner's subsequent Apple UI still displayed
-the former participant; its state/reinvitation behavior is being investigated,
-so fresh reinvitation/recovery is not yet claimed.
+with no pending remote command. The owner's Apple UI still displayed the former
+contact as invitation sent; this is not evidence of active participant access.
+The owner resent the link through Apple's UI. Acceptance in a fresh participant
+workspace retained the join, but opening failed before creating a native file.
+After restarting the participant app and resuming that same workspace/join, both
+notes arrived. No additional invitation or application mutation was replayed.
+
+An offline regression identifies two workspace ownership boundaries: the demo
+must retire its old GraphContext when selecting a new workspace, and a completed
+participant purge must release the idle context graph claim. The old context
+remains blocked. An unsettled remote leave or failed native detachment must keep
+its claim. The new regression retains both old context and handle while a fresh
+context accepts the same graph into an independent empty store; it covers normal
+leave, deferred remote leave and confirmed access revocation. This is automated
+evidence, separate from the restart-assisted physical continuation.
 
 Private instrumentation lives outside shipping checkouts and is not a proposed
 public diagnostic API. Live directory copies are forensic observations rather
@@ -87,7 +99,8 @@ turn the original failed trial into a success or close broader device gates.
 
 ## Remaining scope
 
-Resolve and record native participant state after leave and fresh reinvitation.
+Fresh reinvitation recovered after an app restart, as recorded above; acceptance
+without that restart on the final workspace/claim corrections remains separate.
 Permission restoration/reverse transfer, participant restart and local/remote
 leave settlement have the bounded observations above. Repeat any required acceptance on the reviewed final library/demo
 pins. This checkpoint does not validate attachments, large-store sharing,

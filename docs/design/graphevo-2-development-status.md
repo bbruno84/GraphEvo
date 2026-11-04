@@ -35,6 +35,14 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+The H02 continuation also exposed an idle context claim retained after settled
+participant removal. The focused follow-up releases it only after purge and
+remote intent settlement, while preserving retired-context refusal and pending
+leave/quarantine ownership. Local v2 checks pass 709 macOS functions and 52
+focused iOS functions (60 parameterized runs). Fresh-workspace demo ownership
+is a separate companion change. Physical reinvitation recovered after app
+restart; no restart-free final-pin acceptance is claimed.
+
 The [H02 physical continuation](results/h02-public-invitation-2026-11-04.md)
 identified metadata-first participant history refusal before initial import.
 The [correction #153](https://github.com/bbruno84/GraphEvo/pull/153) integrates
