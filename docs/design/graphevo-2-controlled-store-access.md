@@ -115,6 +115,19 @@ It is not a replacement protocol. The native-detachment/exclusive-maintenance
 guarantee above remains required; its suspension-compatible implementation and
 PA02 physical acceptance are open. No runtime change follows from this report.
 
+## Apple owner-lifetime experiment
+
+The [M/M2 continuation](results/apple-owner-coordination-2026-11-04.md) tests the
+missing owner/maintenance boundary, beyond the earlier writer-only experiment.
+M2 uses an active NSFilePresenter-backed lease, finite NSFileCoordinator requests
+and native detach before presenter removal. Mac controls and bounded iPad
+host/widget background contention pass, including clone-restore refusal while
+active and permanent old-lease refusal after pause. The operation-bound M
+comparator retains its same-UUID/inode clone failure. Matched costs and resource
+layout, initialization/quarantine, reader-concurrency and migration limitations
+are recorded. M2 is a candidate for contract discussion, not the current runtime;
+PA02 stays open. No production lock is changed by this report.
+
 ## Transaction-local mutation inventory
 
 Only protected coordinated transactions admit a reusable Session holder in

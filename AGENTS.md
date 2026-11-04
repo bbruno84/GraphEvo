@@ -1524,3 +1524,13 @@ after the durable remote intent is cleared. Pending leave and failed detachment
 retain ownership. Retired contexts remain blocked; fresh-workspace consumers
 close prior leases and use a distinct GraphContext. See the H02 public-sharing
 contract and retained physical continuation report.
+
+The M/M2 Apple owner-lifetime experiment is recorded in
+`docs/design/results/apple-owner-coordination-2026-11-04.md`. It is not integrated
+runtime behavior. M2's active presenter lease closes permanently on pause and
+requires a new open; M's UUID/inode descriptor fails same-identity clone restore.
+Preserve those scopes and remaining lifecycle/quarantine/layout/migration gates.
+Each Foundation request uses its own coordinator, excluding only its own presenter
+where appropriate; do not share purpose identifiers or hold lifetime accessors.
+Do not copy the private prototype into production before agreeing the public
+lifecycle contract. Experiment/report work does not request remote CI by default.
