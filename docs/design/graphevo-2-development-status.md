@@ -35,6 +35,20 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+The [H02 physical continuation](results/h02-public-invitation-2026-11-04.md)
+identified metadata-first participant history refusal before initial import.
+The [correction #153](https://github.com/bbruno84/GraphEvo/pull/153) integrates
+directly from #152: both permission modes import complete records, with durable
+metadata-only initialization and retained missing-history/unknown-author refusal.
+Reviewed [full checkpoint #41872809620](https://github.com/bbruno84/GraphEvo/actions/runs/41872809620)
+passes on `012b5083082b7674dd6a525fdade32f8e9e2eb3d`: 1,040 macOS functions,
+1,037 passed iOS functions with the known skip, and both Swift 6 consumers.
+Final integration notes change documentation only; shipping, test, consumer and
+workflow inputs match that checkpoint. The existing physical replica recovered
+without replay; its bounded continuation and broader PA03 gate remain separate.
+Companion demo adoption also corrects the participant's misleading zone display
+and is tracked independently with its final library pin.
+
 [H02 public sharing](graphevo-2-public-sharing.md) integrates through
 [PR #152](https://github.com/bbruno84/GraphEvo/pull/152), directly from H01/#151.
 Native Apple invitations and presentation adapters use a fixed GraphEvoGraph

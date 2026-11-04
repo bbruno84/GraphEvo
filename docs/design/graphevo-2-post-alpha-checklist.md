@@ -39,6 +39,14 @@ is still required before closing PA03's B gate. The new cloud record type requir
 Production deployment and stopping old alpha writers; it is not a distributed
 old-client fence. Companion demo delivery is separate.
 
+The [first H02 device checkpoint](results/h02-public-invitation-2026-11-04.md)
+retains a real metadata-first history failure and the candidate's same-workspace
+recovery. The correction integrates through [#153](https://github.com/bbruno84/GraphEvo/pull/153)
+with reviewed full checkpoint #41872809620 on 012b5083; source inputs remain
+unchanged in the final documentation commit. Native acceptance/discovery, one owner-to-participant
+note and read-only enforcement are observed; later lifecycle stages and final
+pin acceptance remain open. No PA03 box closes from this partial result.
+
 ## How to close an item
 
 All boxes start open: existing evidence is input, not a claim that its broader
