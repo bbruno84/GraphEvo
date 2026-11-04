@@ -18,7 +18,7 @@ shutil.copyfile(script.with_name("GraphCloudSpoolDeviceProbe.swift"), library / 
 controller = args.destination / "GraphEvoDemo/RecordTransportProbe.swift"
 s = controller.read_text()
 old = '["seed", "update", "delete", "reopen", "read-baseline", "read-update", "read-delete", "audit", "read-audit"]'
-new = '["account", "prepare-owner", "resume-owner", "fetch-peer", "apply-peer", "verify-owner", "recover-fresh"]'
+new = '["account", "prepare-owner", "resume-owner", "fetch-peer", "apply-peer", "verify-applied-peer", "verify-owner", "recover-fresh"]'
 if s.count(old) != 1:
     raise RuntimeError("Unexpected base stage dispatcher")
 s = s.replace(old, new).replace('GraphCloudTransportDeviceProbe()', 'GraphCloudSpoolDeviceProbe()')

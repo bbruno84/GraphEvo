@@ -59,3 +59,14 @@ replication, not MF10 conversion/authority or cross-account sharing acceptance.
 Full server enumeration rejects pagination rather than inferring completeness
 from a partial page. This is bounded synthetic device correctness evidence,
 not a production latency/memory or arbitrary-media envelope.
+
+## Bounded read-only continuation
+
+`verify-applied-peer / peer` is allowed only after the retained initial
+`apply-peer` report failed. It never fetches or applies again: it requires the
+complete already-imported replica, compares all records/assets with the server,
+and checks that this fixture's queues/files are empty. The original initial
+probe incorrectly required the global session inbox to be empty; CKSyncEngine
+also reported unrelated historical zone lifecycle events. Those events must be
+preserved, not purged to pass a fixture check. Keep the original failure and
+continuation provenance separate. No shipping runtime correction is implied.

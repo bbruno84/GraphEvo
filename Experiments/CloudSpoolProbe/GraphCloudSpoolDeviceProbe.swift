@@ -23,7 +23,7 @@ public actor GraphCloudSpoolDeviceProbe {
         guard container == "iCloud.com.valerioburiani.GraphCKDemo",
               (stage == "account" && ["owner", "peer"].contains(replica)) ||
               (replica == "owner" && ["prepare-owner", "resume-owner", "verify-owner"].contains(stage)) ||
-              (replica == "peer" && ["fetch-peer", "apply-peer"].contains(stage)) ||
+              (replica == "peer" && ["fetch-peer", "apply-peer", "verify-applied-peer"].contains(stage)) ||
               (replica == "fresh" && stage == "recover-fresh") else { throw Failure.request }
         self.run = run
         root = directory.appendingPathComponent(run.uuidString).appendingPathComponent(replica)
@@ -115,6 +115,13 @@ public actor GraphCloudSpoolDeviceProbe {
             try await apply(); try await verify(); try await checkEmptyInbox()
             guard try outgoingFiles().isEmpty else { throw Failure.spool }
             return ["Original owner reopened and independently verified complete server/local state and empty queues."]
+        case "verify-applied-peer":
+            let prior = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("apply-peer.report.json"))) as? [String: Any]
+            guard prior?["status"] as? String == "failed" else { throw Failure.request }
+            // Do not replay fetch/import. A complete persisted replica is a prerequisite.
+            try await verify(); try await checkEmptyInbox()
+            return ["Read-only continuation verified already imported exact data after the original global-queue assertion failure.",
+                    "No fetch or import replay; this fixture's inbox and asset spool are empty; unrelated zone events preserved."]
         case "recover-fresh":
             try await manager.fetchCloudChanges(.private, configuration: configuration)
             try await apply(); try await verify(); try await checkEmptyInbox()
@@ -231,7 +238,9 @@ public actor GraphCloudSpoolDeviceProbe {
     }
     private func checkEmptyInbox() async throws {
         let status = try await manager.cloudStatus(configuration)
-        guard status.failure == nil, status.inboxCount == 0, status.outgoingReceiptCount == 0,
+        let zones = Set(bindings.map(\.zone))
+        let inbox = try await manager.cloudInbox(configuration, limit: configuration.maximumEvents)
+        guard status.failure == nil, inbox.allSatisfy({ !zones.contains($0.change.zone) }), status.outgoingReceiptCount == 0,
               try files(configuration.directory.appendingPathComponent("GraphEvoCloudAssets")).isEmpty else { throw Failure.spool }
     }
 }
