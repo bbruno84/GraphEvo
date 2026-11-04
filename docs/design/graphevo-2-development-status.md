@@ -43,7 +43,8 @@ extend that record; no separate invitation file or advance account identity
 exchange is required. The [discovery investigation](results/public-sharing-graph-discovery-2026-11-04.md)
 records source/documentation feasibility. The implementation candidate on codex/v2-public-sharing adds descriptor/control
 handling, explicit session-8 conversion, pre-GraphID joining and native presentation
-adapters. Local verification/review is in progress; it is not integrated, physical
+adapters. Local full/focused verification and corrective review are in progress through
+[PR #152](https://github.com/bbruno84/GraphEvo/pull/152); it is not integrated, physical
 acceptance or beta-gate closure. Existing T07/T08 ownership, permissions and destructive leave safeguards
 remain the basis of the public lifecycle.
 

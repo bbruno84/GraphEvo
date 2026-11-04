@@ -41,6 +41,9 @@ extension GraphContextManager {
             guard prior.pending?.command == command else { throw GraphCloudError.busy }
             return try await executeSharingIntent(prior, session: session)
         }
+        if try await session.membership(id)?.nativePresentationPending == true {
+            try await session.nativeReconcileOwnerShare(route, stopped: false)
+        }
         let snapshot = try await session.inspectSharing(route)
         guard let snapshot else {
             if command == .stop, let prior = try await session.membership(id) { return prior.status }

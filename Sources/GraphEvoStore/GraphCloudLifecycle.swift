@@ -48,6 +48,7 @@ struct GraphCloudMembership: Codable, Equatable, Sendable {
     var hadAccess = false
     var shareIdentity: String?
     var reason: GraphCloudRemovalReason?
+    var nativePresentationPending: Bool? = nil
     var pending: GraphCloudControlIntent?
     var failure: String?
     var terminal: Bool { phase == .purging || phase == .removed || phase == .leaving }

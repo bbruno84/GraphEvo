@@ -12,6 +12,8 @@ private actor NativeInvitationServer {
     var accepted = false
     var acceptWrites = 0
     var discarded = false
+    var currentAccount = "participant"
+    func switchAccount() { currentAccount = "other-account" }
     func available() { descriptorAvailable = true }
     func accept() { if !accepted { acceptWrites += 1; accepted = true } }
     func discover() throws -> GraphID {
@@ -31,7 +33,7 @@ private actor NativeInvitationServer {
             discover: { _, _ in try await self.discover() }, discard: { _, _, _ in await self.discard() }),
             sharing: .init(operations: operations, invite: { _, _, _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
                 accept: { _, _, _ in .readOnly }),
-            account: { _ in "participant" }, make: { _, _, _, _ in .init(fetch: { _ in }, cancel: {}) })
+            account: { _ in await self.currentAccount }, make: { _, _, _, _ in .init(fetch: { _ in }, cancel: {}) })
     }
 }
 
@@ -257,6 +259,57 @@ private actor NativeInviteGate {
         stale.phase = .openingReplica
         await #expect(throws: GraphCloudDiscoveryError.busy) { try await session.updateJoin(stale, expectedPhase: .ready) }
         #expect(try await session.nativeJoin(join.id).phase == .discarded)
+        try await session.stop()
+    }
+    @Test func malformedDescriptorCannotHideAPermissionReductionBehindTheEventLimit() async throws {
+        let config = config(), id = GraphID()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let graph = try await manager.createGraph(id: id, at: config.directory.appendingPathComponent("Reduction.sqlite"))
+        let invitation = GraphCloudInvitation(container: config.containerIdentifier, environment: config.environment,
+            graphID: id, owner: "owner", zoneName: "reduction", recipient: "participant", url: URL(string: "https://www.icloud.com/share/reduction")!)
+        let descriptor = try GraphCloudRecordCodec.archive(GraphCloudGraphDescriptor.encode(.init(zone: invitation.zone, graphID: GraphID())), scope: .shared)
+        let reduction = GraphCloudIncoming(kind: .recordDeleted, zone: invitation.zone, recordName: CKRecordNameZoneWideShare, recordType: CKRecord.SystemType.share)
+        let adapter = GraphCloudAdapter(sharing: .init(invite: { _, _, _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
+            accept: { _, _, _ in .readWrite }), account: { _ in "participant" }, make: { _, _, _, receive in
+                .init(fetch: { _ in await receive(.incoming([descriptor, reduction])) }, cancel: {})
+            })
+        _ = try await manager.startCloudSession(config, adapter: adapter)
+        try await manager.acceptCloudInvitation(invitation, configuration: config)
+        try await manager.fetchCloudChanges(.shared, configuration: config)
+        do { _ = try await manager.applyCloudInbox(for: id, configuration: config, maximumEvents: 1) } catch { }
+        #expect(try await graph.participantAccess()?.writable == false)
+        #expect(try await manager.cloudInbox(config).count == 1)
+        try await graph.close(); try await manager.stopCloudSession(config)
+    }
+    @Test func changedAccountCannotAdvanceAnAcceptedInvitationIntent() async throws {
+        let config = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        let session = try await GraphCloudSession.open(config, adapter: server.adapter)
+        let join = try await session.nativeBeginJoin(server.url)
+        await server.switchAccount()
+        await #expect(throws: GraphCloudError.accountChanged) { try await session.nativeAdvanceJoin(join.id) }
+        #expect(await server.acceptWrites == 0)
+        try await session.stop()
+    }
+    @Test func confirmedOwnerPresentationCanRecoverAStopButAnAmbiguousCreateCannot() async throws {
+        let config = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        var adapter = server.adapter
+        adapter.sharing?.operations = .init(inspect: { _, _, _ in nil }, execute: { _, _, _, _ in })
+        let session = try await GraphCloudSession.open(config, adapter: adapter)
+        let binding = GraphCloudBinding(zone: .init(scope: .private, owner: CKCurrentUserDefaultName, name: "owner-ui"), graphID: GraphID())
+        try await session.bind(binding)
+        var member = GraphCloudMembership(binding: binding, identity: try await session.identity(), generation: UUID(),
+            role: .owner, phase: .active, permission: .readWrite, hadAccess: true)
+        member.nativePresentationPending = true
+        try await session.updateMembership(member)
+        await #expect(throws: GraphCloudSharingError.metadataPending) { try await session.nativeReconcileOwnerShare(binding, stopped: false) }
+        member.shareIdentity = "confirmed-share-identity"
+        try await session.updateMembership(member)
+        try await session.nativeReconcileOwnerShare(binding, stopped: false)
+        #expect(try await session.membership(binding.graphID)?.nativePresentationPending == nil)
+        #expect(try await session.membership(binding.graphID)?.shareIdentity == nil)
         try await session.stop()
     }
 }

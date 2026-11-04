@@ -23,6 +23,12 @@ intent, then prepares the zone-wide CKShare. The system UI selects recipients;
 no account-identity exchange or custom invitation file is required. Private sharing
 and read-only/read-write are supported. CKShare.publicPermission stays none.
 
+Before handing control to Apple's UI, the confirmed share identity and pending
+presentation are persisted. After a restart, preparing the same graph reconciles
+that state. Confirmed absence of a previously acknowledged share can complete
+an interrupted stop; absence after an ambiguous first create still reports
+metadataPending and never invents another share.
+
 Retain the adapter until its UI completes and call `close()` to await cleanup or
 inspect errors. The adapter retains an independent connection and graph lease;
 closing another connection does not abandon its presentation. On macOS, a close

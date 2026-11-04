@@ -125,7 +125,8 @@ extension GraphCloudConnection {
     func forwarding<Value: Sendable>(_ stream: AsyncStream<Value>) -> GraphObservation<Value> {
         let id = UUID(), pair = AsyncStream<Value>.makeStream(bufferingPolicy: .bufferingNewest(1)), control = GraphObservationControl()
         pair.continuation.onTermination = { [weak control] _ in control?.cancel() }
-        let worker = Task {
+        // No actor state is used; detached forwarding cannot retain the connection executor.
+        let worker = Task.detached {
             for await value in stream {
                 guard !Task.isCancelled else { break }
                 pair.continuation.yield(value)
@@ -217,6 +218,9 @@ extension GraphContextManager {
             let session = try await cloud(configuration)
             guard try await session.membership(id)?.pending == nil else { throw GraphCloudError.busy }
             let binding = try await session.route(for: id)
+            if try await session.membership(id)?.nativePresentationPending == true {
+                try await session.nativeReconcileOwnerShare(binding, stopped: false)
+            }
             guard binding.zone.scope == .private else { throw GraphCloudSharingError.ownerRequired }
             guard let location = locations[id] else { throw GraphStoreError.missingGraph }
             permit = try admitSynchronization(id)
