@@ -35,6 +35,16 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
+extends writer-only research to presence, detach and destructive maintenance.
+M2's active presenter lease passes bounded macOS clone/generation controls and
+iPad host/widget contention through background; pause permanently closes the
+old lease and resume requires a new open. M retains one clone-identity FAIL.
+The matched 50-write batch is 503.73 ms for M2 versus 449.06 ms for the unprotected
+retained control and 1,333.53 ms for operation-bound M. These are experimental
+costs, not production acceptance. The shipping runtime remains unchanged and
+PA02 stays open pending the lifecycle/API contract and remaining integration gates.
+
 The maintainer revised the [alpha CI policy](graphevo-2-ci-checkpoints.md) on
 2026-11-04: reviewed, adequate affected local checks normally permit authorized
 alpha integration. Remote runs are explicit grouped checkpoints, with no rerun

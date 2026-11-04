@@ -65,6 +65,18 @@ contract before claiming safe concurrent App Group lifecycle support. Do not
 remove the lock in production or treat per-operation coordination as a complete
 replacement. Other OS versions, expiry/long writes and cloud roles remain open.
 
+## Apple owner-lifetime continuation — 2026-11-04
+
+[M/M2 evidence](results/apple-owner-coordination-2026-11-04.md) completes the
+bounded native owner/maintenance experiment: M2's presenter lease refuses active
+clone replacement, closes on pause, rejects old leases and reopens explicitly.
+Mac controls and actual iPad background/widget contention pass; 18 timing runs
+verify 1,350 commits. Preserve M's 16 PASS / one clone FAIL and both earlier
+prototype corrections. No PA02 acceptance box closes: public lifecycle/observation,
+partial-init cleanup, quarantined suspension, sibling-store layout, persistent
+workspaces/migration and session/catalog locks still need integration validation.
+This report adds no production code or remote CI checkpoint.
+
 ## How to close an item
 
 All boxes start open: existing evidence is input, not a claim that its broader

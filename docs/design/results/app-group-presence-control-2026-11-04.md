@@ -97,3 +97,8 @@ The documentation integrates through [PR #155](https://github.com/bbruno84/Graph
 The experimentation chat independently checked this summary, related gate updates
 and both evidence hashes against its final report, with no findings. This
 review establishes fidelity to the experiment, not additional runtime acceptance.
+
+The [M/M2 continuation](apple-owner-coordination-2026-11-04.md) subsequently tests
+Apple coordination for native owner lifetime and maintenance, including bounded
+iPad background contention. It preserves the L failure and fd-only controls;
+the candidate is not yet adopted by the production runtime.
