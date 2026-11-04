@@ -41,7 +41,7 @@ transferred automatically to a newer transport or schema.
 |---|---|---|
 | PA01/PA02/PA10: public API and supported runtime | Typed scopes/models, package-only ContextManager, cooperating-process locks | Public coordinated opening/bootstrap, complete Swift 6 audit, OS/process matrix, API/schema reconciliation |
 | PA02: app/widget | Read-only/process safeguards and bounded earlier App Group evidence | Current custom-sync app/widget roles, interactive-write scope, first-launch/migration and physical multiprocess acceptance |
-| PA03/PA04: cloud lifecycle | T01–T08 transport, conflicts, pause, foreground scheduling, sharing and lifecycle | Account/cache policy, public invitation integration, structural conflict scope, broader interruption/restore and new-spool device acceptance |
+| PA03/PA04: cloud lifecycle | T01–T08 transport, conflicts, pause, foreground scheduling, sharing and lifecycle | Account/cache policy, public invitation integration, structural conflict scope, broader interruption/restore and spool device acceptance beyond the bounded private checkpoint |
 | PA05/PA06: supported costs | S04/P01–P03, #142 inventory reuse, #143 descriptor queries, #144 spool | Publish supported limits; broader device/capacity acceptance and beta performance measurements |
 | PA07: observation/processing | A8 async state, Combine and live rescan hints | O04 live processing versus durable replay, recovery contract and current-backend acceptance |
 | PA08/PA09: migration/recovery | MF01–MF11 bounded protected execution, backups, conversion and authoritative new-cloud bootstrap | Public flow, historical/production source matrix, host old-client cutover, interruption and restoration acceptance |
@@ -403,7 +403,8 @@ close O04 or mark the wider beta/stable items above complete.
   native version column and global format refusal. Historical results retain scope.
 - [ ] **B** Reconcile selected S04/custom-sync sharing and independent recovery
   acceptance with [P03's bounded physical result](results/s04-typed-properties-runtime-and-cloud-2026-11-02.md)
-  and subsequent transport changes, including #144's new spool. Historical
+  and subsequent transport changes, including the
+  [private spool result](results/durable-asset-spool-device-2026-11-04.md). Historical
   S01/native-mirroring results do not certify the current complete path; do not
   require obsolete S03 fixtures as a substitute for current-model acceptance.
 - [ ] **B** Complete consumer-defined migration execution with resource/process
@@ -849,7 +850,9 @@ when closing any gate; do not infer success from an unrun or skipped workflow.
 #144 supersedes the original inline durable-body representation with owned-file
 references. The rewrite/copy measurement item below applies to that current
 representation; it must not trigger reimplementation of already integrated
-staging/restart recovery. New-spool physical acceptance remains open.
+staging/restart recovery. The bounded private new-spool checkpoint is recorded
+below; shared-account, in-flight interruption, restoration and broader resource
+acceptance remain open.
 
 - [ ] **R** Measure durable portable asset copies in frozen attempts and engine
   envelopes, whole-document rewriting, memory/I/O and send staging cleanup under
@@ -1001,6 +1004,19 @@ MF09 closes its bounded package-only local opening gate through
 [full checkpoint #355](https://github.com/bbruno84/GraphEvo/actions/runs/41422586643).
 This does not close public bootstrap, production/historical source acceptance,
 physical interruption, cross-process writers, scale or new-cloud activation.
+
+## Durable spool private device checkpoint
+
+- [x] Verify #144's bounded private spool on same-account physical devices with
+  more than 32 MiB total content: [2026-11-04 result](results/durable-asset-spool-device-2026-11-04.md).
+  Signed exports `0fc16a3` and `25ef3d2a` retain identical shipping Sources from
+  integrated #145. iPadOS 27.0/iOS 27.2 recover 40 MiB plus empty/control assets,
+  complex serialized payloads, frozen outgoing and retained incoming checkpoint
+  restarts, exact files/IDs and another empty replica. Eight reports pass; the
+  original global-inbox assertion failure is retained with a guarded read-only
+  continuation. No import replay or broad B/R gate closure. In-flight
+  interruption/power-loss, production resources, cross-account and restoration
+  remain open.
 
 ## CI checkpoint scope
 

@@ -69,6 +69,17 @@ change. A production cutover must start with admitted fresh operational state
 or a separately reviewed migration. Whole-directory backups remain necessary
 for a frozen outgoing attempt.
 
+## Physical private checkpoint — 2026-11-04
+
+The [device result](results/durable-asset-spool-device-2026-11-04.md) verifies
+40 MiB plus empty/control assets on same-account iPad/iPhone: restart before
+send, restart before import, exact content/references, bounded control archives,
+cleanup and another fresh replica. Eight reports pass; one original probe
+assertion fails on unrelated global zone events and is followed by a guarded
+read-only continuation, without import replay. No shipping runtime change is
+needed. This closes the bounded private spool checkpoint; broader gates below
+remain open. Neither restart occurs during file/native publication or power loss.
+
 ## Bounded evidence and open gates
 
 Local tests cover reference recovery after session/store restart, compact
