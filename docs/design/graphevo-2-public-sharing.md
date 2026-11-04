@@ -1,8 +1,12 @@
 # H02 — public sharing through the coordinated context
 
-Status: selected direction and implementation candidate, 2026-11-04.
-Implementation is under local verification on codex/v2-public-sharing; it is not
-yet reviewed/integrated or physically accepted. Base: integrated H01/#151 (`a1097ff1`) and companion demo PR #2.
+Status: implemented through [PR #152](https://github.com/bbruno84/GraphEvo/pull/152),
+2026-11-04, based on integrated H01/#151 (`a1097ff1`) and demo PR #2.
+Reviewed [full checkpoint #41836169999](https://github.com/bbruno84/GraphEvo/actions/runs/41836169999)
+passes on `dc0ea8932a56fe5bed46844628f2020d26f72a32` with 1,038 macOS functions,
+1,035 passed iOS functions with the known skip, and both Swift 6 consumers. Final integration notes are documentation-only;
+shipping, tests, consumers and workflow inputs match that checkpoint.
+Native UI/two-account physical acceptance remains open.
 Read with [H01](graphevo-2-public-entry.md), [T07](graphevo-2-zone-sharing.md),
 [T08](graphevo-2-sharing-lifecycle.md),
 [account isolation](graphevo-2-cloud-account-isolation.md) and the
@@ -13,8 +17,9 @@ name, GraphID and a format version. Future metadata may extend that record under
 explicit compatibility rules. The [discovery investigation](results/public-sharing-graph-discovery-2026-11-04.md)
 provides the feasibility rationale. The selected onboarding direction uses Apple's
 invitation/acceptance followed by descriptor discovery; no separate invitation
-file or advance account-identity exchange is required. This selects the direction,
-not an implemented API, completed native UI adapter or physical acceptance.
+file or advance account-identity exchange is required. Implementation and bounded
+automated evidence follow below; the original selection alone did not establish
+native physical acceptance.
 
 ## Outcome and ownership
 
@@ -235,7 +240,8 @@ or redesign attachment persistence to expose this API.
    Availability of two different accounts is a physical-fixture prerequisite,
    not a reason to reinterpret same-account private recovery as sharing proof.
 
-No beta gate is closed by this selection. Native presentation/URL-only onboarding
-still requires implementation and evidence. Independent readers/protected data,
-broader structural conflicts, interruption/restore, production limits and background scope remain explicit checklist work.
+No beta gate is closed by this increment. Native presentation/URL-only onboarding
+is implemented; its two-account physical evidence remains required. Independent
+readers/protected data, broader structural conflicts, interruption/restore,
+production limits and background scope remain explicit checklist work.
 Physical account-switch trials retain their agreed during-beta scheduling.

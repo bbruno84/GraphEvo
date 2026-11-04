@@ -23,18 +23,21 @@ acceptance below. Public invitation onboarding, independent-reader/protected-dat
 production cutover, restoration and final distribution/API audits remain open.
 No schema, persisted format or account-change beta scheduling gate is changed.
 
-## H02 public sharing proposal — 2026-11-04
+## H02 public sharing — 2026-11-04
 
-The [proposed contract](graphevo-2-public-sharing.md) defines public T07/T08
-ownership, interrupted acceptance, observable permissions and destructive
-leave/recovery. The maintainer selects native invitations plus a fixed system
-record containing GraphID and descriptor format version. Descriptor compatibility,
-pre-GraphID join recovery and native UI implementation/evidence are still required
-before closing PA03's B gate. All acceptance boxes remain unchanged. The H02 implementation candidate adds a
-validated explicit session-8 upgrade and initial-save participant markers; public
-injected/local evidence does not close native UI/two-account acceptance. The new
-cloud record type requires Production deployment and stopping old alpha writers;
-it is not a distributed old-client fence.
+[PR #152](https://github.com/bbruno84/GraphEvo/pull/152) implements the selected
+[contract](graphevo-2-public-sharing.md): native invitations/UI, fixed GraphID
+and descriptor-version control record, durable pre-GraphID joins, observable
+permissions and guarded leave/recovery. Full checkpoint #41836169999 passes on
+dc0ea893 with both platform suites and Swift 6 consumers. Explicit session-8
+conversion preserves validated state; initial-save participant/account markers
+and stale-generation guards protect restart/reinvite boundaries. MF10 private
+recovery also validates/excludes native CKShare control metadata.
+
+All acceptance boxes remain unchanged. Native UI/two-account physical acceptance
+is still required before closing PA03's B gate. The new cloud record type requires
+Production deployment and stopping old alpha writers; it is not a distributed
+old-client fence. Companion demo delivery is separate.
 
 ## How to close an item
 

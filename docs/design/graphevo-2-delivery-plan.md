@@ -40,10 +40,12 @@ Proposed delivery order:
 2. Companion demo adoption of [H01](graphevo-2-public-entry.md) is tracked in
    [GraphEvoDemo PR #2](https://github.com/bbruno84/GraphEvoDemo/pull/2), preserving
    existing user stores and using a reviewed library revision. That PR is merged.
-   [H02 public sharing](graphevo-2-public-sharing.md) is the next proposed contract
-   for invitation and lifecycle integration. Native onboarding plus a fixed
-   GraphID/format-version system descriptor is selected; protocol details,
-   restart recovery and presentation adapters remain to implement and verify.
+   [H02 public sharing](graphevo-2-public-sharing.md) integrates through
+   [PR #152](https://github.com/bbruno84/GraphEvo/pull/152): native onboarding,
+   fixed GraphID/format-version discovery, durable join recovery and presentation
+   adapters. Its reviewed full checkpoint does not close native UI/two-account
+   physical acceptance. Deliver the companion demo on the final library pin,
+   then complete that bounded device path separately.
 3. Resolve remaining beta decisions: app/widget roles and first launch,
    account/cache acceptance, O04 processing semantics, conflict scope, supported
    platforms/processes and API/schema reconciliation. Background scheduling
