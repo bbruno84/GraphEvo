@@ -42,6 +42,11 @@ capabilities, exact replica recovery, permissions and destructive leave semantic
 The contract is for discussion; no H02 source change, new acceptance evidence or
 beta-gate closure is claimed. Native presentation and URL-only onboarding remain
 an explicit decision boundary.
+The subsequent [GraphID discovery investigation](results/public-sharing-graph-discovery-2026-11-04.md)
+finds native URL acceptance plus a shared identity-record read feasible. It
+supersedes the need for separate invitation files in the initial proposal;
+the universal identity record and pre-GraphID join recovery are proposed changes,
+not implemented or physically validated behavior.
 
 [H01 public coordinated entry](graphevo-2-public-entry.md) was selected through
 PR #149 and its library implementation integrates through

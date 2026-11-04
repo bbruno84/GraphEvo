@@ -7,6 +7,15 @@ Read with [H01](graphevo-2-public-entry.md), [T07](graphevo-2-zone-sharing.md),
 [account isolation](graphevo-2-cloud-account-isolation.md) and the
 [release checklist](graphevo-2-post-alpha-checklist.md).
 
+Research update: [native GraphID discovery](results/public-sharing-graph-discovery-2026-11-04.md)
+shows that Apple's standard invitation can support onboarding without the
+separate capability file proposed below. A fixed zone identification record is
+recommended for bounded lookup including empty graphs; it is not implemented.
+The capability-only transport and corresponding acceptance signatures below
+are the initial proposal, not a selected requirement. Revise them around native
+acceptance/discovery after protocol review. No identity secrecy requires the
+separate file, and the two-step demo exchange is not the recommended final UX.
+
 ## Outcome and ownership
 
 An external Swift 6 application can invite a selected participant, accept the
