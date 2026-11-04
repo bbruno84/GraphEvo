@@ -47,6 +47,18 @@ unchanged in the final documentation commit. Native acceptance/discovery, one ow
 note and read-only enforcement are observed; later lifecycle stages and final
 pin acceptance remain open. No PA03 box closes from this partial result.
 
+## App Group physical control — 2026-11-04
+
+The [presence-lock control](results/app-group-presence-control-2026-11-04.md)
+reproduces 0xdead10cc for both real iPad processes retaining owners.flock;
+bootstrap writer locks had already been released. The matched fd-only variant
+survives and passes short bidirectional app/widget round trips, while refusing
+exclusive/destructive maintenance. It is experimental evidence only. **PA02
+remains open:** replace lifetime presence with a suspension-compatible exclusion
+contract before claiming safe concurrent App Group lifecycle support. Do not
+remove the lock in production or treat per-operation coordination as a complete
+replacement. Other OS versions, expiry/long writes and cloud roles remain open.
+
 ## How to close an item
 
 All boxes start open: existing evidence is input, not a claim that its broader

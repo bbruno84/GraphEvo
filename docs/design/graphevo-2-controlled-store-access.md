@@ -105,6 +105,16 @@ callbacks are not covered. The role marker is not a distributed old-client
 fence. Hosts must stop such writers before adoption. Sidecar checks do not
 provide a malicious-writer or arbitrary filesystem replacement guarantee.
 
+## Physical App Group lifecycle finding
+
+The [2026-11-04 presence control](results/app-group-presence-control-2026-11-04.md)
+reproduces iOS termination of app and widget while the lifetime shared presence
+flock is held in an App Group. A matched fd-only control survives and completes
+short bidirectional round trips, but explicitly refuses destructive maintenance.
+It is not a replacement protocol. The native-detachment/exclusive-maintenance
+guarantee above remains required; its suspension-compatible implementation and
+PA02 physical acceptance are open. No runtime change follows from this report.
+
 ## Transaction-local mutation inventory
 
 Only protected coordinated transactions admit a reusable Session holder in
