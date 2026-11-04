@@ -41,8 +41,9 @@ Proposed delivery order:
    [GraphEvoDemo PR #2](https://github.com/bbruno84/GraphEvoDemo/pull/2), preserving
    existing user stores and using a reviewed library revision. That PR is merged.
    [H02 public sharing](graphevo-2-public-sharing.md) is the next proposed contract
-   for invitation and lifecycle integration; native presentation/URL-only
-   onboarding is an explicit decision boundary. No implementation is claimed.
+   for invitation and lifecycle integration. Native onboarding plus a fixed
+   GraphID/format-version system descriptor is selected; protocol details,
+   restart recovery and presentation adapters remain to implement and verify.
 3. Resolve remaining beta decisions: app/widget roles and first launch,
    account/cache acceptance, O04 processing semantics, conflict scope, supported
    platforms/processes and API/schema reconciliation. Background scheduling

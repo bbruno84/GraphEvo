@@ -35,18 +35,17 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
-[H02 public sharing](graphevo-2-public-sharing.md) is the next proposed contract,
-based on integrated H01/#151 and the merged companion demo PR #2. It exposes
-existing T07/T08 through the explicit context/connection, with protected invitation
-capabilities, exact replica recovery, permissions and destructive leave semantics.
-The contract is for discussion; no H02 source change, new acceptance evidence or
-beta-gate closure is claimed. Native presentation and URL-only onboarding remain
-an explicit decision boundary.
-The subsequent [GraphID discovery investigation](results/public-sharing-graph-discovery-2026-11-04.md)
-finds native URL acceptance plus a shared identity-record read feasible. It
-supersedes the need for separate invitation files in the initial proposal;
-the universal identity record and pre-GraphID join recovery are proposed changes,
-not implemented or physically validated behavior.
+[H02 public sharing](graphevo-2-public-sharing.md) is the next contract under
+preparation, based on integrated H01/#151 and the merged companion demo PR #2.
+The maintainer selects native invitation/acceptance followed by one fixed system
+record containing GraphID and descriptor format version. Future metadata can
+extend that record; no separate invitation file or advance account identity
+exchange is required. The [discovery investigation](results/public-sharing-graph-discovery-2026-11-04.md)
+records source/documentation feasibility. Descriptor/control compatibility,
+pre-GraphID join recovery and native presentation adapters remain implementation
+design work; no H02 source change, physical acceptance or beta-gate closure is
+claimed. Existing T07/T08 ownership, permissions and destructive leave safeguards
+remain the basis of the public lifecycle.
 
 [H01 public coordinated entry](graphevo-2-public-entry.md) was selected through
 PR #149 and its library implementation integrates through

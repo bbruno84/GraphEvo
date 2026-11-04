@@ -7,14 +7,13 @@ Read with [H01](graphevo-2-public-entry.md), [T07](graphevo-2-zone-sharing.md),
 [account isolation](graphevo-2-cloud-account-isolation.md) and the
 [release checklist](graphevo-2-post-alpha-checklist.md).
 
-Research update: [native GraphID discovery](results/public-sharing-graph-discovery-2026-11-04.md)
-shows that Apple's standard invitation can support onboarding without the
-separate capability file proposed below. A fixed zone identification record is
-recommended for bounded lookup including empty graphs; it is not implemented.
-The capability-only transport and corresponding acceptance signatures below
-are the initial proposal, not a selected requirement. Revise them around native
-acceptance/discovery after protocol review. No identity secrecy requires the
-separate file, and the two-step demo exchange is not the recommended final UX.
+Decision, 2026-11-04: the maintainer selects a small system record with a fixed
+name, GraphID and a format version. Future metadata may extend that record under
+explicit compatibility rules. The [discovery investigation](results/public-sharing-graph-discovery-2026-11-04.md)
+provides the feasibility rationale. The selected onboarding direction uses Apple's
+invitation/acceptance followed by descriptor discovery; no separate invitation
+file or advance account-identity exchange is required. This selects the direction,
+not an implemented API, completed native UI adapter or physical acceptance.
 
 ## Outcome and ownership
 
@@ -31,41 +30,49 @@ Public access means library API availability; CKShare.publicPermission stays non
 The native schema, logical payload and session formats are unchanged unless a
 separately reviewed implementation necessity is demonstrated.
 
-## Apple integration and invitation boundary
+## Apple integration and graph descriptor
 
 Apple provides [zone-wide sharing](https://developer.apple.com/videos/play/wwdc2021/10086/)
 and [share metadata callbacks](https://developer.apple.com/documentation/cloudkit/ckshare/metadata).
-These identify the native share. Our existing T07 protocol also needs GraphID;
-that library identity is not inferred from a share title, local filename or a
-zone-name convention. This is a GraphEvo protocol constraint, not an Apple limit
-on application-defined discovery.
+The native metadata identifies the exact share and zone. After native acceptance,
+the participant reads a small system descriptor from that zone's shared database
+to learn GraphID, including when the graph contains no application nodes.
 
-The first public increment retains the existing invitation capability: container,
-environment, GraphID, owner, recipient, zone name and Apple's share URL. The host
-transports the complete capability through an authenticated/protected channel
-and selects the local file. It contains no local paths or application payloads.
-No custom network authorization, user directory, identity lookup by email/phone,
-public-link access or server-side invitation registry is introduced.
+The descriptor has a fixed record name within the zone and initially contains
+only GraphID and its own format version. GraphID is a stable public identifier,
+not an authorization credential. This version describes the descriptor protocol,
+not application payload versions, native Core Data schema or sync completion.
+Do not add account credentials, device-specific state, synchronization progress
+or an application-format registry. Additional metadata is future work, not a set
+of speculative fields to implement now. Define unknown-optional-field tolerance
+and reject unsupported required semantics before use. Exact record/type/key names
+and size bounds must be recorded with the implementation.
 
-Expose an opaque Codable/Sendable recipient identity obtained from the verified
-connection, rather than requiring applications to construct CloudKit record-name
-strings. Invitations are opaque Codable/Sendable values with a readable GraphID;
-decoding does not certify authenticity or access. Validate bounded fields before
-local changes and independently check live metadata, current recipient, container,
-environment, zone, owner, role and permission before acceptance. Native CloudKit
-checks remain the authority. Never log recipient identities, invitations or URLs.
-Publish the encoded capability's size/format limits with the implementation.
+Publish and validate the descriptor before exposing a new share. Read it directly
+by its fixed ID under the existing session scope gate, without fetching application
+payloads/assets or advancing CKSyncEngine's import checkpoint. Preserve the MF10
+activation authority record as a separate protocol. Recognize the new descriptor
+as control metadata in import, budget and conflict handling; it must not enter the
+GraphEvoNode decoder. This is a cloud protocol addition and requires an explicit
+old-alpha-zone compatibility policy; it does not require a native model change.
 
-Apple's [standard sharing UI](https://developer.apple.com/documentation/cloudkit/shared-records)
-remains the preferred candidate for a later presentation adapter. Passing a
-mutable CKShare to UICloudSharingController/NSSharingService needs a defined
-admission, reconciliation and durable-intent boundary; it must not bypass T07/T08
-by adding an independent writer. This increment supplies explicit-recipient
-operations and a demo transport, not a claim that a bare Apple URL can bootstrap
-an unknown GraphID. A callback may resume a known invitation after exact matching;
-an unknown URL/metadata callback must report that the GraphEvo capability is
-required, without creating a replica. Native UI/URL-only onboarding remains an
-explicit B-gate decision, not silently deferred beta work.
+The descriptor identifies the graph; CloudKit still authorizes access. Shared
+writers must not be assumed unable to edit it. Pin established graph/zone bindings,
+validate every imported node against them, and refuse a changed or conflicting
+identity without redirecting a replica or authorizing local deletion. A missing
+record is resumable unavailable metadata, never permission to invent GraphID.
+
+Use [Apple's standard sharing UI](https://developer.apple.com/documentation/cloudkit/shared-records)
+for the native presentation path, with an explicit admission, reconciliation and
+durable-intent boundary around mutable CKShare access. Exact platform adapter
+signatures and UI lifecycle remain implementation design work. Do not introduce
+another synchronization manager or bypass T07/T08 through an independent writer.
+The host handles platform callbacks and chooses an explicit local file after
+identity discovery. Invitations and native account references must not be logged.
+
+The existing package-only capability may remain for historical probes and tests;
+it is not a required public transport. There is no separate capability-file demo,
+custom user directory or account-identity exchange in the selected native flow.
 
 ## Proposed public call shapes
 
@@ -73,16 +80,13 @@ All additions target iOS 17/macOS 14 and remain in the GraphEvo product. Names
 below are proposed signatures, not implemented declarations. Supporting values
 have documented consumer fields and initializers where construction is meaningful;
 runtime routes, membership journals and native share archives stay internal.
+The sketch covers lifecycle operations only. Native presentation, acceptance and
+post-discovery replica opening need separate reviewed signatures; they must not
+require the host to know GraphID before native acceptance. Platform invitation
+bridges may accept CloudKit types where needed, as allowed by M17.
 
 ```swift
 extension GraphCloudConnection {
-    func sharingIdentity() async throws -> GraphCloudParticipantIdentity
-    func inviteParticipant(_ recipient: GraphCloudParticipantIdentity,
-                           to graph: GraphStore,
-                           permission: GraphCloudSharePermission = .readWrite)
-        async throws -> GraphCloudInvitation
-    func acceptInvitation(_ invitation: GraphCloudInvitation, at storeURL: URL)
-        async throws -> GraphStore
     func participants(in graph: GraphStore) async throws -> [GraphCloudParticipant]
     func setPermission(_ permission: GraphCloudSharePermission,
                        for participant: GraphCloudParticipantIdentity,
@@ -124,28 +128,34 @@ account. Preserve the durable T07 create marker and metadataPending after an
 ambiguous create. Never create a second share as a retry. A returned invitation
 does not certify export of pending graph writes.
 
-Acceptance validates the capability, immutable route, URL and context claims
-before making persistent account/participant changes. Use an explicit absolute
-SQLite URL as in H01. A fresh request creates only an absent target. Retry may
-resume only the exact durable joining generation, native store identity and
-untouched target; reject nonempty, foreign, replaced or mismatched resources.
-Preflight errors must leave an unrelated local-only graph unchanged.
+Acceptance validates live native metadata, the configured container, exact
+zone-wide share, current participant role/permission and account epoch. Persist
+a bounded pre-GraphID joining intent keyed by the account/container/share-zone
+before the native call. GraphID discovery and local file selection follow native
+acceptance, not the other way around. A crash between these stages must resume
+the same intent by inspecting server acceptance, without requiring a local store.
 
-Return a GraphStore after native acceptance and local access metadata commit.
-It may contain no records yet. Acceptance, readable access, imported content and
-peer convergence are separate facts; no fake download percentage/completion
-certificate is introduced. An interrupted acceptance may have committed remotely
-before throwing: keep the intent, retry the same capability and inspect native
-acceptance rather than replaying it. Do not erase the target on error.
+After descriptor validation, expose detached graph identity so the host can select
+an absolute SQLite URL as in H01. Claim context/graph/resource ownership before
+local changes. A fresh request creates only an absent target. Retry may resume
+only the exact durable joining generation and native store identity; reject
+nonempty, foreign, replaced or mismatched resources. Preflight errors leave an
+unrelated local-only graph unchanged. Do not erase a target on acceptance error.
+
+Return a GraphStore after native acceptance, descriptor validation and local
+access metadata commit. It may contain no records yet. Acceptance, readable
+access, imported content and peer convergence are separate facts; no fake
+percentage/completion certificate is introduced. Missing descriptor or network
+failure retains a retryable join, not a fabricated graph or silent rollback.
 
 On restart, the host restores its saved GraphID/file selection and connection.
 `registerSharedReplica` registers only an existing journal membership's exact
 current URL for control recovery without granting application access or creating
 a missing store. It must support interrupted purge, including already absent
 native files, under T08's identity guards. Then normal `context.openGraph`
-restores participant access checks; incomplete joins resume via the same
-invitation. Cold participant data stays blocked until account and membership
-checks satisfy the existing contract. Account monitoring remains independent of
+restores participant access checks; incomplete joins resume their exact native
+share intent and descriptor discovery. Cold participant data stays blocked until
+account and membership checks satisfy the existing contract. Account monitoring remains independent of
 transport; closing a connection never converts a shared replica to local-only.
 
 ## Permission, observation and destructive operations
@@ -196,22 +206,23 @@ One functional implementation PR follows contract selection. Reuse T07/T08 and
 existing ownership/account boundaries; do not introduce a native model revision
 or redesign attachment persistence to expose this API.
 
-1. Public values/aliases and connection wrappers; exact context/namespace checks,
-   early validation, shared-route pause/resume, bounded observation and restart
-   registration. Review account/close/startup races and offline control admission.
+1. Define the bounded descriptor/control protocol, compatibility and pre-GraphID
+   join recovery, then native presentation/acceptance bridges and public values/
+   connection wrappers. Preserve context/namespace checks, shared-route pause,
+   bounded observation and restart registration. Review account/close/startup
+   races and offline control admission.
 2. External `import GraphEvo` Swift 6 consumer compilation and deterministic tests:
-   invite/accept, wrong recipient/container/environment, malformed input without
-   local claiming, interrupted join/reopen, read-only across leases, offline leave,
+   native invite/accept and empty-graph discovery, wrong container/participant,
+   malformed/conflicting/unsupported descriptor without local claiming, restart
+   after native acceptance but before GraphID/file selection, interrupted join/reopen,
+   read-only across leases, offline leave,
    purge failure/quarantine, confirmed loss, reinvite and unrelated-graph progress.
    Reuse native regressions; do not label injected results physical evidence.
-3. Companion demo: owner invite/export capability and participant import into a
-   separate explicit workspace, status/permission presentation and confirmed
-   destructive actions. Persist descriptors before work; preserve existing user
-   stores. Use a bounded capability file/share action for this first transport.
-   The recipient first exports its opaque identity for the owner to import;
-   the owner returns the resulting invitation capability. No email/SMS delivery
-   service or raw identity text entry is required. This two-step demo is not
-   presented as acceptance of the final consumer invitation UX.
+3. Companion demo: native sharing presentation and invitation callback, descriptor
+   discovery and explicit participant workspace selection, status/permission
+   presentation and confirmed destructive actions. Persist restart state before
+   side effects; preserve existing user stores. No separate invitation file or
+   advance recipient identity exchange. Test both empty and populated graphs.
 4. Review/correct, then the required full persistence/sync/lifecycle checkpoint
    on the reviewed source, then authorized integration. Demo has its own tested
    dependency pin. Documentation-only contract review needs no full suite.
@@ -221,7 +232,7 @@ or redesign attachment persistence to expose this API.
    Availability of two different accounts is a physical-fixture prerequisite,
    not a reason to reinterpret same-account private recovery as sharing proof.
 
-No beta gate is closed by this proposal. Native presentation/URL-only onboarding,
-independent readers/protected data, broader structural conflicts, interruption/
-restore, production limits and background scope remain explicit checklist work.
+No beta gate is closed by this selection. Native presentation/URL-only onboarding
+still requires implementation and evidence. Independent readers/protected data,
+broader structural conflicts, interruption/restore, production limits and background scope remain explicit checklist work.
 Physical account-switch trials retain their agreed during-beta scheduling.
