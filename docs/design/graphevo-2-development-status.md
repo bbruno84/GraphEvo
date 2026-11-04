@@ -35,6 +35,13 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.md)
+selects priority partial-open/quarantine, cancellation/attachment, repeated
+lifecycle and synchronization-owner tests in a separate N laboratory. Physical
+targets are iPadOS 27.0 and iOS 18.7.11. This is test authorization, not production
+adoption: missing priority evidence keeps the integration gate open, and PA02
+remains open. No remote CI is requested for this laboratory/documentation work.
+
 The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
 extends writer-only research to presence, detach and destructive maintenance.
 M2's active presenter lease passes bounded macOS clone/generation controls and
