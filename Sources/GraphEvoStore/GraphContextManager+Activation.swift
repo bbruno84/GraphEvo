@@ -214,7 +214,7 @@ extension GraphContextManager {
                     let inventory = try await service.inventory(configuration, identity, route, limits)
                     _ = try await Self.seedManifest(inventory, session: session, binding: route,
                                                     authority: remote.value, limits: limits)
-                    var events = inventory.filter { !GraphCloudAuthorityCodec.isControl($0) }
+                    var events = inventory.filter { !GraphCloudAuthorityCodec.isControl($0) && !GraphCloudGraphDescriptor.isControl($0) && !GraphCloudShareControl.isControl($0) }
                     // Only this unexposed replica may be reconciled against a complete verified zone cut.
                     // A retry can otherwise retain an earlier import whose row was subsequently deleted remotely.
                     let present = Set(events.compactMap(\.recordName))
@@ -280,7 +280,11 @@ extension GraphContextManager {
             if let data = try await session.assetData(for: event, binding: binding) {
                 record["asset"] = data as CKRecordValue
             }
-            if GraphCloudAuthorityCodec.isControl(event) {
+            if GraphCloudGraphDescriptor.isControl(event) {
+                try GraphCloudGraphDescriptor.validate(event, binding: binding)
+            } else if GraphCloudShareControl.isControl(event) {
+                try GraphCloudShareControl.validateOwnerInventory(event, binding: binding)
+            } else if GraphCloudAuthorityCodec.isControl(event) {
                 guard try GraphCloudAuthorityCodec.decode(record, binding: binding).value.matches(authority) else {
                     throw GraphCloudActivationError.authorityConflict
                 }

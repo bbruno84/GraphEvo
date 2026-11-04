@@ -61,7 +61,7 @@ private actor SharingCalls {
     }
 
     @Test(arguments: [GraphCloudSharePermission.readOnly, .readWrite])
-    func acceptanceProtectsAllHandlesAndPersistsPermission(_ permission: GraphCloudSharePermission) async throws {
+    func acceptanceProtectsAllHandlesAndPersistsPermission(_ permission: GraphEvoStore.GraphCloudSharePermission) async throws {
         let config = config(), manager = manager(), id = GraphID(), entered = SharingLatch(), finish = SharingLatch()
         defer { try? FileManager.default.removeItem(at: config.directory) }
         let path = config.directory.appendingPathComponent("A.sqlite")

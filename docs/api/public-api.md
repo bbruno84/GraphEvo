@@ -2069,3 +2069,44 @@ An interrupted initial peer import is reconciled against a new complete validate
 zone cut before availability: previously imported rows absent from that cut are
 removed through import receipts while consumer access is still closed. This does
 not turn ordinary missing lookups into deletion evidence.
+
+## H02 — native sharing and graph discovery (v2 alpha)
+
+Available on iOS 17/macOS 14 through the existing GraphEvo product and explicitly
+owned GraphContext/GraphCloudConnection. See the [operational guide](../guides/public-sharing.md)
+and [contract](../design/graphevo-2-public-sharing.md).
+
+- `GraphCloudConnection.prepareSharing(for:title:) async throws -> GraphCloudSharingPresentation`
+  prepares the graph descriptor/share and a main-actor native presentation adapter.
+  `present(from:)` accepts UIViewController on iOS or NSView on macOS; retain it
+  through completion and use `close() async throws` for awaited cleanup. Its
+  `failure` is a bounded GraphCloudConnectionFailure. Native SDK objects stay internal.
+- `acceptInvitation(at: URL)` and `acceptInvitation(_: CKShare.Metadata)` return
+  GraphCloudJoin after durable intent publication; network/discovery failure after
+  that point is retained in state. Both are async throwing.
+- GraphCloudJoin exposes stable `id`, async throwing `state`, `observeState()` and
+  `retry()`. GraphCloudJoinState exposes optional graphID, phase and bounded failure.
+  Phases: acceptancePending, discoveringGraph, ready, openingReplica, joined,
+  discarding, discarded. Ready identifies the graph; joined does not certify import.
+- `pendingInvitations()` returns retained non-discarded joins; `openReplica(for:at:)`
+  returns GraphStore for an exact selected URL; `discardInvitation(_:)` abandons
+  a join without a replica through a durable remote leave when necessary.
+- `participants(in:)`, `setPermission(_:for:in:)`, `removeParticipant(_:from:)`,
+  `stopSharing(_:)` and `leaveSharedGraph(_:)` expose the existing guarded lifecycle.
+  GraphCloudParticipant has optional opaque `id`, permission, accepted and owner.
+  Permissions are readOnly/readWrite. Leave destroys the replica and unsent work;
+  stopSharing preserves owner graph data. The host confirms destructive user intent.
+- `sharingStatus(for:)`, `observeSharing(for:)`, `refreshSharing(for:)` and
+  `registerSharedReplica(id:at:)` support membership presentation and restart recovery.
+  GraphCloudSharingStatus exposes graphID, generation, role, phase, permission,
+  reason, remoteOperationPending and bounded failure. Status survives local removal.
+  Shared routes also support existing pause/resume APIs.
+- GraphCloudDiscoveryError distinguishes invalidDescriptor, unsupportedDescriptor,
+  metadataPending, invalidInvitation, busy, graphPaused, limitExceeded, invalidJoin
+  and sessionUpgradeRequired.
+  Existing typed store/sharing errors remain available; native operation errors
+  never imply that durable acceptance/removal rolled back.
+- GraphCloudConnectionConfiguration adds `allowsSessionUpgradeFromV8: Bool = false`.
+  True permits only validated atomic format-8 to format-9 session conversion;
+  it neither resets data nor starts a cross-account session. Known errors and
+  bounded state remain separate from native cleanup quarantine.

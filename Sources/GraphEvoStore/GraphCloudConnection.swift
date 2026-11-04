@@ -4,16 +4,18 @@ import GraphEvoModel
 /// Independently closeable consumer interest in context-owned cloud transport.
 @available(iOS 17, macOS 14, *)
 public actor GraphCloudConnection {
-    var owningContext: GraphContext { context }
+    nonisolated var owningContext: GraphContext { context }
     private let context: GraphContext
     private let namespace: String
     private let token: UUID
     private let hub: GraphCloudConnectionHub
+    var publicObservationControls: [UUID: GraphObservationControl] = [:]
     private var closing: Task<Void, any Error>?
     init(context: GraphContext, namespace: String, token: UUID, hub: GraphCloudConnectionHub) {
         self.context = context; self.namespace = namespace; self.token = token; self.hub = hub
     }
     deinit {
+        for control in publicObservationControls.values { control.cancel() }
         hub.finish(owner: token)
         let context = context, namespace = namespace, token = token
         if closing == nil { Task { try? await context.releaseConnection(namespace, token: token) } }
@@ -48,7 +50,7 @@ public actor GraphCloudConnection {
     public func pauseSynchronization(for graphID: GraphID) async throws {
         let config = try await ready()
         try await operation {
-            guard try await context.manager.cloud(config).routes(in: .private).contains(where: { $0.graphID == graphID }) else { throw GraphStoreError.foreignGraph }
+            guard try await hasRoute(graphID, configuration: config) else { throw GraphStoreError.foreignGraph }
             try await context.manager.pauseCloudSynchronization(for: graphID)
         }
     }
@@ -56,13 +58,14 @@ public actor GraphCloudConnection {
     public func resumeSynchronization(for graphID: GraphID) async throws {
         let config = try await ready()
         try await operation {
-            guard try await context.manager.cloud(config).routes(in: .private).contains(where: { $0.graphID == graphID }) else { throw GraphStoreError.foreignGraph }
+            guard try await hasRoute(graphID, configuration: config) else { throw GraphStoreError.foreignGraph }
             try await context.manager.resumeCloudSynchronization(for: graphID)
         }
     }
     /// Releases this lease; final release awaits native stop without erasing data.
     public func close() async throws {
         if let closing { return try await closing.value }
+        for control in publicObservationControls.values { control.cancel() }
         hub.finish(owner: token)
         let context = context, namespace = namespace, token = token
         let task = Task {
@@ -72,10 +75,17 @@ public actor GraphCloudConnection {
         closing = task
         try await task.value
     }
-    private func check() async throws {
+    func check() async throws {
         guard closing == nil else { throw GraphCloudConnectionError.closed }
         _ = try await context.configuration(namespace, token: token)
         guard closing == nil else { throw GraphCloudConnectionError.closed }
+    }
+    func retainForwardedObservation(_ id: UUID, control: GraphObservationControl) {
+        guard closing == nil else { control.cancel(); return }
+        publicObservationControls[id] = control
+    }
+    func sharingConfiguration() async throws -> GraphCloudConfiguration {
+        try await check(); return try await context.configuration(namespace, token: token)
     }
     func ready() async throws -> GraphCloudConfiguration {
         try await check(); return try await context.requireReady(namespace, token: token)

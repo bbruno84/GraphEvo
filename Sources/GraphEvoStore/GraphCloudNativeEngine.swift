@@ -5,7 +5,7 @@ import GraphEvoModel
 @available(iOS 17, macOS 14, *)
 extension GraphCloudAdapter {
     static let live: GraphCloudAdapter = {
-        var adapter = GraphCloudAdapter(sharing: .live, ledger: .live, activation: .live, account: { identifier in
+        var adapter = GraphCloudAdapter(nativeSharing: .live, sharing: .live, ledger: .live, activation: .live, account: { identifier in
             guard Bundle.main.bundleURL.pathExtension != "appex" else { throw GraphCloudError.invalidConfiguration }
             let container = CKContainer(identifier: identifier)
             guard try await container.accountStatus() == .available else { throw GraphCloudError.accountUnavailable }

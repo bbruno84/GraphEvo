@@ -76,3 +76,29 @@ func compilePublicCloudSurface(context: GraphContext, graph: GraphStore, connect
     let _: GraphCloudReplicaResult = try await connection.openReplica(id: graph.id, at: replicaURL, zoneName: "Public")
     try await connection.close()
 }
+
+/// Compiles native invitation and lifecycle APIs without live CloudKit side effects.
+@available(macOS 14, *)
+func compilePublicSharingSurface(connection: GraphCloudConnection, graph: GraphStore, url: URL) async throws {
+    let presentation: GraphCloudSharingPresentation = try await connection.prepareSharing(for: graph, title: "Shared graph")
+    try await presentation.close()
+    let join: GraphCloudJoin = try await connection.acceptInvitation(at: url)
+    let _: GraphCloudJoinState = try await join.state
+    let progress = try await join.observeState(); progress.cancel()
+    try await join.retry()
+    let _: [GraphCloudJoin] = try await connection.pendingInvitations()
+    let replica = try await connection.openReplica(for: join, at: url)
+    try await replica.close()
+    let participants: [GraphCloudParticipant] = try await connection.participants(in: graph)
+    if let participant = participants.first?.id {
+        let _: GraphCloudSharingStatus = try await connection.setPermission(.readOnly, for: participant, in: graph)
+        let _: GraphCloudSharingStatus = try await connection.removeParticipant(participant, from: graph)
+    }
+    let status = try await connection.observeSharing(for: graph.id); status.cancel()
+    let _: GraphCloudSharingStatus = try await connection.sharingStatus(for: graph.id)
+    let _: GraphCloudSharingStatus = try await connection.refreshSharing(for: graph.id)
+    try await connection.registerSharedReplica(id: graph.id, at: url)
+    let _: GraphCloudSharingStatus = try await connection.stopSharing(graph)
+    let _: GraphCloudSharingStatus = try await connection.leaveSharedGraph(graph)
+    try await connection.discardInvitation(join)
+}

@@ -35,6 +35,29 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+[H02 public sharing](graphevo-2-public-sharing.md) integrates through
+[PR #152](https://github.com/bbruno84/GraphEvo/pull/152), directly from H01/#151.
+Native Apple invitations and presentation adapters use a fixed GraphEvoGraph
+system record to discover GraphID, with durable pre-GraphID join recovery,
+public permission/status/leave operations and explicit validated session-8 to
+session-9 conversion. Core Data/application payload formats remain unchanged.
+Corrective review covers permission-control priority, join-triggered foreground
+import and private MF10 recovery of already shared graphs; descriptors and native
+CKShare remain control metadata, excluded from application inventory/digests.
+
+Reviewed [full checkpoint #41836169999](https://github.com/bbruno84/GraphEvo/actions/runs/41836169999)
+passes on `dc0ea8932a56fe5bed46844628f2020d26f72a32` with 1,038 macOS functions,
+1,035 passed iOS functions with the known skip, and both Swift 6 consumers. Final integration notes are documentation-only;
+shipping, tests, consumers and workflow inputs match that checkpoint.
+
+Companion demo integration is delivered separately with its final library pin.
+Native UI/two-account physical acceptance remains open. Injected local evidence
+and this checkpoint do not close PA03 or broader beta gates. Production requires
+deployment of GraphEvoGraph, and old alpha writers must be stopped before adoption.
+Earlier full run #41832494282 passed on acaae686 before the MF10 correction;
+#41830425696 was canceled before the foreground-wake correction. Their actual
+scope is retained and superseded by the reviewed checkpoint above.
+
 [H01 public coordinated entry](graphevo-2-public-entry.md) was selected through
 PR #149 and its library implementation integrates through
 [PR #150](https://github.com/bbruno84/GraphEvo/pull/150). Applications construct

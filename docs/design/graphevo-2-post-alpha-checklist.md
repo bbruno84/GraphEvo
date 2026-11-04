@@ -23,6 +23,22 @@ acceptance below. Public invitation onboarding, independent-reader/protected-dat
 production cutover, restoration and final distribution/API audits remain open.
 No schema, persisted format or account-change beta scheduling gate is changed.
 
+## H02 public sharing — 2026-11-04
+
+[PR #152](https://github.com/bbruno84/GraphEvo/pull/152) implements the selected
+[contract](graphevo-2-public-sharing.md): native invitations/UI, fixed GraphID
+and descriptor-version control record, durable pre-GraphID joins, observable
+permissions and guarded leave/recovery. Full checkpoint #41836169999 passes on
+dc0ea893 with both platform suites and Swift 6 consumers. Explicit session-8
+conversion preserves validated state; initial-save participant/account markers
+and stale-generation guards protect restart/reinvite boundaries. MF10 private
+recovery also validates/excludes native CKShare control metadata.
+
+All acceptance boxes remain unchanged. Native UI/two-account physical acceptance
+is still required before closing PA03's B gate. The new cloud record type requires
+Production deployment and stopping old alpha writers; it is not a distributed
+old-client fence. Companion demo delivery is separate.
+
 ## How to close an item
 
 All boxes start open: existing evidence is input, not a claim that its broader

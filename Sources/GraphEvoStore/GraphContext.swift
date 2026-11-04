@@ -9,7 +9,7 @@ public actor GraphContext {
     package let manager: GraphContextManager
     private let adapter: GraphCloudAdapter
     private let disk: GraphCloudDisk
-    var identityForBootstrap: UUID { identity }
+    nonisolated var identityForBootstrap: UUID { identity }
     var adapterForBootstrap: GraphCloudAdapter { adapter }
     private let identity: UUID
     private var foreground = false

@@ -2,8 +2,8 @@ import CloudKit
 import Foundation
 import GraphEvoModel
 
-package enum GraphCloudSharePermission: String, Codable, Sendable { case readOnly, readWrite }
-package enum GraphCloudSharingError: Error, Equatable {
+public enum GraphCloudSharePermission: String, Codable, Sendable { case readOnly, readWrite }
+public enum GraphCloudSharingError: Error, Equatable {
     case invalidInvitation, invalidParticipant, ownerRequired, metadataPending, nonemptyReplica, unavailable, superseded
 }
 
@@ -115,6 +115,15 @@ extension GraphCloudSharingService {
 /// CKShare is control metadata, never a GraphEvoNode or application payload.
 enum GraphCloudShareControl {
     static func isControl(_ incoming: GraphCloudIncoming) -> Bool { incoming.recordType == CKRecord.SystemType.share }
+    /// Private MF10 inventories already come from the verified owner's private database.
+    static func validateOwnerInventory(_ incoming: GraphCloudIncoming, binding: GraphCloudBinding) throws {
+        guard binding.zone.scope == .private, incoming.zone == binding.zone,
+              incoming.kind == .recordChanged, incoming.recordName == CKRecordNameZoneWideShare,
+              isControl(incoming), incoming.assetReference == nil else { throw GraphCloudSharingError.invalidInvitation }
+        try GraphCloudRecordCodec.validate(incoming)
+        guard let bytes = incoming.recordArchive, let share = try GraphCloudRecordCodec.restore(bytes) as? CKShare,
+              share.publicPermission == .none else { throw GraphCloudSharingError.invalidInvitation }
+    }
     static func permission(_ incoming: GraphCloudIncoming, binding: GraphCloudBinding) throws -> GraphCloudSharePermission? {
         guard incoming.zone == binding.zone, incoming.recordName == CKRecordNameZoneWideShare,
               isControl(incoming), incoming.kind == .recordChanged || incoming.kind == .recordDeleted else {

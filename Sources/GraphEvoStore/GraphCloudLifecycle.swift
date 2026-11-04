@@ -3,24 +3,25 @@ import CryptoKit
 import Foundation
 import GraphEvoModel
 
-package enum GraphCloudSharingPhase: String, Codable, Sendable { case joining, active, accessUnverified, leaving, purging, removed }
-package enum GraphCloudSharingRole: String, Codable, Sendable { case owner, participant }
-package enum GraphCloudRemovalReason: String, Codable, Sendable { case left, accessLost }
-package struct GraphCloudParticipant: Equatable, Sendable {
-    package let identity: String?
-    package let permission: GraphCloudSharePermission?
-    package let accepted: Bool
-    package let owner: Bool
+public enum GraphCloudSharingPhase: String, Codable, Sendable { case joining, active, accessUnverified, leaving, purging, removed }
+public enum GraphCloudSharingRole: String, Codable, Sendable { case owner, participant }
+public enum GraphCloudRemovalReason: String, Codable, Sendable { case left, accessLost }
+public struct GraphCloudParticipant: Equatable, Sendable {
+    let identity: String?
+    public var id: GraphCloudParticipantIdentity? { identity.map { GraphCloudParticipantIdentity(value: $0) } }
+    public let permission: GraphCloudSharePermission?
+    public let accepted: Bool
+    public let owner: Bool
 }
-package struct GraphCloudSharingStatus: Equatable, Sendable {
-    package let graphID: GraphID
-    package let generation: UUID
-    package let role: GraphCloudSharingRole
-    package let phase: GraphCloudSharingPhase
-    package let permission: GraphCloudSharePermission?
-    package let reason: GraphCloudRemovalReason?
-    package let remoteOperationPending: Bool
-    package let failure: String?
+public struct GraphCloudSharingStatus: Equatable, Sendable {
+    public let graphID: GraphID
+    public let generation: UUID
+    public let role: GraphCloudSharingRole
+    public let phase: GraphCloudSharingPhase
+    public let permission: GraphCloudSharePermission?
+    public let reason: GraphCloudRemovalReason?
+    public let remoteOperationPending: Bool
+    public let failure: String?
 }
 struct GraphCloudShareSnapshot: Sendable {
     let identity: String
@@ -47,6 +48,7 @@ struct GraphCloudMembership: Codable, Equatable, Sendable {
     var hadAccess = false
     var shareIdentity: String?
     var reason: GraphCloudRemovalReason?
+    var nativePresentationPending: Bool? = nil
     var pending: GraphCloudControlIntent?
     var failure: String?
     var terminal: Bool { phase == .purging || phase == .removed || phase == .leaving }

@@ -11,6 +11,7 @@ package actor GraphContextManager {
         let key: StoreKey
         let url: URL
         let creating: Bool
+        var initialJoinID: UUID? = nil
         let initialPolicy: GraphConflictPolicy
         let opening: Task<GraphCoordinator, any Error>
         var ready = false
@@ -49,6 +50,14 @@ package actor GraphContextManager {
     package func setPurgeProbeBarrier(_ barrier: (@Sendable (GraphID) async throws -> Void)?) { purgeProbeBarrier = barrier }
     #endif
     var rejoiningGraphs = Set<GraphID>()
+    var nativeReplicaOpenings = Set<GraphID>()
+    struct NativePresentation {
+        let graph: GraphStore
+        let binding: GraphCloudBinding
+        let configuration: GraphCloudConfiguration
+        let permit: GraphCloudSyncPermit
+    }
+    var nativePresentations: [UUID: NativePresentation] = [:]
     var sharingGraphs = Set<GraphID>()
     var blockedSharingGraphs = Set<GraphID>()
     struct SharingPurge { let namespace: String; let task: Task<Void, any Error> }
@@ -484,6 +493,12 @@ package actor GraphContextManager {
             entries.removeAll { GraphCloudShareControl.isControl($0.change) }
             if entries.isEmpty { return GraphCloudApplyReport(applied: controls.count, cleanupPending: false) }
         }
+        let descriptors = entries.filter { GraphCloudGraphDescriptor.isControl($0.change) }
+        for entry in descriptors { try GraphCloudGraphDescriptor.validate(entry.change, binding: binding.route) }
+        if !descriptors.isEmpty {
+            try await session.consume(Set(descriptors.map(\.id)))
+            entries.removeAll { GraphCloudGraphDescriptor.isControl($0.change) }
+        }
         var effects: [GraphCloudEffect] = []
         for entry in entries {
             let data = try await session.assetData(for: entry.change, binding: binding.route)
@@ -495,7 +510,7 @@ package actor GraphContextManager {
         try await session.consume(ids)
         var cleanup = false
         do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
-        return GraphCloudApplyReport(applied: entries.count + controls.count, cleanupPending: cleanup, resolvedConflicts: result.resolved,
+        return GraphCloudApplyReport(applied: entries.count + controls.count + descriptors.count, cleanupPending: cleanup, resolvedConflicts: result.resolved,
             pendingRetry: !result.rebased.isEmpty, retryIDs: result.rebased)
     }
     package func applyCloudInbox(for graphID: GraphID, configuration: GraphCloudConfiguration,
@@ -852,6 +867,9 @@ package actor GraphContextManager {
         try await request(id: id, url: url, creating: true, conflictPolicy: conflictPolicy)
     }
 
+    func createJoiningGraph(id: GraphID, at url: URL, access: GraphCloudParticipantAccess) async throws -> GraphStore {
+        try await request(id: id, url: url, creating: true, initialParticipant: access)
+    }
     package func openGraph(id: GraphID, at url: URL) async throws -> GraphStore {
         try await request(id: id, url: url, creating: false)
     }
@@ -878,7 +896,7 @@ package actor GraphContextManager {
         guard Set(cloudSessions.values.map(\.id)) == tokens else { throw GraphStoreMigrationError.busy }
     }
 
-    private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins, bootstrapPermit: UUID? = nil) async throws -> GraphStore {
+    private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins, bootstrapPermit: UUID? = nil, initialParticipant: GraphCloudParticipantAccess? = nil) async throws -> GraphStore {
         do {
             try Task.checkCancellation()
             guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
@@ -899,6 +917,7 @@ package actor GraphContextManager {
                         removeClosedEntry(id, generation: entry.generation)
                         continue
                     }
+                    if creating && entry.initialJoinID != initialParticipant?.generation { throw GraphStoreError.ownershipConflict }
                     if creating && entry.initialPolicy != conflictPolicy { throw GraphStoreError.ownershipConflict }
                     if creating && (entry.ready || !entry.creating) { throw GraphStoreError.duplicateIdentity }
                 } else {
@@ -907,10 +926,10 @@ package actor GraphContextManager {
                     let initiallyBlocked = rejoiningGraphs.contains(id)
                     let opening = Task.detached {
                         try await GraphCoordinator.open(id: id, configuration: configuration, creating: creating,
-                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked)
+                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked, initialParticipant: initialParticipant)
                     }
                     guard case .sqlite(let canonicalURL) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
-                    entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, initialPolicy: conflictPolicy, opening: opening)
+                    entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, initialJoinID: initialParticipant?.generation, initialPolicy: conflictPolicy, opening: opening)
                 }
                 let token = UUID()
                 entries[id]!.tokens.insert(token)
@@ -935,8 +954,13 @@ package actor GraphContextManager {
                 do {
                     // A successful shared creation commit must return its result even if cancelled.
                     if !creating { try Task.checkCancellation() }
-                    let accountAllowed = creating ? true : try await restoreAccountOnOpen(id, owner: owner)
+                    let accountAllowed: Bool
+                    if creating, let identity = initialParticipant?.identity {
+                        try await claimCloudAccount(identity, for: id, owner: owner)
+                        accountAllowed = true
+                    } else { accountAllowed = creating ? true : try await restoreAccountOnOpen(id, owner: owner) }
                     let graph = try await owner.lease { try await self.release(id, generation: generation, token: token) }
+                    await graph.setCoordinatorGeneration(generation)
                     locations[id] = GraphLocation(key: entry.key, url: entry.url)
                     // A converted local graph must not acquire an existing cloud participation
                     // as an opening side effect. Bootstrap verifies that the ID is unbound.
