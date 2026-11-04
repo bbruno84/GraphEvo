@@ -136,7 +136,7 @@ private final class PolicyBarrier: @unchecked Sendable {
         try await reopened.close(); try await f.manager.stopCloudSession(f.config); try FileManager.default.removeItem(at: f.directory)
     }
     @Test(arguments: [GraphConflictPolicy.cloudWins, .lastEditWins])
-    func newerRemoteWinsAndKeepsItsDateWithoutFeedback(_ policy: GraphConflictPolicy) async throws {
+    func newerRemoteWinsAndKeepsItsDateWithoutFeedback(_ policy: GraphEvoStore.GraphConflictPolicy) async throws {
         let f = try await fixture(policy), id = try await insert(f)
         f.bus.script([[failure(try remote(f, id, time: 200))]])
         let report = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
@@ -147,7 +147,7 @@ private final class PolicyBarrier: @unchecked Sendable {
         try await finish(f)
     }
     @Test(arguments: [GraphConflictPolicy.cloudWins, .lastEditWins])
-    func currentLocalRatherThanFrozenBodyIsUsedAfterLateEdit(_ policy: GraphConflictPolicy) async throws {
+    func currentLocalRatherThanFrozenBodyIsUsedAfterLateEdit(_ policy: GraphEvoStore.GraphConflictPolicy) async throws {
         let f = try await fixture(policy), id = try await insert(f)
         let patch = try GraphRecordPatch(id: id, properties: ["value": .set(.integer(4))])
         f.bus.beforeReceipt = {
@@ -185,7 +185,7 @@ private final class PolicyBarrier: @unchecked Sendable {
         try await finish(f)
     }
     @Test(arguments: [GraphConflictPolicy.cloudWins, .lastEditWins])
-    func importedDeletionWinsAndOldSaveCannotResurrectOrReuseID(_ policy: GraphConflictPolicy) async throws {
+    func importedDeletionWinsAndOldSaveCannotResurrectOrReuseID(_ policy: GraphEvoStore.GraphConflictPolicy) async throws {
         let f = try await fixture(policy), id = try await insert(f)
         let saved = try remote(f, id, time: 500)
         f.bus.fetch([.init(kind: .recordDeleted, zone: f.binding.route.zone, recordName: saved.recordName, recordType: GraphCloudNodeCodec.recordType)])

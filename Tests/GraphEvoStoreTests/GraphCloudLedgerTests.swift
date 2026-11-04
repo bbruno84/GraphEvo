@@ -318,7 +318,7 @@ private actor LedgerServer {
         #expect(try Data(contentsOf: url) == old)
     }
 
-    @Test(arguments: [GraphCloudScope.private, .shared]) func nativeCodecRoundTripsAndPreservesUnrelatedControlFields(scope: GraphCloudScope) throws {
+    @Test(arguments: [GraphCloudScope.private, .shared]) func nativeCodecRoundTripsAndPreservesUnrelatedControlFields(scope: GraphEvoStore.GraphCloudScope) throws {
         let id = GraphID(), route = binding(id, scope: scope)
         let initial = GraphLedger.empty(id)
         let record = try GraphLedgerCodec.encode(initial, binding: route, base: nil)

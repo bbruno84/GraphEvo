@@ -197,6 +197,46 @@ package actor StoreHandle {
 
 /// Shared production registry; internal initializers allow isolated lifecycle tests.
 package actor StoreRegistry {
+    private struct ContextClaim {
+        let graphID: UUID
+        let key: StoreKey
+        let owner: UUID
+    }
+    private var contextClaims: [UUID: ContextClaim] = [:]
+
+    /// Reservations include pending bootstrap before a native destination exists.
+    package func claimContextGraph(_ graphID: UUID, key: StoreKey, owner: UUID) throws -> UUID {
+        for (token, claim) in contextClaims where claim.graphID == graphID || claim.key == key {
+            guard claim.owner == owner, claim.graphID == graphID, claim.key == key else {
+                throw StoreRuntimeError.configurationConflict(nil)
+            }
+            return token
+        }
+        for entry in entries.values where entry.resolved.key == key || entry.resolved.configuration.exclusiveGraphID == graphID {
+            guard entry.resolved.configuration.contextOwnerID == owner else { throw StoreRuntimeError.configurationConflict(nil) }
+        }
+        let token = UUID()
+        contextClaims[token] = ContextClaim(graphID: graphID, key: key, owner: owner)
+        return token
+    }
+
+    package func releaseContextGraph(_ token: UUID) {
+        guard let claim = contextClaims[token] else { return }
+        // A failed native close must keep the reservation even without a consumer handle.
+        guard !entries.values.contains(where: {
+            $0.resolved.configuration.contextOwnerID == claim.owner &&
+            $0.resolved.configuration.exclusiveGraphID == claim.graphID
+        }) else { return }
+        contextClaims.removeValue(forKey: token)
+    }
+
+    private func validateContextClaim(_ resolved: ResolvedStore) throws {
+        for claim in contextClaims.values where claim.key == resolved.key || claim.graphID == resolved.configuration.exclusiveGraphID {
+            if resolved.configuration.access == .readOnly { continue }
+            guard resolved.configuration.contextOwnerID == claim.owner else { throw StoreRuntimeError.configurationConflict(resolved.url) }
+        }
+    }
+
     package static let shared = StoreRegistry()
 
     /// Reuses runtime alias validation and canonical keys without acquiring a resource.
@@ -229,6 +269,7 @@ package actor StoreRegistry {
                       nativeMigration: StoreNativeMigration? = nil) async throws -> StoreHandle {
         try Task.checkCancellation()
         let resolved = try ResolvedStore(configuration)
+        try validateContextClaim(resolved)
         while true {
             if let entry = entries[resolved.key], let shutdown = entry.shutdown {
                 try await shutdown.value

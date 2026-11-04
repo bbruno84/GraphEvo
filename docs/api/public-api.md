@@ -838,9 +838,76 @@ state, outcome, and history in any arrival order using the UUID.
 
 ## GraphEvo 2 alpha model contracts
 
-The [H01 public coordinated entry](../design/graphevo-2-public-entry.md) is a
-proposal under discussion. Its GraphContext/GraphCloudConnection signatures are
-not available APIs; the declarations documented below retain their actual scope.
+### H01 coordinated local/cloud entry
+
+On iOS 17/macOS 14, `GraphContext()` creates an application-owned coordinated
+entry. Each instance has its own manager. Overlapping graph/resource ownership
+across contexts is refused; compatible requests within a context share one owner.
+Native S04, exact SQLite URLs and explicit create versus existing open apply.
+
+```swift
+public actor GraphContext {
+    public init()
+    public func createGraph(id: GraphID, at storeURL: URL,
+                            conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphStore
+    public func openGraph(id: GraphID, at storeURL: URL) async throws -> GraphStore
+    public func openGraph(convertingLocalV1 request: GraphV1BootstrapRequest) async throws -> GraphV1BootstrapResult
+    public func connectCloud(using configuration: GraphCloudConnectionConfiguration) async throws -> GraphCloudConnection
+    public func setForegroundActive(_ active: Bool) async throws
+    public func refreshCloudAccounts() async throws
+}
+```
+
+`GraphConflictPolicy` is `.cloudWins` or `.lastEditWins` (default). Cloud
+configuration requires container identifier, `GraphCloudEnvironment`
+(`.development`/`.production`), account-bound directory and optional maximumEvents
+(default 4096) / maximumBytes (default 32 MiB). Its initializer throws before I/O
+for malformed input. `GraphCloudScope` is `.private` or `.shared` for matched
+notification hints; invitation onboarding is not exposed by H01.
+
+`GraphCloudConnection.state` and `observeState()` expose `GraphCloudConnectionState`:
+`.verifyingAccount`, `.ready`, `.temporarilyUnavailable`, `.isolated(reason)` or
+`.failed(GraphCloudConnectionFailure)`. Failure categories are configuration,
+ownership, persistence, transport and recoveryRequired; no raw SDK diagnostics
+are published. `GraphCloudConnectionError` distinguishes closed, notReady,
+invalidConfiguration, ownershipConflict, unavailableInExtension and
+operationFailed(failure, underlying: Error). Cancellation retains its original type.
+
+Connection operations are `retry()`, `bindPrivateGraph(_:zoneName:)`,
+`requestSynchronization()`, `notifyRemoteChanges(in:)`,
+`pauseSynchronization(for:)`, `resumeSynchronization(for:)`, `close()`,
+`prepareActivation(for:activationID:zoneName:declaration:)`,
+`advanceActivation(for:)`, `activationStatus(for:)` and
+`openReplica(id:at:zoneName:)`. Startup/retry and sync requests are asynchronous
+state/work requests, not completion barriers. Final close drains transport;
+account monitoring remains with live synchronized graphs. Aggregate foreground
+activity belongs to the context and starts inactive.
+
+`GraphV1BootstrapRequest` requires sourceURL, destinationURL, graphID, operationID,
+backupRoot and reason. The public path uses native staged migration.
+`GraphV1BootstrapResult.conversion` exposes receipt, backupURL, cleanupPending and
+cleanupFailure separately from `opening: Result<GraphStore, Error>`. The detached
+`GraphV1BootstrapReceipt` contains operationID, graphID, sourceStoreID,
+targetStoreID, fingerprint and nodeIDs. Native inode/session metadata stays internal.
+`GraphV1BootstrapError` aliases the supported migration error enum; a cleanup
+failure preserves operationID, failure and cleanupFailure.
+
+`GraphCloudCutoverDeclaration` requires sourceSelection, completeness,
+stoppedWriters and returningClients declarations. Activation status contains
+activationID, graphID, phase and recordCount. Its phases are prepared, claiming,
+seeding, publishing, published, conflict and recovering. Activation results expose
+status, operationError and cleanupPending; replica results expose status and a
+separate opening result. `GraphCloudActivationError` and
+`GraphCloudActivationCleanupFailure` preserve protocol and cleanup distinctions.
+
+Account-bound local opening installs verification without starting transport.
+Local-only stores need no account check. Conversion preserves Data and serialized
+payloads; attachment optimization remains consumer-owned. No schema/default
+opener/legacy mirror conversion follows from H01. See the
+[guide](../guides/public-coordinated-entry.md) and
+[contract](../design/graphevo-2-public-entry.md).
+
+### Existing alpha model contracts
 
 The following additive types are available through `import GraphEvo`. They are
 implemented in the Swift 6 GraphEvoModel target and do not open a store. The typed GraphStore opening gateway is described below; legacy Graph remains

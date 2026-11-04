@@ -123,3 +123,57 @@ extension GraphDatabase {
         }
     }
 }
+
+/// An application-owned coordinated GraphEvo 2 entry, independent of legacy openers.
+@available(iOS 17, macOS 14, *)
+public typealias GraphContext = GraphEvoStore.GraphContext
+
+@available(iOS 17, macOS 14, *)
+extension GraphContext {
+    /// Creates an independent context using the production native adapters.
+    public init() {
+        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()))
+    }
+}
+
+@available(iOS 17, macOS 14, *)
+public typealias GraphCloudConnection = GraphEvoStore.GraphCloudConnection
+
+public typealias GraphCloudConnectionConfiguration = GraphEvoStore.GraphCloudConnectionConfiguration
+
+public typealias GraphCloudConnectionState = GraphEvoStore.GraphCloudConnectionState
+
+public typealias GraphCloudConnectionFailure = GraphEvoStore.GraphCloudConnectionFailure
+
+public typealias GraphCloudConnectionError = GraphEvoStore.GraphCloudConnectionError
+
+public typealias GraphCloudScope = GraphEvoStore.GraphCloudScope
+
+public typealias GraphCloudEnvironment = GraphEvoStore.GraphCloudEnvironment
+
+public typealias GraphConflictPolicy = GraphEvoStore.GraphConflictPolicy
+
+public typealias GraphV1BootstrapRequest = GraphEvoStore.GraphV1BootstrapRequest
+
+public typealias GraphV1BootstrapResult = GraphEvoStore.GraphV1BootstrapResult
+
+public typealias GraphV1BootstrapReceipt = GraphEvoStore.GraphV1BootstrapReceipt
+
+public typealias GraphV1BootstrapConversion = GraphEvoStore.GraphV1BootstrapConversion
+
+public typealias GraphCloudCutoverDeclaration = GraphEvoStore.GraphCloudCutoverDeclaration
+
+public typealias GraphCloudActivationStatus = GraphEvoStore.GraphCloudActivationStatus
+
+public typealias GraphCloudActivationPhase = GraphEvoStore.GraphCloudActivationPhase
+
+public typealias GraphCloudActivationResult = GraphEvoStore.GraphCloudActivationResult
+
+public typealias GraphCloudReplicaResult = GraphEvoStore.GraphCloudReplicaResult
+
+public typealias GraphCloudActivationError = GraphEvoStore.GraphCloudActivationError
+
+public typealias GraphCloudActivationCleanupFailure = GraphEvoStore.GraphCloudActivationCleanupFailure
+
+public typealias GraphV1BootstrapError = GraphEvoStore.GraphStoreMigrationError

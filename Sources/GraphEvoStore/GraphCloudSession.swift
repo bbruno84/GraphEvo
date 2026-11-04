@@ -80,11 +80,11 @@ actor GraphCloudSession {
         self.accountSignal = accountSignal
     }
 
-    static func open(_ config: GraphCloudConfiguration, adapter: GraphCloudAdapter, disk: GraphCloudDisk = .live, verifiedAccount: String? = nil,
+    static func open(_ config: GraphCloudConfiguration, adapter: GraphCloudAdapter, disk: GraphCloudDisk = .live, verifiedAccount: String? = nil, ownershipOwner: UUID? = nil, resetAccountState: Bool = false,
                      accountSignal: @escaping @Sendable (GraphCloudSessionAccountSignal) async -> Void = { _ in }) async throws -> GraphCloudSession {
         guard !config.containerIdentifier.isEmpty, config.directory.isFileURL,
               config.maximumEvents > 0, config.maximumBytes > 0 else { throw GraphCloudError.invalidConfiguration }
-        let owner = UUID()
+        let owner = ownershipOwner ?? UUID()
         try await GraphCloudOwnership.shared.acquire(config.containerIdentifier, owner: owner)
         do {
             let account: String
@@ -176,7 +176,7 @@ actor GraphCloudSession {
                 guard bytes.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 try disk.write(url, bytes)
             }
-            if doc.accountResetRequired == true {
+            if doc.accountResetRequired == true || resetAccountState {
                 doc.states.removeAll(); doc.accountResetRequired = false
                 try disk.write(url, JSONEncoder().encode(doc))
             }

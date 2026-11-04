@@ -7,7 +7,7 @@ import Testing
 @testable import GraphEvoRuntime
 
 /// Deterministic CAS and transport faults; native first-create behavior is proven separately on device.
-private actor ActivationServer {
+actor ActivationServer {
     var authorities: [String: GraphCloudAuthorityRemote] = [:]
     var records: [String: GraphCloudIncoming] = [:]
     var sends = 0

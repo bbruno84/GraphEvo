@@ -3,21 +3,21 @@ import Foundation
 import GraphEvoModel
 import GraphEvoRuntime
 
-package struct GraphCloudActivationResult: Sendable {
-    package let status: GraphCloudActivationStatus
-    package let operationError: (any Error)?
-    package let cleanupPending: Bool
+public struct GraphCloudActivationResult: Sendable {
+    public let status: GraphCloudActivationStatus
+    public let operationError: (any Error)?
+    public let cleanupPending: Bool
 }
 
-package struct GraphCloudReplicaResult: Sendable {
-    package let status: GraphCloudActivationStatus
-    package let opening: Result<GraphStore, any Error>
+public struct GraphCloudReplicaResult: Sendable {
+    public let status: GraphCloudActivationStatus
+    public let opening: Result<GraphStore, any Error>
 }
 
-package struct GraphCloudActivationCleanupFailure: Error {
-    package let status: GraphCloudActivationStatus?
-    package let operationError: (any Error)?
-    package let cleanupFailure: any Error
+public struct GraphCloudActivationCleanupFailure: Error {
+    public let status: GraphCloudActivationStatus?
+    public let operationError: (any Error)?
+    public let cleanupFailure: any Error
 }
 
 extension GraphContextManager {
@@ -167,7 +167,8 @@ extension GraphContextManager {
               entries[id] == nil, localV1Bootstraps[id] == nil, !migratingStores.contains(id),
               activatingCloudGraphs.insert(id).inserted else { throw GraphCloudActivationError.busy }
         defer { activatingCloudGraphs.remove(id); automaticChanged() }
-        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
+        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID))
+        try await claimContextGraph(id, resolved: resolved)
         guard !entries.values.contains(where: { $0.key == resolved.key }),
               !locations.contains(where: { $0.key != id && $0.value.key == resolved.key }),
               !localV1Bootstraps.values.contains(where: { $0.key == resolved.key }),

@@ -2,8 +2,8 @@ import Foundation
 import Darwin
 import GraphEvoModel
 
-package enum GraphCloudScope: String, Codable, Sendable { case `private`, shared }
-package enum GraphCloudEnvironment: String, Codable, Sendable { case development, production }
+public enum GraphCloudScope: String, Codable, Sendable { case `private`, shared }
+public enum GraphCloudEnvironment: String, Codable, Sendable { case development, production }
 package enum GraphCloudError: Error, Equatable {
     case attachmentTimeout, graphPaused
     case ownershipConflict, invalidConfiguration, invalidState, accountUnavailable, accountChanged
@@ -19,7 +19,7 @@ package struct GraphCloudConfiguration: Equatable, Sendable {
     package init(containerIdentifier: String, environment: GraphCloudEnvironment, directory: URL,
                  maximumEvents: Int = 4096, maximumBytes: Int = 32 * 1024 * 1024) {
         self.containerIdentifier = containerIdentifier; self.environment = environment
-        self.directory = directory.standardizedFileURL.resolvingSymlinksInPath()
+        self.directory = URL(fileURLWithPath: directory.standardizedFileURL.resolvingSymlinksInPath().path, isDirectory: true)
         self.maximumEvents = maximumEvents; self.maximumBytes = maximumBytes
     }
     var namespace: String { environment.rawValue + ":" + containerIdentifier }
@@ -106,13 +106,37 @@ struct GraphCloudDocument: Codable, Sendable {
 /// A process-wide claim spans startup/account verification and failed cleanup.
 actor GraphCloudOwnership {
     static let shared = GraphCloudOwnership()
-    private var claims: [String: UUID] = [:]
+    private struct Claim { let owner: UUID; var sessions: Int; var pinned: Bool }
+    private var claims: [String: Claim] = [:]
+    private var directories: [String: (key: String, owner: UUID)] = [:]
+    func reserve(_ key: String, owner: UUID, directory: URL) throws {
+        let path = directory.standardizedFileURL.resolvingSymlinksInPath().path
+        guard claims[key] == nil,
+              directories[path] == nil else { throw GraphCloudError.ownershipConflict }
+        claims[key] = Claim(owner: owner, sessions: 0, pinned: true)
+        directories[path] = (key, owner)
+    }
+    func unreserve(_ key: String, owner: UUID) {
+        guard var claim = claims[key], claim.owner == owner else { return }
+        claim.pinned = false
+        claims[key] = claim
+        releaseIfIdle(key)
+    }
     func acquire(_ key: String, owner: UUID) throws {
-        guard claims[key] == nil else { throw GraphCloudError.ownershipConflict }
-        claims[key] = owner
+        if var claim = claims[key] {
+            guard claim.owner == owner, claim.sessions == 0 else { throw GraphCloudError.ownershipConflict }
+            claim.sessions += 1; claims[key] = claim
+        } else { claims[key] = Claim(owner: owner, sessions: 1, pinned: false) }
     }
     func release(_ key: String, owner: UUID) {
-        if claims[key] == owner { claims.removeValue(forKey: key) }
+        guard var claim = claims[key], claim.owner == owner else { return }
+        claim.sessions = max(0, claim.sessions - 1); claims[key] = claim
+        releaseIfIdle(key)
+    }
+    private func releaseIfIdle(_ key: String) {
+        guard let claim = claims[key], !claim.pinned, claim.sessions == 0 else { return }
+        claims.removeValue(forKey: key)
+        directories = directories.filter { $0.value.key != key || $0.value.owner != claim.owner }
     }
 }
 

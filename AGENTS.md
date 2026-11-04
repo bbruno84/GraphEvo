@@ -1476,3 +1476,15 @@ must never unlock an unverified or previously isolated identity. Preserve epoch
 checks across prepared work and permanent native driver revocation. Optional
 merge and local deletion policies remain backlog work; public coordinated cloud
 opening and independent-reader acceptance remain separate gates.
+
+## H01 public coordinated entry
+
+Read [H01](docs/design/graphevo-2-public-entry.md) for public ownership/lifecycle
+changes. GraphContext is explicitly constructed; production instances own separate
+managers and share only process/resource admission guards. Preserve context owner
+identity through canonicalization, bootstrap and workspaces. Keep account monitors
+independent of transport: synchronized local opens verify identity even without a
+cloud connection, while local-only stores never query accounts. Foreground state
+belongs to the context. Native staged conversion preserves Data/serialized payloads;
+attachment optimization is consumer-owned. Do not expose native executors/adapters
+or treat connection readiness as graph, activation or peer completion.

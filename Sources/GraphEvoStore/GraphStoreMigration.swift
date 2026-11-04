@@ -3,11 +3,11 @@ import Foundation
 import GraphEvoModel
 import GraphEvoRuntime
 
-package enum GraphStoreMigrationError: Error { case unavailable, busy, invalidRequest, unsupportedSource, limitExceeded, staleSource, conflictingDestination, invalidReceipt }
-package struct GraphStoreMigrationCleanupFailure: Error {
-    package let operationID: UUID
-    package let failure: any Error
-    package let cleanupFailure: any Error
+public enum GraphStoreMigrationError: Error { case unavailable, busy, invalidRequest, unsupportedSource, limitExceeded, staleSource, conflictingDestination, invalidReceipt }
+public struct GraphStoreMigrationCleanupFailure: Error {
+    public let operationID: UUID
+    public let failure: any Error
+    public let cleanupFailure: any Error
 }
 /// Bounds for a single atomic conversion into a distinct store.
 package struct GraphStoreMigrationLimits: Sendable {
@@ -118,7 +118,7 @@ extension GraphContextManager {
     package func migrateStore<Snapshot, Intent, Receipt>(using migration: GraphStoreMigrationDefinition<Snapshot, Intent, Receipt>,
         request: GraphStoreMigrationRequest, limits: GraphStoreMigrationLimits = .init()) async throws -> GraphStoreMigrationResult<Receipt> {
         try limits.validate()
-        let destination = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue))
+        let destination = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue, contextOwnerID: contextOwnerID))
         guard localV1Bootstraps[request.graphID] == nil,
               !localV1Bootstraps.values.contains(where: { $0.key == destination.key }) else { throw GraphStoreMigrationError.busy }
         return try await performStoreMigration(using: migration, request: request, limits: limits)
@@ -134,7 +134,7 @@ extension GraphContextManager {
         guard migratingStores.insert(request.graphID).inserted else { throw GraphStoreMigrationError.busy }
         defer { migratingStores.remove(request.graphID) }
         let source = try StoreRegistry.resolve(migration.source.configuration(at: request.sourceURL))
-        let destination = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue))
+        let destination = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue, contextOwnerID: contextOwnerID))
         let artifact = migration.backupArtifactName
         guard source.key != destination.key, case .sqlite(let sourceURL) = source.configuration.location,
               case .sqlite(let destinationURL) = destination.configuration.location,

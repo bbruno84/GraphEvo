@@ -85,6 +85,7 @@ package struct GraphMigrationWorkspaceDescriptor: Codable, Sendable, Equatable {
 /// Isolated migration editing, durable sealing and bounded original-store publication.
 package actor GraphMigrationWorkspace {
     package nonisolated let id: UUID
+    private let contextOwnerID: UUID?
     package nonisolated let managerID: UUID
     package nonisolated let graph: GraphStore
     package nonisolated let descriptor: GraphMigrationWorkspaceDescriptor
@@ -108,7 +109,8 @@ package actor GraphMigrationWorkspace {
 
     init(graph: GraphStore, handle: StoreHandle, descriptor: GraphMigrationWorkspaceDescriptor,
          directory: URL, sourceHold: StoreReservation, ownership: WorkspaceDirectoryIdentity, storeOwnership: WorkspaceFileIdentity,
-         adapter: GraphMigrationWorkspaceAdapter?, registry: StoreRegistry, schema: StoreSchema, activationID: UUID, managerID: UUID, published: GraphMigrationPublicationReceipt? = nil, sealed: GraphMigrationChangeSet? = nil, sealHold: StoreReservation? = nil) {
+         adapter: GraphMigrationWorkspaceAdapter?, registry: StoreRegistry, schema: StoreSchema, activationID: UUID, managerID: UUID, contextOwnerID: UUID? = nil, published: GraphMigrationPublicationReceipt? = nil, sealed: GraphMigrationChangeSet? = nil, sealHold: StoreReservation? = nil) {
+        self.contextOwnerID = contextOwnerID
         self.id = descriptor.id; self.managerID = managerID; self.publicationReceipt = published; self.graph = graph; self.handle = handle
         self.descriptor = descriptor; self.directory = directory; self.sourceHold = sourceHold
         self.ownership = ownership; self.storeOwnership = storeOwnership
@@ -234,7 +236,7 @@ package actor GraphMigrationWorkspace {
               try WorkspaceFiles.activation(directory) == activationID else { throw GraphMigrationWorkspaceError.invalidWorkspace }
         if cleanupHandle == nil {
             cleanupHandle = try await registry.open(.init(location: .sqlite(directory.appendingPathComponent(descriptor.storePath)),
-                exclusiveGraphID: descriptor.graphID.rawValue, workspaceID: id, workspaceSessionID: UUID()), schema: schema)
+                exclusiveGraphID: descriptor.graphID.rawValue, contextOwnerID: contextOwnerID, workspaceID: id, workspaceSessionID: UUID()), schema: schema)
         }
         try await cleanupHandle!.discardWorkspace {
             guard try WorkspaceFiles.activation(directory) == activationID else { throw GraphMigrationWorkspaceError.invalidWorkspace }
@@ -280,7 +282,7 @@ extension GraphContextManager {
             let url = directory.appendingPathComponent(descriptor.storePath)
             guard try WorkspaceFileIdentity(url) == descriptor.workingFile else { throw GraphMigrationWorkspaceError.invalidWorkspace }
             let sessionID = UUID()
-            let handle = try await registry.open(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue,
+            let handle = try await registry.open(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID,
                 workspaceID: descriptor.id, workspaceSessionID: sessionID), schema: schema)
             working = handle
             try await handle.inheritAccount(owner.accountControl())
@@ -310,7 +312,7 @@ extension GraphContextManager {
             }
             let workspace = GraphMigrationWorkspace(graph: graph, handle: handle, descriptor: descriptor, directory: directory,
                 sourceHold: hold, ownership: ownership, storeOwnership: storeOwnership, adapter: workspaceAdapter,
-                registry: registry, schema: schema, activationID: sessionID, managerID: migrationIdentity, published: receipt,
+                registry: registry, schema: schema, activationID: sessionID, managerID: migrationIdentity, contextOwnerID: contextOwnerID, published: receipt,
                 sealed: sealed, sealHold: sealedWrites)
             if receipt != nil { await hold.release() }
             return workspace
@@ -362,7 +364,7 @@ extension GraphContextManager {
             try WorkspaceFiles.mark(store, workspaceID: workspaceID, graphID: id)
             let sessionID = UUID()
             try Data(sessionID.uuidString.utf8).write(to: staging.appendingPathComponent("activation"), options: .withoutOverwriting)
-            let configuration = StoreConfiguration(location: .sqlite(store), exclusiveGraphID: id.rawValue, workspaceID: workspaceID, workspaceSessionID: sessionID)
+            let configuration = StoreConfiguration(location: .sqlite(store), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID, workspaceID: workspaceID, workspaceSessionID: sessionID)
             let handle = try await registry.open(configuration, schema: schema)
             working = handle
             try await handle.inheritAccount(owner.accountControl())
@@ -387,7 +389,7 @@ extension GraphContextManager {
             try FileManager.default.moveItem(at: staging, to: destination)
             published = true
             let final = try await registry.open(.init(location: .sqlite(destination.appendingPathComponent(descriptor.storePath)),
-                exclusiveGraphID: id.rawValue, workspaceID: workspaceID, workspaceSessionID: sessionID), schema: schema)
+                exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID, workspaceID: workspaceID, workspaceSessionID: sessionID), schema: schema)
             working = final
             try await final.inheritAccount(owner.accountControl())
             try await final.read { context in
@@ -405,7 +407,7 @@ extension GraphContextManager {
             }
             return GraphMigrationWorkspace(graph: graph, handle: final, descriptor: descriptor,
                 directory: destination, sourceHold: hold, ownership: ownership,
-                storeOwnership: storeOwnership, adapter: adapter.workspace, registry: registry, schema: schema, activationID: sessionID, managerID: migrationIdentity)
+                storeOwnership: storeOwnership, adapter: adapter.workspace, registry: registry, schema: schema, activationID: sessionID, managerID: migrationIdentity, contextOwnerID: contextOwnerID)
         } catch {
             let original = error
             // Never remove an attached stage, even if native cleanup itself failed.

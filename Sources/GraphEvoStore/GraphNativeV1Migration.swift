@@ -15,11 +15,11 @@ package struct GraphNativeV1MigrationAdapter: Sendable {
 extension GraphContextManager {
     /// Native staged conversion; property bytes are not accumulated into a graph-sized snapshot.
     @available(iOS 17, macOS 14, *)
-    package func openGraph(migratingNativeV1 request: GraphStoreMigrationRequest) async throws -> GraphV1BootstrapResult {
+    package func openGraph(migratingNativeV1 request: GraphStoreMigrationRequest) async throws -> GraphNativeV1BootstrapResult {
         try Task.checkCancellation()
         guard let native = adapter.nativeV1Migration, let conversion = adapter.v1Conversion,
               schema.identifier == conversion.targetSchemaIdentifier else { throw GraphV1ConversionError.unavailable }
-        let destination = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue))
+        let destination = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue, contextOwnerID: contextOwnerID))
         let source = try StoreRegistry.resolve(conversion.migrationSource.configuration(at: request.sourceURL))
         guard source.key != destination.key,
               case .sqlite(let sourceURL) = source.configuration.location,
@@ -33,6 +33,7 @@ extension GraphContextManager {
         guard !entries.values.contains(where: { $0.key == destination.key }),
               !locations.contains(where: { $0.key != request.graphID && $0.value.key == destination.key }),
               locations[request.graphID] == nil || locations[request.graphID]?.key == destination.key else { throw GraphStoreError.ownershipConflict }
+        try await claimContextGraph(request.graphID, resolved: destination)
         let token = UUID()
         localV1Bootstraps[request.graphID] = .init(token: token, key: destination.key)
         defer { if localV1Bootstraps[request.graphID]?.token == token { localV1Bootstraps.removeValue(forKey: request.graphID) } }
@@ -85,7 +86,7 @@ extension GraphContextManager {
                     } catch { try? await reader.close(); throw error }
                 } else { seed = try await backups.restore(at: backupURL, to: seedDirectory).storeURL }
                 let plan = try native.plan(seed, intent, snapshot)
-                let configuration = StoreConfiguration(location: .sqlite(destinationURL), exclusiveGraphID: request.graphID.rawValue,
+                let configuration = StoreConfiguration(location: .sqlite(destinationURL), exclusiveGraphID: request.graphID.rawValue, contextOwnerID: contextOwnerID,
                     workspaceID: request.operationID, workspaceSessionID: migrationIdentity)
                 let handle = try await registry.open(configuration, schema: schema, nativeMigration: plan); target = handle
                 let committed = try await Task.detached {
