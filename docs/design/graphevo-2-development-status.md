@@ -6,6 +6,24 @@ delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
+## Latest physical checkpoint — durable spool, 2026-11-04
+
+The [private device result](results/durable-asset-spool-device-2026-11-04.md)
+verifies 40 MiB plus empty/control assets, serialized complex values, durable
+outgoing/incoming checkpoint restarts, exact files/IDs and cleanup on same-account
+iPad/iPhone, followed by another genuinely empty replica. Eight reports pass;
+one overbroad probe assertion fails on unrelated zone lifecycle events and is
+retained alongside its read-only continuation. No shipping runtime change or
+failed-stage replay occurs. This advances only the bounded #144 private device
+checkpoint; broad beta, production, in-flight interruption and shared-account
+acceptance remain open. Public coordinated host integration remains next in the
+audited delivery recommendation. Protocol/evidence integrate through
+[PR #146](https://github.com/bbruno84/GraphEvo/pull/146), with reviewed
+[full checkpoint #41782215684](https://github.com/bbruno84/GraphEvo/actions/runs/41782215684)
+on `db80d8cd`: 993 macOS functions, 990 passed iOS functions with the known skip
+and both Swift 6 consumers. Final notes are documentation-only with unchanged
+shipping, bridge/helper, test, consumer and workflow inputs.
+
 ## Roadmap audit — 2026-11-03
 
 The [audit](results/roadmap-audit-2026-11-03.md) reconciles integrated #144
@@ -30,8 +48,9 @@ replica, reference-only restart/cleanup and missing-file refusal. Reviewed
 passes on `ae0d50ef688bb0ca5d7088abb12ebfcc0e21f50a`: 993 macOS functions,
 990 passed iOS functions with one known skip, and both Swift 6 consumers. Final
 integration notes are documentation-only; shipping, test, consumer and workflow
-inputs match that checkpoint. Physical cloud/device acceptance and beta gates
-remain open.
+inputs match that checkpoint. The subsequent bounded private spool device
+checkpoint is recorded above; broader physical acceptance and beta gates remain
+open.
 
 Descriptor-first [query scopes](graphevo-2-descriptor-query-scopes.md) integrate
 through [PR #143](https://github.com/bbruno84/GraphEvo/pull/143), directly from

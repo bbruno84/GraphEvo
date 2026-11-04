@@ -11,7 +11,7 @@ anchors and remaining gates. Dated milestones below retain their original scope.
 | Local ownership and models | A1–A3, S04 typed storage, coordinated gateway and cooperating-process locks (#142) | Supported public opening surface, complete Swift 6/distribution audit and final platform/process contract |
 | Query and observation | A7/A8, P02 native planning, descriptor-local inputs (#143), async state and Combine | Final capability/cost contract, O04 live processing versus durable replay decision, observer/device envelope |
 | Custom CloudKit sync and sharing | PH pending work, shared engines, transport/conflicts/pause/foreground scheduling (T01–T06), zone sharing and lifecycle (T07/T08) | Public host/invitation integration, account/cache policy, structural conflict scope and interruption/restore acceptance |
-| Attachments | Native permanent content, local lifecycle and reference-only durable CKAsset spool (#144) | Physical acceptance of the new spool and supported device/resource envelope |
+| Attachments | Native permanent content, local lifecycle, durable CKAsset spool (#144) and [bounded private device checkpoint](results/durable-asset-spool-device-2026-11-04.md) | Broader interruption/sharing/restore acceptance and supported device/resource envelope |
 | Migration and backups | MF01–MF08 protection/packages/ledger/workspace/publication/internal executor, MF09 local bootstrap, MF10 authoritative new-cloud bootstrap, MF11 Core Data staged v1 conversion | Public bootstrap/execution, production/historical source matrix, host v1 cutover policy and full recovery acceptance |
 
 These are implemented alpha capabilities with bounded evidence. They do not
@@ -20,7 +20,9 @@ public custom-sync opening API.
 
 Proposed delivery order:
 
-1. Finish bounded physical acceptance of #142–#144, especially the new spool.
+1. Retain the [completed bounded private spool checkpoint](results/durable-asset-spool-device-2026-11-04.md)
+   for #144. Cooperating-process/current app-widget and broader interruption
+   acceptance remain separate; this does not close all #142–#144 device gates.
 2. Define and integrate one supported public opening/migration/cloud host flow,
    preserving the existing owner, backup and recovery boundaries.
 3. Resolve remaining beta decisions: app/widget roles and first launch,
