@@ -15,8 +15,10 @@ and [experimental evidence register](graphevo-2-test-checklist.md).
 [public coordinated entry](graphevo-2-public-entry.md), including explicit context
 ownership, account-only local verification, public staged bootstrap and private
 cloud authority/peer recovery. Full checkpoint #41811987802 passes on 414cea3f
-with both platform suites and Swift 6 consumers. Companion demo adoption is a
-separate delivery step. This narrows implementation gaps, not the broad B/R
+with both platform suites and Swift 6 consumers. Binding input/route ordering is
+corrected through #151 with reviewed v2 checkpoint #41815151417 on c966f153.
+Companion demo adoption and its bounded local/model evidence are tracked in
+[GraphEvoDemo PR #2](https://github.com/bbruno84/GraphEvoDemo/pull/2). This narrows implementation gaps, not the broad B/R
 acceptance below. Public invitation onboarding, independent-reader/protected-data,
 production cutover, restoration and final distribution/API audits remain open.
 No schema, persisted format or account-change beta scheduling gate is changed.
