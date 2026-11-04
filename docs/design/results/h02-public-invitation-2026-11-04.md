@@ -8,7 +8,9 @@ registration or repository signing values are introduced.
 
 ## Observed failure and diagnosis
 
-The iPad owner presented Apple's sharing UI and sent a native invitation. The
+The owner used iPad13,18 / iPadOS 27.0 (24A437); the participant used iPhone11,8 /
+iOS 18.7.11 (22H384). The iPad owner presented Apple's sharing UI and sent a native
+invitation. The
 independent iPhone XR account received it, opened the demo and completed the
 public join. The participant reported active/readWrite, and GraphID matched.
 The one owner note did not appear after explicit sync/refresh or foreground
@@ -45,8 +47,18 @@ No new store, account switch, invitation or owner-note insertion was used.
 
 The owner then changed the native participant permission to readOnly. The user
 confirmed the participant's inspected status and that Add demo note was refused,
-leaving the original one note. Upgrade/reverse transfer and later stages are
-recorded separately as they complete; they are not implied by this result.
+leaving the original one note. After permission restoration to readWrite, the
+participant created a second note. It arrived on the owner after a delay; native
+observations match both saved note IDs/titles on both devices, and the user
+confirmed visibility. No duplicate insertion was used to force convergence.
+
+The participant was then force-quit and reopened through the same public
+workspace/connection/join. Both notes remained visible. Leave shared graph was
+confirmed through the demo's destructive dialog: the participant became empty,
+the owner retained both notes, and the durable membership reported removed/left
+with no pending remote command. The owner's subsequent Apple UI still displayed
+the former participant; its state/reinvitation behavior is being investigated,
+so fresh reinvitation/recovery is not yet claimed.
 
 Private instrumentation lives outside shipping checkouts and is not a proposed
 public diagnostic API. Live directory copies are forensic observations rather
@@ -57,10 +69,27 @@ Two demo identities briefly existed on the iPad after initial signing setup;
 the correct laboratory app was explicitly restored before the confirmed checks.
 No retrieved crash report establishes a crash cause.
 
+## Reviewed integration
+
+The library correction integrates through [PR #153](https://github.com/bbruno84/GraphEvo/pull/153).
+Reviewed full [checkpoint #41872809620](https://github.com/bbruno84/GraphEvo/actions/runs/41872809620)
+passes on 012b5083082b7674dd6a525fdade32f8e9e2eb3d: 1,040 macOS functions,
+1,037 passed iOS functions with the known skip, and both Swift 6 consumers.
+The first attempt acquired no hosted runner and executed no steps; GitHub
+reported macOS arm64 capacity constraints. Its sole retry on the same reviewed
+head supplies the passing checkpoint above.
+Local focused iOS passes 35 functions; the strengthened import regression passes
+five repeated runs in both permission modes. Final integration notes change only
+documentation; shipping/test/consumer/workflow inputs match that checkpoint.
+Companion demo delivery uses the final library integration pin and corrects the
+misleading participant zone presentation separately. This does not retroactively
+turn the original failed trial into a success or close broader device gates.
+
 ## Remaining scope
 
-Complete and record permission restoration/reverse transfer, restart, leave and
-reinvitation. Repeat any required acceptance on the reviewed final library/demo
+Resolve and record native participant state after leave and fresh reinvitation.
+Permission restoration/reverse transfer, participant restart and local/remote
+leave settlement have the bounded observations above. Repeat any required acceptance on the reviewed final library/demo
 pins. This checkpoint does not validate attachments, large-store sharing,
 Production deployment, background delivery, protected-data/account transitions,
 App Group writers or interruption/crash durability. Retain the initial failure
