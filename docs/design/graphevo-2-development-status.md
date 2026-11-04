@@ -48,8 +48,10 @@ passes on `9ba97c76f175bbce06cf316ac3b90d6d84f3db9a`: 1,009 macOS functions,
 superseded #41790695878 was intentionally canceled before a notification-race
 correction and is not acceptance evidence. Final integration notes are
 documentation-only with unchanged shipping/test/consumer/workflow inputs.
-Physical account changes, protected-data transitions, independent reader policy
-and restoration remain open; public coordinated host integration remains next.
+Physical account-change trials are scheduled during beta, before stable release,
+by the maintainer's 2026-11-04 decision. Protected-data transitions, independent
+reader policy and restoration retain their existing gates. Public coordinated
+host integration remains next.
 
 The third controlled-store increment integrates through
 [PR #144](https://github.com/bbruno84/GraphEvo/pull/144), directly from

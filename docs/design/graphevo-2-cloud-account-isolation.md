@@ -56,8 +56,9 @@ A different account requires a distinct session directory and graph/store. The
 old store is never claimed by the new identity. Host-facing coordinated opening
 and account-aware resource selection remain later public integration work;
 ContextManager orchestration is still package-only. Independently opened reader
-processes/extensions, protected-data lifecycle, physical account switches and
-consistent multi-file restoration retain their beta acceptance gates.
+processes/extensions, protected-data lifecycle, consistent multi-file restoration retain their existing acceptance gates.
+Physical account-change trials are scheduled during beta, before stable release,
+by the maintainer's 2026-11-04 decision; they are no longer a beta-entry condition.
 
 ## Apple behavior and selected policy
 

@@ -261,12 +261,17 @@ engine or cross-process acceptance. Retain this scope when integrating it.
 - [ ] **B** Retire the transitional v2 native mirror/assignment paths after their
   callers have replacement coverage; preserve mandatory v1 conversion/readers.
 
-- [ ] **B** Validate the selected [account isolation](graphevo-2-cloud-account-isolation.md)
-  default on physical account changes, protected-data transitions and independent
-  reader processes. [PR #147](https://github.com/bbruno84/GraphEvo/pull/147)
-  implements the selected default with reviewed full CI. It retains data separately, blocks
-  ordinary access after logout/switch/restriction, notifies consumers and permits
-  verified same-account recovery. Injected tests do not close physical acceptance.
+- [ ] **R** During beta, exercise the selected
+  [account isolation](graphevo-2-cloud-account-isolation.md) default with physical
+  iCloud logout, account switch and verified same-account return. The maintainer
+  deferred these device account-change trials to beta on 2026-11-04; complete
+  them before stable release. [PR #147](https://github.com/bbruno84/GraphEvo/pull/147)
+  implements the default with reviewed full CI and injected regression evidence.
+  It retains data separately, blocks ordinary access after identity loss and
+  notifies consumers. This scheduling decision does not certify physical behavior.
+- [ ] **B** Validate account isolation across protected-data transitions and
+  independent reader processes. These gates are unchanged by deferring physical
+  account-change trials; cached consumer UI and restoration retain their scope.
 - [ ] **R** Design optional local-data merge into a signed-in account, including
   explicit consent, identity/conflict rules and interrupted-operation recovery.
 - [ ] **R** Design optional automatic local deletion on account loss, including
