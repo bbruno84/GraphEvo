@@ -263,7 +263,8 @@ engine or cross-process acceptance. Retain this scope when integrating it.
 
 - [ ] **B** Validate the selected [account isolation](graphevo-2-cloud-account-isolation.md)
   default on physical account changes, protected-data transitions and independent
-  reader processes. The focused implementation retains data separately, blocks
+  reader processes. [PR #147](https://github.com/bbruno84/GraphEvo/pull/147)
+  implements the selected default with reviewed full CI. It retains data separately, blocks
   ordinary access after logout/switch/restriction, notifies consumers and permits
   verified same-account recovery. Injected tests do not close physical acceptance.
 - [ ] **R** Design optional local-data merge into a signed-in account, including

@@ -35,18 +35,21 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
-The account-isolation increment is under local validation on
-`codex/v2-cloud-account-isolation`, based on integrated #146. The
-[contract](graphevo-2-cloud-account-isolation.md) selects retained separate data,
-consumer notification, blocked access after identity loss and verified
-same-account recovery. Merge and local deletion policies are backlog work.
-Local review and validation cover 1,006 macOS functions before the final startup
-corrections, 1,003 passed iOS functions with one known skip, both Swift 6 consumers
-and focused rechecks of the final account/startup changes. Remote CI and
-integration are pending; physical account changes and independent reader
-acceptance remain open. This does not replace the next public coordinated
-host integration milestone.
+The [account-isolation contract](graphevo-2-cloud-account-isolation.md) integrates
+through [PR #147](https://github.com/bbruno84/GraphEvo/pull/147), directly from
+integrated #146. The selected default retains data separately, notifies consumers,
+blocks normal access after logout/switch/restriction and restores access only
+after verified same-account recovery. Temporary outages preserve local access
+only for a verified identity. Merge and local deletion policies are backlog work.
 
+Reviewed [full checkpoint #41790920138](https://github.com/bbruno84/GraphEvo/actions/runs/41790920138)
+passes on `9ba97c76f175bbce06cf316ac3b90d6d84f3db9a`: 1,009 macOS functions,
+1,006 passed iOS functions with one known skip and both Swift 6 consumers. The
+superseded #41790695878 was intentionally canceled before a notification-race
+correction and is not acceptance evidence. Final integration notes are
+documentation-only with unchanged shipping/test/consumer/workflow inputs.
+Physical account changes, protected-data transitions, independent reader policy
+and restoration remain open; public coordinated host integration remains next.
 
 The third controlled-store increment integrates through
 [PR #144](https://github.com/bbruno84/GraphEvo/pull/144), directly from
