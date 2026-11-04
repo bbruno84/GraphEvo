@@ -26,100 +26,135 @@ extension GraphCloudConnection {
     }
     /// Accepts a native share URL and records resumable progress before GraphID is known.
     public func acceptInvitation(at url: URL) async throws -> GraphCloudJoin {
-        let config = try await ready(), session = try await owningContext.manager.cloud(config)
-        let value = try await session.nativeBeginJoin(url)
-        // A failed network step is retained on the returned handle, not a lost acceptance receipt.
-        do { try await session.nativeAdvanceJoin(value.id) } catch { _ = try await session.nativeJoin(value.id) }
-        return GraphCloudJoin(id: value.id, connection: self, contextIdentity: owningContext.identityForBootstrap, namespace: config.namespace)
+        return try await sharingOperation {
+            let config = try await ready(), session = try await owningContext.manager.cloud(config)
+            let value = try await session.nativeBeginJoin(url)
+            // A failed network step is retained on the returned handle, not a lost acceptance receipt.
+            // Publication already committed: even account loss must not conceal the intent ID.
+            try? await session.nativeAdvanceJoin(value.id)
+            return GraphCloudJoin(id: value.id, connection: self, contextIdentity: owningContext.identityForBootstrap, namespace: config.namespace)
+        }
     }
     /// Revalidates native callback metadata through its URL under the current account.
     public func acceptInvitation(_ metadata: CKShare.Metadata) async throws -> GraphCloudJoin {
-        guard let url = metadata.share.url else { throw GraphCloudDiscoveryError.invalidInvitation }
-        return try await acceptInvitation(at: url)
+        return try await sharingOperation {
+            guard let url = metadata.share.url else { throw GraphCloudDiscoveryError.invalidInvitation }
+            return try await acceptInvitation(at: url)
+        }
     }
     /// Lists durable invitations, including completed joins, without reading application data.
     public func pendingInvitations() async throws -> [GraphCloudJoin] {
-        let config = try await controlConfiguration()
-        return try await owningContext.manager.cloud(config).nativeJoins().filter { $0.phase != .discarded }.map { GraphCloudJoin(id: $0.id, connection: self, contextIdentity: owningContext.identityForBootstrap, namespace: config.namespace) }
+        return try await sharingOperation {
+            let config = try await controlConfiguration()
+            return try await owningContext.manager.cloud(config).nativeJoins().filter { $0.phase != .discarded }.map { GraphCloudJoin(id: $0.id, connection: self, contextIdentity: owningContext.identityForBootstrap, namespace: config.namespace) }
+        }
     }
     func joinState(_ id: UUID) async throws -> GraphCloudJoinState {
-        let config = try await controlConfiguration()
-        return try await owningContext.manager.cloud(config).nativeJoin(id).status
+        return try await sharingOperation {
+            let config = try await controlConfiguration()
+            return try await owningContext.manager.cloud(config).nativeJoin(id).status
+        }
     }
     func retryJoin(_ id: UUID) async throws {
-        let config = try await controlConfiguration()
-        try await owningContext.manager.cloud(config).nativeAdvanceJoin(id)
+        return try await sharingOperation {
+            let config = try await controlConfiguration()
+            try await owningContext.manager.cloud(config).nativeAdvanceJoin(id)
+        }
     }
     func observeJoin(_ id: UUID) async throws -> GraphObservation<GraphCloudJoinState> {
-        let config = try await controlConfiguration()
-        return forwarding(try await owningContext.manager.cloud(config).observeJoin(id))
+        return try await sharingOperation {
+            let config = try await controlConfiguration()
+            return forwarding(try await owningContext.manager.cloud(config).observeJoin(id))
+        }
     }
     /// Creates or resumes an exact participant replica after descriptor discovery.
     public func openReplica(for join: GraphCloudJoin, at storeURL: URL) async throws -> GraphStore {
-        try GraphContext.validateStoreURL(storeURL)
-        let config = try await ready()
-        guard join.contextIdentity == owningContext.identityForBootstrap, join.namespace == config.namespace else { throw GraphStoreError.foreignGraph }
-        let graph = try await owningContext.manager.openNativeReplica(join.id, at: storeURL, configuration: config)
-        await graph.retainPublicContext(owningContext, identity: owningContext.identityForBootstrap)
-        return graph
+        return try await sharingOperation {
+            try GraphContext.validateStoreURL(storeURL)
+            let config = try await ready()
+            guard join.contextIdentity == owningContext.identityForBootstrap, join.namespace == config.namespace else { throw GraphStoreError.foreignGraph }
+            let graph = try await owningContext.manager.openNativeReplica(join.id, at: storeURL, configuration: config)
+            await graph.retainPublicContext(owningContext, identity: owningContext.identityForBootstrap)
+            return graph
+        }
     }
     /// Leaves an accepted join without a replica; remote failure preserves the pending command.
     public func discardInvitation(_ join: GraphCloudJoin) async throws {
-        let config = try await controlConfiguration()
-        guard join.contextIdentity == owningContext.identityForBootstrap, join.namespace == config.namespace else { throw GraphStoreError.foreignGraph }
-        try await owningContext.manager.cloud(config).nativeDiscardJoin(join.id)
+        return try await sharingOperation {
+            let config = try await controlConfiguration()
+            guard join.contextIdentity == owningContext.identityForBootstrap, join.namespace == config.namespace else { throw GraphStoreError.foreignGraph }
+            try await owningContext.manager.cloud(config).nativeDiscardJoin(join.id)
+        }
     }
     /// Fetches owner-visible participants. Native identity may be absent on some entries.
     public func participants(in graph: GraphStore) async throws -> [GraphCloudParticipant] {
-        try await validateGraph(graph)
-        let config = try await ready()
-        return try await owningContext.manager.cloudParticipants(for: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        return try await sharingOperation {
+            try await validateGraph(graph)
+            let config = try await ready()
+            return try await owningContext.manager.cloudParticipants(for: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        }
     }
     /// Changes one owner's participant permission through the durable command path.
     public func setPermission(_ permission: GraphCloudSharePermission, for participant: GraphCloudParticipantIdentity,
                               in graph: GraphStore) async throws -> GraphCloudSharingStatus {
-        try await validateGraph(graph)
-        let config = try await controlConfiguration()
-        return try await owningContext.manager.setCloudParticipantPermission(permission, participant: participant.value, for: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        return try await sharingOperation {
+            try await validateGraph(graph)
+            let config = try await controlConfiguration()
+            return try await owningContext.manager.setCloudParticipantPermission(permission, participant: participant.value, for: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        }
     }
     /// Removes one participant without deleting the owner's graph.
     public func removeParticipant(_ participant: GraphCloudParticipantIdentity, from graph: GraphStore) async throws -> GraphCloudSharingStatus {
-        try await validateGraph(graph)
-        let config = try await controlConfiguration()
-        return try await owningContext.manager.removeCloudParticipant(participant.value, from: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        return try await sharingOperation {
+            try await validateGraph(graph)
+            let config = try await controlConfiguration()
+            return try await owningContext.manager.removeCloudParticipant(participant.value, from: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        }
     }
     /// Stops sharing while preserving owner-private graph records.
     public func stopSharing(_ graph: GraphStore) async throws -> GraphCloudSharingStatus {
-        try await validateGraph(graph)
-        let config = try await controlConfiguration()
-        return try await owningContext.manager.stopCloudSharing(for: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        return try await sharingOperation {
+            try await validateGraph(graph)
+            let config = try await controlConfiguration()
+            return try await owningContext.manager.stopCloudSharing(for: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        }
     }
     /// Destroys the participant replica and unpublished work, retaining an offline remote leave.
     public func leaveSharedGraph(_ graph: GraphStore) async throws -> GraphCloudSharingStatus {
-        try await validateGraph(graph)
-        let config = try await controlConfiguration()
-        return try await owningContext.manager.leaveCloudShare(for: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        return try await sharingOperation {
+            try await validateGraph(graph)
+            let config = try await controlConfiguration()
+            return try await owningContext.manager.leaveCloudShare(for: graph.id, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        }
     }
     /// Reads durable membership state, including after local removal.
     public func sharingStatus(for graphID: GraphID) async throws -> GraphCloudSharingStatus {
-        let config = try await controlConfiguration()
-        return try await owningContext.manager.cloudSharingStatus(for: graphID, configuration: config)
+        return try await sharingOperation {
+            let config = try await controlConfiguration()
+            return try await owningContext.manager.cloudSharingStatus(for: graphID, configuration: config)
+        }
     }
     /// Observes newest membership state without retaining a graph lease.
     public func observeSharing(for graphID: GraphID) async throws -> GraphObservation<GraphCloudSharingStatus> {
-        let config = try await controlConfiguration()
-        return forwarding(try await owningContext.manager.observeCloudSharing(for: graphID, configuration: config))
+        return try await sharingOperation {
+            let config = try await controlConfiguration()
+            return forwarding(try await owningContext.manager.observeCloudSharing(for: graphID, configuration: config))
+        }
     }
     /// Inspects current native access; failure is not proof authorizing deletion.
     public func refreshSharing(for graphID: GraphID) async throws -> GraphCloudSharingStatus {
-        let config = try await controlConfiguration()
-        return try await owningContext.manager.refreshCloudSharing(for: graphID, configuration: config)
+        return try await sharingOperation {
+            let config = try await controlConfiguration()
+            return try await owningContext.manager.refreshCloudSharing(for: graphID, configuration: config)
+        }
     }
     /// Supplies a current path for an existing durable membership's restart/purge recovery.
     public func registerSharedReplica(id: GraphID, at storeURL: URL) async throws {
-        try GraphContext.validateStoreURL(storeURL)
-        let config = try await controlConfiguration()
-        try await owningContext.manager.registerCloudGraphLocation(id, at: storeURL, configuration: config)
+        return try await sharingOperation {
+            try GraphContext.validateStoreURL(storeURL)
+            let config = try await controlConfiguration()
+            try await owningContext.manager.registerCloudGraphLocation(id, at: storeURL, configuration: config)
+        }
     }
     private func removePublicObservation(_ id: UUID) { publicObservationControls.removeValue(forKey: id) }
     func forwarding<Value: Sendable>(_ stream: AsyncStream<Value>) -> GraphObservation<Value> {
@@ -137,7 +172,7 @@ extension GraphCloudConnection {
             pair.continuation.finish()
             Task { await self?.removePublicObservation(id) }
         })
-        publicObservationControls[id] = control
+        retainForwardedObservation(id, control: control)
         return .init(stream: pair.stream, control: control)
     }
 }
@@ -150,6 +185,9 @@ extension GraphContextManager {
               !sharingGraphs.contains(id), nativeReplicaOpenings.insert(id).inserted else { throw GraphCloudDiscoveryError.invalidJoin }
         defer { nativeReplicaOpenings.remove(id) }
         let route = GraphCloudBinding(zone: join.invitation.zone, graphID: id)
+        if let member = try await session.membership(id), member.terminal, member.generation == join.id {
+            throw GraphCloudDiscoveryError.invalidJoin
+        }
         if let member = try await session.membership(id), member.hadAccess, !member.terminal {
             guard member.binding == route else { throw GraphCloudError.ownershipConflict }
             try await registerCloudGraphLocation(id, at: url, configuration: configuration)
@@ -258,5 +296,24 @@ extension GraphContextManager {
     func checkPublicSharingOwner(_ id: GraphID, generation: UUID?) throws {
         guard let generation else { return }
         guard let entry = entries[id], entry.generation == generation, entry.closing == nil else { throw GraphStoreError.closed }
+    }
+}
+
+@available(iOS 17, macOS 14, *)
+extension GraphCloudConnection {
+    func sharingOperation<Value: Sendable>(_ body: () async throws -> Value) async throws -> Value {
+        do { return try await body() }
+        catch {
+            switch error {
+            case GraphCloudError.busy: throw GraphCloudDiscoveryError.busy
+            case GraphCloudError.graphPaused: throw GraphCloudDiscoveryError.graphPaused
+            case GraphCloudError.inboxLimit: throw GraphCloudDiscoveryError.limitExceeded
+            case GraphCloudError.accountChanged, GraphCloudError.accountUnavailable, GraphCloudError.stopped, GraphCloudError.stopping:
+                throw GraphCloudConnectionError.notReady
+            default:
+                if error is GraphCloudDiscoveryError || error is GraphCloudSharingError || error is GraphStoreError { throw error }
+                throw GraphCloudConnectionError.translate(error)
+            }
+        }
     }
 }

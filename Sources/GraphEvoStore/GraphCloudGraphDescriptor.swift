@@ -5,7 +5,7 @@ import GraphEvoModel
 
 /// Errors in native invitation discovery; none authorizes local deletion.
 public enum GraphCloudDiscoveryError: Error, Sendable, Equatable {
-    case invalidDescriptor, unsupportedDescriptor, metadataPending, invalidInvitation, busy, invalidJoin, sessionUpgradeRequired
+    case invalidDescriptor, unsupportedDescriptor, metadataPending, invalidInvitation, busy, graphPaused, limitExceeded, invalidJoin, sessionUpgradeRequired
 }
 
 /// A cloud control record, independent of application data and MF10 authority.

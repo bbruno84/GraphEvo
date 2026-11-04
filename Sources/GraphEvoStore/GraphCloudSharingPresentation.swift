@@ -159,19 +159,21 @@ extension GraphCloudSharingPresentation: NSCloudSharingServiceDelegate {
 extension GraphCloudConnection {
     /// Prepares the fixed graph descriptor and an owner-only native presentation adapter.
     public func prepareSharing(for graph: GraphStore, title: String) async throws -> GraphCloudSharingPresentation {
-        try await validateGraph(graph)
-        let config = try await ready(), context = owningContext
-        let lease = try await context.connectCloud(using: .init(containerIdentifier: config.containerIdentifier, environment: config.environment,
-            directory: config.directory, maximumEvents: config.maximumEvents, maximumBytes: config.maximumBytes, allowsSessionUpgradeFromV8: config.allowsSessionUpgradeFromV8))
-        do {
-            let result = try await context.manager.prepareNativePresentation(graph.id, title: title, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+        return try await sharingOperation {
+            try await validateGraph(graph)
+            let config = try await ready(), context = owningContext
+            let lease = try await context.connectCloud(using: .init(containerIdentifier: config.containerIdentifier, environment: config.environment,
+                directory: config.directory, maximumEvents: config.maximumEvents, maximumBytes: config.maximumBytes, allowsSessionUpgradeFromV8: config.allowsSessionUpgradeFromV8))
             do {
-                return try await GraphCloudSharingPresentation(connection: lease, manager: context.manager, token: result.0,
-                    archive: result.1, containerIdentifier: config.containerIdentifier, title: title)
-            } catch {
-                try? await context.manager.finishNativePresentation(result.0, stopped: false)
-                throw error
-            }
-        } catch { try? await lease.close(); throw error }
+                let result = try await context.manager.prepareNativePresentation(graph.id, title: title, configuration: config, publicOwner: graph.publicCoordinatorGeneration)
+                do {
+                    return try await GraphCloudSharingPresentation(connection: lease, manager: context.manager, token: result.0,
+                        archive: result.1, containerIdentifier: config.containerIdentifier, title: title)
+                } catch {
+                    try? await context.manager.finishNativePresentation(result.0, stopped: false)
+                    throw error
+                }
+            } catch { try? await lease.close(); throw error }
+        }
     }
 }

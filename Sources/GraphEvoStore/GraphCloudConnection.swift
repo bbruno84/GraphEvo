@@ -80,6 +80,10 @@ public actor GraphCloudConnection {
         _ = try await context.configuration(namespace, token: token)
         guard closing == nil else { throw GraphCloudConnectionError.closed }
     }
+    func retainForwardedObservation(_ id: UUID, control: GraphObservationControl) {
+        guard closing == nil else { control.cancel(); return }
+        publicObservationControls[id] = control
+    }
     func sharingConfiguration() async throws -> GraphCloudConfiguration {
         try await check(); return try await context.configuration(namespace, token: token)
     }

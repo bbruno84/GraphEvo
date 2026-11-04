@@ -2102,7 +2102,8 @@ and [contract](../design/graphevo-2-public-sharing.md).
   reason, remoteOperationPending and bounded failure. Status survives local removal.
   Shared routes also support existing pause/resume APIs.
 - GraphCloudDiscoveryError distinguishes invalidDescriptor, unsupportedDescriptor,
-  metadataPending, invalidInvitation, busy, invalidJoin and sessionUpgradeRequired.
+  metadataPending, invalidInvitation, busy, graphPaused, limitExceeded, invalidJoin
+  and sessionUpgradeRequired.
   Existing typed store/sharing errors remain available; native operation errors
   never imply that durable acceptance/removal rolled back.
 - GraphCloudConnectionConfiguration adds `allowsSessionUpgradeFromV8: Bool = false`.

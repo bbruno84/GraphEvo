@@ -13,9 +13,15 @@ private actor NativeInvitationServer {
     var acceptWrites = 0
     var discarded = false
     var currentAccount = "participant"
+    var switchAfterAccept = false
+    func switchOnAcceptance() { switchAfterAccept = true }
+    func restoreAccount() { currentAccount = "participant"; switchAfterAccept = false }
     func switchAccount() { currentAccount = "other-account" }
     func available() { descriptorAvailable = true }
-    func accept() { if !accepted { acceptWrites += 1; accepted = true } }
+    func accept() {
+        if !accepted { acceptWrites += 1; accepted = true }
+        if switchAfterAccept { currentAccount = "other-account" }
+    }
     func discover() throws -> GraphID {
         guard descriptorAvailable else { throw GraphCloudDiscoveryError.metadataPending }
         return graphID
@@ -152,6 +158,9 @@ private actor NativeInviteGate {
         #expect(removed.phase == .removed && !removed.remoteOperationPending)
         await #expect(throws: (any Error).self) { try await reopened.read { _ in () } }
         try await reopened.close()
+        let forbidden = native.directory.appendingPathComponent("OldJoin.sqlite")
+        await #expect(throws: GraphCloudDiscoveryError.invalidJoin) { try await connection.openReplica(for: join, at: forbidden) }
+        #expect(!FileManager.default.fileExists(atPath: forbidden.path))
         let reinvited = try await connection.acceptInvitation(at: server.url)
         #expect(reinvited.id != join.id)
         let second = try await connection.openReplica(for: reinvited, at: native.directory.appendingPathComponent("Rejoined.sqlite"))
@@ -311,5 +320,26 @@ private actor NativeInviteGate {
         #expect(try await session.membership(binding.graphID)?.nativePresentationPending == nil)
         #expect(try await session.membership(binding.graphID)?.shareIdentity == nil)
         try await session.stop()
+    }
+    @available(iOS 17, macOS 14, *)
+    @Test func accountLossAfterNativeAcceptanceStillReturnsTheDurableJoinID() async throws {
+        let native = config(), server = NativeInvitationServer()
+        defer { try? FileManager.default.removeItem(at: native.directory) }
+        let context = GraphContext(manager: .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()), adapter: server.adapter)
+        let connection = try await context.connectCloud(using: .init(containerIdentifier: native.containerIdentifier,
+            environment: native.environment, directory: native.directory))
+        for _ in 0..<2000 {
+            if try await connection.state == .ready { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        await server.switchOnAcceptance()
+        let join = try await connection.acceptInvitation(at: server.url)
+        #expect(await server.acceptWrites == 1)
+        try await connection.close()
+        await server.restoreAccount()
+        let recovered = try await GraphCloudSession.open(native, adapter: server.adapter)
+        #expect(try await recovered.nativeJoins().map(\.id) == [join.id])
+        try await recovered.stop()
     }
 }
