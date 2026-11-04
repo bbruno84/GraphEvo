@@ -36,9 +36,11 @@ no new implementation, acceptance result or release is implied by this audit.
 ## Current focused work
 
 [H01 public coordinated entry](graphevo-2-public-entry.md) is a documentation-only
-proposal on `codex/v2-public-entry-contract`. It proposes a shared public context,
-leased cloud connections and an explicit supported local/v1/private-cloud/peer
-flow over the existing owners. Contract discussion precedes implementation;
+proposal on `codex/v2-public-entry-contract`. It proposes an explicitly constructed,
+application-owned context, leased cloud connections and an explicit supported
+local/v1/private-cloud/peer flow. Synchronized local opens retain identity checks
+and account observation even without a transport connection; local-only stores
+remain independent of iCloud availability. Cross-context ownership stays guarded. Contract discussion precedes implementation;
 public invitation onboarding is a subsequent proposed increment. No public
 signature, schema, release gate or shipping code changes with this draft.
 

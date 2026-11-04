@@ -26,17 +26,38 @@ separately; this contract does not expose the entire internal manager, migrate
 old mirrored cloud zones or certify background delivery. Existing shared-engine
 and permission safeguards remain in place internally.
 
-## One entry and existing owners
+## Explicit context and existing owners
 
-Propose `GraphContext.shared` as the public production entry. This is a facade
-using `GraphCoordinatorFactory.shared` and its existing ContextManager. It creates
-no second registry, coordinator ownership domain or engine factory. Initializers
-that inject schemas, registries and adapters remain package-only.
+The application creates `GraphContext()` and passes that instance to its features.
+There is no public `.shared`, implicit default context or global service lookup.
+Each context owns its ContextManager and its graph/connection lifetimes; production
+construction uses the native adapter factory without routing all instances through
+`GraphCoordinatorFactory.shared`. Low-level schema/registry/adapter injection
+remains package-only. Existing singleton-based entry points are not an architectural
+requirement for the new public path.
 
-The context supplies independent GraphStore leases. The coordinator remains the
-owner of one graph/store; the ContextManager remains the owner of the shared
-private/shared engine pair. Multiple application features may use the shared
-context and matching cloud connection leases without allocating another engine.
+Within one context, matching requests share one coordinator and independent
+GraphStore leases. Across contexts, overlapping graph/resource ownership is
+refused while another context owns it; contexts do not silently join one another's
+manager or allocate competing coordinators. Disjoint local graphs can progress
+independently. Extend the existing admission boundary with context ownership as
+needed, rather than adding an uncoordinated parallel ownership registry. Canonical
+aliases, pending opens and failed native detach retain the same exclusion.
+
+Process-wide ownership guards remain necessary. They reserve resources, not a
+global application context: at most one context may own engines for a configured
+CloudKit database at a time, even with different session directories. A conflicting
+cloud connection is refused before native engine construction. Ordinary account
+monitoring does not create an engine and may serve independently owned graphs.
+Matching connection leases within the owning context reuse its manager-owned
+private/shared engine pair.
+
+The app controls its context's lifetime. Live graph/connection leases retain the
+owner and required account monitoring even if the app drops its original context
+reference. Final release drains cleanup; failed native cleanup retains exclusion.
+Creating a new context cannot bypass quarantine or invalidate another context's
+live handles. Tests can own independent contexts and resources without resetting
+global application state.
 
 New entry declarations target iOS 17/macOS 14, matching the selected CKSyncEngine
 and native staged-conversion path. This does not raise the package-wide floor for
@@ -52,7 +73,7 @@ only consumer-relevant fields.
 ```swift
 // Proposed declarations, not available APIs.
 public actor GraphContext {
-    public static var shared: GraphContext { get }
+    public init()
     public func createGraph(id: GraphID, at storeURL: URL,
                             conflictPolicy: GraphConflictPolicy = .lastEditWins)
         async throws -> GraphStore
@@ -145,15 +166,46 @@ finish when their lease closes. Observation refresh republishes current state;
 state carries its outcome. It never replays a consumer write
 or migration body. A closed connection cannot restart through retry.
 
+## Local opening of synchronized stores
+
+Separating local opening from transport does not turn a synchronized store into
+an unrestricted local store. On `openGraph`, the stored immutable cloud identity
+determines whether account checks are required; the caller cannot disable them
+by omitting `connectCloud`, pausing sync or stopping transport.
+
+For an account-bound store the context installs account observation and schedules
+identity verification as part of opening, without constructing CKSyncEngine,
+starting a sync session, scanning for session directories or binding a new route.
+The returned handle remains observable and isolated until verification succeeds.
+The monitor uses the stored container/environment/account ownership and remains
+owned for the lifetime of the live graph, pending work and required cleanup.
+Connecting transport later reuses this account authority, rather than creating a
+second authority that can independently unlock the graph. If observation stops,
+invalidate cached verification before a later reopening; an unobserved gap must
+not count as continuous verification.
+
+A successful same-account verification can restore local access while transport
+remains stopped or was never started in this process. Temporary unavailability
+preserves access only for an identity already verified in this context's current
+lifecycle. At cold start, failure to verify leaves the handle isolated; a previous
+launch's verification is not reused as current proof. A later successful check
+restores access subject to existing permission and migration restrictions.
+If the monitor observes an identity boundary while transport is stopped, its
+next startup must discard invalid SDK engine serialization while preserving PH,
+frozen attempts, receipts, inbox entries and asset files. Reconnecting transport
+cannot bypass that boundary by loading an older session document.
+Unbound local-only stores need no CloudKit verification and remain usable
+regardless of iCloud status.
+
 Local and cloud availability are independent:
 
 | Scenario | Local graph | Cloud connection |
 |---|---|---|
 | Unbound local store | Usable | Optional; no implicit binding |
-| Bound store, cold startup | Opens an observable isolated handle; data is blocked pending verification | Verifies identity |
+| Bound store, cold startup | Opens an observable isolated handle; its account monitor verifies identity | Optional; no transport is needed for account verification |
 | Verified account, transient outage | Local access retained | Suspended; retryable |
-| Logout, switch or restriction | Data retained and ordinary access blocked | Reports isolation |
-| Verified original account returns | Access restored subject to other reservations/permissions | Reconciles durable queues and invalid SDK state |
+| Logout, switch or restriction | Data retained and ordinary access blocked | If connected, reports isolation |
+| Verified original account returns | Access restored subject to other reservations/permissions, even with transport stopped | If connected, reconciles durable queues and invalid SDK state |
 
 Use the existing `GraphStore.cloudAccountState` and its observation for per-graph
 access decisions. Connection state never overrides account epochs, permissions,
@@ -245,13 +297,20 @@ No route discovery, authority transfer or old mirrored-zone adoption is implied.
 
 1. An external Swift 6 consumer uses only `import GraphEvo` to create, reopen,
    mutate, query, observe, attach and close a coordinated graph. Concurrent
-   features and alias URLs share the owner; final-close failure retains exclusion.
+   features and alias URLs within one context share the owner. Cross-context
+   overlap is refused, disjoint contexts progress independently and final-close
+   failure retains exclusion even if another context attempts admission.
 2. Matching connection leases share exactly one engine pair. Verify independent
    cancellation, foreground-interest aggregation, initial state ordering, final
    close during pending account startup, repeated notifications and failed cleanup.
-3. Injected account scenarios cover cold bound opening, transient access, logout,
-   switch, restriction, same-account recovery and refused account-directory reuse.
-   No graph is reported usable merely because the connection is ready.
+3. Injected account scenarios cover cold bound opening without any cloud
+   connection, transient access, logout, switch, restriction, same-account recovery
+   with transport still stopped, and refused account-directory reuse. Local-only
+   graphs remain usable with no account provider calls. Pausing/stopping transport
+   cannot disable identity observation. Check that a boundary observed while
+   transport is stopped invalidates older SDK serialization on later connection
+   without losing durable queues. No graph is reported usable merely because the
+   connection is ready.
 4. A public consumer converts a supported v1 source and retains a committed
    receipt despite opening/cleanup failure. Repeating the request does not erase
    later v2 edits. Bootstrap excludes aliases and unresolved cloud startup.
@@ -274,11 +333,14 @@ acceptance remain roadmap work.
 
 ## Decisions to confirm before implementation
 
-- Use a shared public GraphContext facade and leased cloud connections over the
-  existing manager, rather than exposing its injectable internal actor.
+- Use an explicitly constructed, application-owned GraphContext with its own
+  manager and leased cloud connections. No singleton public context or implicit
+  redirection to the legacy shared manager is proposed. Process/resource ownership
+  remains enforced across instances.
 - Keep local create/open, cloud connection/binding and v1 conversion/activation
   explicit. Return a cloud connection while account verification is pending;
-  bound graph data stays isolated until verification.
+  bound graph data stays isolated until verification. Account observation for a
+  synchronized store starts on local opening, independently of transport.
 - Deliver the first supported owner-private local/v1/cloud/peer flow together;
   public invitation onboarding follows separately.
 - Keep account-specific resource selection explicit for this increment. Automatic
