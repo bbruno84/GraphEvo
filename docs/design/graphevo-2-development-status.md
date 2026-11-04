@@ -49,7 +49,10 @@ passes on `414cea3f5d9f452745026c8a4ff44ba29761a0b0`: 1,020 macOS functions,
 The external consumer also exercises a stopped-source staged conversion with
 public imports only. Final integration notes change documentation only;
 shipping/test/consumer/workflow inputs match the checkpoint. The companion demo
-integration is separate. Public invitations, protected-data/independent-reader,
+integration is tracked separately in [GraphEvoDemo PR #2](https://github.com/bbruno84/GraphEvoDemo/pull/2).
+A v2-only binding-admission correction is under review on
+`codex/v2-public-binding-validation`: invalid input and existing route conflicts
+must be refused before claiming a local-only store for the account. Public invitations, protected-data/independent-reader,
 production cutover, restoration and broader acceptance remain open. Physical
 account-change trials remain scheduled during beta before stable release.
 

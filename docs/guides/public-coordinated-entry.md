@@ -76,6 +76,9 @@ expected environment must match entitlements; it does not change the server
 account or environment. No raw identity appears in observable connection failure
 state. Operation errors preserve an underlying typed cause for diagnosis.
 
+Empty zone identifiers and existing conflicting graph/zone routes are refused
+before claiming the local store for an account.
+
 Matching connection leases in one context reuse the same engines. Final close
 awaits transport drainage and keeps the durable session document and asset files.
 Other contexts cannot acquire the same database while startup, use or quarantine
