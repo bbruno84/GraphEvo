@@ -21,6 +21,13 @@ Optional merge and local deletion are backlog policies. The audited account/cach
 item now requires physical/protected-data/independent-reader acceptance and
 public host integration; its default policy is decided.
 
+[H01](graphevo-2-public-entry.md) subsequently integrates through
+[PR #150](https://github.com/bbruno84/GraphEvo/pull/150): an application-owned public
+context, account-aware local opening independent of transport, explicit staged v1
+bootstrap and private-cloud authority/peer recovery. Its reviewed full checkpoint
+and public Swift 6 consumer do not close production cutover, public invitations,
+independent-reader or restoration acceptance. Companion demo delivery is separate.
+
 These are implemented alpha capabilities with bounded evidence. They do not
 close the complete beta gates. Package-only coordination is not an available
 public custom-sync opening API.
@@ -30,10 +37,9 @@ Proposed delivery order:
 1. Retain the [completed bounded private spool checkpoint](results/durable-asset-spool-device-2026-11-04.md)
    for #144. Cooperating-process/current app-widget and broader interruption
    acceptance remain separate; this does not close all #142–#144 device gates.
-2. Discuss the [H01 public-entry proposal](graphevo-2-public-entry.md), then
-   implement one supported public opening/migration/private-cloud/peer flow,
-   preserving the existing owner, backup and recovery boundaries. The proposal
-   is documentation-only and does not authorize implementation.
+2. Complete companion demo adoption of [H01](graphevo-2-public-entry.md), preserving
+   existing user stores and using public APIs over the reviewed library revision.
+   Public invitation onboarding remains the next separate host-integration slice.
 3. Resolve remaining beta decisions: app/widget roles and first launch,
    account/cache acceptance, O04 processing semantics, conflict scope, supported
    platforms/processes and API/schema reconciliation. Background scheduling
