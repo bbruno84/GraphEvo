@@ -9,6 +9,7 @@ import uuid
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--device", required=True)
+parser.add_argument("--bundle-identifier", default="com.valerioburiani.GraphCKDemo")
 parser.add_argument("--output", required=True, type=Path, help="New external private evidence directory")
 parser.add_argument("arguments", nargs=argparse.REMAINDER, help="Host arguments after --")
 args = parser.parse_args()
@@ -18,7 +19,7 @@ if output == repository or repository in output.parents or output.exists():
     parser.error("Use a new evidence directory outside the repository.")
 output.mkdir(parents=True, mode=0o700)
 request = str(uuid.uuid4()).upper()
-application = "com.valerioburiani.GraphCKDemo.SpoolProbe"
+application = args.bundle_identifier
 host_arguments = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
 launch = output / "launch.json"
 command = ["xcrun", "devicectl", "device", "process", "launch", "--device", args.device,

@@ -9,6 +9,7 @@ import uuid
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--device", required=True)
+parser.add_argument("--bundle-identifier", default="com.valerioburiani.GraphCKDemo")
 parser.add_argument("--run", required=True, type=uuid.UUID)
 parser.add_argument("--stage", required=True, choices=['account', 'prepare-owner', 'resume-owner', 'fetch-peer', 'apply-peer', 'verify-owner', 'recover-fresh'])
 parser.add_argument("--replica", required=True, choices=["owner", "peer", "fresh"])
@@ -23,7 +24,7 @@ source = f"Library/Application Support/GraphEvoLaboratory/CloudSpool/{str(args.r
 deadline = time.monotonic() + 300
 while time.monotonic() < deadline:
     result = subprocess.run(["xcrun", "devicectl", "device", "copy", "from", "--timeout", "15", "--device", args.device,
-        "--domain-type", "appDataContainer", "--domain-identifier", "com.valerioburiani.GraphCKDemo.SpoolProbe",
+        "--domain-type", "appDataContainer", "--domain-identifier", args.bundle_identifier,
         "--source", source, "--destination", str(output / "report.json")], capture_output=True, text=True, timeout=20)
     (output / "copy.log").write_text(result.stdout + result.stderr)
     if result.returncode == 0:

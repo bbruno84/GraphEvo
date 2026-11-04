@@ -10,8 +10,7 @@ Read the [spool contract](../../docs/design/graphevo-2-durable-asset-spool.md).
 python3 Experiments/CloudSpoolProbe/prepare_demo.py ../GraphEvoDemo /tmp/new-spool-host
 xcodebuild build -project /tmp/new-spool-host/GraphEvoDemo.xcodeproj \
   -scheme GraphEvoDemo -configuration Debug -destination 'generic/platform=iOS' \
-  -derivedDataPath /tmp/new-spool-build -allowProvisioningUpdates IPHONEOS_DEPLOYMENT_TARGET=17.0 \
-  PRODUCT_BUNDLE_IDENTIFIER=com.valerioburiani.GraphCKDemo.SpoolProbe
+  -derivedDataPath /tmp/new-spool-build -allowProvisioningUpdates IPHONEOS_DEPLOYMENT_TARGET=17.0
 ```
 
 Verify the signed app uses only the retained laboratory Development container.
@@ -21,8 +20,10 @@ production data, copied store or previous consumed-stage replay is permitted.
 Old laboratory stores remain untouched. Account stages write a salted digest
 privately; compare the two digests before running a mutation and never log them.
 
-The separate `com.valerioburiani.GraphCKDemo.SpoolProbe` bundle preserves any
-existing demo installation and owners. Launch with this directory's `launch_probe.py`; arguments after the ticket are
+Use a separate bundle if an eligible profile is available; both launch/collect
+helpers accept `--bundle-identifier`. With the existing signed laboratory bundle,
+confirm that no other trial needs its live owner before the initial host takeover.
+Never erase old app data. Launch with this directory's `launch_probe.py`; arguments after the ticket are
 `--cloud-spool <stage> <run-UUID> owner|peer|fresh`. Collect each unique report with
 this directory's `collect_report.py`. App-relative evidence is under
 `Library/Application Support/GraphEvoLaboratory/CloudSpool/<run>/<replica>/`.
@@ -41,7 +42,7 @@ report, retaining stores, logs and original process; do not retry the stage.
 | verify-owner / owner | After independent peer observation, reopen original owner, fetch/apply and verify complete state, control, queues and outgoing cleanup. |
 | recover-fresh / fresh | While the owner remains live, use another genuinely empty replica on the independent device; recover all IDs/content/payloads/control and prove no feedback or retained incoming spool. |
 
-The launcher terminates an existing app. Use it only for a PID whose previous
+The launcher terminates an existing app. After initial takeover, use it only for a PID whose previous
 stage and launch reports were acknowledged. Keep each writer owner alive until
 the independent peer has observed its changes. Use separate fresh evidence
 directories for every launch/report; never print account values, archives or
