@@ -36,12 +36,25 @@ no new implementation, acceptance result or release is implied by this audit.
 ## Current focused work
 
 The H02 continuation also exposed an idle context claim retained after settled
-participant removal. The focused follow-up releases it only after purge and
+participant removal. The [correction #154](https://github.com/bbruno84/GraphEvo/pull/154)
+releases it only after purge and
 remote intent settlement, while preserving retired-context refusal and pending
 leave/quarantine ownership. Local v2 checks pass 709 macOS functions and 52
 focused iOS functions (60 parameterized runs). Fresh-workspace demo ownership
 is a separate companion change. Physical reinvitation recovered after app
 restart; no restart-free final-pin acceptance is claimed.
+Reviewed [v2 checkpoint #41887502842](https://github.com/bbruno84/GraphEvo/actions/runs/41887502842)
+passes on `3ee3d3fa6c82c44c8530c5b873b786fd55b92c57`: 709 macOS functions,
+707 iOS functions and both Swift 6 consumers. Attempt 1 acquired no hosted
+runner and executed no steps. Attempt 2 passed iOS but macOS reported 87 issues:
+78 time limits and nine additional failures, mostly subsequent cancellations.
+The new three-path removal regression passed there too. A full local v2 repeat
+passed 709 functions without reproducing that failure. One bounded repeat of
+only macOS passed on the same head, retaining the passing iOS result. No root
+cause is attributed and no timeout/test was relaxed. Final integration notes
+change documentation only; shipping/test/consumer/workflow inputs match the
+tested source head. The #153 full checkpoint remains the preceding baseline.
+
 
 The [H02 physical continuation](results/h02-public-invitation-2026-11-04.md)
 identified metadata-first participant history refusal before initial import.

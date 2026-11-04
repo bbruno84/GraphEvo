@@ -97,6 +97,31 @@ Companion demo delivery uses the final library integration pin and corrects the
 misleading participant zone presentation separately. This does not retroactively
 turn the original failed trial into a success or close broader device gates.
 
+## Settled participant claim correction
+
+[PR #154](https://github.com/bbruno84/GraphEvo/pull/154) releases the idle context
+graph claim only after native purge and remote intent settlement. Normal leave,
+deferred leave and confirmed revocation regressions retain the old context and
+handle while a separate context opens an independent empty replica of the same
+graph. Pending leave refuses a new owner; retired-context access stays blocked.
+Local v2 passes 709 macOS functions twice; focused iOS passes 52 functions
+(60 expanded runs). Reviewed [v2 checkpoint #41887502842](https://github.com/bbruno84/GraphEvo/actions/runs/41887502842)
+passes on `3ee3d3fa6c82c44c8530c5b873b786fd55b92c57`: 709 macOS functions,
+707 iOS functions and both Swift 6 consumers. Attempt 1 acquired no hosted
+runner and executed no steps. Attempt 2 passed iOS but macOS reported 87 issues:
+78 time limits and nine additional failures, mostly subsequent cancellations.
+The new three-path removal regression passed there too. A full local v2 repeat
+passed 709 functions without reproducing that failure. One bounded repeat of
+only macOS passed on the same head, retaining the passing iOS result. No root
+cause is attributed and no timeout/test was relaxed. Final integration notes
+change documentation only; shipping/test/consumer/workflow inputs match the
+tested source head. The #153 full checkpoint remains the preceding baseline.
+
+These checks do not turn the restart-assisted physical continuation into
+restart-free final-pin acceptance. Companion demo PR
+[bbruno84/GraphEvoDemo#4](https://github.com/bbruno84/GraphEvoDemo/pull/4) retires
+workspace contexts and removes repeated CloudKit configuration entry separately.
+
 ## Remaining scope
 
 Fresh reinvitation recovered after an app restart, as recorded above; acceptance
