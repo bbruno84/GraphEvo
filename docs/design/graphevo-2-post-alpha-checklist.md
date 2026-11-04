@@ -77,6 +77,13 @@ partial-init cleanup, quarantined suspension, sibling-store layout, persistent
 workspaces/migration and session/catalog locks still need integration validation.
 This report adds no production code or remote CI checkpoint.
 
+The [pre-integration priority protocol](graphevo-2-apple-owner-test-protocol.md)
+selects separate N tests for partial opening, failed-close recovery, repeated
+lifecycle, async attachments and actual synchronization ownership on the iPad
+and iPhone XR. This selection closes no acceptance box. Missing priority
+evidence blocks the production integration recommendation; deferred layout,
+migration-workspace and broader platform cases remain pre-beta work.
+
 ## How to close an item
 
 All boxes start open: existing evidence is input, not a claim that its broader
