@@ -48,7 +48,7 @@ struct GraphCloudActivationService: Sendable {
                 guard count <= limits.maximumPayloadBytes + 4 * 1024 * 1024 - bytes else { throw GraphCloudActivationError.limitExceeded }
                 bytes += count
                 current[id.recordName] = value
-                guard current.count <= limits.maximumRecords + 2 else { throw GraphCloudActivationError.limitExceeded }
+                guard current.count <= limits.maximumRecords + 3 else { throw GraphCloudActivationError.limitExceeded }
             }
             for deletion in page.deletions { current.removeValue(forKey: deletion.recordID.recordName) }
             token = page.changeToken

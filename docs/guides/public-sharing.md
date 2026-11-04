@@ -99,6 +99,9 @@ The cloud descriptor uses format 1 with canonical UUID `graphID` and numeric
 `format`. Optional future fields are tolerated within a 16 KiB record-archive
 limit; unsupported formats fail. Descriptor edits cannot rebind an established
 replica or authorize purge. MF10 activation metadata remains independent.
+Private same-account recovery validates and excludes the descriptor and native
+zone-wide CKShare from application rows and seed digests; their presence does
+not create outgoing application changes.
 
 The session document is format 9. Format 8 requires explicit configuration
 `allowsSessionUpgradeFromV8: true`; validation and owned-asset checks precede an

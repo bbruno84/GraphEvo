@@ -273,6 +273,30 @@ actor ActivationServer {
         try await graph.close(); try await next.stopCloudSession(config)
     }
 
+    @Test func privateRecoveryOfASharedGraphSeparatesDescriptorAndNativeShareFromApplicationRows() async throws {
+        let server = ActivationServer(), f = try await fixture(server, attachments: true)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        try await publish(f)
+        let expected = try await f.graph.read { scope in try f.nodeIDs.compactMap { try scope.record(for: $0) } }
+        try await server.injectRecord(GraphCloudGraphDescriptor.encode(f.route), route: f.route)
+        let share = CKShare(recordZoneID: GraphCloudGraphDescriptor.id(in: f.zone).zoneID)
+        share.publicPermission = .none
+        try await server.injectRecord(share, route: f.route)
+        let sends = await server.sends
+        try await close(f)
+        let next = manager(), config = GraphCloudConfiguration(containerIdentifier: f.config.containerIdentifier,
+            environment: .development, directory: f.root.appendingPathComponent("SharedOwnerPeerCloud"))
+        _ = try await next.startCloudSession(config, adapter: server.adapter)
+        let result = try await next.openCloudReplica(id: f.graph.id, at: f.root.appendingPathComponent("SharedOwnerPeer.sqlite"), zone: f.zone, configuration: config)
+        let graph = try result.opening.get()
+        let actual = try await graph.read { scope in try f.nodeIDs.compactMap { try scope.record(for: $0) } }
+        #expect(Dictionary(uniqueKeysWithValues: actual.map { ($0.id, $0) }) == Dictionary(uniqueKeysWithValues: expected.map { ($0.id, $0) }))
+        #expect(try await graph.validateIntegrity() == f.nodeIDs.count)
+        #expect(try await graph.collectSyncChanges() == 0)
+        #expect(await server.sends == sends)
+        try await graph.close(); try await next.stopCloudSession(config)
+    }
+
     @Test func activationAndEmptyPeerAcceptAssetBytesBeyondInlinePayloadAllowance() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
