@@ -92,3 +92,8 @@ ordering. No generated stores, journals, reports or signed products are committe
 The fd-only background/foreground notification intervals were 52.559 and 28.990
 seconds; the closed-SH control interval was 24.498 seconds. These intervals do not
 establish an OS suspended state, background assertion expiry or concurrent writes.
+
+The documentation integrates through [PR #155](https://github.com/bbruno84/GraphEvo/pull/155).
+The experimentation chat independently checked this summary, related gate updates
+and both evidence hashes against its final report, with no findings. This
+review establishes fidelity to the experiment, not additional runtime acceptance.

@@ -44,8 +44,14 @@ retains a real metadata-first history failure and the candidate's same-workspace
 recovery. The correction integrates through [#153](https://github.com/bbruno84/GraphEvo/pull/153)
 with reviewed full checkpoint #41872809620 on 012b5083; source inputs remain
 unchanged in the final documentation commit. Native acceptance/discovery, one owner-to-participant
-note and read-only enforcement are observed; later lifecycle stages and final
-pin acceptance remain open. No PA03 box closes from this partial result.
+note, read-only enforcement, reverse transfer, participant restart and settled
+leave are observed. Reinvitation recovered after restarting the participant app.
+The workspace/idle-claim correction [#154](https://github.com/bbruno84/GraphEvo/pull/154)
+covers normal/deferred leave and revocation with reviewed v2 checkpoint
+#41887502842 on 3ee3d3fa: 709 macOS / 707 iOS functions and both Swift 6 consumers.
+The capacity-only first attempt and the next macOS run's 87 issues remain recorded;
+one bounded macOS repeat passes without source/timeout changes or root-cause
+attribution. Restart-free final-pin acceptance remains open. No PA03 box closes from this partial result.
 
 ## App Group physical control — 2026-11-04
 

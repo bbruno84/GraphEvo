@@ -69,7 +69,16 @@ extension GraphContextManager {
             let key = member.identity.environment.rawValue + ":" + member.identity.container + ":" + member.binding.zone.scope.rawValue
             await lifecycleWorkers[key]?.recordFailure(member.binding.graphID, error: error)
         }
-        return try await session.membership(member.binding.graphID)!.status
+        let current = try await session.membership(member.binding.graphID)!
+        await releaseSettledRemovalClaim(current)
+        return current.status
+    }
+
+    private func releaseSettledRemovalClaim(_ member: GraphCloudMembership) async {
+        guard member.role == .participant, member.phase == .removed, member.pending == nil else { return }
+        // A purged owner has no live native handles; a settled remote intent no
+        // longer needs the graph claim. Retired-context access stays blocked.
+        await releaseContextGraphIfIdle(member.binding.graphID)
     }
 
     /// Destructive even offline: remove local work before attempting the retained remote command.
@@ -310,7 +319,9 @@ extension GraphContextManager {
             removeClosedEntry(id, generation: entry.generation)
         }
         try await session.completePurge(id, generation: member.generation)
-        locations.removeValue(forKey: id); automaticChanged()
+        locations.removeValue(forKey: id)
+        if let current = try await session.membership(id) { await releaseSettledRemovalClaim(current) }
+        automaticChanged()
     }
     static func sharingDiagnostic(_ error: any Error) -> String {
         let value = error as NSError

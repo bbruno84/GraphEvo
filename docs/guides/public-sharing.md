@@ -121,3 +121,13 @@ no automatic participant adoption of an old descriptor-less zone.
 
 Public API/injected tests and physical Apple UI/two-account acceptance are separate
 evidence. No background delivery, production cutover or beta readiness is implied.
+
+## Workspace retirement after participant removal
+
+After native purge and durable remote intent settlement, an idle context releases
+its graph claim so a distinct GraphContext can own a fresh replica of the same
+graph. The retired context remains blocked; its old handles are not reusable.
+A pending remote leave retains the claim, and failed native detachment retains
+its quarantined owner. Consumers switching workspace close the prior leases and
+create a new explicit GraphContext after settling pending removal commands.
+This does not change invitation acceptance or certify content synchronization.

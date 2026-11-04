@@ -1519,3 +1519,9 @@ fd-only variant refuses destructive maintenance and must not ship. Preserve
 native-detachment and exclusive-maintenance guarantees while selecting a
 suspension-compatible replacement; short Apple-coordinated writes alone do not
 close PA02 or authorize a global lock substitution.
+
+After settled participant purge, release an idle public context graph claim only
+after the durable remote intent is cleared. Pending leave and failed detachment
+retain ownership. Retired contexts remain blocked; fresh-workspace consumers
+close prior leases and use a distinct GraphContext. See the H02 public-sharing
+contract and retained physical continuation report.

@@ -245,3 +245,13 @@ is implemented; its two-account physical evidence remains required. Independent
 readers/protected data, broader structural conflicts, interruption/restore,
 production limits and background scope remain explicit checklist work.
 Physical account-switch trials retain their agreed during-beta scheduling.
+
+## Workspace retirement after participant removal
+
+After native purge and durable remote intent settlement, an idle context releases
+its graph claim so a distinct GraphContext can own a fresh replica of the same
+graph. The retired context remains blocked; its old handles are not reusable.
+A pending remote leave retains the claim, and failed native detachment retains
+its quarantined owner. Consumers switching workspace close the prior leases and
+create a new explicit GraphContext after settling pending removal commands.
+This does not change invitation acceptance or certify content synchronization.
