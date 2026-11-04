@@ -1534,3 +1534,17 @@ Each Foundation request uses its own coordinator, excluding only its own present
 where appropriate; do not share purpose identifiers or hold lifetime accessors.
 Do not copy the private prototype into production before agreeing the public
 lifecycle contract. Experiment/report work does not request remote CI by default.
+
+The selected pre-integration priority tests are defined in
+`docs/design/graphevo-2-apple-owner-test-protocol.md`. Keep N separate from the
+historical K/L/M/M2 evidence. Missing priority evidence blocks a production
+integration recommendation. Distinguish logical cycles from physical background
+transitions, controlled termination from OS outcomes, prototype observation from
+public observation and existing cloud regressions from presenter integration.
+Injected failed-close paths may sacrifice process survival only while preserving
+data protection and demonstrated recovery; normal paths must not terminate.
+The bounded N result is recorded in
+`docs/design/results/apple-owner-priority-tests-2026-11-04.md`: iPad normal cycles
+pass, but physical faults, XR interaction and coupled transport/public observation
+remain unverified. Preserve its NO GO decision; do not treat baseline cloud tests,
+the surrogate feed or controlled termination as those missing acceptance results.
