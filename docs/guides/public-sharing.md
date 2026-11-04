@@ -93,6 +93,12 @@ come from native snapshots and may be absent. Status/observations do not retain 
 graph handle or certify live server authorization. Observations finish when their
 connection closes. Clear detached cached application values on access loss.
 
+A newly joined replica may contain only account/membership metadata before its
+first import. History initialization accepts that complete metadata-first cut,
+retains a native token and emits no application writes for bookkeeping. Existing
+joined empty replicas can resume without another invitation or a replacement
+store. This does not admit a missing or purged initial history.
+
 ## Alpha compatibility
 
 The cloud descriptor uses format 1 with canonical UUID `graphID` and numeric

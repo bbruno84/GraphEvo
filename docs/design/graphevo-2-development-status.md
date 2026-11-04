@@ -35,6 +35,13 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+The [H02 physical continuation](results/h02-public-invitation-2026-11-04.md)
+identified metadata-first participant history refusal before initial import.
+A corrective candidate on `codex/v2-shared-history-bootstrap` reproduces it in
+both permission modes and resumes the existing device replica without replay.
+Review/integration is pending; the bounded trial and broader sharing gate remain
+separate from the original H02 automated checkpoint below.
+
 [H02 public sharing](graphevo-2-public-sharing.md) integrates through
 [PR #152](https://github.com/bbruno84/GraphEvo/pull/152), directly from H01/#151.
 Native Apple invitations and presentation adapters use a fixed GraphEvoGraph

@@ -58,6 +58,64 @@ private actor SyncTestSignal {
         }
     }
 
+    private func metadataFirstAdapter() -> GraphCoordinatorAdapter {
+        let base = GraphCoordinatorFactory.adapter
+        return GraphCoordinatorAdapter(graph: base.graph, sync: base.sync, initialize: { context, id, creating in
+            try base.initialize(context, id, creating)
+            if creating { context.transactionAuthor = GraphSyncCheckpointAdapter.metadataAuthor }
+        })
+    }
+
+    @Test(arguments: [false, true])
+    func metadataFirstHistoryCreatesAStableCheckpointAndRetainsApplicationWrites(writeBeforeCollection: Bool) async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MetadataFirst-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: metadataFirstAdapter())
+        let id = GraphID(), url = directory.appendingPathComponent("Graph.sqlite")
+        let graph = try await manager.createGraph(id: id, at: url)
+        if writeBeforeCollection {
+            let node = graph.makeNodeID()
+            try await graph.transaction { try $0.insert(GraphRecord(id: node, type: "BeforeBaseline")) }
+        }
+        let pending = writeBeforeCollection ? 1 : 0
+        #expect(try await graph.collectSyncChanges(limits: .init(maximumTransactions: .max)) == pending)
+        let first = try #require(try await state(graph))
+        let checkpoint = try #require(try JSONSerialization.jsonObject(with: first) as? [String: Any])
+        #expect(checkpoint["token"] is String)
+        #expect((checkpoint["transaction"] as? Int ?? 0) > 0)
+        #expect(try await graph.collectSyncChanges() == pending)
+        #expect(try await state(graph) == first)
+        try await graph.close()
+        let next = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let reopened = try await next.openGraph(id: id, at: url)
+        #expect(try await reopened.collectSyncChanges() == pending)
+        #expect(try await state(reopened) == first)
+        try await acknowledgeAll(reopened)
+        let node = reopened.makeNodeID()
+        try await reopened.transaction { try $0.insert(GraphRecord(id: node, type: "AfterBaseline")) }
+        let batch = try await reopened.prepareSyncBatch(maximumRecords: 10)
+        #expect(batch.items.map { $0.change.id } == [node])
+        try await reopened.close()
+    }
+
+    @Test func metadataFirstBootstrapStillRefusesMissingInitialHistory() async throws {
+        let f = try await fixture(adapter: metadataFirstAdapter())
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        try await f.graph.nativeOperation { container in
+            try await container.performBackgroundTask { context in
+                let request = NSPersistentHistoryChangeRequest.fetchHistory(after: nil as NSPersistentHistoryToken?)
+                request.resultType = .transactionsOnly
+                let result = try #require(try context.execute(request) as? NSPersistentHistoryResult)
+                let history = try #require(result.result as? [NSPersistentHistoryTransaction])
+                let latest = try #require(history.max { $0.transactionNumber < $1.transactionNumber })
+                _ = try context.execute(NSPersistentHistoryChangeRequest.deleteHistory(before: latest.token))
+            }
+        }
+        await #expect(throws: GraphSyncError.self) { try await f.graph.collectSyncChanges() }
+        #expect(try await state(f.graph) == nil)
+        try await f.graph.close()
+    }
+
     @Test func updatesCoalesceAndOldAcknowledgementsKeepNewerChanges() async throws {
         let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.directory) }
         let batch = try await f.graph.prepareSyncBatch(maximumRecords: 10)
@@ -234,9 +292,11 @@ private actor SyncTestSignal {
         try await f.graph.close()
     }
 
-    @Test func unknownAuthorsAreVisibleAndDoNotAdvanceTheCheckpoint() async throws {
-        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.directory) }
-        try await acknowledgeAll(f.graph)
+    @Test(arguments: [false, true])
+    func unknownAuthorsAreVisibleAndDoNotAdvanceTheCheckpoint(beforeInitialCheckpoint: Bool) async throws {
+        let f = try await fixture(adapter: beforeInitialCheckpoint ? metadataFirstAdapter() : GraphCoordinatorFactory.adapter)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        if !beforeInitialCheckpoint { try await acknowledgeAll(f.graph) }
         let before = try await state(f.graph), target = f.a
         try await f.graph.nativeOperation { container in
             try await container.performBackgroundTask { context in

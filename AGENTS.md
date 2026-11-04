@@ -491,6 +491,13 @@ The original overload must perform no trace history reads.
 
 ## GraphEvo 2 async runtime
 
+First ordinary history initialization must verify the unfiltered retained native
+cut starts at transaction 1 before excluding trusted bookkeeping. Metadata-only
+participant creation still needs a durable native token; it is not missing
+history. Preserve later metadata filtering, unknown-author refusal and the
+separate migration-workspace contract. See `docs/design/graphevo-2-history-processing.md`.
+
+
 SQLite reads pin their query generation. In-memory read scopes instead join the
 local writer gate for coherent multi-fetch views; a reader behind an active
 memory writer waits for its commit. Preserve queued-reader cancellation/draining

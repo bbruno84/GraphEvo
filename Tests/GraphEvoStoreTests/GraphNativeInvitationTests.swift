@@ -8,6 +8,10 @@ import Testing
 private actor NativeInvitationServer {
     let graphID = GraphID()
     let url = URL(string: "https://www.icloud.com/share/native-fixture")!
+    let permission: GraphCloudSharePermission
+    var remoteRecord: GraphRecord?
+    init(permission: GraphCloudSharePermission = .readOnly) { self.permission = permission }
+    func seedRemote(_ record: GraphRecord) { remoteRecord = record }
     var descriptorAvailable = false
     var accepted = false
     var acceptWrites = 0
@@ -33,18 +37,25 @@ private actor NativeInvitationServer {
     }
     func discard() { discarded = true }
     func invitation() -> GraphCloudNativeInvitation {
-        .init(url: url, zone: .init(scope: .shared, owner: "owner", name: "native-zone"), owner: "owner", permission: .readOnly, accepted: accepted)
+        .init(url: url, zone: .init(scope: .shared, owner: "owner", name: "native-zone"), owner: "owner", permission: permission, accepted: accepted)
     }
     nonisolated var adapter: GraphCloudAdapter {
         let operations = GraphCloudSharingOperations(inspect: { _, _, _ in
-            .init(identity: GraphCloudShareIdentity.of(self.url), role: .participant, permission: .readOnly, participants: [])
+            .init(identity: GraphCloudShareIdentity.of(self.url), role: .participant, permission: self.permission, participants: [])
         }, execute: { _, _, _, _ in })
         return GraphCloudAdapter(nativeSharing: .init(prepare: { _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
             inspect: { _, _, _ in await self.inspectInvitation() }, accept: { _, _, _ in await self.accept() },
             discover: { _, _ in try await self.discover() }, discard: { _, _, _ in await self.discard() }),
             sharing: .init(operations: operations, invite: { _, _, _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
-                accept: { _, _, _ in .readOnly }),
-            account: { _ in await self.currentAccount }, make: { _, scope, _, _ in .init(fetch: { _ in await self.fetched(scope) }, cancel: {}) })
+                accept: { _, _, _ in self.permission }),
+            account: { _ in await self.currentAccount }, make: { _, scope, _, receive in .init(fetch: { _ in
+                await self.fetched(scope)
+                if scope == .shared, let record = await self.remoteRecord {
+                    let route = GraphCloudBinding(zone: await self.invitation().zone, graphID: record.id.graphID)
+                    let incoming = try GraphCloudRecordCodec.archive(GraphCloudNodeCodec.encode(record, binding: route), scope: scope)
+                    await receive(.incoming([incoming]))
+                }
+            }, cancel: {}) })
     }
 }
 
@@ -347,8 +358,9 @@ private actor NativeInviteGate {
         #expect(try await recovered.nativeJoins().map(\.id) == [join.id])
         try await recovered.stop()
     }
-    @Test func nativeJoinWakesForegroundImportWithoutAManualSyncOrPeriodicTick() async throws {
-        let config = config(), server = NativeInvitationServer(), entered = NativeInviteGate(), proceed = NativeInviteGate()
+    @Test(arguments: [false, true])
+    func nativeJoinWakesForegroundImportWithoutAManualSyncOrPeriodicTick(writable: Bool) async throws {
+        let config = config(), server = NativeInvitationServer(permission: writable ? .readWrite : .readOnly), entered = NativeInviteGate(), proceed = NativeInviteGate()
         defer { try? FileManager.default.removeItem(at: config.directory) }
         await server.available()
         let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
@@ -359,6 +371,9 @@ private actor NativeInviteGate {
         let join = try await session.nativeBeginJoin(server.url)
         try await session.nativeAdvanceJoin(join.id)
         let id = await server.graphID
+        let remote = try GraphRecord(id: GraphNodeID(graphID: id, rawValue: UUID()), type: "Native.Shared.Note",
+            properties: ["title": .string("Independent owner note"), "bytes": .data(Data([0, 128, 255]))])
+        await server.seedRemote(remote)
         await server.setInspectHook { await entered.release(); await proceed.wait() }
         let opening = Task { try await manager.openNativeReplica(join.id, at: config.directory.appendingPathComponent("Automatic.sqlite"), configuration: config) }
         await entered.wait()
@@ -367,11 +382,19 @@ private actor NativeInviteGate {
         await proceed.release()
         let graph = try await opening.value
         for _ in 0..<100 {
-            if await server.sharedFetches > 0 { break }
+            if try await graph.read({ try $0.record(for: remote.id) }) != nil { break }
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(await server.sharedFetches > 0)
+        let imported = try await graph.read { try $0.record(for: remote.id) }
+        #expect(imported?.id == remote.id)
+        #expect(imported?.properties == remote.properties)
+        for _ in 0..<100 {
+            if try await manager.automaticCloudSynchronizationStatus(for: id, configuration: config).phase == .idle { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         try await manager.setAutomaticCloudSynchronizationActive(false, configuration: config, clock: clock)
+        #expect(try await graph.collectSyncChanges() == 0)
         try await graph.close(); try await manager.stopCloudSession(config)
     }
 }

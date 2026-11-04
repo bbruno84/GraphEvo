@@ -31,6 +31,17 @@ No sidecar queue or per-consumer-mutation interception is introduced.
 
 ## Discovery and failure behavior
 
+For the first ordinary checkpoint, inspect the bounded unfiltered native cut and
+require that it starts at transaction 1. A participant may have only trusted
+bookkeeping transactions at this point. Exclude those from application change
+discovery but seal the checkpoint with the last retained native token/number,
+even when there are no application rows. Later scans continue excluding
+bookkeeping at fetch, preventing checkpoint-write feedback. Missing initial
+history and unknown application authors still fail without publishing progress.
+The initial native cut charges bookkeeping against the transaction allowance;
+workspace migration discovery retains its separate author/filter contract.
+
+
 Demand-driven collection reads the complete retained history cut after its token,
 scoped to the sole native store. Authors are `GraphEvo.v2.local`,
 `GraphEvo.v2.import` and `GraphEvo.v2.syncMetadata`. Metadata transactions are

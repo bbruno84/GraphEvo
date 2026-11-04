@@ -220,22 +220,28 @@ enum GraphSyncCheckpointAdapter {
         let request = NSPersistentHistoryChangeRequest.fetchHistory(after: token)
         request.resultType = .transactionsAndChanges
         guard let fetch = NSPersistentHistoryTransaction.fetchRequest else { throw GraphSyncError.historyUnavailable }
-        // Excluding bookkeeping at fetch avoids a checkpoint-write -> history -> checkpoint-write loop.
-        if !workspace { fetch.predicate = NSPredicate(format: "author == nil OR author != %@", metadataAuthor) }
-        else {
+        // A new participant can start with bookkeeping only. Verify the unfiltered
+        // first cut before excluding it, retaining a real token even without app rows.
+        let initialNativeCut = !workspace && value.original == nil
+        // Later scans exclude bookkeeping to avoid a checkpoint-write feedback loop.
+        if !workspace {
+            if initialNativeCut { fetch.fetchLimit = limits.maximumTransactions == Int.max ? Int.max : limits.maximumTransactions + 1 }
+            else { fetch.predicate = NSPredicate(format: "author == nil OR author != %@", metadataAuthor) }
+        } else {
             fetch.fetchLimit = limits.maximumTransactions + 1
             if let excludingAuthor { fetch.predicate = NSPredicate(format: "author == nil OR author != %@", excludingAuthor) }
         }
         request.fetchRequest = fetch
         request.affectedStores = context.persistentStoreCoordinator?.persistentStores
-        let transactions: [NSPersistentHistoryTransaction]
+        let retained: [NSPersistentHistoryTransaction]
         do {
             guard let result = try context.execute(request) as? NSPersistentHistoryResult,
                   let rows = result.result as? [NSPersistentHistoryTransaction] else { throw GraphSyncError.historyUnavailable }
-            transactions = rows.sorted { $0.transactionNumber < $1.transactionNumber }
+            retained = rows.sorted { $0.transactionNumber < $1.transactionNumber }
         } catch { throw GraphSyncError.historyUnavailable }
-        guard transactions.count <= limits.maximumTransactions else { throw GraphSyncError.historyLimit }
-        if value.original == nil && transactions.first?.transactionNumber != 1 { throw GraphSyncError.historyUnavailable }
+        guard retained.count <= limits.maximumTransactions else { throw GraphSyncError.historyLimit }
+        if value.original == nil && retained.first?.transactionNumber != 1 { throw GraphSyncError.historyUnavailable }
+        let transactions = initialNativeCut ? retained.filter { $0.author != metadataAuthor } : retained
         var count = 0
         for transaction in transactions {
             try check()
@@ -343,6 +349,10 @@ enum GraphSyncCheckpointAdapter {
             }
             value.state.transaction = transaction.transactionNumber
             value.state.token = try NSKeyedArchiver.archivedData(withRootObject: transaction.token, requiringSecureCoding: true)
+        }
+        if initialNativeCut, let latest = retained.last {
+            value.state.transaction = latest.transactionNumber
+            value.state.token = try NSKeyedArchiver.archivedData(withRootObject: latest.token, requiringSecureCoding: true)
         }
         value.state.pending = pending.values.sorted(by: ordered)
         return inserted
