@@ -29,7 +29,7 @@ public actor GraphCloudSpoolDeviceProbe {
         root = directory.appendingPathComponent(run.uuidString).appendingPathComponent(replica)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent(stage + ".started"), options: .withoutOverwriting)
-        manager = GraphContextManager(schema: .typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        manager = GraphContextManager(schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
         configuration = GraphCloudConfiguration(containerIdentifier: container, environment: .development,
                                                directory: root.appendingPathComponent("Engine"))
         _ = try await manager.startCloudSession(configuration)
