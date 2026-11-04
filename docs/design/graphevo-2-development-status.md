@@ -35,6 +35,14 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+[H02 public sharing](graphevo-2-public-sharing.md) is the next proposed contract,
+based on integrated H01/#151 and the merged companion demo PR #2. It exposes
+existing T07/T08 through the explicit context/connection, with protected invitation
+capabilities, exact replica recovery, permissions and destructive leave semantics.
+The contract is for discussion; no H02 source change, new acceptance evidence or
+beta-gate closure is claimed. Native presentation and URL-only onboarding remain
+an explicit decision boundary.
+
 [H01 public coordinated entry](graphevo-2-public-entry.md) was selected through
 PR #149 and its library implementation integrates through
 [PR #150](https://github.com/bbruno84/GraphEvo/pull/150). Applications construct

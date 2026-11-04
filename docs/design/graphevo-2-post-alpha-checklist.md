@@ -23,6 +23,14 @@ acceptance below. Public invitation onboarding, independent-reader/protected-dat
 production cutover, restoration and final distribution/API audits remain open.
 No schema, persisted format or account-change beta scheduling gate is changed.
 
+## H02 public sharing proposal — 2026-11-04
+
+The [proposed contract](graphevo-2-public-sharing.md) defines public T07/T08
+ownership, protected capability transport, interrupted acceptance, observable
+permissions and destructive leave/recovery. It requires explicit review of the
+native presentation/URL-only onboarding boundary before closing PA03's B gate.
+This is a documentation proposal; all acceptance boxes remain unchanged.
+
 ## How to close an item
 
 All boxes start open: existing evidence is input, not a claim that its broader
