@@ -1,8 +1,8 @@
 # H01 — public coordinated graph entry
 
-Status: proposal for discussion, 2026-11-04. Documentation only. The proposed
-signatures below are not available APIs and this draft does not authorize their
-implementation. Approval of the contract precedes the implementation increment.
+Status: selected contract, 2026-11-04. Implementation is authorized after the
+contract integration. Signatures below describe the selected public surface;
+they are not available APIs until the implementation is integrated.
 Read with [ownership](graphevo-2-graph-coordinator.md),
 [controlled access](graphevo-2-controlled-store-access.md),
 [custom sync](graphevo-2-custom-sync-transition.md),
@@ -78,6 +78,8 @@ public actor GraphContext {
                             conflictPolicy: GraphConflictPolicy = .lastEditWins)
         async throws -> GraphStore
     public func openGraph(id: GraphID, at storeURL: URL) async throws -> GraphStore
+    public func setForegroundActive(_ active: Bool) async throws
+    public func refreshCloudAccounts() async throws
     public func connectCloud(using configuration: GraphCloudConnectionConfiguration)
         async throws -> GraphCloudConnection
     public func openGraph(convertingLocalV1 request: GraphV1BootstrapRequest)
@@ -140,7 +142,6 @@ public actor GraphCloudConnection {
     public func observeState() async throws -> GraphObservation<GraphCloudConnectionState>
     public func retry() async throws
     public func bindPrivateGraph(_ graph: GraphStore, zoneName: String) async throws
-    public func setForegroundActive(_ active: Bool) async throws
     public func requestSynchronization() async throws
     public func notifyRemoteChanges(in scope: GraphCloudScope) async throws
     public func pauseSynchronization(for graphID: GraphID) async throws
@@ -235,9 +236,11 @@ A GraphID/zone binding survives closing handles. Graphs eligible for foreground
 scheduling retain T06's open/ready/bound requirements; a connection is not an
 implicit permanent lease over every graph in the session document.
 
-The app forwards aggregate scene activity. If multiple connection leases share a
-session, foreground interest is the OR of their live requests; one inactive or
-closing consumer cannot suspend another. `requestSynchronization()` and matching
+The app forwards aggregate scene activity to GraphContext.setForegroundActive.
+The context starts inactive and owns one foreground flag for its connections.
+Foreground activation and refreshCloudAccounts schedule account verification
+even without transport; refresh does not start stopped transport. Connection
+leases have no separate foreground flag, and closing one cannot suspend another. `requestSynchronization()` and matching
 container/scope notification hints schedule work; neither is a completion barrier.
 The host filters push notifications for the configured container before forwarding
 a scope. Foreground T06 timing, fair scheduling and durable queues remain the
@@ -260,7 +263,9 @@ supported source URL, distinct destination URL, stable GraphID, operation UUID,
 backup root and reason. Native staged conversion is the default; there is no
 public automatic lightweight/staged selector or total-store byte cutoff. Known
 legacy source validation, read-only protection, verified backup, bounded native
-handlers, semantic sealing and native receipt/map stay library responsibilities.
+handlers, semantic sealing and native receipt/map stay library responsibilities. Existing Data values and
+serialized arrays, dictionaries and Codable payloads are preserved. Converting
+selected binaries into logical attachments remains consumer-owned.
 
 `GraphV1BootstrapResult` preserves the committed conversion receipt/map, current
 backup location, cleanup warnings and a separate `Result<GraphStore, Error>` for
@@ -301,7 +306,7 @@ No route discovery, authority transfer or old mirrored-zone adoption is implied.
    overlap is refused, disjoint contexts progress independently and final-close
    failure retains exclusion even if another context attempts admission.
 2. Matching connection leases share exactly one engine pair. Verify independent
-   cancellation, foreground-interest aggregation, initial state ordering, final
+   cancellation, context-owned foreground activity, initial state ordering, final
    close during pending account startup, repeated notifications and failed cleanup.
 3. Injected account scenarios cover cold bound opening without any cloud
    connection, transient access, logout, switch, restriction, same-account recovery
@@ -331,7 +336,7 @@ their current scope. Public invitation/UI integration, distribution audit,
 background scheduling, format/schema reconciliation and broader device/cost
 acceptance remain roadmap work.
 
-## Decisions to confirm before implementation
+## Selected decisions
 
 - Use an explicitly constructed, application-owned GraphContext with its own
   manager and leased cloud connections. No singleton public context or implicit
