@@ -35,6 +35,13 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+[H01 public coordinated entry](graphevo-2-public-entry.md) is a documentation-only
+proposal on `codex/v2-public-entry-contract`. It proposes a shared public context,
+leased cloud connections and an explicit supported local/v1/private-cloud/peer
+flow over the existing owners. Contract discussion precedes implementation;
+public invitation onboarding is a subsequent proposed increment. No public
+signature, schema, release gate or shipping code changes with this draft.
+
 The [account-isolation contract](graphevo-2-cloud-account-isolation.md) integrates
 through [PR #147](https://github.com/bbruno84/GraphEvo/pull/147), directly from
 integrated #146. The selected default retains data separately, notifies consumers,

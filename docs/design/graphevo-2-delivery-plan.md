@@ -30,8 +30,10 @@ Proposed delivery order:
 1. Retain the [completed bounded private spool checkpoint](results/durable-asset-spool-device-2026-11-04.md)
    for #144. Cooperating-process/current app-widget and broader interruption
    acceptance remain separate; this does not close all #142–#144 device gates.
-2. Define and integrate one supported public opening/migration/cloud host flow,
-   preserving the existing owner, backup and recovery boundaries.
+2. Discuss the [H01 public-entry proposal](graphevo-2-public-entry.md), then
+   implement one supported public opening/migration/private-cloud/peer flow,
+   preserving the existing owner, backup and recovery boundaries. The proposal
+   is documentation-only and does not authorize implementation.
 3. Resolve remaining beta decisions: app/widget roles and first launch,
    account/cache acceptance, O04 processing semantics, conflict scope, supported
    platforms/processes and API/schema reconciliation. Background scheduling

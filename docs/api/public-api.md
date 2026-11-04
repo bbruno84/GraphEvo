@@ -838,6 +838,10 @@ state, outcome, and history in any arrival order using the UUID.
 
 ## GraphEvo 2 alpha model contracts
 
+The [H01 public coordinated entry](../design/graphevo-2-public-entry.md) is a
+proposal under discussion. Its GraphContext/GraphCloudConnection signatures are
+not available APIs; the declarations documented below retain their actual scope.
+
 The following additive types are available through `import GraphEvo`. They are
 implemented in the Swift 6 GraphEvoModel target and do not open a store. The typed GraphStore opening gateway is described below; legacy Graph remains
 available for v1 stores. See the
