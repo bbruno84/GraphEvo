@@ -1465,3 +1465,14 @@ bounds and individual decoder memory requirements remain explicit. The default
 package bootstrap selects it on iOS 17/macOS 14; explicit-limits MF07/MF09 recovery
 and all public legacy openers retain their historical scope. Do not publish private
 source archives, generated stores, identity maps or raw acceptance diagnostics.
+
+## V2 CloudKit account isolation
+
+Read [account isolation](docs/design/graphevo-2-cloud-account-isolation.md) before
+changing account/session access. The selected default retains data separately,
+blocks ordinary access after identity loss and permits only verified same-account
+recovery. Keep consumer state observable while isolated. Temporary unavailability
+must never unlock an unverified or previously isolated identity. Preserve epoch
+checks across prepared work and permanent native driver revocation. Optional
+merge and local deletion policies remain backlog work; public coordinated cloud
+opening and independent-reader acceptance remain separate gates.

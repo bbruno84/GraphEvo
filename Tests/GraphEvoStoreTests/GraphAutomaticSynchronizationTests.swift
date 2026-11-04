@@ -371,6 +371,29 @@ private actor AutomaticBus {
         try await manager.stopCloudSession(config)
     }
 
+    @Test func stopDuringSuccessfulAccountVerificationCannotLeaveAnEngineRunning() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("AccountOpening-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let config = GraphCloudConfiguration(containerIdentifier: "iCloud.opening." + UUID().uuidString,
+                                             environment: .development, directory: root)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let gate = AutomaticGate()
+        let delayed = GraphCloudAdapter(account: { _ in await gate.enter(); return "account" },
+            make: { _, _, _, _ in GraphCloudDriver(fetch: { _ in }, cancel: {}) })
+        let starting = Task { try await manager.startCloudSession(config, adapter: delayed) }
+        await gate.wait()
+        let stopping = Task { try await manager.stopCloudSession(config) }
+        try await wait { await manager.automaticClosingCount == 1 }
+        await gate.release()
+        await #expect(throws: GraphCloudError.stopping) { try await starting.value }
+        try await stopping.value
+        await #expect(throws: GraphCloudError.stopped) { try await manager.cloud(config) }
+        let ready = GraphCloudAdapter(account: { _ in "account" },
+            make: { _, _, _, _ in GraphCloudDriver(fetch: { _ in }, cancel: {}) })
+        _ = try await manager.startCloudSession(config, adapter: ready)
+        try await manager.stopCloudSession(config)
+    }
+
     @Test func debouncedInitialTurnSleepsInsteadOfSpinningBeforeItsDeadline() async throws {
         let bus = AutomaticBus(), clock = AutomaticTestClock(), gate = AutomaticGate()
         let first = await bus.inventory[0], second = await bus.inventory[1], base = bus.driver

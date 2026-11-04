@@ -2,6 +2,7 @@ import Foundation
 
 /// Typed local runtime failures; successful local opening never certifies cloud synchronization.
 package enum StoreRuntimeError: Error {
+    case accountIsolated
     case invalidConfiguration(String)
     case invalidModel(String)
     case configurationConflict(URL?)
@@ -23,6 +24,7 @@ package enum StoreRuntimeError: Error {
 extension StoreRuntimeError: LocalizedError {
     package var errorDescription: String? {
         switch self {
+        case .accountIsolated: return "The graph account requires verification before data access."
         case .invalidConfiguration(let reason): return "Invalid store configuration: \(reason)"
         case .invalidModel(let identifier): return "The store model does not match its declared identity: \(identifier)."
         case .configurationConflict: return "The store already has an incompatible runtime owner."

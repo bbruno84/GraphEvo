@@ -3,6 +3,7 @@ import CloudKit
 import CryptoKit
 import Foundation
 import GraphEvoModel
+import os
 
 package struct GraphCloudSessionIdentity: Codable, Equatable, Sendable {
     package let container: String
@@ -122,21 +123,32 @@ package struct GraphCloudResolution: Sendable {
     package var failures: [GraphCloudRecordFailure] = []
 }
 
+/// An old driver's offers stay revoked; recovery creates a new native driver.
+final class GraphCloudNativeAccountFence: Sendable {
+    private let state = OSAllocatedUnfairLock(initialState: false)
+    func invalidate() { state.withLock { $0 = true } }
+    func check() throws { if state.withLock({ $0 }) { throw GraphCloudError.accountChanged } }
+}
+
 @available(iOS 17, macOS 14, *)
 actor GraphCloudNativeOutbox {
+    nonisolated let accountFence = GraphCloudNativeAccountFence()
     private var batch: GraphCloudOutgoingBatch?
     private var offered = false
     private var zoneError: Int?
     private var staging: URL?
     func begin(_ value: GraphCloudOutgoingBatch) throws {
+        try accountFence.check()
         guard batch == nil else { throw GraphCloudError.busy }
         batch = value; offered = false; zoneError = nil
     }
     func current() throws -> GraphCloudOutgoingBatch {
+        try accountFence.check()
         guard let batch else { throw GraphCloudError.unexpectedUpload }; return batch
     }
     func matchesFrozenServer(_ server: CloudKit.CKRecord, item: GraphCloudOutgoingNode,
                              binding: GraphCloudBinding) async -> Bool {
+        guard (try? accountFence.check()) != nil else { return false }
         guard let reference = item.assetReference else {
             return GraphCloudNodeCodec.matchesFrozenServer(server, item: item, binding: binding)
         }
@@ -144,9 +156,11 @@ actor GraphCloudNativeOutbox {
               let data = try? await spool.read(reference, role: .outgoing, identity: reference.identity,
                                                binding: binding, recordName: item.recordName,
                                                storeID: reference.storeID, epoch: reference.epoch) else { return false }
+        guard (try? accountFence.check()) != nil else { return false }
         return GraphCloudNodeCodec.matchesFrozenServer(server, item: item, binding: binding, originalData: data)
     }
     func next(_ options: CloudKit.CKSyncEngine.SendChangesOptions) async throws -> CloudKit.CKSyncEngine.RecordZoneChangeBatch? {
+        try accountFence.check()
         guard !offered, let batch else { return nil }
         offered = true
         var saves: [CloudKit.CKRecord] = [], deletes: [CloudKit.CKRecord.ID] = []
@@ -165,6 +179,7 @@ actor GraphCloudNativeOutbox {
                     let data = try await spool.read(reference, role: .outgoing, identity: reference.identity,
                                                     binding: route, recordName: item.recordName,
                                                     storeID: reference.storeID, epoch: reference.epoch)
+                    try accountFence.check()
                     record["asset"] = data as CKRecordValue
                     _ = try GraphCloudNodeCodec.decode(record, binding: route)
                     let path = root.appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
@@ -181,6 +196,7 @@ actor GraphCloudNativeOutbox {
                 saves.append(record)
             } else { deletes.append(id) }
         }
+        try accountFence.check()
         return saves.isEmpty && deletes.isEmpty ? nil : .init(recordsToSave: saves, recordIDsToDelete: deletes)
     }
     func zoneFailed(_ code: Int) { zoneError = code }

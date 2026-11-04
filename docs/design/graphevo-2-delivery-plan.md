@@ -14,6 +14,13 @@ anchors and remaining gates. Dated milestones below retain their original scope.
 | Attachments | Native permanent content, local lifecycle, durable CKAsset spool (#144) and [bounded private device checkpoint](results/durable-asset-spool-device-2026-11-04.md) | Broader interruption/sharing/restore acceptance and supported device/resource envelope |
 | Migration and backups | MF01–MF08 protection/packages/ledger/workspace/publication/internal executor, MF09 local bootstrap, MF10 authoritative new-cloud bootstrap, MF11 Core Data staged v1 conversion | Public bootstrap/execution, production/historical source matrix, host v1 cutover policy and full recovery acceptance |
 
+Subsequent [PR #147](https://github.com/bbruno84/GraphEvo/pull/147) selects and
+implements [account isolation](graphevo-2-cloud-account-isolation.md): retain data
+separately, notify consumers and block ordinary access after identity loss.
+Optional merge and local deletion are backlog policies. The audited account/cache
+item now requires physical/protected-data/independent-reader acceptance and
+public host integration; its default policy is decided.
+
 These are implemented alpha capabilities with bounded evidence. They do not
 close the complete beta gates. Package-only coordination is not an available
 public custom-sync opening API.
@@ -26,7 +33,7 @@ Proposed delivery order:
 2. Define and integrate one supported public opening/migration/cloud host flow,
    preserving the existing owner, backup and recovery boundaries.
 3. Resolve remaining beta decisions: app/widget roles and first launch,
-   account/cache handling, O04 processing semantics, conflict scope, supported
+   account/cache acceptance, O04 processing semantics, conflict scope, supported
    platforms/processes and API/schema reconciliation. Background scheduling
    needs an explicit scope; foreground T06 does not supply it.
 4. Review representative end-to-end v1 conversion and independent cloud recovery

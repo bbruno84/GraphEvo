@@ -6,6 +6,7 @@ import GraphEvoRuntime
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
     package var activation: GraphCloudActivationAdapter? = nil
+    package var account: GraphCloudAccountNativeAdapter? = nil
     package let migrationSource: GraphStoreMigrationSource?
     package let v1Conversion: GraphV1ConversionAdapter?
     package var nativeV1Migration: GraphNativeV1MigrationAdapter?
@@ -24,8 +25,9 @@ package struct GraphCoordinatorAdapter: Sendable {
                  workspace: GraphMigrationWorkspaceAdapter? = nil,
                  prepareWorkspace: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
                  validateBackup: (@Sendable (NSManagedObjectContext, GraphID) throws -> Void)? = nil,
+                 account: GraphCloudAccountNativeAdapter? = nil,
                  initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) {
-        self.graph = graph; self.sync = sync; self.v1Conversion = v1Conversion; self.migrationSource = migrationSource; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace; self.workspace = workspace; self.publication = publication
+        self.account = account; self.graph = graph; self.sync = sync; self.v1Conversion = v1Conversion; self.migrationSource = migrationSource; self.initialize = initialize; self.initializePolicy = initializePolicy; self.validateBackup = validateBackup; self.prepareWorkspace = prepareWorkspace; self.workspace = workspace; self.publication = publication
     }
 }
 
@@ -38,10 +40,11 @@ package actor GraphCoordinator {
     private let syncSession: GraphSyncSession?
     private let workspace: GraphMigrationWorkspaceAdapter?
     private let activation: GraphCloudActivationAdapter?
+    private let account: GraphCloudAccountNativeAdapter?
     private let publication: GraphMigrationPublicationAdapter?
 
-    private init(id: GraphID, handle: StoreHandle, storeURL: URL, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil) {
-        self.id = id; self.handle = handle; self.storeURL = storeURL; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation
+    private init(id: GraphID, handle: StoreHandle, storeURL: URL, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil, account: GraphCloudAccountNativeAdapter? = nil) {
+        self.id = id; self.handle = handle; self.storeURL = storeURL; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation; self.account = account
         self.syncSession = sync.map { GraphSyncSession(graphID: id, handle: handle, adapter: $0) }
     }
 
@@ -55,7 +58,7 @@ package actor GraphCoordinator {
         let handle = try await registry.open(configuration, schema: schema)
         let owner = GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
             adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace,
-            publication: adapter.publication, activation: adapter.activation)
+            publication: adapter.publication, activation: adapter.activation, account: adapter.account)
         do {
             if creating {
                 try await handle.transaction {
@@ -74,6 +77,9 @@ package actor GraphCoordinator {
             if let activation = adapter.activation, let value = try await handle.controlRead({ try activation.read($0, id) }), value.blocksWrites {
                 try await handle.restrictActivation(value.authority.activationID, reads: value.peer)
             }
+            if try await owner.accountIdentity() != nil {
+                try await handle.setAccountStatus(.isolated(.verificationRequired), revision: 0)
+            }
             return owner
         } catch {
             let original = error
@@ -83,13 +89,30 @@ package actor GraphCoordinator {
         }
     }
 
+    func accountControl() async throws -> StoreAccountControl { try await handle.accountControl() }
+    func accountIdentity() async throws -> GraphCloudSessionIdentity? {
+        guard let account else { return nil }; let id = id
+        return try await handle.accountControlRead { try account.read($0, id) }
+    }
+    func claimAccount(_ identity: GraphCloudSessionIdentity) async throws {
+        guard let account else { throw GraphCloudError.invalidConfiguration }; let id = id
+        if let existing = try await accountIdentity() {
+            guard existing == identity else { throw GraphCloudError.ownershipConflict }
+            return
+        }
+        try await handle.accountControlTransaction { try account.claim($0, id, identity) }
+    }
+    func setAccountStatus(_ status: StoreAccountStatus, revision: UInt64) async throws {
+        try await handle.setAccountStatus(status, revision: revision)
+    }
+
     func activationDocument() async throws -> GraphCloudActivationDocument? {
         guard let activation else { return nil }; let id = id
-        return try await handle.controlRead { try activation.read($0, id) }
+        return try await handle.accountControlRead { try activation.read($0, id) }
     }
     func requiresCloudActivation() async throws -> Bool {
         guard let activation else { return false }; let id = id
-        return try await handle.controlRead { try activation.requiresActivation($0, id) }
+        return try await handle.accountControlRead { try activation.requiresActivation($0, id) }
     }
     func prepareActivation(_ binding: GraphCloudTransportBinding, operation: UUID, declaration: GraphCloudCutoverDeclaration,
                            limits: GraphCloudActivationLimits) async throws -> GraphCloudActivationDocument {

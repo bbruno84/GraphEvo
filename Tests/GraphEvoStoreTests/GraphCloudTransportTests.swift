@@ -84,7 +84,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
     private func injected(_ modify: (GraphCloudStoreAdapter) -> GraphCloudStoreAdapter) throws -> GraphCoordinatorAdapter {
         let base = GraphCoordinatorFactory.adapter, sync = try #require(base.sync), cloud = try #require(sync.cloud)
         return GraphCoordinatorAdapter(graph: base.graph, sync: GraphSyncAdapter(cloud: modify(cloud), collect: sync.collect,
-            prepare: sync.prepare, acknowledge: sync.acknowledge, importPatches: sync.importPatches), initialize: base.initialize)
+            prepare: sync.prepare, acknowledge: sync.acknowledge, importPatches: sync.importPatches), account: base.account, initialize: base.initialize)
     }
 
     @Test func privatePrimitivesReplicateAndImportsDoNotFeedUpload() async throws {
@@ -445,8 +445,8 @@ private final class TransportFailureSwitch: @unchecked Sendable {
                                              directory: f.directory.appendingPathComponent("OtherAccount"))
         let adapter = GraphCloudAdapter(account: { _ in "different-account" }, make: bus.adapter.make)
         _ = try await f.manager.startCloudSession(config, adapter: adapter)
-        try await f.manager.bindCloudZone(f.binding.route.zone, to: f.graph.id, configuration: config)
-        await #expect(throws: GraphCloudError.invalidState) { try await f.manager.sendCloudChanges(for: f.graph.id, configuration: config) }
+        await #expect { try await f.manager.bindCloudZone(f.binding.route.zone, to: f.graph.id, configuration: config) } throws: { if case StoreRuntimeError.accountIsolated = $0 { return true }; if case GraphStoreError.accountIsolated = $0 { return true }; return false }
+        await #expect { try await f.graph.read { _ in () } } throws: { if case GraphStoreError.accountIsolated = $0 { return true }; return false }
         #expect(bus.sendCount == 0)
         try await f.graph.close(); try await f.manager.stopCloudSession(config)
     }

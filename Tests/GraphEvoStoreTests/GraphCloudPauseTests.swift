@@ -304,7 +304,7 @@ private actor PauseBus {
         var sync = GraphSyncAdapter(cloud: cloud, collect: originalSync.collect, prepare: originalSync.prepare,
                                    acknowledge: originalSync.acknowledge, importPatches: originalSync.importPatches)
         sync.policy = originalSync.policy
-        let adapter = GraphCoordinatorAdapter(graph: base.graph, sync: sync, initializePolicy: base.initializePolicy, initialize: base.initialize)
+        let adapter = GraphCoordinatorAdapter(graph: base.graph, sync: sync, initializePolicy: base.initializePolicy, account: base.account, initialize: base.initialize)
         let f = try await fixture(adapter: adapter)
         try await remote(f, a: true, value: 2)
         try await f.manager.fetchCloudChanges(.private, configuration: f.config)

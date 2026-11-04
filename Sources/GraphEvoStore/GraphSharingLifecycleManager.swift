@@ -159,6 +159,7 @@ extension GraphContextManager {
         if rejoiningGraphs.contains(id) { return }
         for config in activeCloudConfigurations() {
             let session = try await cloud(config)
+            if await session.status().failure != nil { continue }
             if let member = try await session.membership(id), member.role == .participant {
                 try await restoreSharingOwner(member, owner: owner)
             }

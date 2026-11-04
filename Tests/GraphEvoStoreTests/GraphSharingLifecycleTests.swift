@@ -462,7 +462,11 @@ private actor RemovalGate {
         #expect(try await f.manager.cloudStatus(f.config).failure == .accountChanged)
         await f.cloud.setPermission(nil)
         await #expect(throws: GraphCloudError.accountChanged) { try await f.manager.refreshCloudSharing(for: f.graph.id, configuration: f.config) }
-        await #expect(throws: GraphCloudError.accountChanged) { try await f.manager.setAutomaticCloudSynchronizationActive(true, configuration: f.config) }
+        #expect(try await f.graph.cloudAccountState == .isolated(.differentAccount))
+        await #expect { try await f.graph.read { _ in () } } throws: { if case GraphStoreError.accountIsolated = $0 { return true }; return false }
+        // Foreground activation verifies the provider again; this fixture still supplies the original account.
+        try await f.manager.setAutomaticCloudSynchronizationActive(true, configuration: f.config)
+        #expect(try await f.graph.cloudAccountState == .available)
         #expect(FileManager.default.fileExists(atPath: f.url.path))
         try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
     }

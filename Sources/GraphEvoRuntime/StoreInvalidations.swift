@@ -49,6 +49,7 @@ package final class StoreInvalidationHub: Sendable {
     private struct State: Sendable {
         var closed = false
         var accountChanged = false
+        var accountEpoch: UInt64 = 0
         var subscribers: [UUID: Subscriber] = [:]
     }
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -60,12 +61,12 @@ package final class StoreInvalidationHub: Sendable {
         pair.continuation.yield(StoreInvalidation(reason: .initial))
         let flags = state.withLock { state in
             if !state.closed { state.subscribers[id] = Subscriber(owner: owner, localCommitsOnly: localCommitsOnly, continuation: pair.continuation) }
-            return (state.closed, state.accountChanged)
+            return (state.closed, state.accountChanged, state.accountEpoch)
         }
         if flags.1 { pair.continuation.yield(StoreInvalidation(reason: .accountChange)) }
         if flags.0 { pair.continuation.finish() }
         let stream = StoreInvalidationSequence(raw: pair.stream, accountChanged: { [weak self] in
-            self?.state.withLock { $0.accountChanged } ?? false
+            self?.state.withLock { $0.accountChanged || $0.accountEpoch != flags.2 } ?? false
         })
         return StoreInvalidationFeed(stream: stream, refresh: { [weak self] in self?.refresh(id) }, cancel: { [weak self] in self?.cancel(id) })
     }
@@ -86,6 +87,14 @@ package final class StoreInvalidationHub: Sendable {
             return (targets.map(\.continuation), state.accountChanged)
         }
         for continuation in delivery.0 { continuation.yield(StoreInvalidation(reason: delivery.1 ? .accountChange : reason)) }
+    }
+    /// Terminate feeds admitted before this boundary. Verified future feeds may start afresh.
+    package func isolateAccount() {
+        let continuations = state.withLock { state in
+            state.accountEpoch += 1
+            return state.subscribers.values.map(\.continuation)
+        }
+        for continuation in continuations { continuation.yield(StoreInvalidation(reason: .accountChange)) }
     }
     package func finish(owner: UUID? = nil) {
         let continuations = state.withLock { state in

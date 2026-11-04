@@ -147,7 +147,11 @@ private actor WorkspaceOpenFailure {
     func participantsAreRefusedWithoutRemovingTheirAuthority(permission: GraphCloudSharePermission) async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), source = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("A.sqlite"))
-        let access = GraphCloudParticipantAccess(binding: .init(zone: .init(scope: .shared, owner: "owner", name: "test"), graphID: source.id), account: "participant", permission: permission, accepted: true)
+        let identity = GraphCloudSessionIdentity(container: "iCloud.workspace." + UUID().uuidString, environment: .development, account: "participant")
+        let config = GraphCloudConfiguration(containerIdentifier: identity.container, environment: .development, directory: root.appendingPathComponent("Cloud"))
+        _ = try await m.startCloudSession(config, adapter: GraphCloudAdapter(account: { _ in identity.account },
+            make: { _, _, _, _ in GraphCloudDriver(fetch: { _ in }, cancel: {}) }))
+        let access = GraphCloudParticipantAccess(binding: .init(zone: .init(scope: .shared, owner: "owner", name: "test"), graphID: source.id), account: "participant", permission: permission, accepted: true, identity: identity)
         _ = try await source.participantAccess(access)
         await #expect(throws: GraphMigrationWorkspaceError.participantUnsupported) {
             try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
@@ -155,7 +159,7 @@ private actor WorkspaceOpenFailure {
         #expect(try await source.participantAccess() == access)
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("Working").path))
         #expect(try await m.cloudSynchronizationState(for: source.id) == .active)
-        try await source.close()
+        try await source.close(); try await m.stopCloudSession(config)
     }
 
     @Test func validationFailurePreservesSourceAndReleasesOnlyOwnedHolds() async throws {
@@ -270,8 +274,11 @@ private actor WorkspaceOpenFailure {
             try scope.insert(GraphRecord(id: surviving, type: "Kept"))
         }
         try await source.transaction { try $0.delete(deleted) }
-        let binding = GraphCloudTransportBinding(identity: .init(container: "iCloud.workspace.test", environment: .development, account: "test-account"),
+        let binding = GraphCloudTransportBinding(identity: .init(container: "iCloud.workspace." + UUID().uuidString, environment: .development, account: "test-account"),
             route: .init(zone: .init(scope: .private, owner: "owner", name: "test-zone"), graphID: source.id))
+        let config = GraphCloudConfiguration(containerIdentifier: binding.identity.container, environment: .development, directory: root.appendingPathComponent("Cloud"))
+        _ = try await m.startCloudSession(config, adapter: GraphCloudAdapter(account: { _ in binding.identity.account },
+            make: { _, _, _, _ in GraphCloudDriver(fetch: { _ in }, cancel: {}) }))
         let frozen = try await source.prepareTransport(binding)
         let workspace = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         let metadata = try await workspace.graph.nativeOperation { container in
@@ -292,7 +299,7 @@ private actor WorkspaceOpenFailure {
         try await workspace.close()
         #expect(try await source.prepareTransport(binding) == frozen)
         #expect(try await source.conflictPolicy == .cloudWins)
-        try await workspace.discard(); try await source.close()
+        try await workspace.discard(); try await source.close(); try await m.stopCloudSession(config)
     }
 
     @Test func shutdownFailureWithoutReturnedHandlePreservesStageAndReportsCleanup() async throws {

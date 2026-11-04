@@ -283,6 +283,7 @@ extension GraphContextManager {
             let handle = try await registry.open(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue,
                 workspaceID: descriptor.id, workspaceSessionID: sessionID), schema: schema)
             working = handle
+            try await handle.inheritAccount(owner.accountControl())
             maintenance = try await handle.reserveMaintenance()
             let adapter = adapter
             let sealed = try await handle.workspaceTransaction(reservation: maintenance!) { context in
@@ -364,6 +365,7 @@ extension GraphContextManager {
             let configuration = StoreConfiguration(location: .sqlite(store), exclusiveGraphID: id.rawValue, workspaceID: workspaceID, workspaceSessionID: sessionID)
             let handle = try await registry.open(configuration, schema: schema)
             working = handle
+            try await handle.inheritAccount(owner.accountControl())
             let adapter = adapter
             let beforeSetup = try await handle.controlRead { try GraphMigrationBoundary.capture($0) }
             try await handle.transaction { context in
@@ -387,6 +389,7 @@ extension GraphContextManager {
             let final = try await registry.open(.init(location: .sqlite(destination.appendingPathComponent(descriptor.storePath)),
                 exclusiveGraphID: id.rawValue, workspaceID: workspaceID, workspaceSessionID: sessionID), schema: schema)
             working = final
+            try await final.inheritAccount(owner.accountControl())
             try await final.read { context in
                 try adapter.initialize(context, id, false)
                 let current = try GraphMigrationBoundary.capture(context)

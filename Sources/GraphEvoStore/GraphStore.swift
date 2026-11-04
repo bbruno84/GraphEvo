@@ -4,6 +4,7 @@ import GraphEvoModel
 import GraphEvoRuntime
 
 public enum GraphStoreError: Error {
+    case accountIsolated
     case closed
     case readOnly
     case writesSuspended
@@ -71,7 +72,7 @@ package struct GraphStoreAdapter: Sendable {
 /// Independently closeable local graph handle. Public operations never expose native contexts.
 public actor GraphStore {
     public nonisolated let id: GraphID
-    private let handle: StoreHandle
+    let handle: StoreHandle
     private let adapter: GraphStoreAdapter
     private let ownerLease: GraphCoordinatorLease?
     private var observationCoordinator: GraphObservationCoordinator?
@@ -141,7 +142,7 @@ public actor GraphStore {
 
     /// Admission only, without opening another feed.
     package func observationAdmission() async throws {
-        do { _ = try await handle.snapshot() } catch { throw Self.translate(error) }
+        do { _ = try await handle.snapshot(); _ = try await handle.accountPermit() } catch { throw Self.translate(error) }
     }
 
     public nonisolated func makeNodeID() -> GraphNodeID { GraphNodeID(graphID: id) }
@@ -289,6 +290,7 @@ public actor GraphStore {
         case .writesSuspended: return GraphStoreError.writesSuspended
         case .resourceReserved: return GraphStoreError.resourceReserved
         case .synchronizationUnavailableInExtension: return GraphStoreError.synchronizationUnavailableInExtension
+        case .accountIsolated: return GraphStoreError.accountIsolated
         case .dataUnavailable: return GraphStoreError.permissionDenied
         case .closedHandle: return GraphStoreError.closed
         case .configurationConflict: return GraphStoreError.ownershipConflict
@@ -311,6 +313,7 @@ extension GraphStoreError: LocalizedError {
         case .foreignGraph: return "The node belongs to another graph."
         case .duplicateIdentity: return "The graph contains a duplicate logical node identity."
         case .corruptIdentity: return "The graph's persisted identity metadata is invalid."
+        case .accountIsolated: return "The graph is isolated until its CloudKit account is verified."
         case .permissionDenied: return "The current sharing state does not permit this operation."
         case .sharedInsertionRequiresPreparation: return "New shared objects require an awaited native assignment operation."
         case .pendingNativeOperation: return "A previous native graph operation is still pending."

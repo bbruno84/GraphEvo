@@ -17,6 +17,14 @@ extension GraphSyncCheckpointAdapter {
         var receipts: [String: String] = [:]
         var zoneDeleted = false
     }
+    static func existingCloudIdentity(_ context: NSManagedObjectContext, id: GraphID) throws -> GraphCloudSessionIdentity? {
+        let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+        guard let raw = root[dynamicMember: transportKey] else { return nil }
+        guard let bytes = raw as? Data, bytes.count <= 32 * 1024 * 1024 else { throw GraphCloudError.invalidState }
+        let candidate = try JSONDecoder().decode(Transport.self, from: bytes)
+        let value = try load(context, id: id, limits: .init())
+        return try loadTransport(value, binding: candidate.binding).binding.identity
+    }
     private static func loadTransport(_ value: Loaded, binding: GraphCloudTransportBinding) throws -> Transport {
         guard !binding.identity.container.isEmpty, !binding.identity.account.isEmpty,
               !binding.route.zone.name.isEmpty, !binding.route.zone.owner.isEmpty else { throw GraphCloudError.invalidState }

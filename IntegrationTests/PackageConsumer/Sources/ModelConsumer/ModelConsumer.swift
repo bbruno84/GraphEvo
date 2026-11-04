@@ -8,6 +8,12 @@ import GraphEvo
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("Graph.sqlite")
         let store = try await GraphStore.open(at: url)
+        let accountState: GraphCloudAccountState = try await store.cloudAccountState
+        guard accountState == .localOnly else { throw GraphModelError.invalidValue }
+        let accountObservation = try await store.observeCloudAccountState()
+        var accountIterator = accountObservation.makeAsyncIterator()
+        guard await accountIterator.next() == .localOnly else { throw GraphModelError.invalidValue }
+        accountObservation.cancel()
         let graphID = store.id
         let profileNodeID = store.makeNodeID()
         let profile = Profile(id: profileNodeID.rawValue, displayName: "Ada")
