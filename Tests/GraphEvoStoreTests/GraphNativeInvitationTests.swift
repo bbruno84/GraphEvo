@@ -14,6 +14,11 @@ private actor NativeInvitationServer {
     var discarded = false
     var currentAccount = "participant"
     var switchAfterAccept = false
+    var sharedFetches = 0
+    var inspectHook: (@Sendable () async -> Void)?
+    func setInspectHook(_ hook: (@Sendable () async -> Void)?) { inspectHook = hook }
+    func inspectInvitation() async -> GraphCloudNativeInvitation { await inspectHook?(); return invitation() }
+    func fetched(_ scope: GraphCloudScope) { if scope == .shared { sharedFetches += 1 } }
     func switchOnAcceptance() { switchAfterAccept = true }
     func restoreAccount() { currentAccount = "participant"; switchAfterAccept = false }
     func switchAccount() { currentAccount = "other-account" }
@@ -35,11 +40,11 @@ private actor NativeInvitationServer {
             .init(identity: GraphCloudShareIdentity.of(self.url), role: .participant, permission: .readOnly, participants: [])
         }, execute: { _, _, _, _ in })
         return GraphCloudAdapter(nativeSharing: .init(prepare: { _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
-            inspect: { _, _, _ in await self.invitation() }, accept: { _, _, _ in await self.accept() },
+            inspect: { _, _, _ in await self.inspectInvitation() }, accept: { _, _, _ in await self.accept() },
             discover: { _, _ in try await self.discover() }, discard: { _, _, _ in await self.discard() }),
             sharing: .init(operations: operations, invite: { _, _, _, _, _, _, _ in throw GraphCloudSharingError.unavailable },
                 accept: { _, _, _ in .readOnly }),
-            account: { _ in await self.currentAccount }, make: { _, _, _, _ in .init(fetch: { _ in }, cancel: {}) })
+            account: { _ in await self.currentAccount }, make: { _, scope, _, _ in .init(fetch: { _ in await self.fetched(scope) }, cancel: {}) })
     }
 }
 
@@ -341,5 +346,32 @@ private actor NativeInviteGate {
         let recovered = try await GraphCloudSession.open(native, adapter: server.adapter)
         #expect(try await recovered.nativeJoins().map(\.id) == [join.id])
         try await recovered.stop()
+    }
+    @Test func nativeJoinWakesForegroundImportWithoutAManualSyncOrPeriodicTick() async throws {
+        let config = config(), server = NativeInvitationServer(), entered = NativeInviteGate(), proceed = NativeInviteGate()
+        defer { try? FileManager.default.removeItem(at: config.directory) }
+        await server.available()
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        _ = try await manager.startCloudSession(config, adapter: server.adapter)
+        let clock = GraphAutomaticClock(now: { 0 }, sleep: { _ in try await Task.sleep(for: .seconds(3600)) }, jitter: { 1 })
+        try await manager.setAutomaticCloudSynchronizationActive(true, configuration: config, clock: clock)
+        let session = try await manager.cloud(config)
+        let join = try await session.nativeBeginJoin(server.url)
+        try await session.nativeAdvanceJoin(join.id)
+        let id = await server.graphID
+        await server.setInspectHook { await entered.release(); await proceed.wait() }
+        let opening = Task { try await manager.openNativeReplica(join.id, at: config.directory.appendingPathComponent("Automatic.sqlite"), configuration: config) }
+        await entered.wait()
+        // Drain the pre-binding creation hint: it must not accidentally supply the missing wake.
+        await #expect(throws: GraphStoreError.self) { try await manager.automaticCloudSynchronizationStatus(for: id, configuration: config) }
+        await proceed.release()
+        let graph = try await opening.value
+        for _ in 0..<100 {
+            if await server.sharedFetches > 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await server.sharedFetches > 0)
+        try await manager.setAutomaticCloudSynchronizationActive(false, configuration: config, clock: clock)
+        try await graph.close(); try await manager.stopCloudSession(config)
     }
 }

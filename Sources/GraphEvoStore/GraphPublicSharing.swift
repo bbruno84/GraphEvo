@@ -194,6 +194,7 @@ extension GraphContextManager {
             let graph = try await openGraph(id: id, at: url)
             join.phase = .joined; join.failure = false
             do { try await session.updateJoin(join) } catch { try? await graph.close(); throw error }
+            automaticChanged()
             return graph
         }
         try await session.verifyNativeJoinDescriptor(joinID)
@@ -236,6 +237,7 @@ extension GraphContextManager {
             } catch { finishSynchronization(permit); throw error }
             join.phase = .joined; join.failure = false
             try await session.updateJoin(join)
+            automaticChanged()
             return graph
         } catch {
             if let opened { try? await opened.close() }
