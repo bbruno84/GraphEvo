@@ -33,7 +33,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'pull_request' && github.base_ref == 'codex/graphevo-2' && !(github.event.action == 'labeled' && (github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint'))) && github.run_id || 'validation' }}
   cancel-in-progress: ${{ (github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint')) || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/codex/graphevo-2' }}
 
 jobs:
@@ -42,10 +42,8 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.base_ref != 'codex/graphevo-2' ||
-      ((contains(github.event.pull_request.labels.*.name, 'ci-checkpoint') ||
-        contains(github.event.pull_request.labels.*.name, 'ci-full-checkpoint')) &&
-       (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint' ||
-        github.event.label.name == 'ci-full-checkpoint'))
+      (github.event.action == 'labeled' &&
+       (github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint'))
     name: Swift package validation
     runs-on: macos-15
     timeout-minutes: 20
@@ -129,10 +127,8 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.base_ref != 'codex/graphevo-2' ||
-      ((contains(github.event.pull_request.labels.*.name, 'ci-checkpoint') ||
-        contains(github.event.pull_request.labels.*.name, 'ci-full-checkpoint')) &&
-       (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint' ||
-        github.event.label.name == 'ci-full-checkpoint'))
+      (github.event.action == 'labeled' &&
+       (github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint'))
     name: Swift package validation (macOS)
     runs-on: macos-15
     timeout-minutes: 20

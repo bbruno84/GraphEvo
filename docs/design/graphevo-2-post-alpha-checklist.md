@@ -1131,3 +1131,13 @@ physical interruption, cross-process writers, scale or new-cloud activation.
   certify every workload; private source artifacts remain outside Git/CI/cloud.
 
 See [MF11](graphevo-2-native-v1-migration.md).
+
+## Alpha CI frequency — maintainer revision 2026-11-04
+
+Review and adequate affected local checks are the ordinary alpha integration
+gate. Remote checkpoints are explicitly requested for grouped reviewed work;
+retained labels and intermediate pushes do not request another run. Hosted
+runner unavailability is recorded without blocking an authorized, locally
+verified alpha merge. Actual failures remain investigated and recorded. Required
+beta/release and published-tag remote gates remain open until actually passed.
+This scheduling policy closes no acceptance box or physical-device gate.

@@ -1,16 +1,19 @@
 # GraphEvo 2 — explicit CI checkpoints
 
-Updated: 2026-11-02. Alpha work uses explicit reviewed checkpoints with two
-profiles. A skipped job is not a successful validation. Review and relevant local
-checks precede CI; merge follows the selected successful checkpoint.
+Updated: 2026-11-04. Maintainer-selected alpha policy: review and adequate affected
+local checks are the default merge gate. Remote CI runs only at agreed,
+explicitly requested checkpoints, not on every increment, correction, pin or
+push. Runner capacity/service failures do not block an otherwise verified and
+authorized alpha merge. They are not passing evidence. Beta/release and published
+tag acceptance retain their required remote gates.
 
 ## Profiles
 
 | Trigger | Scope |
 | --- | --- |
 | Ordinary v2 PR, no checkpoint label | No macOS/iOS runners |
-| `ci-checkpoint` on a v2 PR | V2 store, runtime and model suites on macOS/iOS; Swift 6 model and process consumers on macOS |
-| `ci-full-checkpoint` on a v2 PR | Every legacy/v2 suite on both platforms, including capacity regression; Swift 6 consumers |
+| Explicit `ci-checkpoint` label event on a v2 PR | V2 store, runtime and model suites on macOS/iOS; Swift 6 model and process consumers on macOS |
+| Explicit `ci-full-checkpoint` label event on a v2 PR | Every legacy/v2 suite on both platforms, including capacity regression; Swift 6 consumers |
 | Both checkpoint labels | Full takes precedence |
 | Manual dispatch on `codex/*`, `profile=v2` | V2 profile |
 | Manual dispatch, default `profile=full` | Complete suites |
@@ -19,13 +22,14 @@ checks precede CI; merge follows the selected successful checkpoint.
 The v2 profile retains all functional runtime/store/model cases except
 `twoThousandRecordNativeSortFitsTheUnchangedStepBudget`. That capacity fixture
 belongs to the full profile; the smaller 300-record multi-chunk/every-page sort
-regression remains in the v2 profile. No tests are deleted or disabled. Current
-counts are 593 v2 macOS functions and 592 v2 iOS functions; these are observed
+regression remains in the v2 profile. No tests are deleted or disabled. At profile adoption,
+counts were 593 v2 macOS functions and 592 v2 iOS functions; these are observed
 counts, not fixed gates to edit whenever tests are added.
 
-Use the full profile for changes to legacy behavior/shared legacy foundations,
-test infrastructure or profile selection, milestone integration, alpha/beta tags
-and release acceptance. Use the v2 profile for focused v2-only increments. A
+When a remote checkpoint is requested, use the full profile for legacy/shared
+foundations, test/CI infrastructure, profile selection or milestone/tag/release
+acceptance. Use the v2 profile for a focused v2 checkpoint. File scope alone does
+not request remote CI for an ordinary alpha increment. A
 relevant capacity regression must also run locally when modifying that behavior.
 Local checks should follow the change, not repeat every unchanged suite after
 every documentation edit. Full validation remains available and required at the
@@ -47,28 +51,36 @@ python3 -m unittest discover -s Scripts/tests
 
 ## Workflow
 
-1. Implement and run the affected local checks. Open the focused PR without a
-   checkpoint label, directly against `codex/graphevo-2`.
-2. Review, correct and re-review. Choose v2/full from the behavior changed.
-3. Add the appropriate checkpoint label only to the reviewed code. A source
-   change on a labeled PR requests a replacement checkpoint; remove both labels
-   before intermediate fixes, then review before requesting it again.
-4. After the selected checks pass, merge within the maintainer's authorization.
-   A request for review alone does not authorize CI or merge.
-5. Record the exact tested head, profile and run. Final docs-only integration
-   notes may reuse the checkpoint only when shipping/test/consumer/workflow
-   inputs are unchanged. Never turn a skipped job into green evidence.
+1. Group the functional increment, UI/dependency pins and related corrections.
+   Run adequate affected local checks; open the focused PR against
+   `codex/graphevo-2` without checkpoint labels.
+2. Review, fix and re-review locally. An ordinary alpha merge may proceed within
+   the maintainer's authorization once those checks pass; remote CI is not an
+   additional gate for every increment.
+3. At an agreed checkpoint or explicit CI request, select v2/full and add the
+   corresponding label to the reviewed head, or use manual dispatch. Only that
+   label event requests a run: opening, reopening, pushing with a retained label
+   and unrelated labels do not. A non-requesting event has its own concurrency
+   group, so it cannot evict a queued or cancel a running requested checkpoint.
+4. Do not automatically rerun for another pin, small correction or docs edit.
+   Re-review affected inputs locally and group them into the next agreed remote
+   checkpoint. Remove/re-add the label only when a new run is actually intended.
+5. Hosted capacity/service failures or cancellation before execution are recorded
+   as unavailable, never passing. Do not retry them by default. They do not block
+   an otherwise locally verified, reviewed and authorized alpha merge. Actual
+   test failures require investigation and adequate local verification; preserve
+   the failure and any unresolved limitation rather than weakening checks.
+6. Record exact local/remote scope, tested head, profile and result. A skipped job
+   is not a passing checkpoint. Required beta/release and published-tag remote
+   gates stay open if the service is unavailable; do not claim acceptance.
 
-The existing `CI` workflow can also be dispatched with a branch/ref and profile.
-If default-branch dispatch registration is unavailable, use the PR-label route;
-do not merge v2 into `develop` just to register a workflow. Alpha integration
-pushes do not repeat the checkpoint. Automatic v1/stable/release validation and
-the existing master consumer fixture remain enabled.
+The existing CI workflow supports branch/ref dispatch with an explicit profile.
+Automatic v1/stable/release validation and the master consumer fixture remain
+enabled. Alpha integration pushes do not request another checkpoint.
 
 The trigger remains `pull_request`, never `pull_request_target`, with read-only
-permissions and no new secrets. Unrelated labels neither request validation nor
-cancel a running checkpoint. Superseded source/checkpoint runs are canceled.
-Jobs have a twenty-minute ceiling rather than the default multi-hour limit.
+permissions and no new secrets. Jobs retain a twenty-minute ceiling. This policy
+changes when remote checks are requested, not test coverage or failure semantics.
 
 ## Build and experiment boundaries
 
