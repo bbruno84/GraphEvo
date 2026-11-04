@@ -73,6 +73,11 @@ package struct GraphStoreAdapter: Sendable {
 public actor GraphStore {
     public nonisolated let id: GraphID
     let handle: StoreHandle
+    private var publicContextLifetime: (any Sendable)?
+    package private(set) var publicContextIdentity: UUID?
+    package func retainPublicContext(_ lifetime: any Sendable, identity: UUID) {
+        publicContextLifetime = lifetime; publicContextIdentity = identity
+    }
     private let adapter: GraphStoreAdapter
     private let ownerLease: GraphCoordinatorLease?
     private var observationCoordinator: GraphObservationCoordinator?
@@ -217,6 +222,7 @@ public actor GraphStore {
         do {
             if let ownerLease { try await ownerLease.close() }
             else { try await handle.close() }
+            publicContextLifetime = nil
         } catch { throw Self.translate(error) }
     }
 

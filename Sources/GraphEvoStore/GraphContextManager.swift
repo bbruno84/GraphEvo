@@ -23,6 +23,9 @@ package actor GraphContextManager {
     struct LocalV1BootstrapAdmission { let token: UUID; let key: StoreKey }
     var activatingCloudGraphs = Set<GraphID>()
     var localV1Bootstraps: [GraphID: LocalV1BootstrapAdmission] = [:]
+    nonisolated let contextOwnerID: UUID?
+    var contextClaims: [GraphID: UUID] = [:]
+    var contextClaimClosing: [GraphID: Task<Void, Never>] = [:]
     let registry: StoreRegistry
     let schema: StoreSchema
     let adapter: GraphCoordinatorAdapter
@@ -40,6 +43,7 @@ package actor GraphContextManager {
     var cloudSessions: [String: CloudOpening] = [:]
     struct AccountOpening { let id: UUID; let configuration: GraphCloudConfiguration; let task: Task<GraphAccountVerification, any Error>; var waiters = 0; var stopping = false }
     var accountOpenings: [String: AccountOpening] = [:]
+    var accountOpeningDrains: [UUID: [CheckedContinuation<Void, Never>]] = [:]
     #if DEBUG
     var purgeProbeBarrier: (@Sendable (GraphID) async throws -> Void)?
     package func setPurgeProbeBarrier(_ barrier: (@Sendable (GraphID) async throws -> Void)?) { purgeProbeBarrier = barrier }
@@ -54,6 +58,8 @@ package actor GraphContextManager {
     var ledgerWorkers: [String: GraphSharingLifecycleWorker] = [:]
     var ledgerListeners: [String: Task<Void, Never>] = [:]
     private var transportGraphs = Set<GraphID>()
+    var localAccountAdapter: GraphCloudAdapter?
+    var publicConnectionHubs: [String: GraphCloudConnectionHub] = [:]
     var accountAuthorities: [String: GraphAccountAuthority] = [:]
     var accountClaims: [GraphID: GraphCloudSessionIdentity] = [:]
     var accountControls: [GraphID: StoreAccountControl] = [:]
@@ -92,7 +98,11 @@ package actor GraphContextManager {
         defer {
             if accountOpenings[key]?.id == accountOpening.id {
                 accountOpenings[key]!.waiters -= 1
-                if accountOpenings[key]!.waiters == 0 { accountOpenings.removeValue(forKey: key) }
+                if accountOpenings[key]!.waiters == 0 {
+                    accountOpenings.removeValue(forKey: key)
+                    let waiters = accountOpeningDrains.removeValue(forKey: accountOpening.id) ?? []
+                    for waiter in waiters { waiter.resume() }
+                }
             }
         }
         let verification = try await accountOpening.task.value
@@ -112,8 +122,10 @@ package actor GraphContextManager {
             let signal: @Sendable (GraphCloudSessionAccountSignal) async -> Void = { [weak self] signal in
                 await self?.sessionAccountSignal(signal, namespace: key, generation: generation)
             }
+            let ownershipOwner = contextOwnerID
+            let resetAccountState = accountAuthorities[key]?.requiresEngineReset ?? false
             let task = Task.detached {
-                try await GraphCloudSession.open(configuration, adapter: adapter, disk: disk, verifiedAccount: verification.account, accountSignal: signal)
+                try await GraphCloudSession.open(configuration, adapter: adapter, disk: disk, verifiedAccount: verification.account, ownershipOwner: ownershipOwner, resetAccountState: resetAccountState, accountSignal: signal)
             }
             cloudSessions[key] = CloudOpening(id: generation, configuration: configuration, task: task)
         }
@@ -128,6 +140,8 @@ package actor GraphContextManager {
         let status = try await session.startStatus()
         guard await session.retainedIdentity().account == verification.account else { throw GraphCloudError.accountChanged }
         try await finishAccountVerification(verification, configuration: configuration)
+        accountAuthorities[key]?.requiresEngineReset = false
+        await publishCloudConnectionState(key)
         for route in await session.retainedBindings() {
             if let entry = entries[route.graphID], entry.ready, entry.closing == nil {
                 try await claimCloudAccount(session.retainedIdentity(), for: route.graphID, owner: entry.opening.value)
@@ -804,7 +818,8 @@ package actor GraphContextManager {
     var registeredGraphCount: Int { entries.count }
     var registeredHandleCount: Int { entries.values.reduce(0) { $0 + $1.tokens.count } }
 
-    package init(registry: StoreRegistry = .shared, schema: StoreSchema, adapter: GraphCoordinatorAdapter) {
+    package init(registry: StoreRegistry = .shared, schema: StoreSchema, adapter: GraphCoordinatorAdapter, contextOwnerID: UUID? = nil) {
+        self.contextOwnerID = contextOwnerID
         self.registry = registry; self.schema = schema; self.adapter = adapter
         let source = adapter.migrationSource
         backups = GraphBackupManager(schemaIdentifier: schema.identifier, migrationSourceSchemaIdentifier: source?.schema.identifier,
@@ -862,9 +877,10 @@ package actor GraphContextManager {
         do {
             try Task.checkCancellation()
             guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
-            let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
+            let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID))
             if let existing = locations[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
             while true {
+                try await claimContextGraph(id, resolved: resolved)
                 try Task.checkCancellation()
                 guard !migratingStores.contains(id),
                       localV1Bootstraps[id] == nil || localV1Bootstraps[id]?.token == bootstrapPermit,
@@ -927,7 +943,10 @@ package actor GraphContextManager {
                     throw error
                 }
             }
-        } catch { throw GraphStore.translate(error) }
+        } catch {
+            await releaseContextGraphIfIdle(id)
+            throw GraphStore.translate(error)
+        }
     }
 
     private func release(_ id: GraphID, generation: UUID, token: UUID) async throws {
@@ -940,6 +959,7 @@ package actor GraphContextManager {
         entries[id] = entry
         try await closing.value
         removeClosedEntry(id, generation: generation)
+        await releaseContextGraphIfIdle(id)
     }
 
     func removeClosedEntry(_ id: GraphID, generation: UUID) {

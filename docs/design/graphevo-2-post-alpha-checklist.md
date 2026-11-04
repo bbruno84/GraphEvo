@@ -9,6 +9,18 @@ A1–A8 and the specification so they survive individual PRs. It complements the
 [delivery plan](graphevo-2-delivery-plan.md), [decision register](graphevo-2-decisions.md)
 and [experimental evidence register](graphevo-2-test-checklist.md).
 
+## H01 public entry — 2026-11-04
+
+[PR #150](https://github.com/bbruno84/GraphEvo/pull/150) implements the selected
+[public coordinated entry](graphevo-2-public-entry.md), including explicit context
+ownership, account-only local verification, public staged bootstrap and private
+cloud authority/peer recovery. Full checkpoint #41811987802 passes on 414cea3f
+with both platform suites and Swift 6 consumers. Companion demo adoption is a
+separate delivery step. This narrows implementation gaps, not the broad B/R
+acceptance below. Public invitation onboarding, independent-reader/protected-data,
+production cutover, restoration and final distribution/API audits remain open.
+No schema, persisted format or account-change beta scheduling gate is changed.
+
 ## How to close an item
 
 All boxes start open: existing evidence is input, not a claim that its broader

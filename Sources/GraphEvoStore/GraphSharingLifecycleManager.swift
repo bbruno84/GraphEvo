@@ -126,7 +126,7 @@ extension GraphContextManager {
             }
             if sameURL, entries[id] != nil { return try await runSharingPurge(member, configuration: configuration) }
         }
-        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
+        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID))
         if let existing = entries[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
         guard !locations.contains(where: { $0.key != id && $0.value.key == resolved.key }) else { throw GraphStoreError.ownershipConflict }
         guard case .sqlite(let canonical) = resolved.configuration.location else { throw GraphCloudError.invalidConfiguration }
@@ -289,7 +289,7 @@ extension GraphContextManager {
         if FileManager.default.fileExists(atPath: location.url.path) || entries[id] != nil {
             if entries[id] == nil {
                 let registry = registry, schema = schema, adapter = adapter
-                let configuration = StoreConfiguration(location: .sqlite(location.url), exclusiveGraphID: id.rawValue)
+                let configuration = StoreConfiguration(location: .sqlite(location.url), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID)
                 let task = Task.detached { try await GraphCoordinator.recoverForPurge(id: id, configuration: configuration, registry: registry, schema: schema, adapter: adapter) }
                 entries[id] = Entry(key: location.key, url: location.url, creating: false, initialPolicy: .lastEditWins, opening: task)
             }

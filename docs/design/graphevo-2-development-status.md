@@ -35,14 +35,23 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
-[H01 public coordinated entry](graphevo-2-public-entry.md) is the selected
-contract integrating through PR #149. It proposes an explicitly constructed,
-application-owned context, leased cloud connections and an explicit supported
-local/v1/private-cloud/peer flow. Synchronized local opens retain identity checks
-and account observation even without a transport connection; local-only stores
-remain independent of iCloud availability. Cross-context ownership stays guarded. Foreground activity belongs to the context.
-Implementation follows on a focused branch; public invitation onboarding remains
-a subsequent increment. This contract integration changes no shipping code.
+[H01 public coordinated entry](graphevo-2-public-entry.md) was selected through
+PR #149 and its library implementation integrates through
+[PR #150](https://github.com/bbruno84/GraphEvo/pull/150). Applications construct
+GraphContext instances with independent managers and guarded cross-context
+ownership. Synchronized local opens monitor identity without starting transport;
+foreground belongs to the context. Public staged bootstrap, explicit authoritative
+activation and empty-peer recovery preserve native receipts and payloads.
+
+Reviewed [full checkpoint #41811987802](https://github.com/bbruno84/GraphEvo/actions/runs/41811987802)
+passes on `414cea3f5d9f452745026c8a4ff44ba29761a0b0`: 1,020 macOS functions,
+1,017 passed iOS functions with one known skip, and both Swift 6 consumers.
+The external consumer also exercises a stopped-source staged conversion with
+public imports only. Final integration notes change documentation only;
+shipping/test/consumer/workflow inputs match the checkpoint. The companion demo
+integration is separate. Public invitations, protected-data/independent-reader,
+production cutover, restoration and broader acceptance remain open. Physical
+account-change trials remain scheduled during beta before stable release.
 
 The [account-isolation contract](graphevo-2-cloud-account-isolation.md) integrates
 through [PR #147](https://github.com/bbruno84/GraphEvo/pull/147), directly from

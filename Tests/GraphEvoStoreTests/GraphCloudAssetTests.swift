@@ -309,7 +309,7 @@ private actor AssetBus {
 
     @available(iOS 17, macOS 14, *)
     @Test(arguments: [GraphConflictPolicy.cloudWins, .lastEditWins])
-    func conflictSelectsOneCompleteAttachmentRevision(_ policy: GraphConflictPolicy) async throws {
+    func conflictSelectsOneCompleteAttachmentRevision(_ policy: GraphEvoStore.GraphConflictPolicy) async throws {
         let bus = AssetBus(), f = try await fixture(bus), original = try await seed(f)
         _ = try await f.manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
         try await f.graph.setConflictPolicy(policy)

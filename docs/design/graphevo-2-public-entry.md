@@ -1,8 +1,9 @@
 # H01 — public coordinated graph entry
 
-Status: selected contract, 2026-11-04. Implementation is authorized after the
-contract integration. Signatures below describe the selected public surface;
-they are not available APIs until the implementation is integrated.
+Status: contract selected through #149; library implementation integrates through
+[PR #150](https://github.com/bbruno84/GraphEvo/pull/150), 2026-11-04. Reviewed full
+checkpoint #41811987802 passes on 414cea3f. Companion demo integration is separate;
+this is bounded alpha implementation, not beta or production acceptance.
 Read with [ownership](graphevo-2-graph-coordinator.md),
 [controlled access](graphevo-2-controlled-store-access.md),
 [custom sync](graphevo-2-custom-sync-transition.md),
@@ -64,14 +65,14 @@ and native staged-conversion path. This does not raise the package-wide floor fo
 retained legacy APIs. The public product remains GraphEvo; native model factories,
 Core Data contexts and runtime handles stay internal.
 
-## Proposed local surface
+## Public local surface
 
-The sketch defines call shapes and semantics, not a compilable interface file.
+The sketch summarizes call shapes and semantics; see the API reference for supporting values.
 Supporting public values must be Sendable, have documented initializers and expose
 only consumer-relevant fields.
 
 ```swift
-// Proposed declarations, not available APIs.
+// Coordinated public entry.
 public actor GraphContext {
     public init()
     public func createGraph(id: GraphID, at storeURL: URL,
@@ -133,10 +134,10 @@ creating native engines. Account/network unavailability is observable state,
 not loss of the connection handle. Concurrent matching requests share startup;
 cancelling a waiter cannot cancel another consumer's startup or abandon claims.
 
-Proposed connection operations:
+Connection operations:
 
 ```swift
-// Proposed declarations; result/support types are specified in the text below.
+// Consumer connection lease; supporting values are described below.
 public actor GraphCloudConnection {
     public var state: GraphCloudConnectionState { get async throws }
     public func observeState() async throws -> GraphObservation<GraphCloudConnectionState>
@@ -277,7 +278,7 @@ not a reason to choose an unbounded custom fallback.
 
 Cloud activation is explicit and remains separate from conversion:
 
-| Proposed operation on GraphCloudConnection | Existing owner/protocol |
+| Operation on GraphCloudConnection | Existing owner/protocol |
 |---|---|
 | `prepareActivation(for:activationID:zoneName:declaration:)` | Manager MF10 local immutable seed and cutover-declaration validation |
 | `advanceActivation(for:)` | MF10 native server claim/CAS, bounded seed upload and publication recovery |

@@ -26,9 +26,9 @@ Instructions for AI agents are in [`AGENTS.md`](../AGENTS.md).
 
 ## Future design
 
-- [H01 public coordinated entry](design/graphevo-2-public-entry.md): proposed
-  public local/cloud/migration contract for discussion, with no available API
-  or implementation authorization implied.
+- [H01 public coordinated entry](design/graphevo-2-public-entry.md): selected
+  public local/cloud/migration ownership and lifecycle contract. See the
+  [public entry guide](guides/public-coordinated-entry.md) for usage.
 
 - [MF10 authoritative cloud bootstrap](design/graphevo-2-authoritative-cloud-bootstrap.md):
   package-only single-conversion authority, recoverable publication and bounded

@@ -4,7 +4,7 @@ import GraphEvoRuntime
 
 /// A successful conversion and its separate ordinary-opening outcome.
 /// A failed opening never implies that committed conversion effects were rolled back.
-package struct GraphV1BootstrapResult: Sendable {
+package struct GraphNativeV1BootstrapResult: Sendable {
     package let conversion: GraphV1ConversionResult
     package let opening: Result<GraphStore, any Error>
 }
@@ -12,7 +12,7 @@ package struct GraphV1BootstrapResult: Sendable {
 extension GraphContextManager {
     /// Uses native staged conversion where supported; the retained bounded recipe
     /// remains explicit through the overload that takes limits.
-    package func openGraph(convertingLocalV1 request: GraphStoreMigrationRequest) async throws -> GraphV1BootstrapResult {
+    package func openGraph(convertingLocalV1 request: GraphStoreMigrationRequest) async throws -> GraphNativeV1BootstrapResult {
         if #available(iOS 17, macOS 14, *), adapter.nativeV1Migration != nil {
             return try await openGraph(migratingNativeV1: request)
         }
@@ -23,13 +23,13 @@ extension GraphContextManager {
     /// The caller retains request IDs/current URLs and must not configure cloud for this graph concurrently.
     /// No handle is exposed until verified conversion and ordinary native opening both succeed.
     package func openGraph(convertingLocalV1 request: GraphStoreMigrationRequest,
-                           limits: GraphV1ConversionLimits) async throws -> GraphV1BootstrapResult {
+                           limits: GraphV1ConversionLimits) async throws -> GraphNativeV1BootstrapResult {
         try Task.checkCancellation()
         try limits.validate()
         guard let conversion = adapter.v1Conversion, schema.identifier == conversion.targetSchemaIdentifier else {
             throw GraphV1ConversionError.unavailable
         }
-        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue))
+        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(request.destinationURL), exclusiveGraphID: request.graphID.rawValue, contextOwnerID: contextOwnerID))
         guard !blockedSharingGraphs.contains(request.graphID) else { throw GraphCloudError.zoneUnavailable }
         guard localV1Bootstraps[request.graphID] == nil, !migratingStores.contains(request.graphID), entries[request.graphID] == nil,
               !localV1Bootstraps.values.contains(where: { $0.key == resolved.key }) else { throw GraphV1ConversionError.busy }
@@ -38,6 +38,7 @@ extension GraphContextManager {
               locations[request.graphID] == nil || locations[request.graphID]?.key == resolved.key else {
             throw GraphStoreError.ownershipConflict
         }
+        try await claimContextGraph(request.graphID, resolved: resolved)
         let token = UUID()
         localV1Bootstraps[request.graphID] = .init(token: token, key: resolved.key)
         defer {

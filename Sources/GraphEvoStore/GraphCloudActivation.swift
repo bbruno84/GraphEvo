@@ -4,21 +4,21 @@ import CryptoKit
 import Foundation
 import GraphEvoModel
 
-package enum GraphCloudActivationError: Error, Equatable {
+public enum GraphCloudActivationError: Error, Equatable {
     case unavailable, invalidRequest, invalidState, busy, authorityConflict, zoneNotEmpty, limitExceeded, recoveryRequired
 }
 
-package enum GraphCloudActivationPhase: String, Codable, Sendable {
+public enum GraphCloudActivationPhase: String, Codable, Sendable {
     case prepared, claiming, seeding, publishing, published, conflict, recovering
 }
 
 /// Consumer evidence is a declaration, not a library-certified distributed v1 fence.
-package struct GraphCloudCutoverDeclaration: Codable, Equatable, Sendable {
-    package let sourceSelection: String
-    package let completeness: String
-    package let stoppedWriters: String
-    package let returningClients: String
-    package init(sourceSelection: String, completeness: String, stoppedWriters: String, returningClients: String) {
+public struct GraphCloudCutoverDeclaration: Codable, Equatable, Sendable {
+    public let sourceSelection: String
+    public let completeness: String
+    public let stoppedWriters: String
+    public let returningClients: String
+    public init(sourceSelection: String, completeness: String, stoppedWriters: String, returningClients: String) {
         self.sourceSelection = sourceSelection; self.completeness = completeness
         self.stoppedWriters = stoppedWriters; self.returningClients = returningClients
     }
@@ -44,11 +44,11 @@ package struct GraphCloudActivationLimits: Codable, Equatable, Sendable {
     }
 }
 
-package struct GraphCloudActivationStatus: Sendable {
-    package let activationID: UUID
-    package let graphID: GraphID
-    package let phase: GraphCloudActivationPhase
-    package let recordCount: Int
+public struct GraphCloudActivationStatus: Sendable {
+    public let activationID: UUID
+    public let graphID: GraphID
+    public let phase: GraphCloudActivationPhase
+    public let recordCount: Int
 }
 
 package struct GraphCloudSeedEntry: Codable, Equatable, Sendable {

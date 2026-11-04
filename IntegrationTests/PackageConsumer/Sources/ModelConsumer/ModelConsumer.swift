@@ -4,6 +4,10 @@ import GraphEvo
 
 @main struct ModelConsumer {
     static func main() async throws {
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--seed-coordinated-v1" {
+            try await seedPublicV1Source(at: URL(fileURLWithPath: CommandLine.arguments[2]))
+            return
+        }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvo-TypedConsumer-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("Graph.sqlite")
@@ -91,6 +95,7 @@ import GraphEvo
         try await nativeReader.close(); try await nativeReopen.close()
         try await checkMirroredOverloadValidation()
         try await checkNumericPropertyValues(at: directory.appendingPathComponent("Numeric.sqlite"))
+        if #available(macOS 14, *) { try await checkPublicCoordinatedContext(at: directory) }
         print("GraphEvo Swift 6 typed store, graph catalog and native schema consumer passed")
     }
 }
