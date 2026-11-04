@@ -48,6 +48,7 @@ enum GraphCoordinatorFactory {
             root[dynamicMember: GraphMigrationNativePublication.receiptKey] = nil
             root[dynamicMember: GraphSyncCheckpointAdapter.stateKey] = nil
             root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] = nil
+            root[dynamicMember: GraphCloudAccountNative.key] = nil
             context.transactionAuthor = GraphMigrationNativeWorkspace.baselineAuthor(UUID(uuidString: workspaceID)!)
         }, validateBackup: { context, id in
             try validateGraph(context, id: id)
@@ -81,6 +82,7 @@ enum GraphCoordinatorFactory {
         if #available(iOS 17, macOS 14, *) {
             coordinator.nativeV1Migration = GraphV1StagedMigration.adapter
         }
+        coordinator.account = GraphCloudAccountNative.adapter
         return coordinator
     }
     static func validateGraph(_ context: NSManagedObjectContext, id: GraphID) throws {

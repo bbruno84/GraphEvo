@@ -183,7 +183,7 @@ private actor CloudSignal {
         try await m.stopCloudSession(config)
     }
 
-    @Test func accountChangeBlocksBothScopesWithoutErasingState() async throws {
+    @Test func accountChangeBlocksBothScopesAndRetainsIdentityForReconciliation() async throws {
         let config = config(), fake = CloudFake(), m = manager()
         defer { try? FileManager.default.removeItem(at: config.directory) }
         _ = try await m.startCloudSession(config, adapter: fake.adapter)
@@ -193,7 +193,7 @@ private actor CloudSignal {
         await fake.emit(.account(nil), scope: .shared)
         await fake.emit(.state(Data([2])), scope: .private)
         #expect(try await m.cloudStatus(config).failure == .accountChanged)
-        #expect(try document(config).states["private"] == Data([1]))
+        #expect(try document(config).states.isEmpty && document(config).accountResetRequired == true)
         try await a.close(); try await m.stopCloudSession(config)
         let wrong = GraphCloudAdapter(account: { _ in "other-account" }, make: fake.adapter.make)
         await #expect(throws: GraphCloudError.invalidState) { try await m.startCloudSession(config, adapter: wrong) }

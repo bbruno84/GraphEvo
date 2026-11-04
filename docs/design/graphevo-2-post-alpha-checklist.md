@@ -261,9 +261,16 @@ engine or cross-process acceptance. Retain this scope when integrating it.
 - [ ] **B** Retire the transitional v2 native mirror/assignment paths after their
   callers have replacement coverage; preserve mandatory v1 conversion/readers.
 
-- [ ] **B** Publish account-unavailable/sign-out/switch/restriction and cached-data
-  access rules, including revocation and offline retention. Prevent exposing or
-  exporting an old account's data through a new account's session.
+- [ ] **B** Validate the selected [account isolation](graphevo-2-cloud-account-isolation.md)
+  default on physical account changes, protected-data transitions and independent
+  reader processes. The focused implementation retains data separately, blocks
+  ordinary access after logout/switch/restriction, notifies consumers and permits
+  verified same-account recovery. Injected tests do not close physical acceptance.
+- [ ] **R** Design optional local-data merge into a signed-in account, including
+  explicit consent, identity/conflict rules and interrupted-operation recovery.
+- [ ] **R** Design optional automatic local deletion on account loss, including
+  unsent edits, attachments, backups and interrupted deletion. Only isolation is
+  implemented now; neither alternative is exposed as a supported configuration.
 - [ ] **B** Define supported graph/zone scale, quotas and recovery limits; do not
   infer selective graph download or unlimited zones from isolation tests.
   Include unbound database lifecycle-event retention: the private spool checkpoint

@@ -31,13 +31,15 @@ package actor GraphContextManager {
     struct GraphLocation { let key: StoreKey; let url: URL }
     // Runtime-only registrations. App bootstrap supplies current sandbox/App Group URLs after relaunch.
     var locations: [GraphID: GraphLocation] = [:]
-    private struct CloudOpening {
-        let id = UUID()
+    struct CloudOpening {
+        let id: UUID
         let configuration: GraphCloudConfiguration
         let task: Task<GraphCloudSession, any Error>
         var session: GraphCloudSession?
     }
-    private var cloudSessions: [String: CloudOpening] = [:]
+    var cloudSessions: [String: CloudOpening] = [:]
+    struct AccountOpening { let id: UUID; let configuration: GraphCloudConfiguration; let task: Task<GraphAccountVerification, any Error>; var waiters = 0; var stopping = false }
+    var accountOpenings: [String: AccountOpening] = [:]
     #if DEBUG
     var purgeProbeBarrier: (@Sendable (GraphID) async throws -> Void)?
     package func setPurgeProbeBarrier(_ barrier: (@Sendable (GraphID) async throws -> Void)?) { purgeProbeBarrier = barrier }
@@ -52,6 +54,13 @@ package actor GraphContextManager {
     var ledgerWorkers: [String: GraphSharingLifecycleWorker] = [:]
     var ledgerListeners: [String: Task<Void, Never>] = [:]
     private var transportGraphs = Set<GraphID>()
+    var accountAuthorities: [String: GraphAccountAuthority] = [:]
+    var accountClaims: [GraphID: GraphCloudSessionIdentity] = [:]
+    var accountControls: [GraphID: StoreAccountControl] = [:]
+    var accountRevision: UInt64 = 1
+    var accountRefreshTasks: [String: Task<Void, Never>] = [:]
+    var accountAutomaticActivity: [String: Bool] = [:]
+    var accountAutomaticClocks: [String: GraphAutomaticClock] = [:]
     private let attachmentRefresh = GraphCloudAttachmentRefresh<Void>()
     private let attachmentFetch = GraphCloudAttachmentRefresh<Set<GraphID>>()
     private var automatic: [String: GraphAutomaticSynchronizer] = [:]
@@ -69,11 +78,43 @@ package actor GraphContextManager {
         try Task.checkCancellation()
         let key = configuration.namespace
         guard automaticClosing[key] == nil else { throw GraphCloudError.stopping }
+        if let existing = cloudSessions[key], existing.configuration != configuration { throw GraphCloudError.ownershipConflict }
+        if let pending = accountOpenings[key], pending.configuration != configuration { throw GraphCloudError.ownershipConflict }
+        if accountOpenings[key] == nil {
+            accountOpenings[key] = AccountOpening(id: UUID(), configuration: configuration, task: Task {
+                try await self.verifyAccountForStart(configuration, adapter: adapter, disk: disk)
+            })
+        }
+        guard accountOpenings[key]?.stopping == false else { throw GraphCloudError.stopping }
+        accountOpenings[key]!.waiters += 1
+        let accountOpening = accountOpenings[key]!
+        defer {
+            if accountOpenings[key]?.id == accountOpening.id {
+                accountOpenings[key]!.waiters -= 1
+                if accountOpenings[key]!.waiters == 0 { accountOpenings.removeValue(forKey: key) }
+            }
+        }
+        let verification = try await accountOpening.task.value
+        guard automaticClosing[key] == nil, accountOpenings[key]?.stopping == false else { throw GraphCloudError.stopping }
+        let restoreAutomatic = accountAutomaticActivity[key] ?? false
+        if let existing = cloudSessions[key]?.session {
+            let status = await existing.status()
+            if status.failure == .accountChanged || status.failure == .accountUnavailable {
+                guard await existing.retainedIdentity().account == verification.account else { throw GraphCloudError.accountChanged }
+                try await stopCloudSession(configuration, accountRecovery: true)
+            }
+        }
         if let existing = cloudSessions[key] {
             guard existing.configuration == configuration else { throw GraphCloudError.ownershipConflict }
         } else {
-            let task = Task.detached { try await GraphCloudSession.open(configuration, adapter: adapter, disk: disk) }
-            cloudSessions[key] = CloudOpening(configuration: configuration, task: task)
+            let generation = UUID()
+            let signal: @Sendable (GraphCloudSessionAccountSignal) async -> Void = { [weak self] signal in
+                await self?.sessionAccountSignal(signal, namespace: key, generation: generation)
+            }
+            let task = Task.detached {
+                try await GraphCloudSession.open(configuration, adapter: adapter, disk: disk, verifiedAccount: verification.account, accountSignal: signal)
+            }
+            cloudSessions[key] = CloudOpening(id: generation, configuration: configuration, task: task)
         }
         let opening = cloudSessions[key]!
         let session: GraphCloudSession
@@ -84,10 +125,21 @@ package actor GraphContextManager {
         }
         if cloudSessions[key]?.id == opening.id { cloudSessions[key]?.session = session }
         let status = try await session.startStatus()
+        guard await session.retainedIdentity().account == verification.account else { throw GraphCloudError.accountChanged }
+        try await finishAccountVerification(verification, configuration: configuration)
+        for route in await session.retainedBindings() {
+            if let entry = entries[route.graphID], entry.ready, entry.closing == nil {
+                try await claimCloudAccount(session.retainedIdentity(), for: route.graphID, owner: entry.opening.value)
+            }
+        }
         for id in Array(localV1Bootstraps.keys) {
             guard !(await session.containsBinding(for: id)) else { throw GraphStoreMigrationError.busy }
         }
         try await restoreSharingRegistrations(configuration: configuration)
+        if restoreAutomatic {
+            try await setAutomaticCloudSynchronizationActive(true, configuration: configuration,
+                clock: accountAutomaticClocks[key] ?? .live)
+        }
         return status
     }
 
@@ -134,6 +186,7 @@ package actor GraphContextManager {
             } else if activation != nil { throw GraphCloudActivationError.recoveryRequired }
         }
         guard !activatingCloudGraphs.contains(graphID) else { throw GraphCloudActivationError.busy }
+        try await claimCloudAccount(session.identity(), for: graphID, owner: owner)
         try await session.bind(route)
         automaticChanged()
     }
@@ -176,6 +229,7 @@ package actor GraphContextManager {
         guard invitation.container == identity.container, invitation.environment == identity.environment,
               invitation.recipient == identity.account else { throw GraphCloudSharingError.invalidInvitation }
         let binding = GraphCloudBinding(zone: invitation.zone, graphID: graphID)
+        if let entry = entries[graphID] { try await claimCloudAccount(identity, for: graphID, owner: entry.opening.value) }
         let routes = try await session.routes(in: .private) + session.routes(in: .shared)
         guard !routes.contains(where: { ($0.graphID == graphID || $0.zone == binding.zone) && $0 != binding }) else { throw GraphCloudError.ownershipConflict }
         guard let location = locations[graphID], entries[graphID] != nil, entries[graphID]?.closing == nil else { throw GraphStoreError.missingGraph }
@@ -228,6 +282,22 @@ package actor GraphContextManager {
         await (try cloud(configuration)).binding(for: zone)
     }
     package func stopCloudSession(_ configuration: GraphCloudConfiguration) async throws {
+        try await stopCloudSession(configuration, accountRecovery: false)
+    }
+    func stopCloudSession(_ configuration: GraphCloudConfiguration, accountRecovery: Bool) async throws {
+        if !accountRecovery {
+            accountAuthorities[configuration.namespace]?.wantsCloud = false
+            accountAutomaticActivity[configuration.namespace] = false
+        }
+        if let preflight = accountOpenings[configuration.namespace], cloudSessions[configuration.namespace] == nil {
+            automaticClosing[configuration.namespace] = preflight.id
+            accountOpenings[configuration.namespace]?.stopping = true
+            defer {
+                if automaticClosing[configuration.namespace] == preflight.id { automaticClosing.removeValue(forKey: configuration.namespace) }
+            }
+            _ = try await preflight.task.value
+            return
+        }
         guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { return }
         automaticClosing[configuration.namespace] = opening.id
         let session: GraphCloudSession
@@ -426,6 +496,7 @@ package actor GraphContextManager {
         guard let location = locations[id.graphID] else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: id.graphID, at: location.url)
         do {
+            let accountCheck = try await graph.accountCheck()
             var content = try await graph.read { try $0.attachment(id) }
             if content == nil {
                 guard canSynchronize(id.graphID) else { throw GraphCloudError.graphPaused }
@@ -444,7 +515,7 @@ package actor GraphContextManager {
                 content = try await graph.read { try $0.attachment(id) }
             }
             guard let content else { throw GraphStoreError.missingNode }
-            try await GraphAttachmentIO.export(content.data, to: destination)
+            try await GraphAttachmentIO.export(content.data, to: destination, check: accountCheck)
             try await graph.close()
             return content.metadata
         } catch {
@@ -678,6 +749,8 @@ package actor GraphContextManager {
     }
 
     package func setAutomaticCloudSynchronizationActive(_ active: Bool, configuration: GraphCloudConfiguration) async throws {
+        accountAutomaticActivity[configuration.namespace] = active
+        if active { try await refreshCloudAccount(configuration) }
         try await setAutomaticCloudSynchronizationActive(active, configuration: configuration, clock: .live)
     }
     func setAutomaticCloudSynchronizationActive(_ active: Bool, configuration: GraphCloudConfiguration, clock: GraphAutomaticClock) async throws {
@@ -685,6 +758,8 @@ package actor GraphContextManager {
         guard automaticClosing[configuration.namespace] == nil else { throw GraphCloudError.stopping }
         let revision = (automaticActivityRevision[configuration.namespace] ?? 0) + 1
         automaticActivityRevision[configuration.namespace] = revision
+        accountAutomaticActivity[configuration.namespace] = active
+        accountAutomaticClocks[configuration.namespace] = clock
         let scheduler = try await automaticScheduler(configuration, clock: clock)
         await scheduler.setActive(active, revision: revision)
         await setSharingLifecycleActive(active, revision: revision, configuration: configuration, clock: clock)
@@ -771,6 +846,7 @@ package actor GraphContextManager {
 
     /// Checks only sessions explicitly started by the caller; bootstrap never starts one.
     func requireUnboundBootstrap(_ id: GraphID) async throws {
+        guard accountOpenings.isEmpty else { throw GraphStoreMigrationError.busy }
         let sessions = Array(cloudSessions.values), tokens = Set(cloudSessions.values.map(\.id))
         for opening in sessions {
             // Do not make local conversion wait for an account/network startup.
@@ -837,11 +913,12 @@ package actor GraphContextManager {
                 do {
                     // A successful shared creation commit must return its result even if cancelled.
                     if !creating { try Task.checkCancellation() }
+                    let accountAllowed = creating ? true : try await restoreAccountOnOpen(id, owner: owner)
                     let graph = try await owner.lease { try await self.release(id, generation: generation, token: token) }
                     locations[id] = GraphLocation(key: entry.key, url: entry.url)
                     // A converted local graph must not acquire an existing cloud participation
                     // as an opening side effect. Bootstrap verifies that the ID is unbound.
-                    if bootstrapPermit == nil { try await restoreSharingOnOpen(id, owner: owner) }
+                    if bootstrapPermit == nil, accountAllowed { try await restoreSharingOnOpen(id, owner: owner) }
                     automaticChanged()
                     return graph
                 } catch {

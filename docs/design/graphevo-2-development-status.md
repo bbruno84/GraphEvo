@@ -1,6 +1,6 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-03. This is the single entry point for **integrated work,
+Updated: 2026-11-04. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
@@ -34,6 +34,19 @@ acceptance. It supersedes pending-work summaries in historical sections below;
 no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
+
+The account-isolation increment is under local validation on
+`codex/v2-cloud-account-isolation`, based on integrated #146. The
+[contract](graphevo-2-cloud-account-isolation.md) selects retained separate data,
+consumer notification, blocked access after identity loss and verified
+same-account recovery. Merge and local deletion policies are backlog work.
+Local review and validation cover 1,006 macOS functions before the final startup
+corrections, 1,003 passed iOS functions with one known skip, both Swift 6 consumers
+and focused rechecks of the final account/startup changes. Remote CI and
+integration are pending; physical account changes and independent reader
+acceptance remain open. This does not replace the next public coordinated
+host integration milestone.
+
 
 The third controlled-store increment integrates through
 [PR #144](https://github.com/bbruno84/GraphEvo/pull/144), directly from

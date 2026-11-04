@@ -4,56 +4,61 @@ import GraphEvoModel
 
 @available(iOS 17, macOS 14, *)
 extension GraphCloudAdapter {
-    static let live = GraphCloudAdapter(sharing: .live, ledger: .live, activation: .live, account: { identifier in
-        guard Bundle.main.bundleURL.pathExtension != "appex" else { throw GraphCloudError.invalidConfiguration }
-        let container = CKContainer(identifier: identifier)
-        guard try await container.accountStatus() == .available else { throw GraphCloudError.accountUnavailable }
-        return try await container.userRecordID().recordName
-    }, make: { config, scope, state, receive in
-        let container = CKContainer(identifier: config.containerIdentifier)
-        let database = scope == .private ? container.privateCloudDatabase : container.sharedCloudDatabase
-        let serialization: CKSyncEngine.State.Serialization?
-        do { serialization = try state.map { try JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0) } }
-        catch { throw GraphCloudError.invalidState }
-        let delegate = GraphCloudNativeDelegate(scope: scope, fetchRecord: { try await database.record(for: $0) }, receive: receive)
-        var configuration = CKSyncEngine.Configuration(database: database, stateSerialization: serialization, delegate: delegate)
-        configuration.automaticallySync = false
-        let engine = CKSyncEngine(configuration)
-        return GraphCloudDriver(fetch: { zones in
-            var options = CKSyncEngine.FetchChangesOptions()
-            options.scope = .zoneIDs(zones.map { CKRecordZone.ID(zoneName: $0.name, ownerName: $0.owner) })
-            try await engine.fetchChanges(options)
-        }, cancel: {
-            await engine.cancelOperations()
-            // Retain the delegate independently of the framework's delegate reference semantics.
-            _ = delegate
-        }, send: { batch in
-            try await delegate.outbox.begin(batch)
-            do {
-                let zoneID = CKRecordZone.ID(zoneName: batch.zone.name, ownerName: batch.zone.owner)
-                if scope == .private { engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zoneID))]) }
-                let route = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)
-                let changes = try batch.items.map { item -> CKSyncEngine.PendingRecordZoneChange in
-                    let id = try GraphCloudNodeCodec.recordID(for: item.change.id, binding: route)
-                    return item.change.operation == .save ? .saveRecord(id) : .deleteRecord(id)
+    static let live: GraphCloudAdapter = {
+        var adapter = GraphCloudAdapter(sharing: .live, ledger: .live, activation: .live, account: { identifier in
+            guard Bundle.main.bundleURL.pathExtension != "appex" else { throw GraphCloudError.invalidConfiguration }
+            let container = CKContainer(identifier: identifier)
+            guard try await container.accountStatus() == .available else { throw GraphCloudError.accountUnavailable }
+            return try await container.userRecordID().recordName
+        }, make: { config, scope, state, receive in
+            let container = CKContainer(identifier: config.containerIdentifier)
+            let database = scope == .private ? container.privateCloudDatabase : container.sharedCloudDatabase
+            let serialization: CKSyncEngine.State.Serialization?
+            do { serialization = try state.map { try JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0) } }
+            catch { throw GraphCloudError.invalidState }
+            let delegate = GraphCloudNativeDelegate(scope: scope, fetchRecord: { try await database.record(for: $0) }, receive: receive)
+            var configuration = CKSyncEngine.Configuration(database: database, stateSerialization: serialization, delegate: delegate)
+            configuration.automaticallySync = false
+            let engine = CKSyncEngine(configuration)
+            return GraphCloudDriver(fetch: { zones in
+                var options = CKSyncEngine.FetchChangesOptions()
+                options.scope = .zoneIDs(zones.map { CKRecordZone.ID(zoneName: $0.name, ownerName: $0.owner) })
+                try await engine.fetchChanges(options)
+            }, cancel: {
+                await engine.cancelOperations()
+                // Retain the delegate independently of the framework's delegate reference semantics.
+                _ = delegate
+            }, send: { batch in
+                try await delegate.outbox.begin(batch)
+                do {
+                    let zoneID = CKRecordZone.ID(zoneName: batch.zone.name, ownerName: batch.zone.owner)
+                    if scope == .private { engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zoneID))]) }
+                    let route = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)
+                    let changes = try batch.items.map { item -> CKSyncEngine.PendingRecordZoneChange in
+                        let id = try GraphCloudNodeCodec.recordID(for: item.change.id, binding: route)
+                        return item.change.operation == .save ? .saveRecord(id) : .deleteRecord(id)
+                    }
+                    engine.state.add(pendingRecordZoneChanges: changes)
+                    try await engine.sendChanges(.init(scope: .zoneIDs([zoneID])))
+                    try await delegate.outbox.finish()
+                } catch {
+                    try? await delegate.outbox.finish()
+                    throw error
                 }
-                engine.state.add(pendingRecordZoneChanges: changes)
-                try await engine.sendChanges(.init(scope: .zoneIDs([zoneID])))
-                try await delegate.outbox.finish()
-            } catch {
-                try? await delegate.outbox.finish()
-                throw error
-            }
-        }, forget: { zone in
-            let id = CKRecordZone.ID(zoneName: zone.name, ownerName: zone.owner)
-            engine.state.remove(pendingRecordZoneChanges: try engine.state.pendingRecordZoneChanges.filter { change in
-                switch change { case .saveRecord(let record), .deleteRecord(let record): return record.zoneID == id; @unknown default: throw GraphCloudError.invalidState }
-            })
-            engine.state.remove(pendingDatabaseChanges: try engine.state.pendingDatabaseChanges.filter { change in
-                switch change { case .saveZone(let zone): return zone.zoneID == id; case .deleteZone(let zone): return zone == id; @unknown default: throw GraphCloudError.invalidState }
-            })
+            }, forget: { zone in
+                let id = CKRecordZone.ID(zoneName: zone.name, ownerName: zone.owner)
+                engine.state.remove(pendingRecordZoneChanges: try engine.state.pendingRecordZoneChanges.filter { change in
+                    switch change { case .saveRecord(let record), .deleteRecord(let record): return record.zoneID == id; @unknown default: throw GraphCloudError.invalidState }
+                })
+                engine.state.remove(pendingDatabaseChanges: try engine.state.pendingDatabaseChanges.filter { change in
+                    switch change { case .saveZone(let zone): return zone.zoneID == id; case .deleteZone(let zone): return zone == id; @unknown default: throw GraphCloudError.invalidState }
+                })
+            }, invalidateAccount: { delegate.outbox.accountFence.invalidate() })
         })
-    })
+        adapter.accountAvailability = { try await GraphCloudAccountAvailability.live($0) }
+        adapter.observeAccount = { GraphCloudAccountObservation(changed: $0) }
+        return adapter
+    }()
 }
 
 /// Only detached bytes/IDs cross into the session. No graph writes happen in this delegate.
@@ -77,9 +82,9 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
             case .accountChange(let update):
                 switch update.changeType {
                 case .signIn(let user): await receive(.account(user.recordName))
-                case .signOut: await receive(.account(nil))
-                case .switchAccounts: await receive(.failure(.accountChanged))
-                @unknown default: await receive(.failure(.accountChanged))
+                case .signOut: outbox.accountFence.invalidate(); await receive(.account(nil))
+                case .switchAccounts(_, let user): outbox.accountFence.invalidate(); await receive(.account(user.recordName))
+                @unknown default: outbox.accountFence.invalidate(); await receive(.failure(.accountChanged))
                 }
             case .fetchedDatabaseChanges(let update):
                 var changes = update.modifications.map { GraphCloudIncoming(kind: .zoneChanged, zone: zone($0.zoneID)) }
@@ -151,7 +156,7 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
     }
     func nextRecordZoneChangeBatch(_ context: CKSyncEngine.SendChangesContext, syncEngine: CKSyncEngine) async -> CKSyncEngine.RecordZoneChangeBatch? {
         do { return try await outbox.next(context.options) }
-        catch { await receive(.failure(.invalidState)); return nil }
+        catch { await receive(.failure(error as? GraphCloudError ?? .invalidState)); return nil }
     }
 }
 

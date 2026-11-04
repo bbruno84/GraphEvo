@@ -31,6 +31,18 @@ actor StoreResources {
     private var legacyMirroring: LegacyStoreMirroring?
     private var changeObservers: [NSObjectProtocol] = []
     nonisolated let invalidations = StoreInvalidationHub()
+    nonisolated let accountAccess = StoreAccountAccess()
+    private var accountParent: StoreAccountControl?
+    private var cancelAccountParent: (@Sendable () -> Void)?
+    var effectiveAccountAccess: StoreAccountAccess { accountParent?.access ?? accountAccess }
+
+    func inheritAccount(_ parent: StoreAccountControl) throws {
+        guard !closing, accountParent == nil else { throw StoreRuntimeError.closedHandle }
+        _ = try parent.access.permit()
+        accountParent = parent
+        let hub = invalidations
+        cancelAccountParent = parent.access.onIsolation { [weak hub] in hub?.isolateAccount() }
+    }
     private var writerBusy = false
     private var writers: [(UUID, CheckedContinuation<Void, any Error>)] = []
     private var closing = false
@@ -240,10 +252,11 @@ actor StoreResources {
     }
 
     /// Trusted adapter boundary: bodies return values and must never save or escape contexts.
-    func read<Value: Sendable>(control: Bool = false,
+    func read<Value: Sendable>(control: Bool = false, accountControl: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
+        let accountPermit = try accountControl ? nil : effectiveAccountAccess.permit()
         try admit(control: control)
         defer { finish() }
         let cancellation = OperationCancellation()
@@ -258,14 +271,14 @@ actor StoreResources {
             defer { if memoryRequest != nil { releaseWriter() } }
             return try await container.performBackgroundTask { @Sendable context in
                 Self.prepare(context, configuration: configuration, container: container)
-                let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
+                let check: StoreNativeContext.CancellationCheck = { try cancellation.check(); try accountPermit?.check() }
                 context.userInfo[StoreNativeContext.cancellationKey] = check
                 defer { context.rollback(); context.reset() }
-                try cancellation.check()
+                try check()
                 if sqlite && !configuration.legacyReadOnly { try context.setQueryGenerationFrom(.current) }
                 let value = try body(context)
                 guard !context.hasChanges else { throw StoreRuntimeError.mutationInReadScope }
-                try cancellation.check()
+                try check()
                 return value
             }
         } onCancel: {
@@ -275,12 +288,13 @@ actor StoreResources {
     }
 
     /// FIFO among admitted local writers; native save is the cancellation boundary.
-    func transaction<Value: Sendable>(control: Bool = false,
+    func transaction<Value: Sendable>(control: Bool = false, accountControl: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         try Self.checkProcessReentry(resolved)
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
         guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
+        let accountPermit = try accountControl ? nil : effectiveAccountAccess.permit()
         try admit(write: true, control: control)
         defer { finish(write: true) }
         let cancellation = OperationCancellation()
@@ -296,15 +310,15 @@ actor StoreResources {
                 try await container.performBackgroundTask { @Sendable context in
                     Self.prepare(context, configuration: configuration, container: container)
                     context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
-                    let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
+                    let check: StoreNativeContext.CancellationCheck = { try cancellation.check(); try accountPermit?.check() }
                     context.userInfo[StoreNativeContext.cancellationKey] = check
                     defer {
                         StoreNativeContext.clearMutationSession(in: context)
                         context.rollback(); context.reset()
                     }
-                    try cancellation.check()
+                    try check()
                     let value = try body(context)
-                    try cancellation.check()
+                    try check()
                     if context.hasChanges { try context.save() }
                     // A completed save is success even if cancellation arrives during save.
                     hooks.afterCommit?()
@@ -330,6 +344,7 @@ actor StoreResources {
               resolved.configuration.cloudKitContainerIdentifier == nil, resolved.configuration.sharedStoreURL == nil else {
             throw StoreRuntimeError.invalidConfiguration("File preparation requires a plain writable SQLite store.")
         }
+        let accountPermit = try effectiveAccountAccess.permit()
         try admit(write: true, control: true)
         defer { self.finish(write: true) }
         let cancellation = OperationCancellation(), request = UUID()
@@ -342,7 +357,7 @@ actor StoreResources {
             let configuration = resolved.configuration, container = container, hooks = hooks
             return try await StoreProcessLock.$held.withValue(held) {
                 let context = container.newBackgroundContext()
-                let check: StoreNativeContext.CancellationCheck = { try cancellation.check() }
+                let check: StoreNativeContext.CancellationCheck = { try cancellation.check(); try accountPermit.check() }
                 do {
                     let snapshot = try await context.perform {
                         Self.prepare(context, configuration: configuration, container: container)
@@ -389,6 +404,7 @@ actor StoreResources {
     ) async throws -> Value {
         try Self.checkProcessReentry(resolved)
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
+        let accountPermit = try effectiveAccountAccess.permit()
         try admit(write: true)
         defer { finish(write: true) }
         let request = UUID(), cancellation = OperationCancellation()
@@ -397,11 +413,15 @@ actor StoreResources {
             defer { releaseWriter() }
             let processWriter = try await acquireOwnedWriter()
             defer { processWriter?.release() }
-            try cancellation.check()
+            try cancellation.check(); try accountPermit.check()
             // Native APIs own their cancellation semantics once started. Await their real outcome.
             defer { invalidations.publish(.nativeOperation) }
             let held = processWriter == nil ? StoreProcessLock.held : StoreProcessLock.held.union([resolved.key])
-            return try await StoreProcessLock.$held.withValue(held) { try await body(container) }
+            return try await StoreProcessLock.$held.withValue(held) {
+                let result = try await body(container)
+                try accountPermit.check()
+                return result
+            }
         } onCancel: {
             cancellation.cancel()
             Task { await self.cancelWriter(request) }
@@ -549,6 +569,7 @@ actor StoreResources {
         guard resolved.configuration.workspaceID != nil else { throw StoreRuntimeError.invalidConfiguration("Only a workspace can use detached workspace cleanup.") }
         closing = true; invalidations.finish()
         if admitted > 0 { await withCheckedContinuation { drain = $0 } }
+        accountAccess.finish(); cancelAccountParent?(); cancelAccountParent = nil
         let processWriter = try await acquireOwnedWriter(cancellable: false)
         defer { processWriter?.release() }
         try await requireSoleProcessOwner()
@@ -586,6 +607,7 @@ actor StoreResources {
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
         try Self.checkProcessReentry(resolved)
         guard dataAvailable, reservations[reservation] == .all, admitted == 0 else { throw StoreRuntimeError.resourceReserved }
+        let accountPermit = try effectiveAccountAccess.permit()
         try admit(write: true, reservation: reservation)
         defer { finish(write: true) }
         let cancellation = OperationCancellation(), container = container, configuration = resolved.configuration, hooks = hooks
@@ -595,14 +617,14 @@ actor StoreResources {
             return try await container.performBackgroundTask { @Sendable context in
                 Self.prepare(context, configuration: configuration, container: container)
                 context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
-                context.userInfo[StoreNativeContext.cancellationKey] = { @Sendable in try cancellation.check() } as StoreNativeContext.CancellationCheck
+                context.userInfo[StoreNativeContext.cancellationKey] = { @Sendable in try cancellation.check(); try accountPermit.check() } as StoreNativeContext.CancellationCheck
                 defer {
                     StoreNativeContext.clearMutationSession(in: context)
                     context.rollback(); context.reset()
                 }
-                try cancellation.check()
+                try cancellation.check(); try accountPermit.check()
                 let result = try body(context)
-                try cancellation.check()
+                try cancellation.check(); try accountPermit.check()
                 if context.hasChanges { try context.save(); hooks.afterCommit?() }
                 return result
             }
@@ -612,6 +634,7 @@ actor StoreResources {
     func copyStore(to destination: URL, reservation: UUID) async throws {
         try Self.checkProcessReentry(resolved)
         guard dataAvailable else { throw StoreRuntimeError.dataUnavailable }
+        let accountPermit = try effectiveAccountAccess.permit()
         guard let source = resolved.url,
               (resolved.configuration.exclusiveGraphID != nil || resolved.configuration.access == .readOnly),
               resolved.configuration.cloudKitContainerIdentifier == nil, resolved.configuration.sharedStoreURL == nil,
@@ -637,10 +660,12 @@ actor StoreResources {
         guard !FileManager.default.fileExists(atPath: destination.path) else { throw StoreRuntimeError.configurationConflict(destination) }
         let container = container, readOnly = resolved.configuration.access == .readOnly
         try await container.performBackgroundTask { _ in
+            try accountPermit.check()
             let copier = NSPersistentStoreCoordinator(managedObjectModel: container.managedObjectModel)
             try copier.replacePersistentStore(at: destination, destinationOptions: nil,
                 withPersistentStoreFrom: source, sourceOptions: readOnly ? [NSReadOnlyPersistentStoreOption: true] : nil, ofType: NSSQLiteStoreType)
         }
+        try accountPermit.check()
     }
 
     private func acquireWriter(_ request: UUID, cancellation: OperationCancellation) async throws {
@@ -671,10 +696,16 @@ actor StoreResources {
         if admitted > 0 {
             await withCheckedContinuation { drain = $0 }
         }
+        accountAccess.finish(); cancelAccountParent?(); cancelAccountParent = nil
         let processWriter = try await acquireOwnedWriter(cancellable: false)
         defer { processWriter?.release() }
         do { try await detach() }
         catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
+    }
+
+    func setAccountStatus(_ value: StoreAccountStatus, revision: UInt64) throws {
+        guard !closing else { throw StoreRuntimeError.closedHandle }
+        if accountAccess.update(value, revision: revision) { invalidations.isolateAccount() }
     }
 
     func setDataAvailable(_ value: Bool, terminal: Bool = false) throws {
@@ -695,6 +726,7 @@ actor StoreResources {
         }
         closing = true; invalidations.finish()
         if admitted > 0 { await withCheckedContinuation { drain = $0 } }
+        accountAccess.finish(); cancelAccountParent?(); cancelAccountParent = nil
         let processWriter = try await acquireOwnedWriter(cancellable: false)
         defer { processWriter?.release() }
         try await requireSoleProcessOwner()

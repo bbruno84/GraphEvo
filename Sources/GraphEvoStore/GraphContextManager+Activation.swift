@@ -55,6 +55,7 @@ extension GraphContextManager {
         return try await withActivationOwner(id) { manager, owner in
             let session = try await manager.cloud(configuration)
             let binding = GraphCloudTransportBinding(identity: try await session.identity(), route: .init(zone: zone, graphID: id))
+            try await manager.claimCloudAccount(binding.identity, for: id, owner: owner)
             if await session.containsBinding(for: id), await session.activationRoute(for: id) == nil { throw GraphCloudActivationError.invalidRequest }
             if let prior = try await owner.activationDocument() {
                 guard prior.authority.activationID == activationID, prior.binding == binding,
@@ -187,6 +188,7 @@ extension GraphContextManager {
         }
         let graph = try await openActivationReplica(id: id, at: url, permit: token, creating: !FileManager.default.fileExists(atPath: url.path))
         let owner = try await entries[id]!.opening.value
+        try await claimCloudAccount(identity, for: id, owner: owner)
         var document: GraphCloudActivationDocument?
         do {
             if let prior = try await owner.activationDocument() {

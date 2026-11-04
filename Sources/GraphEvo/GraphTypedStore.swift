@@ -2,6 +2,7 @@ import Foundation
 import GraphEvoRuntime
 @_exported public import GraphEvoStore
 
+public typealias GraphCloudAccountState = GraphEvoStore.GraphCloudAccountState
 public typealias GraphStore = GraphEvoStore.GraphStore
 public typealias GraphReadScope = GraphEvoStore.GraphReadScope
 public typealias GraphMutation = GraphEvoStore.GraphMutation

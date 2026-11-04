@@ -17,6 +17,7 @@ package actor StoreHandle {
     private let token: UUID
     private var closeTask: Task<Void, any Error>?
     private var changeHub: StoreInvalidationHub?
+    private var accountHub: StoreAccountAccess?
 
     fileprivate init(registry: StoreRegistry, key: StoreKey, generation: UUID, token: UUID) {
         self.registry = registry
@@ -26,7 +27,7 @@ package actor StoreHandle {
     }
 
     deinit {
-        changeHub?.finish(owner: token)
+        changeHub?.finish(owner: token); accountHub?.finish(owner: token)
         let registry = registry, key = key, generation = generation, token = token
         Task { try? await registry.release(key, generation: generation, token: token) }
     }
@@ -72,7 +73,7 @@ package actor StoreHandle {
 
     package func close() async throws {
         if let closeTask { return try await closeTask.value }
-        changeHub?.finish(owner: token)
+        changeHub?.finish(owner: token); accountHub?.finish(owner: token)
         let registry = registry, key = key, generation = generation, token = token
         let task = Task { try await registry.release(key, generation: generation, token: token) }
         closeTask = task
@@ -97,6 +98,42 @@ package actor StoreHandle {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         return try await registry.preparedControlTransaction(key, generation: generation, token: token,
             prepare: prepare, materialize: materialize, finish: finish)
+    }
+    package func inheritAccount(_ control: StoreAccountControl) async throws {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        try await registry.inheritAccount(key, generation: generation, token: token, control: control)
+    }
+    package func accountControl() async throws -> StoreAccountControl {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        let access = try await registry.accountAccess(key, generation: generation, token: token)
+        let hub = try await registry.invalidationHub(key, generation: generation, token: token)
+        return StoreAccountControl(access: access, invalidations: hub)
+    }
+    package func accountPermit() async throws -> StoreAccountPermit {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.accountAccess(key, generation: generation, token: token).permit()
+    }
+    package func accountStatus() async throws -> StoreAccountStatus {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.accountAccess(key, generation: generation, token: token).status
+    }
+    package func accountFeed() async throws -> StoreAccountFeed {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        let hub = try await registry.accountAccess(key, generation: generation, token: token)
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        accountHub = hub
+        return hub.subscribe(owner: token)
+    }
+    package func setAccountStatus(_ value: StoreAccountStatus, revision: UInt64) async throws {
+        try await registry.setAccountStatus(key, generation: generation, token: token, value: value, revision: revision)
+    }
+    package func accountControlRead<Value: Sendable>(_ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.read(key, generation: generation, token: token, control: true, accountControl: true, body)
+    }
+    package func accountControlTransaction<Value: Sendable>(_ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.transaction(key, generation: generation, token: token, control: true, accountControl: true, body)
     }
     package func setDataAvailable(_ value: Bool, terminal: Bool = false) async throws {
         try await registry.setDataAvailable(key, generation: generation, token: token, value: value, terminal: terminal)
@@ -297,21 +334,21 @@ package actor StoreRegistry {
     }
 
     fileprivate func read<Value: Sendable>(
-        _ key: StoreKey, generation: UUID, token: UUID, control: Bool = false,
+        _ key: StoreKey, generation: UUID, token: UUID, control: Bool = false, accountControl: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
-        return try await resources.read(control: control, body)
+        return try await resources.read(control: control, accountControl: accountControl, body)
     }
 
     fileprivate func transaction<Value: Sendable>(
-        _ key: StoreKey, generation: UUID, token: UUID, control: Bool = false,
+        _ key: StoreKey, generation: UUID, token: UUID, control: Bool = false, accountControl: Bool = false,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
-        return try await resources.transaction(control: control, body)
+        return try await resources.transaction(control: control, accountControl: accountControl, body)
     }
 
     fileprivate func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
@@ -325,6 +362,20 @@ package actor StoreRegistry {
         return try await resources.preparedControlTransaction(prepare: prepare, materialize: materialize, finish: finish)
     }
 
+    fileprivate func inheritAccount(_ key: StoreKey, generation: UUID, token: UUID, control: StoreAccountControl) async throws {
+        let entry = try entry(for: key, generation: generation, token: token)
+        try await entry.opening.value.inheritAccount(control)
+    }
+    fileprivate func accountAccess(_ key: StoreKey, generation: UUID, token: UUID) async throws -> StoreAccountAccess {
+        let entry = try entry(for: key, generation: generation, token: token)
+        let resources = try await entry.opening.value
+        _ = try self.entry(for: key, generation: generation, token: token)
+        return await resources.effectiveAccountAccess
+    }
+    fileprivate func setAccountStatus(_ key: StoreKey, generation: UUID, token: UUID, value: StoreAccountStatus, revision: UInt64) async throws {
+        let entry = try entry(for: key, generation: generation, token: token)
+        try await entry.opening.value.setAccountStatus(value, revision: revision)
+    }
     fileprivate func setDataAvailable(_ key: StoreKey, generation: UUID, token: UUID, value: Bool, terminal: Bool) async throws {
         let entry = try entry(for: key, generation: generation, token: token)
         try await entry.opening.value.setDataAvailable(value, terminal: terminal)

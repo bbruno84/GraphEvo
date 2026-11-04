@@ -12,11 +12,14 @@ struct GraphCloudDriver: Sendable {
     let cancel: @Sendable () async throws -> Void
     let forget: (@Sendable (GraphCloudZone) async throws -> Void)?
     let send: (@Sendable (GraphCloudOutgoingBatch) async throws -> Void)?
+    let invalidateAccount: (@Sendable () -> Void)?
     init(fetch: @escaping @Sendable ([GraphCloudZone]) async throws -> Void,
          cancel: @escaping @Sendable () async throws -> Void,
          send: (@Sendable (GraphCloudOutgoingBatch) async throws -> Void)? = nil,
-         forget: (@Sendable (GraphCloudZone) async throws -> Void)? = nil) {
+         forget: (@Sendable (GraphCloudZone) async throws -> Void)? = nil,
+         invalidateAccount: (@Sendable () -> Void)? = nil) {
         self.fetch = fetch; self.cancel = cancel; self.send = send; self.forget = forget
+        self.invalidateAccount = invalidateAccount
     }
 }
 
@@ -32,6 +35,8 @@ struct GraphCloudAdapter: Sendable {
     var activation: GraphCloudActivationService? = nil
     let account: @Sendable (String) async throws -> String
     let make: @Sendable (GraphCloudConfiguration, GraphCloudScope, Data?, @escaping @Sendable (GraphCloudEvent) async -> Void) throws -> GraphCloudDriver
+    var accountAvailability: (@Sendable (String) async throws -> GraphCloudAccountAvailability)? = nil
+    var observeAccount: (@Sendable (@escaping @Sendable () -> Void) -> GraphCloudAccountObservation)? = nil
 }
 
 struct GraphCloudQuarantine: Error {
@@ -45,6 +50,7 @@ actor GraphCloudSession {
     private let owner: UUID
     private let adapter: GraphCloudAdapter
     private let disk: GraphCloudDisk
+    private let accountSignal: @Sendable (GraphCloudSessionAccountSignal) async -> Void
     private let url: URL
     private var directoryLease: GraphCloudDirectoryLease?
     private var document: GraphCloudDocument
@@ -66,19 +72,31 @@ actor GraphCloudSession {
     private var drains: [CheckedContinuation<Void, Never>] = []
 
     private init(configuration: GraphCloudConfiguration, owner: UUID, adapter: GraphCloudAdapter,
-                 disk: GraphCloudDisk, lease: GraphCloudDirectoryLease, document: GraphCloudDocument) {
+                 disk: GraphCloudDisk, lease: GraphCloudDirectoryLease, document: GraphCloudDocument,
+                 accountSignal: @escaping @Sendable (GraphCloudSessionAccountSignal) async -> Void) {
         self.configuration = configuration; self.owner = owner; self.adapter = adapter; self.disk = disk
         self.url = configuration.directory.appendingPathComponent("session.json")
         self.directoryLease = lease; self.document = document
+        self.accountSignal = accountSignal
     }
 
-    static func open(_ config: GraphCloudConfiguration, adapter: GraphCloudAdapter, disk: GraphCloudDisk = .live) async throws -> GraphCloudSession {
+    static func open(_ config: GraphCloudConfiguration, adapter: GraphCloudAdapter, disk: GraphCloudDisk = .live, verifiedAccount: String? = nil,
+                     accountSignal: @escaping @Sendable (GraphCloudSessionAccountSignal) async -> Void = { _ in }) async throws -> GraphCloudSession {
         guard !config.containerIdentifier.isEmpty, config.directory.isFileURL,
               config.maximumEvents > 0, config.maximumBytes > 0 else { throw GraphCloudError.invalidConfiguration }
         let owner = UUID()
         try await GraphCloudOwnership.shared.acquire(config.containerIdentifier, owner: owner)
         do {
-            let account = try await adapter.account(config.containerIdentifier)
+            let account: String
+            let availability: GraphCloudAccountAvailability
+            if let verifiedAccount { availability = .available(verifiedAccount) }
+            else { availability = try await adapter.readAccountAvailability(config.containerIdentifier) }
+            switch availability {
+            case .available(let value): account = value
+            case .signedOut: await accountSignal(.signedOut); throw GraphCloudError.accountUnavailable
+            case .restricted: await accountSignal(.restricted); throw GraphCloudError.accountUnavailable
+            case .temporarilyUnavailable: await accountSignal(.temporarilyUnavailable); throw GraphCloudError.accountUnavailable
+            }
             guard !account.isEmpty else { throw GraphCloudError.accountUnavailable }
             let lease = try GraphCloudDirectoryLease(directory: config.directory)
             let url = config.directory.appendingPathComponent("session.json")
@@ -87,8 +105,8 @@ actor GraphCloudSession {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
-                guard doc.format == 8, doc.container == config.containerIdentifier, doc.environment == config.environment,
-                      doc.account == account else { throw GraphCloudError.invalidState }
+                guard doc.format == 8, doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
+                guard doc.account == account else { await accountSignal(.differentAccount); throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
                       Set(doc.inbox.map(\.id)).count == doc.inbox.count,
@@ -158,6 +176,10 @@ actor GraphCloudSession {
                 guard bytes.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 try disk.write(url, bytes)
             }
+            if doc.accountResetRequired == true {
+                doc.states.removeAll(); doc.accountResetRequired = false
+                try disk.write(url, JSONEncoder().encode(doc))
+            }
             let spool = try GraphCloudAssetSpool(root: config.directory.appendingPathComponent("GraphEvoCloudAssets"))
             try await spool.reconcile(retaining: doc.assetReferences)
             for reference in doc.assetReferences {
@@ -165,7 +187,7 @@ actor GraphCloudSession {
                     identity: GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account),
                     binding: reference.binding, recordName: reference.recordName)
             }
-            let session = GraphCloudSession(configuration: config, owner: owner, adapter: adapter, disk: disk, lease: lease, document: doc)
+            let session = GraphCloudSession(configuration: config, owner: owner, adapter: adapter, disk: disk, lease: lease, document: doc, accountSignal: accountSignal)
             // Restoring shared state also restores shared engine ownership, even before a graph reopens.
             do { try await session.start(restoringShared: doc.states[GraphCloudScope.shared.rawValue] != nil || doc.bindings.contains { $0.zone.scope == .shared }) }
             catch {
@@ -301,9 +323,24 @@ actor GraphCloudSession {
         } catch { block(error as? GraphCloudError ?? .persistence); throw error }
     }
 
-    func receive(_ received: GraphCloudEvent, scope: GraphCloudScope, driverGeneration: UUID? = nil) {
+    func receive(_ received: GraphCloudEvent, scope: GraphCloudScope, driverGeneration: UUID? = nil) async {
         if let driverGeneration, driverGenerations[scope] != driverGeneration { return }
         guard !stopped else { return }
+        if case .account(let value) = received {
+            if value != document.account {
+                await isolateAccount(value == nil ? .signedOut : .differentAccount)
+            } else if failure == .accountChanged || failure == .accountUnavailable {
+                await accountSignal(.signedIn)
+            }
+            return
+        }
+        if case .failure(.accountChanged) = received {
+            if failure != .accountChanged { await isolateAccount(.differentAccount) }
+            return
+        }
+        if case .failure(.accountUnavailable) = received {
+            block(.accountUnavailable); await accountSignal(.temporarilyUnavailable); return
+        }
         var event = received
         if case .incoming(let changes) = event {
             if let failure, failure != .inboxLimit { return }
@@ -427,8 +464,24 @@ actor GraphCloudSession {
         if let failure { throw failure }
     }
 
+    private func isolateAccount(_ signal: GraphCloudSessionAccountSignal) async {
+        for driver in drivers.values { driver.invalidateAccount?() }
+        block(.accountChanged)
+        await accountSignal(signal)
+        var next = document
+        next.states.removeAll(); next.accountResetRequired = true
+        do { try publish(next) }
+        catch { failure = .persistence }
+    }
+    func suspendForUnavailableAccount() { block(.accountUnavailable) }
+    func retainedBindings() -> [GraphCloudBinding] { document.bindings }
+    func retainedIdentity() -> GraphCloudSessionIdentity {
+        .init(container: document.container, environment: document.environment, account: document.account)
+    }
+
     private func block(_ error: GraphCloudError) {
-        guard failure == nil || (failure == .inboxLimit && error != .inboxLimit) else { return }
+        guard failure == nil || (failure == .inboxLimit && error != .inboxLimit) ||
+                (failure == .accountUnavailable && error == .accountChanged) else { return }
         failure = error
         if error != .inboxLimit {
             for values in ledgerObservers.values {
@@ -610,6 +663,7 @@ actor GraphCloudSession {
         GraphCloudStatus(scopes: Set(drivers.keys), inboxCount: document.inbox.count, failure: failure, stopped: stopped, outgoingReceiptCount: document.sent.count)
     }
     func inbox(limit: Int) throws -> [GraphCloudInboxEntry] {
+        try check(control: true)
         guard limit > 0 else { throw GraphCloudError.invalidConfiguration }
         return Array(document.inbox.prefix(limit))
     }
@@ -620,14 +674,18 @@ actor GraphCloudSession {
     func stop() async throws {
         if let stopping { return try await stopping.value }
         if stopped { return }
-        let values = Array(drivers.values), cancellation = cancellation
         let job = Task {
-            if let cancellation { try await cancellation.value }
-            else { try await Self.cancelAll(values) }
+            try await self.cancelForStop()
             await self.finishStop()
         }
         stopping = job
         try await job.value
+    }
+
+    private func cancelForStop() async throws {
+        if let cancellation { try await cancellation.value }
+        else { try await Self.cancelAll(Array(drivers.values)) }
+        cancellation = nil
     }
 
     private func finishStop() async {
@@ -645,8 +703,16 @@ extension GraphCloudSession {
     private func acceptsDriver(_ scope: GraphCloudScope, generation: UUID) -> Bool { driverGenerations[scope] == generation }
 
     private func verifySharingAccount(_ expected: String) async throws {
-        let actual = try await adapter.account(configuration.containerIdentifier)
-        guard actual == expected else { block(.accountChanged); throw GraphCloudError.accountChanged }
+        let actual: String
+        switch try await adapter.readAccountAvailability(configuration.containerIdentifier) {
+        case .available(let account): actual = account
+        case .signedOut: await isolateAccount(.signedOut); throw GraphCloudError.accountChanged
+        case .restricted:
+            block(.accountUnavailable); await accountSignal(.restricted); throw GraphCloudError.accountUnavailable
+        case .temporarilyUnavailable:
+            block(.accountUnavailable); await accountSignal(.temporarilyUnavailable); throw GraphCloudError.accountUnavailable
+        }
+        guard actual == expected else { await isolateAccount(.differentAccount); throw GraphCloudError.accountChanged }
         try check(control: true)
     }
     func memberships() throws -> [GraphCloudMembership] { try check(control: true); return document.memberships }

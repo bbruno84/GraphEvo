@@ -19,11 +19,13 @@ extension GraphStore {
     public func importAttachment(from source: URL, ownedBy ownerID: GraphNodeID,
                                  fileName: String? = nil, contentType: String = "public.data") async throws -> GraphAttachmentMetadata {
         guard ownerID.graphID == id else { throw GraphStoreError.foreignGraph }
+        let accountCheck = try await accountCheck()
         // Validate ownership/handle before potentially expensive document-provider access.
         try await read { scope in
             guard let owner = try scope.record(for: ownerID), owner.type != GraphAttachmentPayload.graphType else { throw GraphAttachmentError.missingOwner }
         }
         let data = try await GraphAttachmentIO.read(source)
+        try accountCheck()
         let payload = try GraphAttachmentPayload(id: makeNodeID(), ownerID: ownerID,
             fileName: fileName ?? source.lastPathComponent, contentType: contentType, data: data)
         let graphID = id
@@ -35,13 +37,14 @@ extension GraphStore {
             }
         }
         if shared { _ = try await insertShared(payload) }
-        else { _ = try await transaction { try $0.insert(payload) } }
+        else { _ = try await transaction { try accountCheck(); return try $0.insert(payload) } }
         return payload.content.metadata
     }
 
     /// Preserves identity/owner. Local concurrent replacements must still match the captured revision.
     public func replaceAttachment(_ id: GraphNodeID, from source: URL,
                                   fileName: String? = nil, contentType: String? = nil) async throws -> GraphAttachmentMetadata {
+        let accountCheck = try await accountCheck()
         let (old, legacy) = try await read { scope in
             guard let record = try scope.record(for: id) else { throw GraphStoreError.missingNode }
             let payload = try GraphAttachmentPayload(graphRecord: record)
@@ -56,6 +59,7 @@ extension GraphStore {
         let record = try replacement.graphRecord(legacy: legacy)
         let patch = try GraphRecordPatch(id: id, properties: record.properties.mapValues { .set($0) })
         return try await transaction { scope in
+            try accountCheck()
             guard let current = try scope.attachment(id) else { throw GraphStoreError.missingNode }
             guard current.metadata.revision == old.metadata.revision else { throw GraphAttachmentError.conflict }
             _ = try scope.patch(patch)
@@ -72,8 +76,9 @@ extension GraphStore {
 
     /// Writes a caller-owned file at a new destination; existing content is never replaced.
     @discardableResult public func exportAttachment(_ id: GraphNodeID, to destination: URL) async throws -> GraphAttachmentMetadata {
+        let accountCheck = try await accountCheck()
         guard let content = try await attachment(id) else { throw GraphStoreError.missingNode }
-        try await GraphAttachmentIO.export(content.data, to: destination)
+        try await GraphAttachmentIO.export(content.data, to: destination, check: accountCheck)
         return content.metadata
     }
 }

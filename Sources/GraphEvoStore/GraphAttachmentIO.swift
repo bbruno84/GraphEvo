@@ -60,8 +60,9 @@ package enum GraphAttachmentIO {
         }
     }
 
-    package static func export(_ data: Data, to destination: URL) async throws {
+    package static func export(_ data: Data, to destination: URL, check: @escaping @Sendable () throws -> Void = {}) async throws {
         try await perform {
+            try check()
             guard destination.isFileURL, destination.query == nil, destination.fragment == nil else { throw GraphAttachmentError.invalidFileURL }
             let access = destination.startAccessingSecurityScopedResource()
             let parentAccess = destination.deletingLastPathComponent().startAccessingSecurityScopedResource()
@@ -78,8 +79,10 @@ package enum GraphAttachmentIO {
                     let temporary = target.deletingLastPathComponent().appendingPathComponent(".GraphEvoExport-\(UUID())")
                     defer { try? files.removeItem(at: temporary) }
                     try Task.checkCancellation()
+                    try check()
                     try data.write(to: temporary, options: .atomic)
                     try Task.checkCancellation()
+                    try check()
                     // Publication refuses an existing destination. The caller owns the resulting file.
                     try publishExclusive(temporary, at: target)
                 }

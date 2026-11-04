@@ -1212,6 +1212,32 @@ certify quiescence, remote delivery or cloud rollback. The narrower
 `MigrationBackupManager.backupStore` is insufficient for a whole-content backup
 when native external content exists. See the [A6 contract](../design/graphevo-2-attachments.md).
 
+## V2 cloud account state
+
+```swift
+public enum GraphCloudAccountState: Sendable, Equatable {
+    public enum IsolationReason: Sendable, Equatable {
+        case verificationRequired, signedOut, differentAccount, restricted
+    }
+    case localOnly, available, temporarilyUnavailable
+    case isolated(IsolationReason)
+}
+extension GraphStore {
+    public var cloudAccountState: GraphCloudAccountState { get async throws }
+    public func observeCloudAccountState() async throws -> GraphObservation<GraphCloudAccountState>
+}
+```
+
+`GraphEvo` explicitly aliases `GraphCloudAccountState`. State access remains
+available while isolated; ordinary data operations throw
+`GraphStoreError.accountIsolated`. The stream retains the newest state and
+supports cancellation and refresh through `GraphObservation`. Refresh republishes
+local state. The selected default preserves account data separately and blocks
+access after logout/switch/restriction. Only an already verified identity retains
+local access during a transient outage. Consumer cached values must be removed
+from UI on isolation. Public coordinated cloud opening remains later work; see
+[account isolation](../design/graphevo-2-cloud-account-isolation.md).
+
 ## V2 alpha bounded queries and traversal (A7)
 
 `GraphQuery<Model: GraphModel>: Sendable` selects the persistent type/kind and
