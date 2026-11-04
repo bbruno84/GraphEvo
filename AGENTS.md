@@ -358,16 +358,19 @@ to set up branches.
 
 ## V2 test and CI scope
 
-Follow [CI profiles](docs/design/graphevo-2-ci-checkpoints.md): review and affected
-local checks first, then `ci-checkpoint` for focused v2-only work. It runs the
-store/runtime/model suites on both platforms and the Swift 6 consumers; the large
-capacity fixture is retained in full validation and relevant local checks.
-Use `ci-full-checkpoint` for legacy/shared-foundation changes, test/CI
-infrastructure, milestone/tag/release acceptance. Full takes precedence if both
-labels exist. Remove both labels before intermediate fixes. Skipped jobs are not
-passing checks. Do not rerun unchanged full suites for documentation-only notes.
-For v2-only changes this scoped policy replaces the unconditional full-suite
-command in the general checklist below. Experimental executables compile only
+Follow [CI profiles](docs/design/graphevo-2-ci-checkpoints.md). During alpha,
+review and adequate affected local verification are the default merge gate.
+Remote CI is requested only at agreed checkpoints or explicit maintainer request;
+do not request it for every increment, correction, dependency pin or push. Group
+related work before a checkpoint. When requested, ci-checkpoint selects v2 and
+ci-full-checkpoint selects full; full takes precedence. Only the label event or
+manual dispatch starts an alpha run, not a later push with a retained label.
+Unrequested events must not evict/cancel requested checkpoints. Runner capacity
+or service failure does not block an otherwise reviewed, locally verified and
+authorized alpha merge; record it and do not retry by default. Investigate actual
+test failures, preserve limitations and never call skipped/cancelled jobs passing.
+Required beta/release and published-tag gates remain mandatory. For v2-only work
+this replaces unconditional remote/full-suite instructions below. Experimental executables compile only
 with `GRAPHEVO_BUILD_LABS=1` and never belong to ordinary CI builds. The ordinary
 Xcode package scheme is `GraphEvo`. Native failed
 xcresult uploads are opt-in (`ci-diagnostics`); default failure artifacts are text
@@ -413,22 +416,18 @@ on shared or release branches unless explicitly requested.
 6. Publish the branch and open a PR against the intended target branch. Include
    the goal, context, behavior before/after, files or modules, tests, risks,
    limitations, follow-up work, and updated documentation.
-7. Follow this order: **review, CI, merge**. Complete implementation and relevant
-   local verification, open the PR without `ci-checkpoint`, then review and resolve
-   findings. Only after review is complete, immediately before an authorized merge,
-   request the required remote CI checkpoint on the reviewed head. Do not start
-   expensive alpha CI before review or while review fixes are still being prepared.
-   V2 alpha PRs use the explicit [CI checkpoint policy](docs/design/graphevo-2-ci-checkpoints.md):
-   full remote CI is not required on every alpha PR. The maintainer delegates
-   alpha delivery/checkpoint selection: group related implementation and corrections
-   into one functional increment/PR, use focused local checks while developing,
-   and retain one full reviewed checkpoint for persistence/sync/migration/lifecycle
-   increments and before tags. Do not split each small step into its own PR/CI. A skipped job is not a tested
-   checkpoint. Run full remote CI at agreed delivery checkpoints and before
-   alpha/beta tags. A source change after review requires focused re-review before
-   another required checkpoint; remove the label before intermediate pushes.
-   Merge through the PR only after the required checks pass and merge is authorized.
-   Stable/v1/release automatic checks remain required.
+7. Complete implementation, affected local verification and review before an
+   authorized merge. For ordinary v2 alpha increments, these are the default
+   gate; remote CI is opt-in at agreed checkpoints under the policy above.
+   Group source, UI, pins and corrections instead of requesting a run per push.
+   At an explicit remote checkpoint, choose the appropriate profile on the
+   reviewed head. Later changes require focused local re-review, not an automatic
+   replacement CI. Record unavailable runners without treating them as failed
+   product tests or blocking a sufficiently verified alpha merge. Actual test
+   failures still require investigation; never hide them or relax checks merely
+   to obtain green. Stable/v1/release automatic checks and required beta/release
+   or published-tag checkpoints remain mandatory. Merge through the PR within
+   the maintainer's authorization.
 8. For tracked fixes, add a new commit or update the PR. Avoid rewriting shared
    branch history. Prefer a revert commit for already-merged changes.
 9. Never use destructive commands such as `git reset --hard` or `git checkout --`

@@ -35,6 +35,13 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+The maintainer revised the [alpha CI policy](graphevo-2-ci-checkpoints.md) on
+2026-11-04: reviewed, adequate affected local checks normally permit authorized
+alpha integration. Remote runs are explicit grouped checkpoints, with no rerun
+on a retained label or minor pin/push. Unavailable hosted runners are recorded
+without blocking ordinary verified alpha work. Actual failures remain investigated;
+mandatory beta/release and published-tag acceptance is unchanged.
+
 The [physical App Group control](results/app-group-presence-control-2026-11-04.md),
 recorded through [documentation PR #155](https://github.com/bbruno84/GraphEvo/pull/155),
 identifies lifetime shared-presence flock as the cause of observed iOS app/widget
