@@ -1511,3 +1511,9 @@ Native UI adapters retain independent leases, reserve same-graph sharing and
 reconcile server state; no scope lock or Core Data transaction spans UI input.
 Never use a descriptor edit, network error or account loss as purge authority.
 Native UI/two-account device acceptance remains separate from injected tests.
+
+After settled participant purge, release an idle public context graph claim only
+after the durable remote intent is cleared. Pending leave and failed detachment
+retain ownership. Retired contexts remain blocked; fresh-workspace consumers
+close prior leases and use a distinct GraphContext. See the H02 public-sharing
+contract and retained physical continuation report.
