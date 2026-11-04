@@ -49,7 +49,15 @@ passes on `414cea3f5d9f452745026c8a4ff44ba29761a0b0`: 1,020 macOS functions,
 The external consumer also exercises a stopped-source staged conversion with
 public imports only. Final integration notes change documentation only;
 shipping/test/consumer/workflow inputs match the checkpoint. The companion demo
-integration is separate. Public invitations, protected-data/independent-reader,
+integration is tracked separately in [GraphEvoDemo PR #2](https://github.com/bbruno84/GraphEvoDemo/pull/2).
+The v2-only [binding-admission correction #151](https://github.com/bbruno84/GraphEvo/pull/151)
+refuses invalid input and existing route conflicts before claiming a local-only
+store for the account. Reviewed [v2 checkpoint #41815151417](https://github.com/bbruno84/GraphEvo/actions/runs/41815151417)
+passes on `c966f1536292e5055bbb76a727a35d00ff4864bc`: 689 macOS and 687 iOS
+functions without failures/skips, plus both Swift 6 consumers. It retains H01's
+full baseline above. Final correction notes are documentation-only with unchanged
+shipping/test/consumer/workflow inputs. Demo PR #2 includes seven model tests,
+local UI create/reopen smoke and a reviewed integration dependency pin. Public invitations, protected-data/independent-reader,
 production cutover, restoration and broader acceptance remain open. Physical
 account-change trials remain scheduled during beta before stable release.
 

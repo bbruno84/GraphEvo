@@ -178,6 +178,8 @@ package actor GraphContextManager {
 
     package func bindCloudZone(_ zone: GraphCloudZone, to graphID: GraphID,
                                configuration: GraphCloudConfiguration) async throws {
+        // Input/route refusal must precede the immutable local account claim.
+        guard !zone.owner.isEmpty, !zone.name.isEmpty else { throw GraphCloudError.invalidConfiguration }
         guard !activatingCloudGraphs.contains(graphID) else { throw GraphCloudActivationError.busy }
         guard localV1Bootstraps[graphID] == nil else { throw GraphStoreMigrationError.busy }
         guard let entry = entries[graphID], entry.closing == nil else { throw GraphStoreError.missingGraph }
@@ -190,6 +192,9 @@ package actor GraphContextManager {
         }
         let session = try await cloud(configuration)
         let route = GraphCloudBinding(zone: zone, graphID: graphID)
+        guard !(await session.retainedBindings()).contains(where: {
+            ($0.zone == zone || $0.graphID == graphID) && $0 != route
+        }) else { throw GraphCloudError.ownershipConflict }
         if let activation, try await session.identity() != activation.binding.identity { throw GraphCloudError.accountChanged }
         if zone.scope == .private, await session.activationService != nil {
             let remote = try await session.activationControl { service, _ -> GraphCloudAuthorityRemote? in

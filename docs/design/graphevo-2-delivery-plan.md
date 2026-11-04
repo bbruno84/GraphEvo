@@ -37,9 +37,10 @@ Proposed delivery order:
 1. Retain the [completed bounded private spool checkpoint](results/durable-asset-spool-device-2026-11-04.md)
    for #144. Cooperating-process/current app-widget and broader interruption
    acceptance remain separate; this does not close all #142–#144 device gates.
-2. Complete companion demo adoption of [H01](graphevo-2-public-entry.md), preserving
-   existing user stores and using public APIs over the reviewed library revision.
-   Public invitation onboarding remains the next separate host-integration slice.
+2. Companion demo adoption of [H01](graphevo-2-public-entry.md) is tracked in
+   [GraphEvoDemo PR #2](https://github.com/bbruno84/GraphEvoDemo/pull/2), preserving
+   existing user stores and using a reviewed library revision. Public invitation
+   onboarding remains the next separate host-integration slice after paired delivery.
 3. Resolve remaining beta decisions: app/widget roles and first launch,
    account/cache acceptance, O04 processing semantics, conflict scope, supported
    platforms/processes and API/schema reconciliation. Background scheduling

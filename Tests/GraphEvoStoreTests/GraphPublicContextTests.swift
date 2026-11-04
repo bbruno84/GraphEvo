@@ -317,4 +317,25 @@ private final class PublicAccountDriver: @unchecked Sendable {
         try await connection.close()
     }
 
+    @available(iOS 17, macOS 14, *)
+    @Test func invalidZoneCannotClaimAnUnboundLocalGraph() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let owner = context(), config = try configuration(root), id = GraphID(), url = root.appendingPathComponent("Local.sqlite")
+        let graph = try await owner.createGraph(id: id, at: url)
+        let connection = try await owner.connectCloud(using: config)
+        try await wait { try await connection.state == .ready }
+        await #expect(throws: GraphCloudConnectionError.self) { try await connection.bindPrivateGraph(graph, zoneName: "") }
+        #expect(try await graph.cloudAccountState == .localOnly)
+        let occupied = try await owner.createGraph(id: GraphID(), at: root.appendingPathComponent("Occupied.sqlite"))
+        try await connection.bindPrivateGraph(occupied, zoneName: "Occupied")
+        await #expect(throws: GraphCloudConnectionError.self) { try await connection.bindPrivateGraph(graph, zoneName: "Occupied") }
+        #expect(try await graph.cloudAccountState == .localOnly)
+        try await connection.close(); try await graph.close(); try await occupied.close()
+        let unavailable = PublicAccountDriver(); unavailable.set(.signedOut)
+        let reader = context(unavailable), reopened = try await reader.openGraph(id: id, at: url)
+        #expect(try await reopened.cloudAccountState == .localOnly)
+        #expect(unavailable.queryCount == 0)
+        try await reopened.close()
+    }
+
 }
