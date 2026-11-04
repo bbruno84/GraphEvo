@@ -128,6 +128,14 @@ layout, initialization/quarantine, reader-concurrency and migration limitations
 are recorded. M2 is a candidate for contract discussion, not the current runtime;
 PA02 stays open. No production lock is changed by this report.
 
+The [priority protocol](graphevo-2-apple-owner-test-protocol.md) and
+[N result](results/apple-owner-priority-tests-2026-11-04.md) add macOS partial-open,
+retained cancellation and real session/backup lease checks, plus thirty actual
+iPad Home/widget/app cycles with exact native readback and ordering. Production
+adoption is still **NO GO**: physical failure/background, XR iOS 18 interaction
+and coupled synchronization/public observation lifecycle remain unverified.
+These reports do not replace the shipping ownership protocol above.
+
 ## Transaction-local mutation inventory
 
 Only protected coordinated transactions admit a reusable Session holder in

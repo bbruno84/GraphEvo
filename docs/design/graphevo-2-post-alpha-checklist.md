@@ -78,11 +78,13 @@ workspaces/migration and session/catalog locks still need integration validation
 This report adds no production code or remote CI checkpoint.
 
 The [pre-integration priority protocol](graphevo-2-apple-owner-test-protocol.md)
-selects separate N tests for partial opening, failed-close recovery, repeated
-lifecycle, async attachments and actual synchronization ownership on the iPad
-and iPhone XR. This selection closes no acceptance box. Missing priority
-evidence blocks the production integration recommendation; deferred layout,
-migration-workspace and broader platform cases remain pre-beta work.
+has [N evidence](results/apple-owner-priority-tests-2026-11-04.md): 51 macOS
+controls, 99 existing adapter tests and thirty actual iPad lifecycle cycles pass.
+Partial opening, retained-task cancellation and actual session/backup lease
+release have bounded positive evidence. **NO GO for production adoption**:
+physical fault/background, XR iOS 18 interaction and coupled transport/public
+observation checks remain incomplete. No PA02 acceptance box closes. Deferred
+layout, migration-workspace and broader platform cases remain pre-beta work.
 
 ## How to close an item
 

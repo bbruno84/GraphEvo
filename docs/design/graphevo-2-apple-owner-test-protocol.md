@@ -44,6 +44,9 @@ transitions. State both counts. A laboratory observation stream does not certify
 the public observation implementation. Existing cloud tests do not establish
 coupling to the new presenter lifecycle. A synchronous coordination accessor
 returning after spawning a Task does not protect that Task's later work.
+Repeated lifecycle notifications must retain distinct journal checkpoints;
+overwriting an earlier close trace prevents an ordering claim even when final
+values are correct. Preserve incomplete runs and rerun on a fresh fixture.
 
 Audit actual lock release, rather than inferring it from foreground notifications:
 the current cloud session releases its directory lease during awaited stop;
