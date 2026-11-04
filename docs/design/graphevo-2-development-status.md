@@ -17,7 +17,12 @@ retained alongside its read-only continuation. No shipping runtime change or
 failed-stage replay occurs. This advances only the bounded #144 private device
 checkpoint; broad beta, production, in-flight interruption and shared-account
 acceptance remain open. Public coordinated host integration remains next in the
-audited delivery recommendation.
+audited delivery recommendation. Protocol/evidence integrate through
+[PR #146](https://github.com/bbruno84/GraphEvo/pull/146), with reviewed
+[full checkpoint #41782215684](https://github.com/bbruno84/GraphEvo/actions/runs/41782215684)
+on `db80d8cd`: 993 macOS functions, 990 passed iOS functions with the known skip
+and both Swift 6 consumers. Final notes are documentation-only with unchanged
+shipping, bridge/helper, test, consumer and workflow inputs.
 
 ## Roadmap audit — 2026-11-03
 

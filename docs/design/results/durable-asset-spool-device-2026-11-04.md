@@ -1,5 +1,13 @@
 # Durable CKAsset spool — physical checkpoint, 2026-11-04
 
+Status: protocol and evidence integrate through
+[PR #146](https://github.com/bbruno84/GraphEvo/pull/146). Reviewed
+[full checkpoint #41782215684](https://github.com/bbruno84/GraphEvo/actions/runs/41782215684)
+passes on `db80d8cdf0011d990dba1be6f6281345fbc2c8b8`: 993 macOS functions,
+990 passed iOS functions with one known skip, and both Swift 6 consumers.
+Final integration notes change documentation only; shipping, bridge/helper,
+test, consumer and workflow inputs match the reviewed head.
+
 ## Outcome and scope
 
 The private S04 custom-sync path recovered four 10 MiB attachments, an empty
@@ -79,6 +87,8 @@ session had 65 `zoneChanged` entries and no asset references. The corrected
 probe checks only its bound zones and still requires empty asset files, no
 session failure and no pending outgoing receipts. It never deletes other zone
 events to satisfy an assertion. Original failing evidence remains retained.
+The supported graph/zone scale and retention policy must account for unbound lifecycle events; this fixture does
+not establish an unlimited retention envelope.
 
 ## Verification and remaining gates
 

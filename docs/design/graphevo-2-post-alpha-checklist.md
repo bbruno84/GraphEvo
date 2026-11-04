@@ -266,6 +266,9 @@ engine or cross-process acceptance. Retain this scope when integrating it.
   exporting an old account's data through a new account's session.
 - [ ] **B** Define supported graph/zone scale, quotas and recovery limits; do not
   infer selective graph download or unlimited zones from isolation tests.
+  Include unbound database lifecycle-event retention: the private spool checkpoint
+  retained 65 unrelated `zoneChanged` events after consuming its fixture zones.
+  Preserving those events is not acceptance of unbounded queue growth.
 - [ ] **B** Settle native sharing presentation/adapters and invitation transport,
   recipient/container binding, errors and host responsibilities. Protect
   invitation/account capabilities and keep diagnostics payload-free.
@@ -1016,7 +1019,10 @@ physical interruption, cross-process writers, scale or new-cloud activation.
   original global-inbox assertion failure is retained with a guarded read-only
   continuation. No import replay or broad B/R gate closure. In-flight
   interruption/power-loss, production resources, cross-account and restoration
-  remain open.
+  remain open. Protocol/evidence integrate through #146; reviewed full checkpoint
+  [#41782215684](https://github.com/bbruno84/GraphEvo/actions/runs/41782215684)
+  passes on `db80d8cd`: 993 macOS functions, 990 passed iOS functions with the known
+  skip and both Swift 6 consumers.
 
 ## CI checkpoint scope
 
