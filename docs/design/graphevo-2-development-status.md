@@ -1,6 +1,6 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-04. This is the single entry point for **integrated work,
+Updated: 2026-11-05. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
@@ -86,8 +86,14 @@ race on the runtime that preceded the fix. The
 [coordinated opening contract](graphevo-2-controlled-store-access.md#one-graph-opening-gateway)
 now rechecks file existence and identity under the writer fence before
 loading Core Data. A purge recovery interrupted by file removal can retry.
-The result is **NO GO for production adoption**, with PA02 open and the shipping
-runtime unchanged. No remote CI is requested for this laboratory/documentation work.
+[PR #169](https://github.com/bbruno84/GraphEvo/pull/169) integrates the opening
+fix and regression after 50 focused macOS and 49 iOS 18.5 simulator tests.
+The [participant purge device result](results/app-group-participant-purge-device-2026-11-05.md)
+verifies terminal read refusal, exact replica removal on retry and neighboring
+store integrity on a physical iPad and iPhone XR. The private build uses an
+injected claim and CloudKit adapter. PA02 remains open for the combined
+multiprocess purge and owner recovery. Cleanup stays pending without proof
+of the exact prior owner's exit.
 
 The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
 extends writer-only research to presence, detach and destructive maintenance.

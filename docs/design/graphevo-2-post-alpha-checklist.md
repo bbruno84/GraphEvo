@@ -110,9 +110,14 @@ adds bounded macOS evidence for durable refusal after an interrupted close.
 Claim recovery and integration with actual participant purge remain open.
 The [verified purge experiment](results/app-group-verified-purge-2026-11-05.md)
 covers actual native deletion and one-time claim recovery for a supervised
-macOS child. The coordinated opening guard now covers the open-existing
-race. App Group recovery authority and integration with participant leave
-remain open.
+macOS child. [PR #169](https://github.com/bbruno84/GraphEvo/pull/169)
+integrates the coordinated opening guard for the open-existing race.
+The [participant purge device result](results/app-group-participant-purge-device-2026-11-05.md)
+verifies the actual local leave path with an injected claim on iPad and
+iPhone XR. The original handle refuses reads during `purging`. The journal
+records removal after explicit retry while the neighboring store stays intact.
+Supported App Group recovery authority and combined multiprocess participant
+purge remain open.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 
