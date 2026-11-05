@@ -53,8 +53,16 @@ and a missing-store result for an opener queued during purge. Forced exits
 exercised exact offline recovery for ordinary replica purge, native v1
 conversion, and workspace publication. Recovery after a committed migration
 reused the verified backup and receipt. The earlier physical iPad run passed
-30 app and widget cycles with exact record and attachment readback. CloudKit
-session ownership remains a separate work item.
+30 app and widget cycles with exact record and attachment readback.
+
+[PR #176](https://github.com/bbruno84/GraphEvo/pull/176) ties the CloudKit
+directory lock to aggregate application activity. Background awaits native
+shutdown, and foreground restores the retained connection from its checkpoint
+with retry on directory contention. Review tests on `e3ee8237` cover failed
+startup and explicit close during the background transition. A physical iPadOS 27 fixture
+using a UIKit background task and a simulated CloudKit driver verified lock
+release in the App Group and same-process checkpoint recovery after an observed
+execution gap. Cross-process exclusion still follows the session directory.
 
 The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.md)
 is exercised in the separate [N laboratory result](results/apple-owner-priority-tests-2026-11-04.md):
