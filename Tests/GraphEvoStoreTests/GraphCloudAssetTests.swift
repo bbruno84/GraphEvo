@@ -68,10 +68,14 @@ private actor AssetBus {
         let binding: GraphCloudBinding
     }
     @available(iOS 17, macOS 14, *)
-    private func fixture(_ bus: AssetBus, container: String = UUID().uuidString, id: GraphID = GraphID()) async throws -> Fixture {
+    private func fixture(_ bus: AssetBus, container: String = UUID().uuidString, id: GraphID = GraphID(),
+                         appGroup: Bool = false) async throws -> Fixture {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("AssetTests-" + UUID().uuidString)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
-        let graph = try await manager.createGraph(id: id, at: directory.appendingPathComponent("Graph.sqlite"))
+        if appGroup { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false) }
+        let group = appGroup ? AppGroupStoreLocation(container: directory) : nil
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+                                          adapter: GraphCoordinatorFactory.adapter, appGroup: group)
+        let graph = try await manager.createGraph(id: id, at: group?.storeURL(for: id.rawValue) ?? directory.appendingPathComponent("Graph.sqlite"))
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.asset." + container, environment: .development, directory: directory.appendingPathComponent("Engine"))
         _ = try await manager.startCloudSession(config, adapter: bus.adapter)
         let zone = GraphCloudZone(scope: .private, owner: "owner", name: "graph")
@@ -143,9 +147,10 @@ private actor AssetBus {
         try await close(owner)
     }
     @available(iOS 17, macOS 14, *)
-    @Test func outgoingAssetAttemptReopensFromOwnedFileAndCleansUpAfterReceipt() async throws {
+    @Test(arguments: [false, true])
+    func outgoingAssetAttemptReopensFromOwnedFileAndCleansUpAfterReceipt(appGroup: Bool) async throws {
         let bus = AssetBus(), graphID = GraphID()
-        let first = try await fixture(bus, id: graphID)
+        let first = try await fixture(bus, id: graphID, appGroup: appGroup)
         _ = try await seed(first, count: GraphAttachmentPayload.maximumByteCount)
         let route = GraphCloudTransportBinding(identity: try await first.manager.cloud(first.config).identity(),
                                                route: first.binding)
@@ -157,9 +162,11 @@ private actor AssetBus {
         #expect(try JSONEncoder().encode(prepared).count < 128 * 1024)
         try await first.graph.close()
         try await first.manager.stopCloudSession(first.config)
+        let group = first.manager.appGroup
         let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
-                                          adapter: GraphCoordinatorFactory.adapter)
-        let reopened = try await manager.openGraph(id: graphID, at: first.directory.appendingPathComponent("Graph.sqlite"))
+                                          adapter: GraphCoordinatorFactory.adapter, appGroup: group)
+        let reopened = try await manager.openGraph(id: graphID,
+            at: group?.storeURL(for: graphID.rawValue) ?? first.directory.appendingPathComponent("Graph.sqlite"))
         _ = try await manager.startCloudSession(first.config, adapter: bus.adapter)
         let again = try await reopened.prepareTransport(route)
         #expect(again == prepared)

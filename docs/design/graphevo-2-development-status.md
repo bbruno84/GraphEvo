@@ -106,8 +106,8 @@ verifies actual local leave and retry on iPad with a widget attached to the
 same replica. The live owner blocks deletion. After an interruption inside
 close, a new app still refuses deletion until the laboratory supervisor
 releases the exact registration. The retry removes only the target replica.
-PA02 remains open for production recovery authority and Apple owner protocol
-integration. Cleanup stays pending without proof of the exact prior owner's exit.
+The experiment did not establish production recovery authority. Cleanup
+stays pending without proof of the exact prior owner's exit.
 
 The [pre-integration candidate](results/app-group-preintegration-candidate-2026-11-05.md)
 combines the real participant purge and Apple owner coordination without the
@@ -119,6 +119,18 @@ Nine physical lifecycle fault fixtures recover the exact baseline with the
 original registration retained. UIKit expiration and a close held behind an
 Apple accessor have separate physical traces. A controlled budget release
 while close waits preserves the registration and exact cold readback.
+
+[PR #173](https://github.com/bbruno84/GraphEvo/pull/173) brings the package-only
+[App Group runtime protocol](graphevo-2-controlled-store-access.md#dedicated-app-group-stores)
+into the v2 line. The fresh S04 namespace uses Apple as the only source of interprocess
+exclusion on that store path. Durable owner generations describe interrupted
+lifecycle work. Purge uses one deletion grant, and prepared CloudKit writes
+revalidate Persistent History before saving. The
+[runtime validation report](results/app-group-runtime-integration-2026-11-05.md)
+distinguishes this runtime from the prior hybrid and records the reconciliation
+with PR #174. Both local v2 platform profiles pass on the aligned branch.
+The aligned runtime passed 30 physical iPad app/widget cycles. Public roles
+and orphan recovery remain open.
 
 The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
 extends writer-only research to presence, detach and destructive maintenance.

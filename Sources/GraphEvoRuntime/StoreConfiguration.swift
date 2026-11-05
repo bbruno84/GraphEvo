@@ -23,10 +23,11 @@ package struct StoreConfiguration: Sendable, Equatable {
     package let exclusiveGraphID: UUID?
     package let workspaceID: UUID?
     package let workspaceSessionID: UUID?
+    package let appGroup: AppGroupStoreLocation?
     /// Stopped-writer v1 import only: do not enable PH or query-generation tracking on the source.
     package let legacyReadOnly: Bool
 
-    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil, exclusiveGraphID: UUID? = nil, contextOwnerID: UUID? = nil, workspaceID: UUID? = nil, workspaceSessionID: UUID? = nil, legacyReadOnly: Bool = false) {
+    package init(location: StoreLocation, access: StoreAccess = .readWrite, cloudKitContainerIdentifier: String? = nil, sharedStoreURL: URL? = nil, exclusiveGraphID: UUID? = nil, contextOwnerID: UUID? = nil, workspaceID: UUID? = nil, workspaceSessionID: UUID? = nil, legacyReadOnly: Bool = false, appGroup: AppGroupStoreLocation? = nil) {
         self.location = location
         self.access = access
         self.cloudKitContainerIdentifier = cloudKitContainerIdentifier
@@ -36,6 +37,7 @@ package struct StoreConfiguration: Sendable, Equatable {
         self.workspaceID = workspaceID
         self.workspaceSessionID = workspaceSessionID
         self.legacyReadOnly = legacyReadOnly
+        self.appGroup = appGroup
     }
 }
 
@@ -87,6 +89,12 @@ struct ResolvedStore: Sendable {
     }
 
     init(_ configuration: StoreConfiguration) throws {
+        if configuration.appGroup != nil {
+            guard configuration.exclusiveGraphID != nil, configuration.workspaceID == nil,
+                  !configuration.legacyReadOnly else {
+                throw StoreRuntimeError.invalidConfiguration("App Group admission requires a standalone exclusive graph.")
+            }
+        }
         if configuration.legacyReadOnly {
             guard configuration.access == .readOnly, configuration.exclusiveGraphID == nil,
                   configuration.cloudKitContainerIdentifier == nil, configuration.sharedStoreURL == nil,
@@ -134,6 +142,12 @@ struct ResolvedStore: Sendable {
             }
             var canonical = ancestor.resolvingSymlinksInPath().standardizedFileURL
             for component in missing.reversed() { canonical.appendPathComponent(component) }
+            if let group = configuration.appGroup, let graphID = configuration.exclusiveGraphID {
+                try group.validate(requested: url, canonical: canonical, graphID: graphID)
+            } else {
+                try AppGroupStoreLocation.rejectUncoordinated(url)
+                try AppGroupStoreLocation.rejectUncoordinated(canonical)
+            }
             let volume: URLResourceValues
             do { volume = try ancestor.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey]) }
             catch { throw StoreRuntimeError.loadFailed(canonical, underlying: error) }
@@ -149,7 +163,7 @@ struct ResolvedStore: Sendable {
                 throw StoreRuntimeError.invalidConfiguration("Private and shared stores must use distinct files.")
             }
             self.configuration = StoreConfiguration(location: .sqlite(canonical), access: configuration.access,
-                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url, exclusiveGraphID: configuration.exclusiveGraphID, contextOwnerID: configuration.contextOwnerID, workspaceID: configuration.workspaceID, workspaceSessionID: configuration.workspaceSessionID, legacyReadOnly: configuration.legacyReadOnly)
+                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier, sharedStoreURL: secondary?.url, exclusiveGraphID: configuration.exclusiveGraphID, contextOwnerID: configuration.contextOwnerID, workspaceID: configuration.workspaceID, workspaceSessionID: configuration.workspaceSessionID, legacyReadOnly: configuration.legacyReadOnly, appGroup: configuration.appGroup)
             secondaryResources = secondary.map { [$0] } ?? []
             _ = try fileIdentity()
         }
@@ -167,6 +181,7 @@ struct ResolvedStore: Sendable {
 
     func isCompatible(with other: ResolvedStore) throws -> Bool {
         guard configuration.access == other.configuration.access,
+              configuration.appGroup == other.configuration.appGroup,
               configuration.legacyReadOnly == other.configuration.legacyReadOnly,
               configuration.exclusiveGraphID == other.configuration.exclusiveGraphID,
               configuration.contextOwnerID == other.configuration.contextOwnerID,

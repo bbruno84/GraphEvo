@@ -11,7 +11,7 @@ package enum StoreNativeContext {
         (context.userInfo[cancellationKey] as? CancellationCheck) ?? {}
     }
     package static let containerKey = "GraphEvo.v2.container"
-    /// Only the runtime writer boundary installs this holder after acquiring its process lock.
+    /// Only the runtime writer boundary installs this holder after acquiring exclusive write access.
     /// The adapter's queue-confined value must be cleared before rollback/reset to break context cycles.
     package static let mutationSessionKey = "GraphEvo.v2.mutationSession"
     package static func clearMutationSession(in context: NSManagedObjectContext) {

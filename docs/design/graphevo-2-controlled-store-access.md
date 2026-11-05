@@ -206,3 +206,45 @@ refused until workspace close; resuming without a schema change still requires
 exclusivity. Other regressions cover actual child-process lock release, namespace
 replacement refusal, reserved-fence borrowing, idle-owner destruction refusal,
 generic writable admission refusal and pending mutation/cascade/rollback behavior.
+
+## Dedicated App Group stores
+
+The package-only App Group `GraphContext` uses an entitled container and
+`GraphEvo-AppGroup-v2/<graph UUID>/Store.sqlite` under
+`Library/Application Support`. It uses the same graph create/open entry and
+S04 schema. Both App Group namespaces are reserved against generic SQLite,
+v1, native mirroring and uncoordinated maintenance, including through aliases.
+The new protocol admits fresh v2 locations only. It does not adopt v1
+experimental locations. All processes accessing a v2 store must participate
+through the same canonical directory.
+
+`NSFileCoordinator` provides interprocess exclusion for opening, writes,
+identity validation, close and purge. These paths do not acquire advisory
+writer or owner sidecars. Local admission drains in-flight operations before
+close; ordinary reads remain generation-pinned. The native owner registers its
+presenter and records its generation before attaching Core Data under an Apple
+grant. Close detaches before clearing both. The host starts closing its graph
+leases on inactivity, and the extension closes its handle before returning.
+If the system interrupts close or native detachment fails, the registration
+records that its detach was not confirmed.
+
+Prepared CloudKit writes capture the file and native store identity and
+Persistent History token under the first grant. They stage outgoing assets in a
+unique namespace outside that grant. A fresh context validates the boundary
+under the final grant before publishing. Changed or unavailable history causes
+rollback and cleanup of the attempt's own files. The retry starts from current
+state. An App Group staging attempt does not sweep other attempts' files.
+
+A purge requests an Apple deletion grant so active presenters can refuse it.
+After a grant, remaining foreign registrations are unresolved detach evidence.
+Cold purge checks for such evidence before attaching. Native identity
+verification, Core Data destruction, artifact cleanup and registration removal
+share one deletion grant on the stable directory. If refusal precedes native
+destruction, the purging owner detaches under a normal grant and the membership
+stays `purging` until retry. After native destruction starts, only verified
+cleanup can release ownership. Restart without sufficient evidence leaves the
+purge pending. PID, age and file absence are not release authority.
+
+The package does not expose App Group role selection or a production orphan
+recovery operation. See [PA02](graphevo-2-post-alpha-checklist.md) for remaining
+physical-device, public-role and CloudKit validation.

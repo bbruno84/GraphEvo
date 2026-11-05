@@ -171,39 +171,47 @@ package struct GraphCloudAssetSpool: Sendable {
     }
 
     package func freeze(_ prepared: GraphCloudPreparedOutgoing, identity: GraphCloudSessionIdentity,
+                        stagingNamespace: UUID? = nil,
                         check: @Sendable () throws -> Void) async throws -> GraphCloudOutgoingBatch {
         let batch = prepared.batch
         let binding = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)
-        try await reconcile(retaining: batch.items.compactMap(\.assetReference))
+        if stagingNamespace == nil { try await reconcile(retaining: batch.items.compactMap(\.assetReference)) }
         var items: [GraphCloudOutgoingNode] = []
         var preparedBytes = 0
-        for item in batch.items {
-            try check()
-            guard let archive = item.recordArchive else {
-                guard item.assetReference == nil else { throw GraphCloudError.invalidState }
-                items.append(item); continue
-            }
-            let record = try GraphCloudRecordCodec.restore(archive)
-            if let reference = item.assetReference {
-                try reference.validate(role: .outgoing, identity: identity, binding: binding,
+        var staged: [GraphCloudAssetReference] = []
+        do {
+            for item in batch.items {
+                try check()
+                guard let archive = item.recordArchive else {
+                    guard item.assetReference == nil else { throw GraphCloudError.invalidState }
+                    items.append(item); continue
+                }
+                let record = try GraphCloudRecordCodec.restore(archive)
+                if let reference = item.assetReference {
+                    try reference.validate(role: .outgoing, identity: identity, binding: binding,
+                                           recordName: item.recordName, storeID: prepared.storeID, epoch: prepared.epoch)
+                    try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding)
+                    try await presence(reference, role: .outgoing, identity: identity, binding: binding,
                                        recordName: item.recordName, storeID: prepared.storeID, epoch: prepared.epoch)
-                try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding)
-                try await presence(reference, role: .outgoing, identity: identity, binding: binding,
-                                   recordName: item.recordName, storeID: prepared.storeID, epoch: prepared.epoch)
-                items.append(item)
-            } else if record["asset"] != nil {
-                let data = try GraphCloudAsset.bytes(record["asset"])
-                guard data.count <= 32 * 1024 * 1024 - preparedBytes else { throw GraphCloudError.inboxLimit }
-                preparedBytes += data.count
-                let reference = try await stage(data, role: .outgoing, namespace: batch.id, identity: identity,
-                                                binding: binding, recordName: item.recordName,
-                                                storeID: prepared.storeID, epoch: prepared.epoch)
-                record["asset"] = Data() as CKRecordValue
-                try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding)
-                let frozen = try GraphCloudRecordCodec.archive(record, scope: batch.zone.scope, portableAsset: true)
-                items.append(GraphCloudOutgoingNode(change: item.change, recordName: item.recordName,
-                                                    recordArchive: frozen.recordArchive, assetReference: reference))
-            } else { items.append(item) }
+                    items.append(item)
+                } else if record["asset"] != nil {
+                    let data = try GraphCloudAsset.bytes(record["asset"])
+                    guard data.count <= 32 * 1024 * 1024 - preparedBytes else { throw GraphCloudError.inboxLimit }
+                    preparedBytes += data.count
+                    let reference = try await stage(data, role: .outgoing, namespace: stagingNamespace ?? batch.id, identity: identity,
+                                                    binding: binding, recordName: item.recordName,
+                                                    storeID: prepared.storeID, epoch: prepared.epoch)
+                    if stagingNamespace != nil { staged.append(reference) }
+                    record["asset"] = Data() as CKRecordValue
+                    try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding)
+                    let frozen = try GraphCloudRecordCodec.archive(record, scope: batch.zone.scope, portableAsset: true)
+                    items.append(GraphCloudOutgoingNode(change: item.change, recordName: item.recordName,
+                                                        recordArchive: frozen.recordArchive, assetReference: reference))
+                } else { items.append(item) }
+            }
+        } catch {
+            await remove(staged, retaining: [])
+            throw error
         }
         return GraphCloudOutgoingBatch(id: batch.id, graphID: batch.graphID, zone: batch.zone,
                                        items: items, assetRoot: root)

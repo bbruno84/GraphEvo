@@ -238,6 +238,32 @@ private actor ExportValidationGate {
         await retention.release(); try await graph.close()
     }
 
+    @Test func backupPublicationRefusesMissingDestinationsInsideAnAliasedAppGroupPath() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let m = manager()
+        let graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
+        let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
+        let group = AppGroupStoreLocation(container: root)
+        let slot = group.storeURL(for: UUID()).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: slot, withIntermediateDirectories: true)
+        let alias = root.appendingPathComponent("Alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: slot)
+        let destination = alias.appendingPathComponent("Missing/Output.geb")
+        await #expect(throws: StoreRuntimeError.self) {
+            try await m.backups.export(at: backup.url, to: destination)
+        }
+        await #expect(throws: StoreRuntimeError.self) {
+            try await m.backups.importBackup(at: backup.url, in: destination.deletingLastPathComponent())
+        }
+        await #expect(throws: StoreRuntimeError.self) {
+            try await m.backups.restore(at: backup.url, to: destination)
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: slot.path).isEmpty)
+        _ = try await m.backups.verify(at: backup.url)
+        try await graph.close()
+    }
+
     @Test(arguments: [false, true]) func rejectedLegacyImportCollectionPreservesSource(throughAlias: Bool) async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))

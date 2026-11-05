@@ -25,6 +25,7 @@ package actor GraphContextManager {
     var activatingCloudGraphs = Set<GraphID>()
     var localV1Bootstraps: [GraphID: LocalV1BootstrapAdmission] = [:]
     nonisolated let contextOwnerID: UUID?
+    nonisolated let appGroup: AppGroupStoreLocation?
     var contextClaims: [GraphID: UUID] = [:]
     var contextClaimClosing: [GraphID: Task<Void, Never>] = [:]
     let registry: StoreRegistry
@@ -838,8 +839,9 @@ package actor GraphContextManager {
     var registeredGraphCount: Int { entries.count }
     var registeredHandleCount: Int { entries.values.reduce(0) { $0 + $1.tokens.count } }
 
-    package init(registry: StoreRegistry = .shared, schema: StoreSchema, adapter: GraphCoordinatorAdapter, contextOwnerID: UUID? = nil) {
-        self.contextOwnerID = contextOwnerID
+    package init(registry: StoreRegistry = .shared, schema: StoreSchema, adapter: GraphCoordinatorAdapter, contextOwnerID: UUID? = nil,
+                 appGroup: AppGroupStoreLocation? = nil) {
+        self.contextOwnerID = contextOwnerID; self.appGroup = appGroup
         self.registry = registry; self.schema = schema; self.adapter = adapter
         let source = adapter.migrationSource
         backups = GraphBackupManager(schemaIdentifier: schema.identifier, migrationSourceSchemaIdentifier: source?.schema.identifier,
@@ -896,11 +898,16 @@ package actor GraphContextManager {
         guard Set(cloudSessions.values.map(\.id)) == tokens else { throw GraphStoreMigrationError.busy }
     }
 
+    nonisolated func graphStoreConfiguration(_ id: GraphID, at url: URL) -> StoreConfiguration {
+        StoreConfiguration(location: .sqlite(url), exclusiveGraphID: id.rawValue,
+                           contextOwnerID: contextOwnerID, appGroup: appGroup)
+    }
+
     private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins, bootstrapPermit: UUID? = nil, initialParticipant: GraphCloudParticipantAccess? = nil) async throws -> GraphStore {
         do {
             try Task.checkCancellation()
             guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
-            let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID))
+            let resolved = try StoreRegistry.resolve(graphStoreConfiguration(id, at: url))
             if let existing = locations[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
             while true {
                 try await claimContextGraph(id, resolved: resolved)

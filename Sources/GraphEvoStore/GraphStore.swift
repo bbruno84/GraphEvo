@@ -74,6 +74,8 @@ public actor GraphStore {
     public nonisolated let id: GraphID
     let handle: StoreHandle
     private var publicContextLifetime: (any Sendable)?
+    package var usesCoordinatedStore: Bool { ownerLease != nil }
+
     package private(set) var publicCoordinatorGeneration: UUID?
     package var publicLeaseIsOpen: Bool { publicContextLifetime != nil }
     package func setCoordinatorGeneration(_ value: UUID) { publicCoordinatorGeneration = value }

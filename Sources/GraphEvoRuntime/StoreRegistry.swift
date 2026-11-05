@@ -5,6 +5,19 @@ package enum StoreOpeningMode: Sendable, Equatable {
     case openOrCreate
     case existing
     case new
+    /// A cold purge cannot borrow an ordinary graph owner or attach ahead of a peer.
+    case appGroupPurgeRecovery(storeID: String)
+
+    var isAppGroupPurgeRecovery: Bool {
+        if case .appGroupPurgeRecovery = self { return true }
+        return false
+    }
+}
+
+package enum StoreDestructionOutcome: Sendable {
+    case removed
+    /// A peer prevented destruction; this generation detached without deleting data.
+    case deferredAfterDetach
 }
 
 /// Value-only diagnostics, distinct from domain identity and cloud readiness.
@@ -13,6 +26,7 @@ package struct StoreRuntimeSnapshot: Sendable, Equatable {
     package let location: StoreLocation
     package let access: StoreAccess
     package let schemaIdentifier: String
+    package let usesAppGroupCoordination: Bool
 }
 
 /// One lease on an owner; close is idempotent and concurrent callers await the same outcome.
@@ -99,11 +113,12 @@ package actor StoreHandle {
     package func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
         materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        discard: @escaping @Sendable (Prepared) async -> Void = { _ in },
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         return try await registry.preparedControlTransaction(key, generation: generation, token: token,
-            prepare: prepare, materialize: materialize, finish: finish)
+            prepare: prepare, materialize: materialize, discard: discard, finish: finish)
     }
     package func inheritAccount(_ control: StoreAccountControl) async throws {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
@@ -188,7 +203,8 @@ package actor StoreHandle {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         try await registry.copyStore(key, generation: generation, token: token, to: url, reservation: reservation.id)
     }
-    package func destroy(graphID: UUID, storeID: String) async throws {
+    @discardableResult
+    package func destroy(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
         try await registry.destroy(key, generation: generation, token: token, graphID: graphID, storeID: storeID)
     }
 
@@ -257,12 +273,14 @@ package actor StoreRegistry {
         let resolved: ResolvedStore
         let schema: StoreSchema
         let nativeMigrationDocument: Data?
+        let recoveringAppGroupPurge: Bool
         let opening: Task<StoreResources, any Error>
         var fileIdentities: [StoreKey: FileIdentity] = [:]
         var tokens: Set<UUID> = []
         var shutdown: Task<Void, any Error>?
         var destroyToken: UUID?
-        var destroying = false
+        var destruction: Task<StoreDestructionOutcome, any Error>?
+        var discardingWorkspace = false
     }
 
     private let owner = UUID()
@@ -271,11 +289,29 @@ package actor StoreRegistry {
 
     init(hooks: StoreLifecycleHooks = StoreLifecycleHooks()) { self.hooks = hooks }
 
+    /// Check a restart-supplied App Group path without admitting a second native owner.
+    package nonisolated static func validateAppGroupIdentity(_ configuration: StoreConfiguration, storeID: String) async throws {
+        let resolved = try ResolvedStore(configuration)
+        guard configuration.appGroup != nil, let url = resolved.url, let graphID = configuration.exclusiveGraphID else {
+            throw StoreRuntimeError.resourceReserved
+        }
+        let presenter = AppGroupStorePresenter(directory: url.deletingLastPathComponent())
+        try await AppGroupStoreAccess(presenter: presenter, associatePresenter: false).run {
+            try StoreResources.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
+        }
+    }
+
     package func open(_ configuration: StoreConfiguration, schema: StoreSchema,
                       nativeMigration: StoreNativeMigration? = nil,
                       mode: StoreOpeningMode = .openOrCreate) async throws -> StoreHandle {
         try Task.checkCancellation()
         let resolved = try ResolvedStore(configuration)
+        if mode.isAppGroupPurgeRecovery, configuration.appGroup == nil {
+            throw StoreRuntimeError.invalidConfiguration("App Group purge recovery requires App Group admission.")
+        }
+        if configuration.appGroup != nil, mode == .openOrCreate {
+            throw StoreRuntimeError.invalidConfiguration("App Group stores require explicit creation or opening.")
+        }
         try validateContextClaim(resolved)
         while true {
             if let entry = entries[resolved.key], let shutdown = entry.shutdown {
@@ -299,6 +335,9 @@ package actor StoreRegistry {
             }
             if let entry = entries[resolved.key] {
                 if mode == .new, let url = resolved.url { throw StoreRuntimeError.storeAlreadyExists(url) }
+                guard !mode.isAppGroupPurgeRecovery, !entry.recoveringAppGroupPurge else {
+                    throw StoreRuntimeError.resourceReserved
+                }
                 guard try entry.resolved.isCompatible(with: resolved), entry.schema.isCompatible(with: schema),
                       entry.nativeMigrationDocument == nativeMigration?.document else {
                     throw StoreRuntimeError.configurationConflict(resolved.url)
@@ -311,6 +350,7 @@ package actor StoreRegistry {
                         nativeMigration: nativeMigration, mode: mode, expectedIdentity: expectedIdentity)
                 }
                 entries[resolved.key] = Entry(resolved: resolved, schema: schema, nativeMigrationDocument: nativeMigration?.document,
+                                             recoveringAppGroupPurge: mode.isAppGroupPurgeRecovery,
                                              opening: opening, fileIdentities: identities)
             }
             let token = UUID()
@@ -381,7 +421,7 @@ package actor StoreRegistry {
         let resources = try await entry.opening.value
         return try await resources.read(control: true) { _ in
             StoreRuntimeSnapshot(runtimeID: resources.id, location: entry.resolved.configuration.location,
-                                 access: entry.resolved.configuration.access, schemaIdentifier: entry.schema.identifier)
+                                 access: entry.resolved.configuration.access, schemaIdentifier: entry.schema.identifier, usesAppGroupCoordination: entry.resolved.configuration.appGroup != nil)
         }
     }
 
@@ -407,11 +447,12 @@ package actor StoreRegistry {
         _ key: StoreKey, generation: UUID, token: UUID,
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
         materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        discard: @escaping @Sendable (Prepared) async -> Void,
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
-        return try await resources.preparedControlTransaction(prepare: prepare, materialize: materialize, finish: finish)
+        return try await resources.preparedControlTransaction(prepare: prepare, materialize: materialize, discard: discard, finish: finish)
     }
 
     fileprivate func inheritAccount(_ key: StoreKey, generation: UUID, token: UUID, control: StoreAccountControl) async throws {
@@ -450,16 +491,16 @@ package actor StoreRegistry {
               value.destroyToken == token || (value.destroyToken == nil && value.tokens == [token] && value.shutdown == nil) else {
             throw StoreRuntimeError.configurationConflict(nil)
         }
-        if value.destroying, let task = value.shutdown { return try await task.value }
+        if value.discardingWorkspace, let task = value.shutdown { return try await task.value }
         let opening = value.opening
-        value.destroyToken = token; value.destroying = true; value.tokens.removeAll()
+        value.destroyToken = token; value.discardingWorkspace = true; value.tokens.removeAll()
         let task = Task { try await opening.value.discardWorkspace(body) }
         value.shutdown = task; entries[key] = value
         do {
             try await task.value
             if entries[key]?.generation == generation { entries.removeValue(forKey: key) }
         } catch {
-            if entries[key]?.generation == generation { entries[key]?.destroying = false }
+            if entries[key]?.generation == generation { entries[key]?.discardingWorkspace = false }
             throw error
         }
     }
@@ -478,25 +519,28 @@ package actor StoreRegistry {
         try await value.opening.value.copyStore(to: url, reservation: reservation)
     }
 
-    fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String) async throws {
+    fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
         guard var value = entries[key], value.generation == generation,
               value.resolved.configuration.exclusiveGraphID == graphID,
               value.destroyToken == token || (value.destroyToken == nil && value.tokens.contains(token) && value.shutdown == nil) else {
             throw StoreRuntimeError.closedHandle
         }
-        if value.destroying, let job = value.shutdown { return try await job.value }
+        if let job = value.destruction { return try await job.value }
         if value.destroyToken == nil {
             try validateIdentities(value.fileIdentities, current: value.resolved.resourceIdentities(), resolved: value.resolved)
         }
         let opening = value.opening
-        value.destroyToken = token; value.destroying = true; value.tokens.removeAll()
+        value.destroyToken = token; value.tokens.removeAll()
         let job = Task { try await opening.value.destroy(graphID: graphID, storeID: storeID) }
-        value.shutdown = job; entries[key] = value
+        value.destruction = job
+        value.shutdown = Task { _ = try await job.value }
+        entries[key] = value
         do {
-            try await job.value
+            let outcome = try await job.value
             if entries[key]?.generation == generation { entries.removeValue(forKey: key) }
+            return outcome
         } catch {
-            if entries[key]?.generation == generation { entries[key]?.destroying = false }
+            if entries[key]?.generation == generation { entries[key]?.destruction = nil }
             throw error
         }
     }
@@ -518,8 +562,13 @@ package actor StoreRegistry {
     }
 
     fileprivate func release(_ key: StoreKey, generation: UUID, token: UUID) async throws {
-        guard var entry = entries[key], entry.generation == generation,
-              entry.tokens.remove(token) != nil else { return }
+        guard var entry = entries[key], entry.generation == generation else { return }
+        if entry.resolved.configuration.appGroup != nil, entry.destroyToken != nil, let shutdown = entry.shutdown {
+            // Destruction revoked the leases. Closing one still waits for actual
+            // detachment and must surface a retained owner's failure.
+            return try await shutdown.value
+        }
+        guard entry.tokens.remove(token) != nil else { return }
         if !entry.tokens.isEmpty { entries[key] = entry; return }
         let opening = entry.opening
         let shutdown = Task { try await opening.value.close() }

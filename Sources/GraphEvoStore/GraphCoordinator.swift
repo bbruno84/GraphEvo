@@ -146,11 +146,17 @@ package actor GraphCoordinator {
         return try await handle.controlRead { try activation.replicaIDs($0, id) }
     }
 
-    static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, registry: StoreRegistry,
+    static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, storeID: String, registry: StoreRegistry,
                                 schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
         guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
-        let handle = try await registry.open(configuration, schema: schema, mode: .existing)
-        try await handle.setDataAvailable(false, terminal: true)
+        let mode: StoreOpeningMode = configuration.appGroup == nil ? .existing : .appGroupPurgeRecovery(storeID: storeID)
+        let handle = try await registry.open(configuration, schema: schema, mode: mode)
+        do { try await handle.setDataAvailable(false, terminal: true) }
+        catch {
+            let original = error
+            try await handle.close()
+            throw original
+        }
         return GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
             adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication)
     }
@@ -212,9 +218,9 @@ package actor GraphCoordinator {
         if let value { return try await handle.controlTransaction { try access($0, id, value) } }
         return try await handle.controlRead { try access($0, id, nil) }
     }
-    func destroy(storeID: String) async throws {
+    func destroy(storeID: String) async throws -> StoreDestructionOutcome {
         await syncSession?.retire()
-        try await handle.destroy(graphID: id.rawValue, storeID: storeID)
+        return try await handle.destroy(graphID: id.rawValue, storeID: storeID)
     }
 
     func validateCloudBinding(_ initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) async throws {

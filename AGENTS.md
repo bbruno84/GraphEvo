@@ -6,6 +6,9 @@ Read [controlled access](docs/design/graphevo-2-controlled-store-access.md) befo
 changing graph entry points, writer admission or mutation inventory reuse.
 GraphContextManager remains the coordinated writable gateway. Plain local
 runtime owners use stable advisory writer sidecars and lifetime presence leases.
+Dedicated package-only App Group S04 owners use finite Apple coordination for
+all interprocess exclusion. Durable generations record interrupted lifecycle
+work. Keep native destruction and artifact cleanup inside one Apple grant.
 Workspaces retain exclusive presence through final detach, including resumed or
 already converted workspaces; ordinary owners share presence. Destructive
 maintenance must refuse another live process owner. Never

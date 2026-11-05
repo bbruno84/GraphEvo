@@ -135,6 +135,13 @@ extension GraphContext {
         self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()))
     }
+
+    /// Creates a context restricted to the dedicated store paths in this App Group.
+    package init(appGroupIdentifier: String) throws {
+        let group = try AppGroupStoreLocation(identifier: appGroupIdentifier)
+        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group))
+    }
 }
 
 @available(iOS 17, macOS 14, *)

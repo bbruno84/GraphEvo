@@ -162,6 +162,8 @@ package actor GraphBackupManager {
 
     /// Materializes and verifies a private snapshot before publishing an empty destination.
     package func restore(at backup: URL, to destination: URL) async throws -> GraphRestoredBackup {
+        try AppGroupStoreLocation.rejectUncoordinated(backup)
+        try AppGroupStoreLocation.rejectUncoordinated(destination)
         let backup = backup.standardizedFileURL.resolvingSymlinksInPath()
         let target = try Self.destination(destination, outside: backup)
         return try await withStage(in: target.deletingLastPathComponent()) { stage in
@@ -187,6 +189,7 @@ package actor GraphBackupManager {
     }
 
     private func export(at source: URL, to destination: URL, expectedBackupID: UUID?) async throws -> GraphBackup {
+        try AppGroupStoreLocation.rejectUncoordinated(destination)
         let source = source.standardizedFileURL.resolvingSymlinksInPath()
         guard destination.pathExtension.lowercased() == GraphBackupPackage.fileExtension else { throw GraphBackupError.invalidDestination }
         let target = try Self.destination(destination, outside: source)
@@ -238,6 +241,7 @@ package actor GraphBackupManager {
     }
 
     package func remove(at directory: URL) async throws {
+        try AppGroupStoreLocation.rejectUncoordinated(directory)
         let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
         try await Self.catalog([.write(directory.deletingLastPathComponent())]) {
             let manifest = try self.readManifest(directory)
@@ -516,6 +520,7 @@ package actor GraphBackupManager {
         return try Data(contentsOf: url)
     }
     private static func directory(_ url: URL) throws -> URL {
+        try AppGroupStoreLocation.rejectUncoordinated(url)
         guard url.isFileURL, url.query == nil, url.fragment == nil else { throw GraphBackupError.invalidDestination }
         let result = url.standardizedFileURL.resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: result, withIntermediateDirectories: true)

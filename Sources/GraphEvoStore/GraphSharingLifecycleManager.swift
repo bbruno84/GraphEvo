@@ -143,7 +143,8 @@ extension GraphContextManager {
             }
             if sameURL, entries[id] != nil { return try await runSharingPurge(member, configuration: configuration) }
         }
-        let resolved = try StoreRegistry.resolve(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID))
+        let storeConfiguration = graphStoreConfiguration(id, at: url)
+        let resolved = try StoreRegistry.resolve(storeConfiguration)
         if let existing = entries[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
         guard !locations.contains(where: { $0.key != id && $0.value.key == resolved.key }) else { throw GraphStoreError.ownershipConflict }
         guard case .sqlite(let canonical) = resolved.configuration.location else { throw GraphCloudError.invalidConfiguration }
@@ -155,7 +156,17 @@ extension GraphContextManager {
             }
             if entries[id] != nil { return try await runSharingPurge(member, configuration: configuration) }
         }
-        if FileManager.default.fileExists(atPath: canonical.path) {
+        if appGroup != nil {
+            // A terminal replica is validated by the coordinated destroy path. A
+            // missing file after restart is not evidence that its purge completed.
+            if !member.terminal {
+                guard let storeID = member.storeID else { throw GraphCloudSharingError.metadataPending }
+                try await StoreRegistry.validateAppGroupIdentity(storeConfiguration, storeID: storeID)
+                guard !rejoiningGraphs.contains(id),
+                      let latest = try await session.membership(id), latest.generation == member.generation,
+                      !latest.terminal else { throw GraphCloudError.busy }
+            }
+        } else if FileManager.default.fileExists(atPath: canonical.path) {
             try autoreleasepool {
                 let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: canonical)
                 guard metadata[NSStoreUUIDKey] as? String == member.storeID,
@@ -303,25 +314,36 @@ extension GraphContextManager {
         guard let current = try await session.membership(id), current.generation == member.generation, current.terminal else { throw GraphCloudError.invalidState }
         guard let location = locations[id], let storeID = member.storeID else { throw GraphCloudSharingError.metadataPending }
         if let entry = entries[id], !entry.tokens.isEmpty { try await pauseCloudSynchronization(for: id) }
-        if FileManager.default.fileExists(atPath: location.url.path) || entries[id] != nil {
+        if appGroup != nil || FileManager.default.fileExists(atPath: location.url.path) || entries[id] != nil {
             if entries[id] == nil {
                 let registry = registry, schema = schema, adapter = adapter
-                let configuration = StoreConfiguration(location: .sqlite(location.url), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID)
-                let task = Task.detached { try await GraphCoordinator.recoverForPurge(id: id, configuration: configuration, registry: registry, schema: schema, adapter: adapter) }
+                let configuration = graphStoreConfiguration(id, at: location.url)
+                let task = Task.detached { try await GraphCoordinator.recoverForPurge(id: id, configuration: configuration, storeID: storeID, registry: registry, schema: schema, adapter: adapter) }
                 entries[id] = Entry(key: location.key, url: location.url, creating: false, initialPolicy: .lastEditWins, opening: task)
             }
             let entry = entries[id]!
             let owner: GraphCoordinator
             do { owner = try await entry.opening.value }
             catch let error as StoreRuntimeError {
-                if case .missingStore = error { removeClosedEntry(id, generation: entry.generation) }
+                switch error {
+                case .missingStore:
+                    removeClosedEntry(id, generation: entry.generation)
+                case .shutdownFailed:
+                    break // Retain a quarantined native owner.
+                default:
+                    if appGroup != nil { removeClosedEntry(id, generation: entry.generation) }
+                }
+                throw error
+            } catch {
+                if appGroup != nil { removeClosedEntry(id, generation: entry.generation) }
                 throw error
             }
             #if DEBUG
             try await purgeProbeBarrier?(id)
             #endif
-            try await owner.destroy(storeID: storeID)
+            let outcome = try await owner.destroy(storeID: storeID)
             removeClosedEntry(id, generation: entry.generation)
+            if case .deferredAfterDetach = outcome { throw StoreRuntimeError.resourceReserved }
         }
         try await session.completePurge(id, generation: member.generation)
         locations.removeValue(forKey: id)

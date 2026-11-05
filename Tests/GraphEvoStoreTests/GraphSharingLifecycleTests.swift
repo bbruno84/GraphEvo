@@ -2,6 +2,7 @@ import CloudKit
 import CoreData
 import Foundation
 import Testing
+import os
 @testable import GraphEvo
 @testable import GraphEvoModel
 @testable import GraphEvoStore
@@ -87,12 +88,16 @@ private actor RemovalGate {
         let invitation: GraphCloudInvitation
     }
     private func fixture(registry: StoreRegistry = StoreRegistry(), disk: GraphCloudDisk = .live,
-                         maximumBytes: Int = 32 * 1024 * 1024) async throws -> Fixture {
+                         maximumBytes: Int = 32 * 1024 * 1024, appGroup: Bool = false) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Lifecycle-\(UUID())")
+        if appGroup { try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false) }
+        let group = appGroup ? AppGroupStoreLocation(container: root) : nil
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.lifecycle.\(UUID())", environment: .development,
             directory: root.appendingPathComponent("Engine"), maximumBytes: maximumBytes)
-        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
-        let cloud = LifecycleCloud(), id = GraphID(), url = root.appendingPathComponent("Graph.sqlite")
+        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
+                                          adapter: GraphCoordinatorFactory.adapter, appGroup: group)
+        let cloud = LifecycleCloud(), id = GraphID()
+        let url = group?.storeURL(for: id.rawValue) ?? root.appendingPathComponent("Graph.sqlite")
         let graph = try await manager.createGraph(id: id, at: url)
         _ = try await manager.startCloudSession(config, adapter: cloud.adapter, disk: disk)
         let invitation = GraphCloudInvitation(container: config.containerIdentifier, environment: config.environment, graphID: id,
@@ -132,6 +137,53 @@ private actor RemovalGate {
         while await changes.next() != nil {}
         try await alias.close(); try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
     }
+    @Test(arguments: [false, true])
+    func appGroupLeaveWaitsForAnotherGenerationAndPurgesOnlyItsReplica(cold: Bool) async throws {
+        let f = try await fixture(appGroup: true)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let group = try #require(f.manager.appGroup)
+        let neighborID = GraphID(), neighborURL = group.storeURL(for: neighborID.rawValue)
+        let neighbor = try await f.manager.createGraph(id: neighborID, at: neighborURL)
+        let node = neighbor.makeNodeID()
+        _ = try await neighbor.transaction { try $0.insert(.init(id: node, type: "Neighbor")) }
+        try await neighbor.close()
+        let before = try Data(contentsOf: neighborURL)
+
+        if cold { try await f.graph.close() }
+        let configuration = f.manager.graphStoreConfiguration(f.graph.id, at: f.url)
+        let resolved = try ResolvedStore(configuration)
+        let generation = UUID()
+        let peer = AppGroupStorePresenter(directory: f.url.deletingLastPathComponent())
+        try await AppGroupStoreAccess(presenter: peer, associatePresenter: false).run {
+            try AppGroupOwnerClaims.publish(generation, for: resolved, creating: false)
+        }
+
+        await #expect(throws: (any Error).self) {
+            try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
+        }
+        #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .purging)
+        #expect(FileManager.default.fileExists(atPath: f.url.path))
+        await #expect(throws: (any Error).self) { try await f.graph.read { _ in () } }
+        let owners = f.url.deletingLastPathComponent().appendingPathComponent(".owners-v1")
+        // The app may go inactive while the peer still has the store open.
+        try await f.graph.close()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path) == [generation.uuidString])
+
+        // Simulate a successful close by the other generation. Production only
+        // removes its own claim after native detachment.
+        try await AppGroupStoreAccess(presenter: peer, associatePresenter: false).run {
+            try AppGroupOwnerClaims.remove(generation, for: resolved)
+        }
+        try await waitRemoved(f)
+        #expect(try Data(contentsOf: neighborURL) == before)
+        for artifact in [f.url.path, f.url.path + "-wal", f.url.path + "-shm"] {
+            #expect(!FileManager.default.fileExists(atPath: artifact))
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path).isEmpty)
+        try await f.graph.close()
+        try await f.manager.stopCloudSession(f.config)
+    }
+
     @Test func confirmedRevocationWinsOverPendingWritesEvenWhilePaused() async throws {
         let f = try await fixture()
         defer { try? FileManager.default.removeItem(at: f.root) }
@@ -210,6 +262,34 @@ private actor RemovalGate {
         var remaining = 1
         func fail() throws { if remaining > 0 { remaining -= 1; throw GraphCloudError.persistence } }
     }
+    @Test func appGroupCloseAfterNativeDestructionFailureRetainsClaimUntilRetry() async throws {
+        let failed = OSAllocatedUnfairLock(initialState: false)
+        var hooks = StoreLifecycleHooks()
+        hooks.beforeAppGroupArtifactCleanup = {
+            try failed.withLock { value in
+                guard !value else { return }
+                value = true
+                throw GraphCloudError.persistence
+            }
+        }
+        let f = try await fixture(registry: StoreRegistry(hooks: hooks), appGroup: true)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let owners = f.url.deletingLastPathComponent().appendingPathComponent(".owners-v1")
+        let original = try FileManager.default.contentsOfDirectory(atPath: owners.path)
+        #expect(original.count == 1)
+
+        await #expect(throws: GraphCloudError.persistence) {
+            try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
+        }
+        await #expect(throws: GraphCloudError.persistence) { try await f.graph.close() }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path) == original)
+        #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .purging)
+
+        #expect(try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config).phase == .removed)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path).isEmpty)
+        try await f.manager.stopCloudSession(f.config)
+    }
+
     @Test(arguments: [false, true]) func failedNativeDestructionRetainsClaimsAndCanResume(_ after: Bool) async throws {
         let failure = FailureOnce()
         var hooks = StoreLifecycleHooks()
@@ -226,22 +306,35 @@ private actor RemovalGate {
         #expect(recovered.phase == .removed && !FileManager.default.fileExists(atPath: f.url.path))
         try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
     }
-    @Test func restartAfterDestructionBeforeJournalCompletionUsesRegisteredCurrentURL() async throws {
+    @Test(arguments: [false, true])
+    func restartAfterDestructionBeforeJournalCompletionUsesRegisteredCurrentURL(appGroup: Bool) async throws {
         let disk = GraphCloudDisk(read: GraphCloudDisk.live.read, write: { url, data in
             let doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data)
             if doc.memberships.contains(where: { $0.phase == .removed }) { throw GraphCloudError.persistence }
             try GraphCloudDisk.live.write(url, data)
         })
-        let f = try await fixture(disk: disk)
+        let f = try await fixture(disk: disk, appGroup: appGroup)
         defer { try? FileManager.default.removeItem(at: f.root) }
         await #expect(throws: GraphCloudError.persistence) { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
         #expect(!FileManager.default.fileExists(atPath: f.url.path))
         try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
-        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let restarted = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+                                            adapter: GraphCoordinatorFactory.adapter, appGroup: f.manager.appGroup)
         _ = try await restarted.startCloudSession(f.config, adapter: f.cloud.adapter)
-        try await restarted.registerCloudGraphLocation(f.graph.id, at: f.url, configuration: f.config)
-        #expect(try await restarted.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .removed)
-        _ = try await restarted.leaveCloudShare(for: f.graph.id, configuration: f.config)
+        if appGroup {
+            await #expect {
+                try await restarted.registerCloudGraphLocation(f.graph.id, at: f.url, configuration: f.config)
+            } throws: { error in
+                if case .missingStore? = error as? StoreRuntimeError { return true }
+                return false
+            }
+            #expect(try await restarted.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .purging)
+            #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        } else {
+            try await restarted.registerCloudGraphLocation(f.graph.id, at: f.url, configuration: f.config)
+            #expect(try await restarted.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .removed)
+            _ = try await restarted.leaveCloudShare(for: f.graph.id, configuration: f.config)
+        }
         try await restarted.stopCloudSession(f.config)
     }
     @Test func purgeRetriesWhenReplicaDisappearsWhileOpening() async throws {
