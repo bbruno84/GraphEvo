@@ -50,3 +50,38 @@ after native destruction verifies that close surfaces the failure and retains
 the exact claim until the original owner finishes cleanup. The corrected
 runtime passed 715 local macOS v2 test functions and 40 focused tests on
 iOS 18.5 Simulator. The physical widget replay remains pending.
+
+## Apple coordination as the only interprocess exclusion
+
+The fresh App Group v2 namespace at `0bb7961e` uses Apple grants for all
+coordinated store access. The earlier hybrid namespace stays reserved. The
+updated local v2 profile passed 716 macOS test functions and the focused
+iOS 18.5 simulator run passed 64 tests. The prepared CloudKit asset case
+also verifies that a published batch reopens and its files are removed after
+a receipt. A rejected preparation removes its own staged files. Abandoned
+staging from a process crash requires separate verified cleanup.
+
+An independent macOS process harness checked two writers with 50 exact records
+and a third process that rejected its stale preparation and removed its
+staging. A live peer refused the Apple deletion grant. A separate opener
+submitted while native destruction had finished and cleanup was still inside
+the grant waited, then got `missingStore`. The adjacent SQLite digest stayed
+equal and no advisory lock sidecars appeared in the App Group namespace.
+
+On physical iPadOS 27.0, SIGKILL before native detach preserved the exact
+two-record inventory and two payload hashes. Cold purge refused and kept the
+same registration. SIGKILL after native destruction and before artifact
+cleanup left the original registration. The cold harness refused the
+remaining SQLite placeholders, so it could not publish a clean purge. A
+separate clean purge removed SQLite, WAL and SHM and cleared the registration
+without creating advisory lock sidecars. These are native lifecycle checks with
+a private bridge. The injected sharing suite separately verifies membership
+stays `purging` where cleanup cannot be proved.
+
+On the same iPad, the hybrid baseline `8cd6f90a` and the Apple-only candidate
+each reopened six times and committed 150 exact, ordered records. Median
+end-to-end reopen was 306.35 ms and 329.75 ms respectively. Median end-to-end
+write was 14.46 ms and 13.84 ms. The runs were sequential on one device.
+
+XCTest again stopped while enabling UI automation before starting the 30
+physical app/widget cycles. That replay remains the integration gate.
