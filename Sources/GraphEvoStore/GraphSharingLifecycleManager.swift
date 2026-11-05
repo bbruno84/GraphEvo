@@ -127,9 +127,22 @@ extension GraphContextManager {
     }
 
     /// A restart supplies current URLs before recovery; no sandbox path is persisted.
-    package func registerCloudGraphLocation(_ id: GraphID, at url: URL, configuration: GraphCloudConfiguration) async throws {
+    package func registerCloudGraphLocation(_ id: GraphID, at url: URL, configuration: GraphCloudConfiguration, recoveringOfflineGeneration: UUID? = nil) async throws {
         let session = try await cloud(configuration)
         guard let member = try await session.membership(id), member.role == .participant else { throw GraphStoreError.missingGraph }
+        if let generation = recoveringOfflineGeneration {
+            guard appGroup == nil, member.terminal, member.phase != .removed, let storeID = member.storeID,
+                  entries[id] == nil, purgeTasks[id] == nil, !rejoiningGraphs.contains(id) else {
+                throw StoreRuntimeError.resourceReserved
+            }
+            let store = graphStoreConfiguration(id, at: url)
+            let resolved = try StoreRegistry.resolve(store)
+            guard locations[id].map({ $0.key == resolved.key }) ?? true else { throw GraphCloudError.ownershipConflict }
+            try await StoreRegistry.recoverOfflineOwner(store, generation: generation, storeID: storeID) { _, metadata in
+                guard metadata[StoreNativeContext.workspaceKey] == nil else { throw StoreRuntimeError.resourceReserved }
+            }
+            return try await registerCloudGraphLocation(id, at: url, configuration: configuration)
+        }
         guard !rejoiningGraphs.contains(id) else { throw GraphCloudError.busy }
         if member.terminal, member.phase != .removed, let location = locations[id] {
             let sameURL = url.standardizedFileURL.resolvingSymlinksInPath() == location.url

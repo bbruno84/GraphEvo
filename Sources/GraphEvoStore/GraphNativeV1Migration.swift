@@ -12,10 +12,16 @@ package struct GraphNativeV1MigrationAdapter: Sendable {
     }
 }
 
+private struct GraphNativeV1RecoveryDocument: Decodable {
+    let format: Int
+    let intent: GraphV1ConversionIntent
+}
+
 extension GraphContextManager {
     /// Native staged conversion; property bytes are not accumulated into a graph-sized snapshot.
     @available(iOS 17, macOS 14, *)
-    package func openGraph(migratingNativeV1 request: GraphStoreMigrationRequest) async throws -> GraphNativeV1BootstrapResult {
+    package func openGraph(migratingNativeV1 request: GraphStoreMigrationRequest,
+                           recoveringOfflineGeneration: UUID? = nil) async throws -> GraphNativeV1BootstrapResult {
         try Task.checkCancellation()
         guard let native = adapter.nativeV1Migration, let conversion = adapter.v1Conversion,
               schema.identifier == conversion.targetSchemaIdentifier else { throw GraphV1ConversionError.unavailable }
@@ -47,12 +53,24 @@ extension GraphContextManager {
         do {
             let snapshot = try await input.read { try native.inspect($0, request.graphID) }
             let intent = GraphV1ConversionIntent(operationID: request.operationID, graphID: request.graphID, sourceFile: file, snapshot: snapshot)
-            let exists = FileManager.default.fileExists(atPath: destinationURL.path)
+            let destinationFile = FileManager.default.fileExists(atPath: destinationURL.path)
+                ? try WorkspaceFileIdentity(destinationURL) : nil
+            let exists = destinationFile != nil
             let metadata = exists ? try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: destinationURL) : [:]
+            let configuration = StoreConfiguration(location: .sqlite(destinationURL), exclusiveGraphID: request.graphID.rawValue,
+                contextOwnerID: contextOwnerID, workspaceID: request.operationID, workspaceSessionID: migrationIdentity)
+            if recoveringOfflineGeneration != nil, !exists { throw GraphV1ConversionError.conflictingDestination }
             if exists, metadata[StoreNativeContext.workspaceKey] == nil {
                 let handle = try await registry.open(destination.configuration, schema: schema); target = handle
                 guard let existing = try await handle.read({ try conversion.receipt($0, request.graphID) }), existing.intent == intent else {
                     throw GraphV1ConversionError.conflictingDestination
+                }
+                if let generation = recoveringOfflineGeneration {
+                    try await handle.close(); target = nil
+                    try await StoreRegistry.recoverOfflineOwner(configuration, generation: generation, storeID: existing.targetStoreID) { url, metadata in
+                        guard try WorkspaceFileIdentity(url) == destinationFile, metadata[StoreNativeContext.workspaceKey] == nil,
+                              metadata[StoreNativeMigration.documentKey] == nil else { throw GraphV1ConversionError.conflictingDestination }
+                    }
                 }
                 receipt = existing
             } else {
@@ -86,8 +104,17 @@ extension GraphContextManager {
                     } catch { try? await reader.close(); throw error }
                 } else { seed = try await backups.restore(at: backupURL, to: seedDirectory).storeURL }
                 let plan = try native.plan(seed, intent, snapshot)
-                let configuration = StoreConfiguration(location: .sqlite(destinationURL), exclusiveGraphID: request.graphID.rawValue, contextOwnerID: contextOwnerID,
-                    workspaceID: request.operationID, workspaceSessionID: migrationIdentity)
+                if let generation = recoveringOfflineGeneration {
+                    guard let storeID = metadata[NSStoreUUIDKey] as? String,
+                          let data = metadata[StoreNativeMigration.documentKey] as? Data, data.count <= 4 * 1024 * 1024,
+                          let document = try? JSONDecoder().decode(GraphNativeV1RecoveryDocument.self, from: data),
+                          document.format == 1, document.intent == intent else { throw GraphV1ConversionError.conflictingDestination }
+                    try await StoreRegistry.recoverOfflineOwner(configuration, generation: generation, storeID: storeID) { url, current in
+                        guard try WorkspaceFileIdentity(url) == destinationFile,
+                              current[StoreNativeContext.workspaceKey] as? String == request.operationID.uuidString,
+                              current[StoreNativeMigration.documentKey] as? Data == data else { throw GraphV1ConversionError.conflictingDestination }
+                    }
+                }
                 let handle = try await registry.open(configuration, schema: schema, nativeMigration: plan); target = handle
                 let committed = try await Task.detached {
                     try await handle.controlRead { try conversion.receipt($0, request.graphID) }

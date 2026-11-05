@@ -150,10 +150,16 @@ extension GraphCloudConnection {
     }
     /// Supplies a current path for an existing durable membership's restart/purge recovery.
     public func registerSharedReplica(id: GraphID, at storeURL: URL) async throws {
+        try await registerSharedReplica(id: id, at: storeURL, recoveringOfflineGeneration: nil)
+    }
+
+    /// A recovery generation may be supplied after stopping every process using an ordinary SQLite replica.
+    public func registerSharedReplica(id: GraphID, at storeURL: URL, recoveringOfflineGeneration: UUID?) async throws {
         return try await sharingOperation {
             try GraphContext.validateStoreURL(storeURL)
             let config = try await controlConfiguration()
-            try await owningContext.manager.registerCloudGraphLocation(id, at: storeURL, configuration: config)
+            try await owningContext.manager.registerCloudGraphLocation(id, at: storeURL, configuration: config,
+                recoveringOfflineGeneration: recoveringOfflineGeneration)
         }
     }
     private func removePublicObservation(_ id: UUID) { publicObservationControls.removeValue(forKey: id) }

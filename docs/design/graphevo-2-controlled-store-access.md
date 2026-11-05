@@ -86,6 +86,21 @@ Use the descriptor and the UUID-named entry under the workspace anchor's
 `.owners-v1` to identify the generation. Process age and file absence are
 insufficient evidence for releasing a registration.
 
+An ordinary replica purge can recover one abandoned registration at a time
+through `registerSharedReplica(id:at:recoveringOfflineGeneration:)`. The
+terminal membership supplies the expected store UUID. Native v1 conversion
+accepts the same explicit recovery parameter on its opening request and
+checks the durable intent or committed receipt. Stop all store users before
+using either path. Recovery refuses an active native owner and preserves
+retirement registrations. Native seed creation precedes owner registration
+while the exclusive grant is held.
+
+Ordinary SQLite outgoing attachment preparation sweeps unreferenced files,
+writes the bounded batch and saves its references within the same Apple grant.
+The next preparation can reclaim files after process death. Post-send cleanup
+uses the same grant so it cannot change the spool during a coordinated copy.
+Dedicated App Group preparation keeps its split-phase staging.
+
 Maintenance reservations drain local work. Native snapshot creation acquires
 source and destination in one Foundation request. The copy, source history
 boundary and outgoing assets are captured within that request. Compression

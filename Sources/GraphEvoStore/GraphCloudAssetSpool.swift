@@ -74,7 +74,8 @@ package struct GraphCloudAssetSpool: Sendable {
     /// Session event publication is serial; this bounded write completes before a checkpoint is stored.
     package func stageBlocking(_ data: Data, role: GraphCloudAssetReference.Role, namespace: UUID,
                                identity: GraphCloudSessionIdentity, binding: GraphCloudBinding,
-                               recordName: String, storeID: String? = nil, epoch: UUID? = nil) throws -> GraphCloudAssetReference {
+                               recordName: String, storeID: String? = nil, epoch: UUID? = nil,
+                               check: () throws -> Void = { try Task.checkCancellation() }) throws -> GraphCloudAssetReference {
         guard data.count <= GraphAttachmentPayload.maximumByteCount else { throw GraphCloudError.inboxLimit }
         let file = UUID()
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -83,7 +84,7 @@ package struct GraphCloudAssetSpool: Sendable {
             sha256: digest, storeID: storeID, epoch: epoch)
         try reference.validate(role: role, identity: identity, binding: binding, recordName: recordName,
                                storeID: storeID, epoch: epoch)
-        try Task.checkCancellation()
+        try check()
         try Self.ensureRoot(root)
         let directory = root.appendingPathComponent(namespace.uuidString, isDirectory: true)
         try Self.ensurePrivateDirectory(directory)
@@ -96,7 +97,7 @@ package struct GraphCloudAssetSpool: Sendable {
                 guard let base = raw.baseAddress else { return }
                 var offset = 0
                 while offset < raw.count {
-                    try Task.checkCancellation()
+                    try check()
                     let count = Darwin.write(descriptor, base.advanced(by: offset), min(raw.count - offset, 256 * 1024))
                     guard count > 0 else { throw GraphCloudError.persistence }
                     offset += count
@@ -152,30 +153,47 @@ package struct GraphCloudAssetSpool: Sendable {
     package func presence(_ reference: GraphCloudAssetReference, role: GraphCloudAssetReference.Role,
                           identity: GraphCloudSessionIdentity, binding: GraphCloudBinding,
                           recordName: String, storeID: String? = nil, epoch: UUID? = nil) async throws {
+        try await GraphAttachmentIO.perform {
+            try presenceBlocking(reference, role: role, identity: identity, binding: binding,
+                                 recordName: recordName, storeID: storeID, epoch: epoch)
+        }
+    }
+
+    private func presenceBlocking(_ reference: GraphCloudAssetReference, role: GraphCloudAssetReference.Role,
+                                  identity: GraphCloudSessionIdentity, binding: GraphCloudBinding,
+                                  recordName: String, storeID: String?, epoch: UUID?) throws {
         try reference.validate(role: role, identity: identity, binding: binding, recordName: recordName,
                                storeID: storeID, epoch: epoch)
-        try await GraphAttachmentIO.perform {
-            if self.root.lastPathComponent != "GraphEvoCloudAssets" {
-                try Self.checkPrivateDirectory(self.root.deletingLastPathComponent())
-            }
-            try Self.checkPrivateDirectory(self.root)
-            try Self.checkMarker(self.root)
-            let directory = self.root.appendingPathComponent(reference.namespace.uuidString, isDirectory: true)
-            try Self.checkPrivateDirectory(directory)
-            let path = directory.appendingPathComponent(reference.file.uuidString)
-            var value = stat()
-            guard lstat(path.path, &value) == 0, (value.st_mode & S_IFMT) == S_IFREG,
-                  value.st_uid == getuid(), value.st_nlink == 1, value.st_mode & 0o077 == 0,
-                  value.st_size == reference.byteCount else { throw GraphCloudError.invalidState }
+        if root.lastPathComponent != "GraphEvoCloudAssets" {
+            try Self.checkPrivateDirectory(root.deletingLastPathComponent())
         }
+        try Self.checkPrivateDirectory(root)
+        try Self.checkMarker(root)
+        let directory = root.appendingPathComponent(reference.namespace.uuidString, isDirectory: true)
+        try Self.checkPrivateDirectory(directory)
+        let path = directory.appendingPathComponent(reference.file.uuidString)
+        var value = stat()
+        guard lstat(path.path, &value) == 0, (value.st_mode & S_IFMT) == S_IFREG,
+              value.st_uid == getuid(), value.st_nlink == 1, value.st_mode & 0o077 == 0,
+              value.st_size == reference.byteCount else { throw GraphCloudError.invalidState }
     }
 
     package func freeze(_ prepared: GraphCloudPreparedOutgoing, identity: GraphCloudSessionIdentity,
                         stagingNamespace: UUID? = nil,
-                        check: @Sendable () throws -> Void) async throws -> GraphCloudOutgoingBatch {
+                        check: @escaping @Sendable () throws -> Void) async throws -> GraphCloudOutgoingBatch {
+        try await GraphAttachmentIO.perform {
+            try freezeBlocking(prepared, identity: identity, stagingNamespace: stagingNamespace) {
+                try Task.checkCancellation(); try check()
+            }
+        }
+    }
+
+    /// Without a staging namespace the caller must retain the store writer grant through save.
+    func freezeBlocking(_ prepared: GraphCloudPreparedOutgoing, identity: GraphCloudSessionIdentity,
+                        stagingNamespace: UUID? = nil, check: () throws -> Void) throws -> GraphCloudOutgoingBatch {
         let batch = prepared.batch
         let binding = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)
-        if stagingNamespace == nil { try await reconcile(retaining: batch.items.compactMap(\.assetReference)) }
+        if stagingNamespace == nil { try reconcileBlocking(retaining: batch.items.compactMap(\.assetReference), check: check) }
         var items: [GraphCloudOutgoingNode] = []
         var preparedBytes = 0
         var staged: [GraphCloudAssetReference] = []
@@ -191,17 +209,17 @@ package struct GraphCloudAssetSpool: Sendable {
                     try reference.validate(role: .outgoing, identity: identity, binding: binding,
                                            recordName: item.recordName, storeID: prepared.storeID, epoch: prepared.epoch)
                     try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding)
-                    try await presence(reference, role: .outgoing, identity: identity, binding: binding,
+                    try presenceBlocking(reference, role: .outgoing, identity: identity, binding: binding,
                                        recordName: item.recordName, storeID: prepared.storeID, epoch: prepared.epoch)
                     items.append(item)
                 } else if record["asset"] != nil {
                     let data = try GraphCloudAsset.bytes(record["asset"])
                     guard data.count <= 32 * 1024 * 1024 - preparedBytes else { throw GraphCloudError.inboxLimit }
                     preparedBytes += data.count
-                    let reference = try await stage(data, role: .outgoing, namespace: stagingNamespace ?? batch.id, identity: identity,
+                    let reference = try stageBlocking(data, role: .outgoing, namespace: stagingNamespace ?? batch.id, identity: identity,
                                                     binding: binding, recordName: item.recordName,
-                                                    storeID: prepared.storeID, epoch: prepared.epoch)
-                    if stagingNamespace != nil { staged.append(reference) }
+                                                    storeID: prepared.storeID, epoch: prepared.epoch, check: check)
+                    staged.append(reference)
                     record["asset"] = Data() as CKRecordValue
                     try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding)
                     let frozen = try GraphCloudRecordCodec.archive(record, scope: batch.zone.scope, portableAsset: true)
@@ -210,7 +228,7 @@ package struct GraphCloudAssetSpool: Sendable {
                 } else { items.append(item) }
             }
         } catch {
-            await remove(staged, retaining: [])
+            try? removeBlocking(staged, retaining: [])
             throw error
         }
         return GraphCloudOutgoingBatch(id: batch.id, graphID: batch.graphID, zone: batch.zone,
@@ -284,40 +302,48 @@ package struct GraphCloudAssetSpool: Sendable {
 
     /// Only this caller's owned root may be swept, after its complete durable reference set is known.
     package func reconcile(retaining references: [GraphCloudAssetReference]) async throws {
-        let retained = Set(references.map { $0.namespace.uuidString + "/" + $0.file.uuidString })
         try await GraphAttachmentIO.perform {
-            guard FileManager.default.fileExists(atPath: self.root.path) else {
-                guard references.isEmpty else { throw GraphCloudError.invalidState }
-                return
+            try reconcileBlocking(retaining: references, check: { try Task.checkCancellation() })
+        }
+    }
+
+    private func reconcileBlocking(retaining references: [GraphCloudAssetReference], check: () throws -> Void) throws {
+        let retained = Set(references.map { $0.namespace.uuidString + "/" + $0.file.uuidString })
+        guard FileManager.default.fileExists(atPath: root.path) else {
+            guard references.isEmpty else { throw GraphCloudError.invalidState }
+            return
+        }
+        try Self.checkPrivateDirectory(root)
+        try Self.checkMarker(root)
+        for namespace in try FileManager.default.contentsOfDirectory(atPath: root.path) where namespace != "format-1" {
+            try check()
+            guard let uuid = UUID(uuidString: namespace), uuid.uuidString == namespace else { continue }
+            let directory = root.appendingPathComponent(namespace, isDirectory: true)
+            try Self.checkPrivateDirectory(directory)
+            for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
+                try check()
+                guard let file = UUID(uuidString: name), file.uuidString == name,
+                      !retained.contains(namespace + "/" + name) else { continue }
+                try Self.removeFile(directory.appendingPathComponent(name))
             }
-            try Self.checkPrivateDirectory(self.root)
-            try Self.checkMarker(self.root)
-            for namespace in try FileManager.default.contentsOfDirectory(atPath: self.root.path) where namespace != "format-1" {
-                guard let uuid = UUID(uuidString: namespace), uuid.uuidString == namespace else { continue }
-                let directory = self.root.appendingPathComponent(namespace, isDirectory: true)
-                try Self.checkPrivateDirectory(directory)
-                for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
-                    guard let file = UUID(uuidString: name), file.uuidString == name,
-                          !retained.contains(namespace + "/" + name) else { continue }
-                    try Self.removeFile(directory.appendingPathComponent(name))
-                }
-                if try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty {
-                    guard Darwin.rmdir(directory.path) == 0 else { throw GraphCloudError.persistence }
-                }
+            if try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty {
+                guard Darwin.rmdir(directory.path) == 0 else { throw GraphCloudError.persistence }
             }
         }
     }
 
     package func remove(_ references: [GraphCloudAssetReference], retaining kept: [GraphCloudAssetReference]) async {
+        _ = try? await GraphAttachmentIO.perform { try removeBlocking(references, retaining: kept) }
+    }
+
+    func removeBlocking(_ references: [GraphCloudAssetReference], retaining kept: [GraphCloudAssetReference]) throws {
         let retained = Set(kept.map { $0.namespace.uuidString + "/" + $0.file.uuidString })
-        _ = try? await GraphAttachmentIO.perform {
-            try Self.checkPrivateDirectory(self.root)
-            try Self.checkMarker(self.root)
-            for reference in references where !retained.contains(reference.namespace.uuidString + "/" + reference.file.uuidString) {
-                let directory = self.root.appendingPathComponent(reference.namespace.uuidString, isDirectory: true)
-                try Self.checkPrivateDirectory(directory)
-                try Self.removeFile(directory.appendingPathComponent(reference.file.uuidString))
-            }
+        try Self.checkPrivateDirectory(root)
+        try Self.checkMarker(root)
+        for reference in references where !retained.contains(reference.namespace.uuidString + "/" + reference.file.uuidString) {
+            let directory = root.appendingPathComponent(reference.namespace.uuidString, isDirectory: true)
+            try Self.checkPrivateDirectory(directory)
+            try Self.removeFile(directory.appendingPathComponent(reference.file.uuidString))
         }
     }
 

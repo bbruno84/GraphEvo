@@ -178,6 +178,27 @@ private actor AssetBus {
         try FileManager.default.removeItem(at: first.directory)
     }
     @available(iOS 17, macOS 14, *)
+    @Test func ordinaryPreparationSweepsAbandonedFilesAndPreservesTheDurableAttempt() async throws {
+        let f = try await fixture(AssetBus())
+        _ = try await seed(f, count: 4096)
+        let route = GraphCloudTransportBinding(identity: try await f.manager.cloud(f.config).identity(), route: f.binding)
+        let batch = try await f.graph.prepareTransport(route)
+        let reference = try #require(batch.items.compactMap(\.assetReference).first)
+        let root = try #require(batch.assetRoot)
+        let spool = try GraphCloudAssetSpool(root: root)
+        let abandoned = try await spool.stage(Data([0x42]), role: .outgoing, namespace: UUID(),
+            identity: route.identity, binding: route.route, recordName: reference.recordName,
+            storeID: reference.storeID, epoch: reference.epoch)
+        let abandonedDirectory = root.appendingPathComponent(abandoned.namespace.uuidString)
+        let durableFile = root.appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
+        #expect(FileManager.default.fileExists(atPath: abandonedDirectory.path))
+        #expect(try await f.graph.prepareTransport(route) == batch)
+        #expect(!FileManager.default.fileExists(atPath: abandonedDirectory.path))
+        #expect(FileManager.default.fileExists(atPath: durableFile.path))
+        try await close(f)
+    }
+
+    @available(iOS 17, macOS 14, *)
     @Test func backupPackageIncludesFrozenOutgoingAssetFile() async throws {
         let bus = AssetBus(), f = try await fixture(bus)
         let content = try await seed(f, count: 1024 * 1024)

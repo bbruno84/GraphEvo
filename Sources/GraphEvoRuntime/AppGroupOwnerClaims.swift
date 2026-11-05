@@ -22,19 +22,22 @@ enum AppGroupOwnerClaims {
         }
     }
 
+    static func checkCreationArtifacts(_ resolved: ResolvedStore) throws {
+        guard let url = resolved.url else { throw StoreRuntimeError.resourceReserved }
+        let files = FileManager.default
+        for suffix in ["-wal", "-shm", "-journal"] {
+            let sidecar = URL(fileURLWithPath: url.path + suffix)
+            let exists = files.fileExists(atPath: sidecar.path)
+            let symlink = (try? files.destinationOfSymbolicLink(atPath: sidecar.path)) != nil
+            guard !exists, !symlink else { throw StoreRuntimeError.resourceReserved }
+        }
+    }
+
     static func publish(_ generation: UUID, for resolved: ResolvedStore, creating: Bool) throws {
         let directory = try directory(for: resolved)
         let graph = resolved.configuration.exclusiveGraphID
         let files = FileManager.default
-        if creating {
-            guard let url = resolved.url else { throw StoreRuntimeError.resourceReserved }
-            for suffix in ["-wal", "-shm", "-journal"] {
-                let sidecar = URL(fileURLWithPath: url.path + suffix)
-                let exists = files.fileExists(atPath: sidecar.path)
-                let symlink = (try? files.destinationOfSymbolicLink(atPath: sidecar.path)) != nil
-                guard !exists, !symlink else { throw StoreRuntimeError.resourceReserved }
-            }
-        }
+        if creating { try checkCreationArtifacts(resolved) }
         if creating || resolved.configuration.appGroup == nil {
             do { try files.createDirectory(at: directory, withIntermediateDirectories: false) }
             catch let error as CocoaError where error.code == .fileWriteFileExists { }
@@ -75,11 +78,18 @@ enum AppGroupOwnerClaims {
         try handle.synchronize()
     }
 
-    static func recoverWorkspace(_ generation: UUID, for resolved: ResolvedStore) throws {
-        guard resolved.configuration.workspaceID != nil else { throw StoreRuntimeError.resourceReserved }
-        try requireSoleClaim(generation, for: resolved)
-        let entry = try directory(for: resolved).appendingPathComponent(generation.uuidString)
-        guard try verify(entry, generation: generation, for: resolved).retiring != true else {
+    static func recoverOffline(_ generation: UUID, for resolved: ResolvedStore) throws {
+        let directory = try directory(for: resolved)
+        try verifyDirectory(directory)
+        if resolved.configuration.workspaceID != nil {
+            try requireSoleClaim(generation, for: resolved)
+        }
+        let entry = directory.appendingPathComponent(generation.uuidString)
+        let claim = try read(entry)
+        guard claim.generation == generation, claim.workspace == resolved.configuration.workspaceID,
+              claim.retiring != true,
+              claim.graph == resolved.configuration.exclusiveGraphID ||
+                (claim.graph == nil && claim.workspace == nil) else {
             throw StoreRuntimeError.resourceReserved
         }
         try FileManager.default.removeItem(at: entry)

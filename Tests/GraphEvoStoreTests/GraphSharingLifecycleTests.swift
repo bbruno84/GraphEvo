@@ -466,6 +466,37 @@ private actor RemovalGate {
         #expect(!FileManager.default.fileExists(atPath: moved.path))
         try await graph.close(); try await restarted.stopCloudSession(f.config)
     }
+    @Test func offlineRecoveryRemovesOnlyTheNamedAbandonedOwnerAndResumesPurge() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let id = f.graph.id
+        let configuration = StoreConfiguration(location: .sqlite(f.url), exclusiveGraphID: id.rawValue)
+        let resolved = try ResolvedStore(configuration)
+        let anchor = try SQLiteStoreCoordination.directory(resolved)
+        let abandoned = UUID()
+        try await CoordinatedFiles.run([.write(anchor)]) {
+            try AppGroupOwnerClaims.publish(abandoned, for: resolved, creating: false)
+        }
+        await #expect(throws: StoreRuntimeError.self) {
+            try await f.manager.leaveCloudShare(for: id, configuration: f.config)
+        }
+        try await f.graph.close()
+        #expect(try await f.manager.cloudSharingStatus(for: id, configuration: f.config).phase == .purging)
+        await #expect(throws: (any Error).self) {
+            try await f.manager.registerCloudGraphLocation(id, at: f.url, configuration: f.config, recoveringOfflineGeneration: UUID())
+        }
+        #expect(FileManager.default.fileExists(atPath: f.url.path))
+        let peer = try await StoreRegistry().open(configuration, schema: GraphRuntimeSchema.typedProperties, mode: .existing)
+        await #expect(throws: StoreRuntimeError.self) {
+            try await f.manager.registerCloudGraphLocation(id, at: f.url, configuration: f.config, recoveringOfflineGeneration: abandoned)
+        }
+        try await peer.close()
+        try await f.manager.registerCloudGraphLocation(id, at: f.url, configuration: f.config, recoveringOfflineGeneration: abandoned)
+        #expect(try await f.manager.cloudSharingStatus(for: id, configuration: f.config).phase == .removed)
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        try await f.manager.stopCloudSession(f.config)
+    }
+
     @Test func wrongStoreRegistrationCannotClaimOrDestroyUnrelatedGraph() async throws {
         let f = try await fixture()
         defer { try? FileManager.default.removeItem(at: f.root) }

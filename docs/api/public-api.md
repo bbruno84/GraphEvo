@@ -852,11 +852,19 @@ public actor GraphContext {
                             conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphStore
     public func openGraph(id: GraphID, at storeURL: URL) async throws -> GraphStore
     public func openGraph(convertingLocalV1 request: GraphV1BootstrapRequest) async throws -> GraphV1BootstrapResult
+    public func openGraph(convertingLocalV1 request: GraphV1BootstrapRequest,
+                          recoveringOfflineGeneration: UUID?) async throws -> GraphV1BootstrapResult
     public func connectCloud(using configuration: GraphCloudConnectionConfiguration) async throws -> GraphCloudConnection
     public func setForegroundActive(_ active: Bool) async throws
     public func refreshCloudAccounts() async throws
 }
 ```
+
+After an interrupted native v1 conversion, stop every process using the
+destination. The recovery overload takes the UUID of the abandoned
+registration under the destination coordination directory's `.owners-v1`.
+Use the original conversion request. Recovery checks the destination identity
+and the saved conversion intent or committed receipt before releasing that registration.
 
 `GraphConflictPolicy` is `.cloudWins` or `.lastEditWins` (default). Cloud
 configuration requires container identifier, `GraphCloudEnvironment`
@@ -2098,6 +2106,9 @@ and [contract](../design/graphevo-2-public-sharing.md).
   stopSharing preserves owner graph data. The host confirms destructive user intent.
 - `sharingStatus(for:)`, `observeSharing(for:)`, `refreshSharing(for:)` and
   `registerSharedReplica(id:at:)` support membership presentation and restart recovery.
+  For a terminal ordinary SQLite replica, `registerSharedReplica(id:at:recoveringOfflineGeneration:)`
+  can remove a named abandoned owner registration before resuming purge. Stop
+  every process using the replica and use the UUID of the exact registration.
   GraphCloudSharingStatus exposes graphID, generation, role, phase, permission,
   reason, remoteOperationPending and bounded failure. Status survives local removal.
   Shared routes also support existing pause/resume APIs.

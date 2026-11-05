@@ -59,10 +59,16 @@ extension GraphContext {
     /// Converts a stopped supported source through native staged Core Data migration.
     /// Data remains a value; attachment optimization belongs to the consumer.
     public func openGraph(convertingLocalV1 request: GraphV1BootstrapRequest) async throws -> GraphV1BootstrapResult {
+        try await openGraph(convertingLocalV1: request, recoveringOfflineGeneration: nil)
+    }
+
+    /// Supply an exact recovery generation only after stopping every process using the destination.
+    public func openGraph(convertingLocalV1 request: GraphV1BootstrapRequest,
+                          recoveringOfflineGeneration: UUID?) async throws -> GraphV1BootstrapResult {
         try Self.validateStoreURL(request.destinationURL)
         await manager.setLocalAccountAdapter(adapterForBootstrap)
         do {
-            let result = try await manager.openPublicV1(request.native)
+            let result = try await manager.openPublicV1(request.native, recoveringOfflineGeneration: recoveringOfflineGeneration)
             if case .success(let graph) = result.opening { await graph.retainPublicContext(self, identity: identityForBootstrap) }
             await manager.releaseContextGraphIfIdle(request.graphID)
             return .init(conversion: .init(result.conversion), opening: result.opening)
@@ -75,9 +81,9 @@ extension GraphContext {
 
 extension GraphContextManager {
     @available(iOS 17, macOS 14, *)
-    func openPublicV1(_ request: GraphStoreMigrationRequest) async throws -> GraphNativeV1BootstrapResult {
+    func openPublicV1(_ request: GraphStoreMigrationRequest, recoveringOfflineGeneration: UUID? = nil) async throws -> GraphNativeV1BootstrapResult {
         guard adapter.nativeV1Migration != nil else { throw GraphStoreMigrationError.unavailable }
-        return try await openGraph(migratingNativeV1: request)
+        return try await openGraph(migratingNativeV1: request, recoveringOfflineGeneration: recoveringOfflineGeneration)
     }
 }
 

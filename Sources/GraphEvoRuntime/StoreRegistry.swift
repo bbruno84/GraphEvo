@@ -120,7 +120,7 @@ package actor StoreHandle {
     /// The runtime retains writer admission, owns the sole save and always drains cleanup.
     package func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
-        materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        materialize: @escaping @Sendable (Snapshot, @escaping StoreNativeContext.CancellationCheck) async throws -> Prepared,
         discard: @escaping @Sendable (Prepared) async -> Void = { _ in },
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {
@@ -320,8 +320,22 @@ package actor StoreRegistry {
     package nonisolated static func recoverOfflineWorkspace(_ configuration: StoreConfiguration,
         generation: UUID, storeID: String, validate: @escaping @Sendable () throws -> Void
     ) async throws {
+        guard configuration.workspaceID != nil else { throw StoreRuntimeError.resourceReserved }
+        try await recoverOfflineOwner(configuration, generation: generation, storeID: storeID) { _, metadata in
+            guard metadata[StoreNativeContext.workspaceKey] as? String == configuration.workspaceID?.uuidString else {
+                throw StoreRuntimeError.resourceReserved
+            }
+            try validate()
+        }
+    }
+
+    /// Offline repair is limited to one named registration, with no native owner attached.
+    package nonisolated static func recoverOfflineOwner(_ configuration: StoreConfiguration,
+        generation: UUID, storeID: String,
+        validate: @escaping @Sendable (URL, [String: Any]) throws -> Void = { _, _ in }
+    ) async throws {
         let resolved = try ResolvedStore(configuration)
-        guard let workspace = configuration.workspaceID, let graph = configuration.exclusiveGraphID,
+        guard let graph = configuration.exclusiveGraphID,
               configuration.appGroup == nil, let url = resolved.url else { throw StoreRuntimeError.resourceReserved }
         let gateway = try StoreGatewayLease.acquire(configuration, owner: UUID())
         defer { gateway.release() }
@@ -334,14 +348,14 @@ package actor StoreRegistry {
                       try SQLiteStoreCoordination.identity(directory) == anchorIdentity else {
                     throw StoreRuntimeError.storeReplaced(url)
                 }
-                try validate()
-                try StoreResources.validateDestructionIdentity(url, graphID: graph, storeID: storeID)
                 let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType,
                     at: url, options: [NSReadOnlyPersistentStoreOption: true])
-                guard metadata[StoreNativeContext.workspaceKey] as? String == workspace.uuidString else {
-                    throw StoreRuntimeError.resourceReserved
+                guard metadata[NSStoreUUIDKey] as? String == storeID,
+                      metadata[StoreNativeContext.historySyncGraphKey] as? String == graph.uuidString else {
+                    throw StoreRuntimeError.storeReplaced(url)
                 }
-                try AppGroupOwnerClaims.recoverWorkspace(generation, for: resolved)
+                try validate(url, metadata)
+                try AppGroupOwnerClaims.recoverOffline(generation, for: resolved)
             }
         } catch is CoordinatedFiles.Denied { throw StoreRuntimeError.resourceReserved }
     }
@@ -502,7 +516,7 @@ package actor StoreRegistry {
     fileprivate func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
         _ key: StoreKey, generation: UUID, token: UUID,
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
-        materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        materialize: @escaping @Sendable (Snapshot, @escaping StoreNativeContext.CancellationCheck) async throws -> Prepared,
         discard: @escaping @Sendable (Prepared) async -> Void,
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {

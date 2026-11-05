@@ -144,7 +144,21 @@ actor GraphSyncSession {
         let id = graphID
         let snapshot = try await handle.snapshot()
         guard case .sqlite(let storeURL) = snapshot.location else { throw GraphCloudError.invalidConfiguration }
-        let stagingNamespace = snapshot.usesSQLiteCoordination ? UUID() : nil
+        if snapshot.usesSQLiteCoordination, !snapshot.usesAppGroupCoordination {
+            // Keep the durable reference inventory, sweep, asset writes and save in one grant.
+            let batch = try await handle.controlTransaction { context in
+                let prepared = try cloud.prepare(context, id, binding, maximum, limits, onlyIDs)
+                let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(
+                    storeURL: storeURL, storeID: prepared.storeID))
+                let batch = try spool.freezeBlocking(prepared, identity: binding.identity,
+                    check: StoreNativeContext.cancellationCheck(in: context))
+                try cloud.finishPrepared(context, id, binding, batch, limits)
+                return batch
+            }
+            guard !retired else { throw GraphStoreError.closed }
+            return batch
+        }
+        let stagingNamespace = snapshot.usesAppGroupCoordination ? UUID() : nil
         let result = try await handle.preparedControlTransaction(
             prepare: { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) },
             materialize: { prepared, check in
@@ -187,13 +201,21 @@ actor GraphSyncSession {
         let captured = resolvedAssets
         let result = try await handle.controlTransaction { try cloud.sent($0, id, binding, receipts, captured, remoteAssets, limits) }
         if let attempt, attempt.batch.items.contains(where: { $0.assetReference != nil }),
-           case .sqlite(let storeURL) = try await handle.snapshot().location,
+           let snapshot = try? await handle.snapshot(),
+           case .sqlite(let storeURL) = snapshot.location,
            let spool = try? GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL,
                                                                                           storeID: attempt.storeID)) {
             do {
-                let current = try await handle.controlRead { try cloud.currentAttempt($0, id, binding, limits) }
-                await spool.remove(attempt.batch.items.compactMap(\.assetReference),
-                                   retaining: current?.batch.items.compactMap(\.assetReference) ?? [])
+                let references = attempt.batch.items.compactMap(\.assetReference)
+                if snapshot.usesSQLiteCoordination, !snapshot.usesAppGroupCoordination {
+                    try await handle.controlTransaction {
+                        let current = try cloud.currentAttempt($0, id, binding, limits)
+                        try spool.removeBlocking(references, retaining: current?.batch.items.compactMap(\.assetReference) ?? [])
+                    }
+                } else {
+                    let current = try await handle.controlRead { try cloud.currentAttempt($0, id, binding, limits) }
+                    await spool.remove(references, retaining: current?.batch.items.compactMap(\.assetReference) ?? [])
+                }
             } catch { /* A later verified preparation can prune the orphan. */ }
         }
         return result

@@ -174,13 +174,19 @@ actor StoreResources {
                 }
                 let initialDescription = try nativeMigration == nil ? storeDescription(resolved, model: model,
                     requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier, nativeMirroring: false) : nil
-                try AppGroupOwnerClaims.publish(presenter.generation, for: resolved,
-                    creating: mode == .new || (mode == .openOrCreate && !FileManager.default.fileExists(atPath: url.path)))
+                let creating = mode == .new || (mode == .openOrCreate && !FileManager.default.fileExists(atPath: url.path))
+                if let nativeMigration, creating {
+                    try AppGroupOwnerClaims.requireNoClaims(for: resolved, allowMissing: true)
+                    try AppGroupOwnerClaims.checkCreationArtifacts(resolved)
+                    // An interrupted seed has no attached coordinator to register.
+                    do { try nativeMigration.seed(resolved) }
+                    catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
+                }
+                try AppGroupOwnerClaims.publish(presenter.generation, for: resolved, creating: creating && nativeMigration == nil)
                 presenter.register()
                 var container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model)
                 do {
                     if let nativeMigration {
-                        try nativeMigration.seed(resolved)
                         if let prepare = nativeMigration.prepare {
                             let source = nativeMigration.sourceSchema, sourceModel = source.makeModel()
                             let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
@@ -480,7 +486,7 @@ actor StoreResources {
     /// revalidates the persistent history boundary under its final Apple grant.
     func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
-        materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        materialize: @escaping @Sendable (Snapshot, @escaping StoreNativeContext.CancellationCheck) async throws -> Prepared,
         discard: @escaping @Sendable (Prepared) async -> Void,
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {
