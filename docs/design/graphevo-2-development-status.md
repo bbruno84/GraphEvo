@@ -79,6 +79,11 @@ The [maintenance admission experiment](results/app-group-maintenance-admission-2
 verifies that a durable owner claim blocks a replacement dry run after process
 exit and cold reopen on macOS. Public participant leave uses runtime destroy
 to purge the replica. Its integration and recovery policy remain open.
+The [verified purge experiment](results/app-group-verified-purge-2026-11-05.md)
+destroys an exact synthetic replica on macOS after supervisor-verified
+claim recovery. A competing open reproduced an empty-store recreation
+race on the current runtime. Rechecking existence under the writer fence
+prevents it in an isolated candidate.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
 runtime unchanged. No remote CI is requested for this laboratory/documentation work.
 
