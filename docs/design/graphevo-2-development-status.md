@@ -82,8 +82,10 @@ to purge the replica. Its integration and recovery policy remain open.
 The [verified purge experiment](results/app-group-verified-purge-2026-11-05.md)
 destroys an exact synthetic replica on macOS after supervisor-verified
 claim recovery. A competing open reproduced an empty-store recreation
-race on the current runtime. Rechecking existence under the writer fence
-prevents it in an isolated candidate.
+race on the runtime that preceded the fix. The
+[coordinated opening contract](graphevo-2-controlled-store-access.md#one-graph-opening-gateway)
+now rechecks file existence and identity under the writer fence before
+loading Core Data. A purge recovery interrupted by file removal can retry.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
 runtime unchanged. No remote CI is requested for this laboratory/documentation work.
 

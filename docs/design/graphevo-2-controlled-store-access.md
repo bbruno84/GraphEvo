@@ -42,6 +42,16 @@ retains its existing native validation and cannot mutate the graph. Generic
 unmarked local stores, v1 readers and transitional mirrored/paired stores retain
 their separate contracts; this is not implicit conversion or public activation.
 
+Coordinated graph opening distinguishes existing-store access from explicit
+creation. The runtime rechecks that intent under the process writer fence
+before Core Data opens the file. An existing-store request that waits through
+a purge reports a missing store without creating a new SQLite file. A
+request that observed an existing file refuses a different filesystem
+identity before native loading. Explicit creation refuses an occupied path.
+Participant purge recovery also requires an existing store. If it disappears
+while recovery is waiting, the next attempt can resume from the durable
+terminal membership without retaining the failed opening.
+
 ## Cooperating process protocol
 
 Writable plain local SQLite runtime owners and coordinated read-only replicas

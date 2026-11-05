@@ -7,6 +7,7 @@ package enum StoreRuntimeError: Error {
     case invalidModel(String)
     case configurationConflict(URL?)
     case missingStore(URL)
+    case storeAlreadyExists(URL)
     case incompatibleStore(URL)
     case unsupportedFileAlias(URL)
     case storeReplaced(URL)
@@ -29,6 +30,7 @@ extension StoreRuntimeError: LocalizedError {
         case .invalidModel(let identifier): return "The store model does not match its declared identity: \(identifier)."
         case .configurationConflict: return "The store already has an incompatible runtime owner."
         case .missingStore: return "The requested local store does not exist; the containing app must initialize it first."
+        case .storeAlreadyExists: return "A persistent store already exists at the requested location."
         case .incompatibleStore: return "The existing store requires an explicit data migration."
         case .unsupportedFileAlias: return "The SQLite file uses an unsupported filesystem alias."
         case .storeReplaced: return "The SQLite file changed identity while owned by this runtime."

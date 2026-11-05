@@ -244,6 +244,40 @@ private actor RemovalGate {
         _ = try await restarted.leaveCloudShare(for: f.graph.id, configuration: f.config)
         try await restarted.stopCloudSession(f.config)
     }
+    @Test func purgeRetriesWhenReplicaDisappearsWhileOpening() async throws {
+        let contended = AsyncStream<Void>.makeStream()
+        var hooks = StoreLifecycleHooks()
+        hooks.didContendProcessLock = { contended.continuation.yield(()) }
+        let f = try await fixture(registry: StoreRegistry(hooks: hooks))
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let id = f.graph.id
+        try await f.graph.close()
+        let resolved = try ResolvedStore(.init(location: .sqlite(f.url), exclusiveGraphID: id.rawValue))
+        let writer = try await StoreProcessLock.acquire(resolved)
+        defer { writer.release() }
+        let leaving = Task { try await f.manager.leaveCloudShare(for: id, configuration: f.config) }
+        defer { leaving.cancel() }
+        var signals = contended.stream.makeAsyncIterator()
+        _ = await signals.next()
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: GraphRuntimeSchema.typedProperties.makeModel())
+        try coordinator.destroyPersistentStore(at: f.url, ofType: NSSQLiteStoreType, options: nil)
+        for suffix in ["", "-wal", "-shm"] {
+            let path = f.url.path + suffix
+            if FileManager.default.fileExists(atPath: path) { try FileManager.default.removeItem(atPath: path) }
+        }
+        writer.release()
+        await #expect {
+            try await leaving.value
+        } throws: { error in
+            if case .missingStore? = error as? StoreRuntimeError { return true }
+            return false
+        }
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        #expect(try await f.manager.cloudSharingStatus(for: id, configuration: f.config).phase == .purging)
+        #expect(try await f.manager.leaveCloudShare(for: id, configuration: f.config).phase == .removed)
+        try await f.manager.stopCloudSession(f.config)
+    }
+
     @Test func downgradeKeepsPendingUploadsButImportsOtherRemoteRecordsAndCanUpgrade() async throws {
         let f = try await fixture()
         defer { try? FileManager.default.removeItem(at: f.root) }

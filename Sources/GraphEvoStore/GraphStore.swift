@@ -295,6 +295,7 @@ public actor GraphStore {
         guard let runtime = error as? StoreRuntimeError else { return error }
         switch runtime {
         case .missingStore: return GraphStoreError.missingStore
+        case .storeAlreadyExists: return GraphStoreError.duplicateIdentity
         case .readOnlyStore: return GraphStoreError.readOnly
         case .writesSuspended: return GraphStoreError.writesSuspended
         case .resourceReserved: return GraphStoreError.resourceReserved

@@ -75,7 +75,9 @@ actor StoreResources {
         schema: StoreSchema,
         hooks: StoreLifecycleHooks,
         owner: UUID,
-        nativeMigration: StoreNativeMigration? = nil
+        nativeMigration: StoreNativeMigration?,
+        mode: StoreOpeningMode,
+        expectedIdentity: FileIdentity?
     ) async throws -> StoreResources {
         try (hooks.processRole ?? StoreProcessRole.current).validate(resolved.configuration)
         let members = try resolved.resources
@@ -91,6 +93,20 @@ actor StoreResources {
                 mode: resolved.configuration.workspaceID == nil ? .shared : .exclusive, wait: false)
         } else { presence = nil }
         try await hooks.beforeLoad?()
+        if let url = resolved.url {
+            switch mode {
+            case .openOrCreate: break
+            case .existing:
+                guard let expectedIdentity, let identity = try resolved.fileIdentity() else {
+                    throw StoreRuntimeError.missingStore(url)
+                }
+                guard identity == expectedIdentity else { throw StoreRuntimeError.storeReplaced(url) }
+            case .new:
+                guard expectedIdentity == nil, !FileManager.default.fileExists(atPath: url.path) else {
+                    throw StoreRuntimeError.storeAlreadyExists(url)
+                }
+            }
+        }
         let model = schema.makeModel()
         guard !schema.identifier.isEmpty, !schema.entityVersionHashes.isEmpty,
               model.entityVersionHashesByName == schema.entityVersionHashes,

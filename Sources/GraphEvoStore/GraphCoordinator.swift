@@ -55,7 +55,7 @@ package actor GraphCoordinator {
         let exists = FileManager.default.fileExists(atPath: url.path)
         if creating && exists { throw GraphStoreError.duplicateIdentity }
         if !creating && !exists { throw GraphStoreError.missingStore }
-        let handle = try await registry.open(configuration, schema: schema)
+        let handle = try await registry.open(configuration, schema: schema, mode: creating ? .new : .existing)
         let owner = GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
             adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace,
             publication: adapter.publication, activation: adapter.activation, account: adapter.account)
@@ -149,7 +149,7 @@ package actor GraphCoordinator {
     static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, registry: StoreRegistry,
                                 schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
         guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
-        let handle = try await registry.open(configuration, schema: schema)
+        let handle = try await registry.open(configuration, schema: schema, mode: .existing)
         try await handle.setDataAvailable(false, terminal: true)
         return GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
             adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication)
