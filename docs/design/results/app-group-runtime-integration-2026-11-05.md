@@ -42,3 +42,11 @@ retains its own separate physical app/widget evidence.
 PA02 remains open. XR physical validation, supported public process roles,
 real CloudKit, and production authority to clear abandoned registrations
 are separate gates. No remote CI checkpoint was requested.
+
+The follow-up review regression closes the app handle after a peer blocks
+purge and before the peer detaches. The app's registration is already gone;
+the later purge reopens the same replica and completes. A separate fault
+after native destruction verifies that close surfaces the failure and retains
+the exact claim until the original owner finishes cleanup. The corrected
+runtime passed 715 local macOS v2 test functions and 40 focused tests on
+iOS 18.5 Simulator. The physical widget replay remains pending.

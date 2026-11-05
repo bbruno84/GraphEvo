@@ -51,6 +51,7 @@ actor StoreResources {
     private var dataAvailable = true
     private var activationRestriction: (id: UUID, reads: Bool)?
     private var terminalDataBlock = false
+    private var appGroupDestructionStarted = false
     private var destructionIssued = false
     struct DestructionArtifact: Equatable, Sendable {
         let identity: FileIdentity
@@ -843,19 +844,22 @@ actor StoreResources {
         let processWriter = try await acquireOwnedWriter(cancellable: false)
         defer { processWriter?.release() }
         do {
-            if resolved.configuration.appGroup != nil {
-                guard let presenter = appGroupPresenter else { throw StoreRuntimeError.resourceReserved }
-                try await hooks.beforeDetach?()
-                let container = container
-                let resolved = resolved
-                let request = AppGroupStoreAccess(presenter: presenter, cancellable: false)
-                try await request.run {
-                    try Self.detachAppGroupStores(container, presenter: presenter, resolved: resolved)
-                }
-                appGroupPresenter = nil
-                finishDetached(releasing: true)
-            } else { try await detach() }
+            if resolved.configuration.appGroup != nil { try await detachAppGroupOwner() }
+            else { try await detach() }
         } catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
+    }
+
+    /// Called with the writer fence held, either by close or by a purge that
+    /// cannot proceed and has not attempted native destruction.
+    private func detachAppGroupOwner() async throws {
+        guard let presenter = appGroupPresenter else { throw StoreRuntimeError.resourceReserved }
+        try await hooks.beforeDetach?()
+        let container = container, resolved = resolved
+        try await AppGroupStoreAccess(presenter: presenter, cancellable: false).run {
+            try Self.detachAppGroupStores(container, presenter: presenter, resolved: resolved)
+        }
+        appGroupPresenter = nil
+        finishDetached(releasing: true)
     }
 
     func setAccountStatus(_ value: StoreAccountStatus, revision: UInt64) throws {
@@ -870,8 +874,9 @@ actor StoreResources {
         dataAvailable = value
     }
 
-    /// Invalidate every lease, drain admitted work, and retain claims until native destruction succeeds.
-    func destroy(graphID: UUID, storeID: String) async throws {
+    /// Invalidate every lease and drain admitted work. Release claims only after
+    /// destruction succeeds or a pre-destruction refusal has safely detached.
+    func destroy(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
         if resolved.configuration.appGroup != nil { return try await destroyAppGroup(graphID: graphID, storeID: storeID) }
         try Self.checkProcessReentry(resolved)
         guard resolved.configuration.exclusiveGraphID == graphID,
@@ -921,12 +926,13 @@ actor StoreResources {
         processPresence?.release(); processPresence = nil
         maintenanceWriter?.release(); maintenanceWriter = nil
         for gateway in gateways { gateway.release() }
+        return .removed
     }
 
     /// An App Group owner uses a durable generation claim in place of an
     /// idle lifetime flock. The writer spans admission, Apple's grant, native
     /// destruction, artifact cleanup and claim removal.
-    private func destroyAppGroup(graphID: UUID, storeID: String) async throws {
+    private func destroyAppGroup(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
         try Self.checkProcessReentry(resolved)
         guard resolved.configuration.exclusiveGraphID == graphID,
               resolved.configuration.access == .readWrite,
@@ -941,13 +947,19 @@ actor StoreResources {
         let processWriter = try await acquireOwnedWriter(cancellable: false)
         defer { processWriter?.release() }
         guard processWriter != nil else { throw StoreRuntimeError.resourceReserved }
-        try AppGroupOwnerClaims.requireSoleClaim(presenter.generation, for: resolved)
+        do { try AppGroupOwnerClaims.requireSoleClaim(presenter.generation, for: resolved) }
+        catch StoreRuntimeError.resourceReserved where !appGroupDestructionStarted {
+            do { try await detachAppGroupOwner() }
+            catch { throw StoreRuntimeError.shutdownFailed(url, underlying: error) }
+            return .deferredAfterDetach
+        }
         let container = container, resolved = resolved
         if !destructionIssued {
             try Self.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
             try await hooks.beforeDetach?()
             try await hooks.beforeDestroy?()
             struct Progress: Sendable {
+                var started = false
                 var issued = false
                 var artifacts: [URL: DestructionArtifact]?
             }
@@ -959,6 +971,7 @@ actor StoreResources {
                     try AppGroupOwnerClaims.requireSoleClaim(presenter.generation, for: resolved)
                     try Self.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
                     let coordinator = container.persistentStoreCoordinator
+                    progress.withLock { $0.started = true }
                     try coordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
                     progress.withLock { $0.issued = true }
                     for store in coordinator.persistentStores { try coordinator.remove(store) }
@@ -970,6 +983,7 @@ actor StoreResources {
                 }
             } catch {
                 let phase = progress.withLock { $0 }
+                appGroupDestructionStarted = appGroupDestructionStarted || phase.started
                 if phase.issued {
                     destructionIssued = true
                     destructionArtifacts = phase.artifacts
@@ -978,6 +992,7 @@ actor StoreResources {
             }
             let phase = progress.withLock { $0 }
             guard phase.issued, let artifacts = phase.artifacts else { throw StoreRuntimeError.resourceReserved }
+            appGroupDestructionStarted = true
             destructionIssued = true
             destructionArtifacts = artifacts
         }
@@ -1005,6 +1020,7 @@ actor StoreResources {
         }
         appGroupPresenter = nil
         finishDetached(releasing: true)
+        return .removed
     }
 
     static func destructionStoreID(_ url: URL, graphID: UUID) throws -> String {

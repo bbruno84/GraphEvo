@@ -163,9 +163,9 @@ private actor RemovalGate {
         #expect(FileManager.default.fileExists(atPath: f.url.path))
         await #expect(throws: (any Error).self) { try await f.graph.read { _ in () } }
         let owners = f.url.deletingLastPathComponent().appendingPathComponent(".owners-v1")
-        if cold {
-            #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path) == [generation.uuidString])
-        }
+        // The app may go inactive while the peer still has the store open.
+        try await f.graph.close()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path) == [generation.uuidString])
 
         // Simulate a successful close by the other generation. Production only
         // removes its own claim after native detachment.
@@ -260,6 +260,28 @@ private actor RemovalGate {
         var remaining = 1
         func fail() throws { if remaining > 0 { remaining -= 1; throw GraphCloudError.persistence } }
     }
+    @Test func appGroupCloseAfterNativeDestructionFailureRetainsClaimUntilRetry() async throws {
+        let failure = FailureOnce()
+        var hooks = StoreLifecycleHooks()
+        hooks.beforeDestroyedArtifactCleanup = { try await failure.fail() }
+        let f = try await fixture(registry: StoreRegistry(hooks: hooks), appGroup: true)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let owners = f.url.deletingLastPathComponent().appendingPathComponent(".owners-v1")
+        let original = try FileManager.default.contentsOfDirectory(atPath: owners.path)
+        #expect(original.count == 1)
+
+        await #expect(throws: GraphCloudError.persistence) {
+            try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
+        }
+        await #expect(throws: GraphCloudError.persistence) { try await f.graph.close() }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path) == original)
+        #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .purging)
+
+        #expect(try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config).phase == .removed)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path).isEmpty)
+        try await f.manager.stopCloudSession(f.config)
+    }
+
     @Test(arguments: [false, true]) func failedNativeDestructionRetainsClaimsAndCanResume(_ after: Bool) async throws {
         let failure = FailureOnce()
         var hooks = StoreLifecycleHooks()

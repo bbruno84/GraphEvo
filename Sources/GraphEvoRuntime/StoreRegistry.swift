@@ -14,6 +14,12 @@ package enum StoreOpeningMode: Sendable, Equatable {
     }
 }
 
+package enum StoreDestructionOutcome: Sendable {
+    case removed
+    /// A peer prevented destruction; this generation detached without deleting data.
+    case deferredAfterDetach
+}
+
 /// Value-only diagnostics, distinct from domain identity and cloud readiness.
 package struct StoreRuntimeSnapshot: Sendable, Equatable {
     package let runtimeID: UUID
@@ -195,7 +201,8 @@ package actor StoreHandle {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         try await registry.copyStore(key, generation: generation, token: token, to: url, reservation: reservation.id)
     }
-    package func destroy(graphID: UUID, storeID: String) async throws {
+    @discardableResult
+    package func destroy(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
         try await registry.destroy(key, generation: generation, token: token, graphID: graphID, storeID: storeID)
     }
 
@@ -270,7 +277,8 @@ package actor StoreRegistry {
         var tokens: Set<UUID> = []
         var shutdown: Task<Void, any Error>?
         var destroyToken: UUID?
-        var destroying = false
+        var destruction: Task<StoreDestructionOutcome, any Error>?
+        var discardingWorkspace = false
     }
 
     private let owner = UUID()
@@ -482,16 +490,16 @@ package actor StoreRegistry {
               value.destroyToken == token || (value.destroyToken == nil && value.tokens == [token] && value.shutdown == nil) else {
             throw StoreRuntimeError.configurationConflict(nil)
         }
-        if value.destroying, let task = value.shutdown { return try await task.value }
+        if value.discardingWorkspace, let task = value.shutdown { return try await task.value }
         let opening = value.opening
-        value.destroyToken = token; value.destroying = true; value.tokens.removeAll()
+        value.destroyToken = token; value.discardingWorkspace = true; value.tokens.removeAll()
         let task = Task { try await opening.value.discardWorkspace(body) }
         value.shutdown = task; entries[key] = value
         do {
             try await task.value
             if entries[key]?.generation == generation { entries.removeValue(forKey: key) }
         } catch {
-            if entries[key]?.generation == generation { entries[key]?.destroying = false }
+            if entries[key]?.generation == generation { entries[key]?.discardingWorkspace = false }
             throw error
         }
     }
@@ -510,25 +518,28 @@ package actor StoreRegistry {
         try await value.opening.value.copyStore(to: url, reservation: reservation)
     }
 
-    fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String) async throws {
+    fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
         guard var value = entries[key], value.generation == generation,
               value.resolved.configuration.exclusiveGraphID == graphID,
               value.destroyToken == token || (value.destroyToken == nil && value.tokens.contains(token) && value.shutdown == nil) else {
             throw StoreRuntimeError.closedHandle
         }
-        if value.destroying, let job = value.shutdown { return try await job.value }
+        if let job = value.destruction { return try await job.value }
         if value.destroyToken == nil {
             try validateIdentities(value.fileIdentities, current: value.resolved.resourceIdentities(), resolved: value.resolved)
         }
         let opening = value.opening
-        value.destroyToken = token; value.destroying = true; value.tokens.removeAll()
+        value.destroyToken = token; value.tokens.removeAll()
         let job = Task { try await opening.value.destroy(graphID: graphID, storeID: storeID) }
-        value.shutdown = job; entries[key] = value
+        value.destruction = job
+        value.shutdown = Task { _ = try await job.value }
+        entries[key] = value
         do {
-            try await job.value
+            let outcome = try await job.value
             if entries[key]?.generation == generation { entries.removeValue(forKey: key) }
+            return outcome
         } catch {
-            if entries[key]?.generation == generation { entries[key]?.destroying = false }
+            if entries[key]?.generation == generation { entries[key]?.destruction = nil }
             throw error
         }
     }
@@ -550,8 +561,13 @@ package actor StoreRegistry {
     }
 
     fileprivate func release(_ key: StoreKey, generation: UUID, token: UUID) async throws {
-        guard var entry = entries[key], entry.generation == generation,
-              entry.tokens.remove(token) != nil else { return }
+        guard var entry = entries[key], entry.generation == generation else { return }
+        if entry.resolved.configuration.appGroup != nil, entry.destroyToken != nil, let shutdown = entry.shutdown {
+            // Destruction revoked the leases. Closing one still waits for actual
+            // detachment and must surface a retained owner's failure.
+            return try await shutdown.value
+        }
+        guard entry.tokens.remove(token) != nil else { return }
         if !entry.tokens.isEmpty { entries[key] = entry; return }
         let opening = entry.opening
         let shutdown = Task { try await opening.value.close() }

@@ -341,8 +341,9 @@ extension GraphContextManager {
             #if DEBUG
             try await purgeProbeBarrier?(id)
             #endif
-            try await owner.destroy(storeID: storeID)
+            let outcome = try await owner.destroy(storeID: storeID)
             removeClosedEntry(id, generation: entry.generation)
+            if case .deferredAfterDetach = outcome { throw StoreRuntimeError.resourceReserved }
         }
         try await session.completePurge(id, generation: member.generation)
         locations.removeValue(forKey: id)

@@ -218,9 +218,9 @@ package actor GraphCoordinator {
         if let value { return try await handle.controlTransaction { try access($0, id, value) } }
         return try await handle.controlRead { try access($0, id, nil) }
     }
-    func destroy(storeID: String) async throws {
+    func destroy(storeID: String) async throws -> StoreDestructionOutcome {
         await syncSession?.retire()
-        try await handle.destroy(graphID: id.rawValue, storeID: storeID)
+        return try await handle.destroy(graphID: id.rawValue, storeID: storeID)
     }
 
     func validateCloudBinding(_ initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) async throws {

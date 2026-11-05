@@ -238,8 +238,12 @@ attaching or creating its own. Purge verifies the native store and graph
 identities, requires the sole registered generation before and inside the deletion grant,
 and holds the writer through artifact cleanup. With another or unverified
 registration, or missing evidence after an interrupted destruction, the
-membership remains `purging`. A fresh owner can read an intact store where
-membership permits, but cannot remove an abandoned generation. PID, age and
+membership remains `purging`. If a peer prevents destruction before Core
+Data is asked to delete the store, the purging owner detaches and removes
+only its own registration. A later attempt reopens after the peer detaches.
+Once native destruction has been attempted, close cannot discard its cleanup
+authority. A fresh owner can read an intact store where membership permits,
+but cannot remove an abandoned generation. PID, age and
 file absence are not release authority.
 
 The package does not expose App Group role selection or a production orphan
