@@ -94,8 +94,11 @@ physical lifecycle checks. The [P macOS experiment](results/apple-owner-runtime-
 verifies the presenter attachment, transport drain and fresh public observation
 with existing runtime fences active. The [Q experiment](results/apple-owner-coordinated-write-admission-2026-11-05.md)
 passes the one-graph admission transition and ordinary Apple-coordinated native
-transactions on macOS. The replacement presence fence, other native paths and
-physical lifecycle acceptance remain open.
+transactions on macOS. The [R experiment](results/apple-owner-presence-replacement-2026-11-05.md)
+passes independent-process and composed lifecycle controls without a lifetime
+presence fence on one selected macOS store. Dry-run maintenance and injected
+failed-close quarantine pass in that fixture. Physical App Group validation
+with R, actual destructive maintenance and other native paths remain open.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 

@@ -57,8 +57,12 @@ drain, store close and fresh public observation using an injected driver.
 The [Q write and admission experiment](results/apple-owner-coordinated-write-admission-2026-11-05.md)
 adds an application admission boundary and Apple coordination for ordinary
 native transactions on macOS. Its composed lifecycle and independent-process
-checks pass with existing runtime fences active. Replacement of the presence
-fence, additional native paths and physical validation remain open.
+checks pass with existing runtime fences active. The [R experiment](results/apple-owner-presence-replacement-2026-11-05.md)
+omits the lifetime presence fence for one selected macOS fixture. Independent
+processes and the composed lifecycle pass with Apple-coordinated native open
+and last detach. Dry-run maintenance is refused while an owner is live, even
+when the request was submitted before presenter registration. Actual destructive
+maintenance, other native paths and physical validation remain open.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
 runtime unchanged. No remote CI is requested for this laboratory/documentation work.
 
