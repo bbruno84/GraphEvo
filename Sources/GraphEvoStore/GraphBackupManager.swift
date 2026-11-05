@@ -1,6 +1,5 @@
 import CoreData
 import CryptoKit
-import Darwin
 import Foundation
 import GraphEvoModel
 import GraphEvoRuntime
@@ -81,187 +80,184 @@ package actor GraphBackupManager {
         }
         guard accepts(schema), Set(artifacts.map(\.name)).count == artifacts.count,
               artifacts.allSatisfy({ Self.component($0.name) }) else { throw GraphBackupError.invalidBackup }
-        let root = try Self.directory(root), lease = try BackupRootLease(root)
-        defer { lease.release() }
-        let id = backupID ?? UUID(), stageID = UUID()
-        let stage = root.appendingPathComponent(".stage-" + stageID.uuidString)
+        let root = try Self.directory(root)
+        let id = backupID ?? UUID()
         let destination = root.appendingPathComponent(id.uuidString).appendingPathExtension(GraphBackupPackage.fileExtension)
-        if backupID != nil, FileManager.default.fileExists(atPath: destination.path) {
-            let manifest = try readManifest(destination)
+        let manifest = try await withStage(in: root) { stage in
+            let alreadyExists = try await Self.catalog([.read(root)]) {
+                FileManager.default.fileExists(atPath: destination.path)
+            }
+            if alreadyExists { return nil as GraphBackupManifest? }
+            let payload = stage.appendingPathComponent("payload")
+            try FileManager.default.createDirectory(at: payload, withIntermediateDirectories: false)
+            try await copy(payload.appendingPathComponent("Graph.sqlite"))
+            try Task.checkCancellation()
+            if !artifacts.isEmpty {
+                let directory = stage.appendingPathComponent("artifacts")
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+                for artifact in artifacts {
+                    try artifact.data.write(to: directory.appendingPathComponent(artifact.name), options: .withoutOverwriting)
+                }
+            }
+            let files = try inventory(stage)
+            let manifest = GraphBackupManifest(format: 1, id: id, graphID: graphID, nativeStoreID: storeID,
+                schemaIdentifier: schema, createdAt: Date(), reason: reason, storePath: "payload/Graph.sqlite", files: files)
+            let archive = stage.appendingPathComponent("Archive.geb"), limits = limits
+            try await GraphBackupPackage.perform { try GraphBackupPackage.pack(stage, manifest: manifest, to: archive, limits: limits) }
+            try await validate(archive, manifest: manifest)
+            return try await Self.catalog([.write(root)]) {
+                if FileManager.default.fileExists(atPath: destination.path) { return nil }
+                if let retentionOwner { try self.pin(destination, id: id, owner: retentionOwner) }
+                try Self.publish(archive, to: destination)
+                return manifest
+            }
+        }
+        if let manifest { return GraphBackup(url: destination, manifest: manifest) }
+        guard backupID != nil else { throw GraphBackupError.invalidDestination }
+        return try await withStage(in: root) { stage in
+            let archive = stage.appendingPathComponent("Archive.geb")
+            let (manifest, identity) = try await snapshot(destination, to: archive)
             guard manifest.id == id, manifest.graphID == graphID, manifest.nativeStoreID == storeID,
                   manifest.schemaIdentifier == schema, manifest.reason == reason,
                   let intent = artifacts.first(where: { $0.name == immutableArtifact }),
                   manifest.files.contains(where: { $0.path == "artifacts/" + intent.name &&
-                    $0.sha256 == SHA256.hash(data: intent.data).map { String(format: "%02x", $0) }.joined() }) else { throw GraphBackupError.invalidBackup }
-            try await validate(destination, manifest: manifest)
-            if let retentionOwner { try pin(destination, id: id, owner: retentionOwner) }
-            return GraphBackup(url: destination, manifest: manifest)
-        }
-        try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: stage) }
-        try JSONEncoder().encode(Intent(format: 1, id: stageID, backupID: id)).write(to: stage.appendingPathComponent("intent.json"), options: .atomic)
-        let payload = stage.appendingPathComponent("payload")
-        try FileManager.default.createDirectory(at: payload, withIntermediateDirectories: false)
-        let store = payload.appendingPathComponent("Graph.sqlite")
-        try await copy(store)
-        try Task.checkCancellation()
-        if !artifacts.isEmpty {
-            let directory = stage.appendingPathComponent("artifacts")
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-            for artifact in artifacts {
-                try artifact.data.write(to: directory.appendingPathComponent(artifact.name), options: .withoutOverwriting)
+                    $0.sha256 == SHA256.hash(data: intent.data).map { String(format: "%02x", $0) }.joined() }) else {
+                throw GraphBackupError.invalidBackup
+            }
+            try await validate(archive, manifest: manifest)
+            return try await Self.catalog([.write(root)]) {
+                guard try FileIdentity(destination) == identity else { throw GraphBackupError.invalidBackup }
+                if let retentionOwner { try self.pin(destination, id: id, owner: retentionOwner) }
+                return GraphBackup(url: destination, manifest: manifest)
             }
         }
-        let files = try inventory(stage)
-        let manifest = GraphBackupManifest(format: 1, id: id, graphID: graphID, nativeStoreID: storeID,
-            schemaIdentifier: schema, createdAt: Date(), reason: reason, storePath: "payload/Graph.sqlite", files: files)
-        let archive = stage.appendingPathComponent("Archive.geb")
-        let limits = limits
-        try await GraphBackupPackage.perform { try GraphBackupPackage.pack(stage, manifest: manifest, to: archive, limits: limits) }
-        try await validate(archive, manifest: manifest)
-        try Task.checkCancellation()
-        if let retentionOwner { try pin(destination, id: id, owner: retentionOwner) }
-        try FileManager.default.moveItem(at: archive, to: destination)
-        return GraphBackup(url: destination, manifest: manifest)
     }
 
-    package func list(in root: URL) throws -> [GraphBackup] {
+    package func list(in root: URL) async throws -> [GraphBackup] {
         guard FileManager.default.fileExists(atPath: root.path) else { return [] }
-        let root = try Self.directory(root), lease = try BackupRootLease(root)
-        defer { lease.release() }
-        return try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-            .filter { !$0.lastPathComponent.hasPrefix(".") &&
-                ($0.pathExtension.lowercased() == GraphBackupPackage.fileExtension ||
-                 FileManager.default.fileExists(atPath: $0.appendingPathComponent("manifest.json").path)) }
-            .map { GraphBackup(url: $0, manifest: try readManifest($0)) }
-            .sorted { $0.manifest.createdAt < $1.manifest.createdAt }
+        let root = try Self.directory(root)
+        return try await Self.catalog([.read(root)]) {
+            try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                .filter { !$0.lastPathComponent.hasPrefix(".") &&
+                    ($0.pathExtension.lowercased() == GraphBackupPackage.fileExtension ||
+                     FileManager.default.fileExists(atPath: $0.appendingPathComponent("manifest.json").path)) }
+                .map { GraphBackup(url: $0, manifest: try self.readManifest($0)) }
+                .sorted { $0.manifest.createdAt < $1.manifest.createdAt }
+        }
     }
 
     package func verify(at directory: URL) async throws -> GraphBackup {
-        let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
-        let lease = try BackupRootLease(directory.deletingLastPathComponent()); defer { lease.release() }
-        let manifest = try readManifest(directory)
-        try await validate(directory, manifest: manifest)
-        return GraphBackup(url: directory, manifest: manifest)
+        let source = directory.standardizedFileURL.resolvingSymlinksInPath()
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("GraphBackupSnapshot-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let archive = scratch.appendingPathComponent("Archive.geb")
+        let (manifest, identity) = try await snapshot(source, to: archive)
+        try await validate(archive, manifest: manifest)
+        return try await Self.catalog([.read(source.deletingLastPathComponent())]) {
+            guard try FileIdentity(source) == identity else { throw GraphBackupError.invalidBackup }
+            return GraphBackup(url: source, manifest: manifest)
+        }
     }
 
-    /// No existing file, graph, cloud cursor or session is replaced by this operation.
+    /// Materializes and verifies a private snapshot before publishing an empty destination.
     package func restore(at backup: URL, to destination: URL) async throws -> GraphRestoredBackup {
         let backup = backup.standardizedFileURL.resolvingSymlinksInPath()
-        let destination = destination.standardizedFileURL
-        guard destination.isFileURL, !FileManager.default.fileExists(atPath: destination.path),
-              (try? FileManager.default.destinationOfSymbolicLink(atPath: destination.path)) == nil else { throw GraphBackupError.invalidDestination }
-        // Validate containment before directory creation can alter the immutable source.
-        let candidate = try Self.creationLocation(destination.deletingLastPathComponent())
-        guard candidate.path != backup.path, !candidate.path.hasPrefix(backup.path + "/") else { throw GraphBackupError.invalidDestination }
-        let parent = try Self.directory(candidate)
-        guard parent != backup, !parent.path.hasPrefix(backup.path + "/") else { throw GraphBackupError.invalidDestination }
-        let sourceRoot = backup.deletingLastPathComponent(), first = try BackupRootLease(sourceRoot)
-        defer { first.release() }
-        let second = parent.path == sourceRoot.path ? nil : try BackupRootLease(parent)
-        defer { second?.release() }
-        let manifest = try readManifest(backup)
-        try await validate(backup, manifest: manifest)
-        let id = UUID(), stage = parent.appendingPathComponent(".stage-" + id.uuidString)
-        try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
-        var published = false
-        defer { if !published { try? FileManager.default.removeItem(at: stage) } }
-        try JSONEncoder().encode(Intent(format: 1, id: id, backupID: manifest.id)).write(to: stage.appendingPathComponent("intent.json"), options: .atomic)
-        if try Self.isPackage(backup) {
+        let target = try Self.destination(destination, outside: backup)
+        return try await withStage(in: target.deletingLastPathComponent()) { stage in
+            let archive = stage.appendingPathComponent("Archive.geb")
+            let (manifest, _) = try await snapshot(backup, to: archive)
+            let restored = stage.appendingPathComponent("Restored")
+            try FileManager.default.createDirectory(at: restored, withIntermediateDirectories: false)
             let limits = limits
-            _ = try await GraphBackupPackage.perform { try GraphBackupPackage.unpack(backup, to: stage, limits: limits) }
-        } else {
-            for name in ["payload", "artifacts", "manifest.json"] {
-                let source = backup.appendingPathComponent(name)
-                if FileManager.default.fileExists(atPath: source.path) { try FileManager.default.copyItem(at: source, to: stage.appendingPathComponent(name)) }
+            let decoded = try await GraphBackupPackage.perform { try GraphBackupPackage.unpack(archive, to: restored, limits: limits) }
+            guard decoded == manifest else { throw GraphBackupError.invalidBackup }
+            try JSONEncoder().encode(Intent(format: 1, id: UUID(), backupID: manifest.id))
+                .write(to: restored.appendingPathComponent("intent.json"), options: .atomic)
+            try await validate(restored, manifest: manifest)
+            return try await Self.catalog([.write(target.deletingLastPathComponent())]) {
+                try Self.publish(restored, to: target)
+                return GraphRestoredBackup(directory: target, manifest: manifest)
             }
         }
-        try await validate(stage, manifest: manifest)
-        try Task.checkCancellation()
-        try FileManager.default.moveItem(at: stage, to: destination)
-        published = true
-        return GraphRestoredBackup(directory: destination, manifest: manifest)
     }
 
-    /// Export reuses a completed package; it never takes another live graph snapshot.
     package func export(at source: URL, to destination: URL) async throws -> GraphBackup {
+        try await export(at: source, to: destination, expectedBackupID: nil)
+    }
+
+    private func export(at source: URL, to destination: URL, expectedBackupID: UUID?) async throws -> GraphBackup {
         let source = source.standardizedFileURL.resolvingSymlinksInPath()
-        let destination = destination.standardizedFileURL
-        guard destination.isFileURL, destination.query == nil, destination.fragment == nil,
-              destination.pathExtension.lowercased() == GraphBackupPackage.fileExtension,
-              !FileManager.default.fileExists(atPath: destination.path),
-              (try? FileManager.default.destinationOfSymbolicLink(atPath: destination.path)) == nil else { throw GraphBackupError.invalidDestination }
-        let candidate = try Self.creationLocation(destination.deletingLastPathComponent())
-        guard candidate.path != source.path, !candidate.path.hasPrefix(source.path + "/") else { throw GraphBackupError.invalidDestination }
-        let parent = try Self.directory(candidate), sourceRoot = source.deletingLastPathComponent()
-        let first = try BackupRootLease(sourceRoot); defer { first.release() }
-        let second = parent.path == sourceRoot.path ? nil : try BackupRootLease(parent); defer { second?.release() }
-        let manifest = try readManifest(source)
-        try await validate(source, manifest: manifest)
-        let id = UUID(), stage = parent.appendingPathComponent(".stage-" + id.uuidString)
-        try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: stage) }
-        try JSONEncoder().encode(Intent(format: 1, id: id, backupID: manifest.id)).write(to: stage.appendingPathComponent("intent.json"), options: .atomic)
-        let archive = stage.appendingPathComponent("Archive.geb"), limits = limits
-        let packaged = try Self.isPackage(source)
-        try await GraphBackupPackage.perform {
-            if packaged { try GraphBackupPackage.copy(source, to: archive, maximumBytes: limits.maximumPackageBytes) }
-            else { try GraphBackupPackage.pack(source, manifest: manifest, to: archive, limits: limits) }
+        guard destination.pathExtension.lowercased() == GraphBackupPackage.fileExtension else { throw GraphBackupError.invalidDestination }
+        let target = try Self.destination(destination, outside: source)
+        return try await withStage(in: target.deletingLastPathComponent()) { stage in
+            let archive = stage.appendingPathComponent("Archive.geb")
+            let (manifest, _) = try await snapshot(source, to: archive)
+            guard expectedBackupID == nil || expectedBackupID == manifest.id else { throw GraphBackupError.invalidBackup }
+            try await validate(archive, manifest: manifest)
+            return try await Self.catalog([.write(target.deletingLastPathComponent())]) {
+                try Self.publish(archive, to: target)
+                return GraphBackup(url: target, manifest: manifest)
+            }
         }
-        try await validate(archive, manifest: manifest)
-        try Task.checkCancellation()
-        try FileManager.default.moveItem(at: archive, to: destination)
-        return GraphBackup(url: destination, manifest: manifest)
     }
 
-    /// Import a package into the local backup collection, without activating any graph/cloud state.
     package func importBackup(at source: URL, in root: URL) async throws -> GraphBackup {
-        let manifest = try readManifest(source)
-        // Export validates the complete destination before creating its parent collection.
-        return try await export(at: source, to: root.appendingPathComponent(manifest.id.uuidString).appendingPathExtension(GraphBackupPackage.fileExtension))
+        let source = source.standardizedFileURL.resolvingSymlinksInPath()
+        let id = try await Self.catalog([.read(source.deletingLastPathComponent())]) { try self.readManifest(source).id }
+        return try await export(at: source, to: root.appendingPathComponent(id.uuidString)
+            .appendingPathExtension(GraphBackupPackage.fileExtension), expectedBackupID: id)
     }
 
-    package func retain(at directory: URL, owner: UUID = UUID()) throws -> StoreReservation {
+    package func retain(at directory: URL, owner: UUID = UUID()) async throws -> StoreReservation {
         let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
-        let lease = try BackupRootLease(directory.deletingLastPathComponent()); defer { lease.release() }
-        let manifest = try readManifest(directory)
-        guard !directory.lastPathComponent.hasPrefix(".") else { throw GraphBackupError.invalidBackup }
-        var retention = try readRetention(directory, id: manifest.id)
-        guard retention.owners.count < 1024, retention.owners.insert(owner).inserted else { throw GraphBackupError.retained }
-        try writeRetention(retention, directory: directory)
+        try await Self.catalog([.write(directory.deletingLastPathComponent())]) {
+            let manifest = try self.readManifest(directory)
+            guard !directory.lastPathComponent.hasPrefix(".") else { throw GraphBackupError.invalidBackup }
+            var retention = try self.readRetention(directory, id: manifest.id)
+            guard retention.owners.count < 1024, retention.owners.insert(owner).inserted else { throw GraphBackupError.retained }
+            try self.writeRetention(retention, directory: directory)
+        }
         return StoreReservation(id: owner) { try? await self.releaseRetention(at: directory, owner: owner) }
     }
-    package func retentionOwners(at directory: URL) throws -> Set<UUID> {
+
+    package func retentionOwners(at directory: URL) async throws -> Set<UUID> {
         let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
-        let lease = try BackupRootLease(directory.deletingLastPathComponent()); defer { lease.release() }
-        return try readRetention(directory, id: readManifest(directory).id).owners
+        return try await Self.catalog([.read(directory.deletingLastPathComponent())]) {
+            try self.readRetention(directory, id: self.readManifest(directory).id).owners
+        }
     }
-    package func releaseRetention(at directory: URL, owner: UUID) throws {
+
+    package func releaseRetention(at directory: URL, owner: UUID) async throws {
         let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
-        let lease = try BackupRootLease(directory.deletingLastPathComponent()); defer { lease.release() }
-        let manifest = try readManifest(directory)
-        var retention = try readRetention(directory, id: manifest.id)
-        if retention.owners.remove(owner) != nil { try writeRetention(retention, directory: directory) }
+        try await Self.catalog([.write(directory.deletingLastPathComponent())]) {
+            let manifest = try self.readManifest(directory)
+            var retention = try self.readRetention(directory, id: manifest.id)
+            if retention.owners.remove(owner) != nil { try self.writeRetention(retention, directory: directory) }
+        }
     }
-    package func remove(at directory: URL) throws {
+
+    package func remove(at directory: URL) async throws {
         let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
-        let lease = try BackupRootLease(directory.deletingLastPathComponent()); defer { lease.release() }
-        let manifest = try readManifest(directory)
-        guard try readRetention(directory, id: manifest.id).owners.isEmpty else { throw GraphBackupError.retained }
-        try FileManager.default.removeItem(at: directory)
-        try? FileManager.default.removeItem(at: retentionURL(directory, id: manifest.id))
+        try await Self.catalog([.write(directory.deletingLastPathComponent())]) {
+            let manifest = try self.readManifest(directory)
+            guard try self.readRetention(directory, id: manifest.id).owners.isEmpty else { throw GraphBackupError.retained }
+            try FileManager.default.removeItem(at: directory)
+            try? FileManager.default.removeItem(at: self.retentionURL(directory, id: manifest.id))
+        }
     }
-    /// Called under the backup root lease, before atomic package visibility when creating.
-    private func pin(_ directory: URL, id: UUID, owner: UUID) throws {
+
+    /// Called under the catalog grant before the package becomes visible.
+    private nonisolated func pin(_ directory: URL, id: UUID, owner: UUID) throws {
         var value = try readRetention(directory, id: id)
         guard value.owners.count < 1024 || value.owners.contains(owner) else { throw GraphBackupError.limitExceeded }
         value.owners.insert(owner)
         try writeRetention(value, directory: directory)
     }
-    private func retentionURL(_ directory: URL, id: UUID) -> URL {
+    private nonisolated func retentionURL(_ directory: URL, id: UUID) -> URL {
         directory.deletingLastPathComponent().appendingPathComponent(".retention-" + id.uuidString + ".json")
     }
-    private func readRetention(_ directory: URL, id: UUID) throws -> Retention {
+    private nonisolated func readRetention(_ directory: URL, id: UUID) throws -> Retention {
         let url = retentionURL(directory, id: id)
         if !FileManager.default.fileExists(atPath: url.path) {
             guard (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) == nil else { throw GraphBackupError.invalidBackup }
@@ -271,29 +267,154 @@ package actor GraphBackupManager {
         guard value.format == 1, value.backupID == id, value.owners.count <= 1024 else { throw GraphBackupError.invalidBackup }
         return value
     }
-    private func writeRetention(_ value: Retention, directory: URL) throws {
+    private nonisolated func writeRetention(_ value: Retention, directory: URL) throws {
         try JSONEncoder().encode(value).write(to: retentionURL(directory, id: value.backupID), options: .atomic)
     }
 
     /// Recover only explicitly owned incomplete stages; final backups are never touched.
-    package func discardIncomplete(in root: URL) throws -> Int {
-        let root = try Self.directory(root), lease = try BackupRootLease(root); defer { lease.release() }
+    package func discardIncomplete(in root: URL) async throws -> Int {
+        let root = try Self.directory(root)
+        let stages = try await Self.catalog([.read(root)]) {
+            try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                .filter { $0.lastPathComponent.hasPrefix(".stage-") }
+                .compactMap { stage -> (URL, FileIdentity)? in
+                    do { return (stage, try FileIdentity(stage)) }
+                    catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
+                }
+        }
         var removed = 0
-        for stage in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) where stage.lastPathComponent.hasPrefix(".stage-") {
-            guard try Self.attributes(stage)[.type] as? FileAttributeType == .typeDirectory else { throw GraphBackupError.invalidBackup }
-            if try FileManager.default.contentsOfDirectory(atPath: stage.path).isEmpty,
-               UUID(uuidString: String(stage.lastPathComponent.dropFirst(7))) != nil {
-                try FileManager.default.removeItem(at: stage); removed += 1; continue
+        for (stage, identity) in stages {
+            do {
+                let didRemove = try await CoordinatedFiles.run([.delete(stage)]) {
+                    guard FileManager.default.fileExists(atPath: stage.path),
+                          try FileIdentity(stage).sameFile(as: identity) else { return false }
+                    guard try Self.attributes(stage)[.type] as? FileAttributeType == .typeDirectory,
+                          let id = UUID(uuidString: String(stage.lastPathComponent.dropFirst(7))),
+                          stage.lastPathComponent == ".stage-" + id.uuidString else { throw GraphBackupError.invalidBackup }
+                    let children = try FileManager.default.contentsOfDirectory(atPath: stage.path)
+                    if !children.isEmpty {
+                        let data = try Self.smallData(stage.appendingPathComponent("intent.json"), maximum: 1024)
+                        let intent = try JSONDecoder().decode(Intent.self, from: data)
+                        guard intent.format == 1, intent.id == id else { throw GraphBackupError.invalidBackup }
+                    }
+                    try FileManager.default.removeItem(at: stage)
+                    return true
+                }
+                if didRemove { removed += 1 }
+            } catch is CoordinatedFiles.Denied {
+                // An active stage's presenter refused deletion.
             }
-            let data = try Self.smallData(stage.appendingPathComponent("intent.json"), maximum: 1024)
-            let intent = try JSONDecoder().decode(Intent.self, from: data)
-            guard intent.format == 1, stage.lastPathComponent == ".stage-" + intent.id.uuidString else { throw GraphBackupError.invalidBackup }
-            try FileManager.default.removeItem(at: stage); removed += 1
         }
         return removed
     }
 
-    private func readManifest(_ directory: URL) throws -> GraphBackupManifest {
+    private static func catalog<Value: Sendable>(_ accesses: [CoordinatedFiles.Access],
+                                                   _ body: @escaping @Sendable () throws -> Value) async throws -> Value {
+        do { return try await CoordinatedFiles.run(accesses, body) }
+        catch is CoordinatedFiles.Denied { throw GraphBackupError.busy }
+    }
+
+    private func withStage<Value: Sendable>(in root: URL, _ operation: (URL) async throws -> Value) async throws -> Value {
+        let id = UUID()
+        let stage = root.appendingPathComponent(".stage-" + id.uuidString)
+        let presenter = BackupStagePresenter(stage)
+        let identity = try await Self.catalog([.write(root)]) {
+            try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
+            do {
+                try JSONEncoder().encode(Intent(format: 1, id: id, backupID: id))
+                    .write(to: stage.appendingPathComponent("intent.json"), options: .atomic)
+                let identity = try FileIdentity(stage)
+                NSFileCoordinator.addFilePresenter(presenter)
+                return identity
+            } catch {
+                try? FileManager.default.removeItem(at: stage)
+                throw error
+            }
+        }
+        let result: Result<Value, any Error>
+        do { result = .success(try await operation(stage)) }
+        catch { result = .failure(error) }
+        // Cleanup must still run when the caller cancels. Keep the presenter
+        // registered until the coordinated cleanup ends.
+        await Task {
+            defer { NSFileCoordinator.removeFilePresenter(presenter) }
+            _ = try? await CoordinatedFiles.run([.write(root)], presenter: presenter) {
+                if (try? FileIdentity(stage).sameFile(as: identity)) == true {
+                    try FileManager.default.removeItem(at: stage)
+                }
+            }
+        }.value
+        return try result.get()
+    }
+
+    private func snapshot(_ source: URL, to archive: URL) async throws -> (GraphBackupManifest, FileIdentity) {
+        do {
+            return try await CoordinatedFiles.run([.read(source.deletingLastPathComponent())]) { checkCancellation in
+                let identity = try FileIdentity(source)
+                let manifest = try self.readManifest(source)
+                if try Self.isPackage(source) {
+                    try GraphBackupPackage.copy(source, to: archive, maximumBytes: self.limits.maximumPackageBytes,
+                                                checkCancellation: checkCancellation)
+                } else {
+                    guard try self.inventory(source, checkCancellation: checkCancellation) == manifest.files else {
+                        throw GraphBackupError.invalidBackup
+                    }
+                    try GraphBackupPackage.pack(source, manifest: manifest, to: archive, limits: self.limits,
+                                                checkCancellation: checkCancellation)
+                }
+                return (manifest, identity)
+            }
+        } catch is CoordinatedFiles.Denied {
+            throw GraphBackupError.busy
+        }
+    }
+
+    private static func destination(_ destination: URL, outside source: URL) throws -> URL {
+        let requested = destination.standardizedFileURL
+        guard requested.isFileURL, requested.query == nil, requested.fragment == nil,
+              !FileManager.default.fileExists(atPath: requested.path),
+              (try? FileManager.default.destinationOfSymbolicLink(atPath: requested.path)) == nil else {
+            throw GraphBackupError.invalidDestination
+        }
+        let candidate = try Self.creationLocation(requested.deletingLastPathComponent())
+        guard candidate.path != source.path, !candidate.path.hasPrefix(source.path + "/") else {
+            throw GraphBackupError.invalidDestination
+        }
+        let parent = try Self.directory(candidate)
+        return parent.appendingPathComponent(requested.lastPathComponent)
+    }
+
+    private static func publish(_ stage: URL, to destination: URL) throws {
+        let files = FileManager.default
+        guard !files.fileExists(atPath: destination.path),
+              (try? files.destinationOfSymbolicLink(atPath: destination.path)) == nil else {
+            throw GraphBackupError.invalidDestination
+        }
+        try files.moveItem(at: stage, to: destination)
+    }
+
+    private struct FileIdentity: Sendable, Equatable {
+        let device: UInt64
+        let inode: UInt64
+        let size: UInt64
+        let modified: Date
+
+        init(_ url: URL) throws {
+            let attributes = try GraphBackupManager.attributes(url)
+            guard let device = attributes[.systemNumber] as? NSNumber,
+                  let inode = attributes[.systemFileNumber] as? NSNumber,
+                  let size = attributes[.size] as? NSNumber,
+                  let modified = attributes[.modificationDate] as? Date else { throw GraphBackupError.invalidBackup }
+            self.device = device.uint64Value
+            self.inode = inode.uint64Value
+            self.size = size.uint64Value
+            self.modified = modified
+        }
+
+        func sameFile(as other: Self) -> Bool { device == other.device && inode == other.inode }
+    }
+
+    private nonisolated func readManifest(_ directory: URL) throws -> GraphBackupManifest {
         if try Self.isPackage(directory) {
             let manifest = try GraphBackupPackage.header(at: directory, limits: limits).manifest
             try checkManifest(manifest)
@@ -307,14 +428,14 @@ package actor GraphBackupManager {
         guard intent.format == 1, intent.backupID == manifest.id else { throw GraphBackupError.invalidBackup }
         return manifest
     }
-    private func checkManifest(_ manifest: GraphBackupManifest) throws {
+    private nonisolated func checkManifest(_ manifest: GraphBackupManifest) throws {
         guard manifest.format == 1, manifest.storePath == "payload/Graph.sqlite", !manifest.nativeStoreID.isEmpty,
               accepts(manifest.schemaIdentifier), manifest.files.count <= limits.maximumFiles,
               Set(manifest.files.map(\.path)).count == manifest.files.count,
               manifest.files.contains(where: { $0.path == manifest.storePath }),
               manifest.files.allSatisfy({ Self.relative($0.path) && $0.sha256.count == 64 }) else { throw GraphBackupError.invalidBackup }
     }
-    private func accepts(_ schema: String) -> Bool {
+    private nonisolated func accepts(_ schema: String) -> Bool {
         schema == schemaIdentifier || (schema == migrationSourceSchemaIdentifier && validateMigrationSource != nil)
     }
     private func validator(_ schema: String) -> Validator {
@@ -356,10 +477,10 @@ package actor GraphBackupManager {
         }
         guard try inventory(directory) == manifest.files else { throw GraphBackupError.invalidBackup }
     }
-    private func inventory(_ directory: URL) throws -> [GraphBackupFile] {
+    private nonisolated func inventory(_ directory: URL, checkCancellation: () throws -> Void = { try Task.checkCancellation() }) throws -> [GraphBackupFile] {
         var files: [GraphBackupFile] = [], bytes: UInt64 = 0, visited = 0
         func walk(_ current: URL, path: String) throws {
-            try Task.checkCancellation()
+            try checkCancellation()
             visited += 1
             guard visited <= limits.maximumFiles, path.split(separator: "/").count <= 64 else { throw GraphBackupError.limitExceeded }
             let attributes = try Self.attributes(current)
@@ -373,7 +494,7 @@ package actor GraphBackupManager {
                       let size = (attributes[.size] as? NSNumber)?.uint64Value,
                       size <= limits.maximumBytes - min(bytes, limits.maximumBytes), files.count < limits.maximumFiles else { throw GraphBackupError.limitExceeded }
                 bytes += size
-                files.append(GraphBackupFile(path: path, bytes: size, sha256: try Self.digest(current)))
+                files.append(GraphBackupFile(path: path, bytes: size, sha256: try Self.digest(current, checkCancellation: checkCancellation)))
             default: throw GraphBackupError.invalidBackup
             }
         }
@@ -425,22 +546,26 @@ package actor GraphBackupManager {
         let parts = value.split(separator: "/", omittingEmptySubsequences: false)
         return parts.count > 1 && ["payload", "artifacts"].contains(String(parts[0])) && parts.allSatisfy { component(String($0)) }
     }
-    private static func digest(_ url: URL) throws -> String {
+    private static func digest(_ url: URL, checkCancellation: () throws -> Void = { try Task.checkCancellation() }) throws -> String {
         let file = try FileHandle(forReadingFrom: url); defer { try? file.close() }
         var hash = SHA256()
-        while let data = try file.read(upToCount: 1024 * 1024), !data.isEmpty { try Task.checkCancellation(); hash.update(data: data) }
+        while let data = try file.read(upToCount: 1024 * 1024), !data.isEmpty { try checkCancellation(); hash.update(data: data) }
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }
 
-/// A stable root lock prevents another service/process from deleting an active stage or bundle.
-private final class BackupRootLease: @unchecked Sendable {
-    private var descriptor: Int32
-    init(_ root: URL) throws {
-        descriptor = Darwin.open(root.appendingPathComponent(".graphevo-backups.lock").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
-        guard descriptor >= 0 else { throw GraphBackupError.invalidDestination }
-        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else { Darwin.close(descriptor); descriptor = -1; throw GraphBackupError.busy }
+/// The stage's presenter lets Foundation refuse cleanup while preparation is active.
+private final class BackupStagePresenter: NSObject, NSFilePresenter, @unchecked Sendable {
+    let presentedItemURL: URL?
+    let presentedItemOperationQueue = OperationQueue()
+
+    init(_ url: URL) {
+        presentedItemURL = url
+        presentedItemOperationQueue.maxConcurrentOperationCount = 1
+        super.init()
     }
-    func release() { if descriptor >= 0 { flock(descriptor, LOCK_UN); Darwin.close(descriptor); descriptor = -1 } }
-    deinit { release() }
+
+    func accommodatePresentedItemDeletion(completionHandler: @escaping ((any Error)?) -> Void) {
+        completionHandler(GraphBackupError.busy)
+    }
 }

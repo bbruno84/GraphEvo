@@ -38,7 +38,7 @@ enum GraphBackupPackage {
     }
 
     static func pack(_ directory: URL, manifest: GraphBackupManifest, to destination: URL,
-                     limits: GraphBackupLimits) throws {
+                     limits: GraphBackupLimits, checkCancellation: () throws -> Void = { try Task.checkCancellation() }) throws {
         try validateInventory(manifest, limits: limits)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let json = try encoder.encode(manifest)
@@ -48,8 +48,9 @@ enum GraphBackupPackage {
         try output.write(contentsOf: prefix(json, packed: 0)); try output.write(contentsOf: json)
         var index = 0, input: FileHandle?
         defer { try? input?.close() }
-        try transform(encoding: true, read: {
+        try transform(encoding: true, checkCancellation: checkCancellation, read: {
             while index < manifest.files.count {
+                try checkCancellation()
                 if input == nil { input = try FileHandle(forReadingFrom: directory.appendingPathComponent(manifest.files[index].path)) }
                 let data = try input!.read(upToCount: bufferBytes) ?? Data()
                 if !data.isEmpty { return data }
@@ -157,12 +158,13 @@ enum GraphBackupPackage {
         return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     }
 
-    static func copy(_ source: URL, to destination: URL, maximumBytes: UInt64) throws {
+    static func copy(_ source: URL, to destination: URL, maximumBytes: UInt64,
+                     checkCancellation: () throws -> Void = { try Task.checkCancellation() }) throws {
         let input = try FileHandle(forReadingFrom: source), output = try exclusiveFile(destination)
         defer { try? input.close(); try? output.close() }
         var bytes: UInt64 = 0
         while let data = try input.read(upToCount: bufferBytes), !data.isEmpty {
-            try Task.checkCancellation()
+            try checkCancellation()
             guard UInt64(data.count) <= maximumBytes - min(bytes, maximumBytes) else { throw GraphBackupError.limitExceeded }
             bytes += UInt64(data.count); try output.write(contentsOf: data)
         }
@@ -171,7 +173,7 @@ enum GraphBackupPackage {
 
     /// All buffers are bounded independently of archive size. End markers and unused input
     /// are checked explicitly: neither truncation nor concatenated/trailing streams are accepted.
-    private static func transform(encoding: Bool,
+    private static func transform(encoding: Bool, checkCancellation: () throws -> Void = { try Task.checkCancellation() },
                                   read: () throws -> Data?, write: (Data) throws -> Void) throws {
         let output = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferBytes)
         defer { output.deallocate() }
@@ -183,14 +185,14 @@ enum GraphBackupPackage {
         defer { if encoding { deflateEnd(&stream) } else { inflateEnd(&stream) } }
         var chunk = try read()
         while true {
-            try Task.checkCancellation()
+            try checkCancellation()
             let next = chunk == nil ? nil : try read(), final = next == nil
             let data = chunk ?? Data()
             let ended = try data.withUnsafeBytes { raw -> Bool in
                 stream.next_in = UnsafeMutablePointer(mutating: raw.baseAddress?.assumingMemoryBound(to: UInt8.self) ?? UnsafePointer(output))
                 stream.avail_in = uInt(raw.count)
                 repeat {
-                    try Task.checkCancellation()
+                    try checkCancellation()
                     stream.next_out = output; stream.avail_out = uInt(bufferBytes)
                     let before = stream.avail_in
                     let status = encoding ? deflate(&stream, final ? Z_FINISH : Z_NO_FLUSH) : inflate(&stream, Z_NO_FLUSH)
