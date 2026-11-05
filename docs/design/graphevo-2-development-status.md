@@ -120,13 +120,14 @@ original registration retained. UIKit expiration and a close held behind an
 Apple accessor have separate physical traces. A controlled budget release
 while close waits preserves the registration and exact cold readback.
 
-The proposed package-only [App Group runtime protocol](graphevo-2-controlled-store-access.md#dedicated-app-group-stores)
-uses a fresh S04 namespace and Apple as the only source of interprocess
+[PR #173](https://github.com/bbruno84/GraphEvo/pull/173) brings the package-only
+[App Group runtime protocol](graphevo-2-controlled-store-access.md#dedicated-app-group-stores)
+into the v2 line. The fresh S04 namespace uses Apple as the only source of interprocess
 exclusion on that store path. Durable owner generations describe interrupted
 lifecycle work. Purge uses one deletion grant, and prepared CloudKit writes
 revalidate Persistent History before saving. The
 [runtime validation report](results/app-group-runtime-integration-2026-11-05.md)
-distinguishes this candidate from the prior hybrid and records the reconciliation
+distinguishes this runtime from the prior hybrid and records the reconciliation
 with PR #174. Both local v2 platform profiles pass on the aligned branch.
 The aligned runtime passed 30 physical iPad app/widget cycles. Public roles
 and orphan recovery remain open.
