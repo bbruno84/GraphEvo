@@ -109,3 +109,10 @@ confirmed separate host and widget processes, host close before widget open,
 widget completion before app readback, exact identities and order for 32
 records, and matching hashes for two 4 MiB payloads. It found no advisory
 lock sidecars in the store slot.
+
+On a further wired iPad retry, CoreDevice reported that the device was paired
+and Developer Mode was enabled. A device screenshot taken while XCTest was
+waiting showed the system's Enable UI Automation dialog asking for Touch ID.
+The runner had started but was waiting for that authorization before entering
+the test. The next physical run requires confirmation on the iPad when the
+dialog appears.
