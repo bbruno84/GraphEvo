@@ -37,13 +37,25 @@ no new implementation, acceptance result or release is implied by this audit.
 
 The [backup catalog coordination candidate](graphevo-2-backup-packages.md#capture-publication-and-cancellation)
 uses Foundation grants for the catalog and for native copying from a stopped,
-read-only v1 source. Ordinary v2 store ownership, online v2 migration and
-CloudKit owner election continue to use their existing protocols. A macOS
+read-only v1 source. A macOS
 independent-process control with a synthetic payload preserves a live stage,
 reclaims the stage after process termination, and verifies the previously
 published package byte for byte. [PR #174](https://github.com/bbruno84/GraphEvo/pull/174)
 delivers the catalog and stopped-source copy independently of App Group
 ownership.
+
+The [ordinary SQLite coordination change](graphevo-2-controlled-store-access.md#cooperating-process-protocol)
+brings ordinary v2 stores and open-store migration under Foundation grants.
+The local v2 profiles pass 709 macOS and 708 iOS 18.5 simulator tests. In
+separate macOS processes, writers reached the same store through aliases,
+and a stale migration refused publication. A live peer refused purge and
+the requesting owner detached before retry. An opener queued during purge
+cleanup received a missing-store result. Process termination before and
+after the publication save exercised exact offline workspace recovery and
+receipt-based retry with a single verified backup. The shared coordination
+changes passed 30 app and widget cycles on a physical iPad with exact
+record and attachment readback. CloudKit session ownership remains a
+separate work item.
 
 The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.md)
 is exercised in the separate [N laboratory result](results/apple-owner-priority-tests-2026-11-04.md):

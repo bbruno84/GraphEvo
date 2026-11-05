@@ -413,7 +413,7 @@ extension GraphNativeIdentityPrototypeTests {
         let graph = try await database.createGraph(), id = graph.makeNodeID()
         _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: "item", properties: ["name": .string("keep")])) }
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.rollback(); context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let node = try #require(session.nodes[id])
@@ -429,7 +429,7 @@ extension GraphNativeIdentityPrototypeTests {
         #expect(try await graph.read { try $0.record(for: id)?.properties["name"] } == .string("keep"))
         let stagedID = graph.makeNodeID()
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.reset() }
                 // Simulate a framework import with logical staging metadata but incomplete native columns.
                 let staged = Entity("writer.partialImport", graph: GraphTypedStoreAdapter.facade(context))
@@ -445,7 +445,7 @@ extension GraphNativeIdentityPrototypeTests {
             try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: id, properties: ["name": .set(.string("bad"))])) }
         }
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.reset() }
                 let graph = GraphTypedStoreAdapter.facade(context)
                 for node in Search<Entity>(graph: graph).where(.type("writer.partialImport")).sync() { node.delete() }

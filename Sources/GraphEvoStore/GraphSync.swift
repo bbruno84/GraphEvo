@@ -144,7 +144,7 @@ actor GraphSyncSession {
         let id = graphID
         let snapshot = try await handle.snapshot()
         guard case .sqlite(let storeURL) = snapshot.location else { throw GraphCloudError.invalidConfiguration }
-        let stagingNamespace = snapshot.usesAppGroupCoordination ? UUID() : nil
+        let stagingNamespace = snapshot.usesSQLiteCoordination ? UUID() : nil
         let result = try await handle.preparedControlTransaction(
             prepare: { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) },
             materialize: { prepared, check in

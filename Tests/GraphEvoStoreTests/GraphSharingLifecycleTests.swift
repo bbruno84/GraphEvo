@@ -74,6 +74,11 @@ private actor RemovalGate {
         arrived = true; let values = arrivals; arrivals.removeAll(); for value in values { value.resume() }
         if !open { await withCheckedContinuation { waits.append($0) } }
     }
+    nonisolated func blockAccessor() throws {
+        let done = DispatchSemaphore(value: 0)
+        Task { await self.enter(); done.signal() }
+        guard done.wait(timeout: .now() + 15) == .success else { throw GraphCloudError.busy }
+    }
     func wait() async { if !arrived { await withCheckedContinuation { arrivals.append($0) } } }
     func release() { open = true; let values = waits; waits.removeAll(); for value in values { value.resume() } }
 }
@@ -128,10 +133,8 @@ private actor RemovalGate {
         #expect(try Data(contentsOf: exported) == Data([1,2,3]))
         let files = try FileManager.default.contentsOfDirectory(atPath: f.root.path)
         let resource = try ResolvedStore(.init(location: .sqlite(f.url)))
-        let writerSidecar = try StoreProcessLock.sidecar(resource, purpose: "writer").lastPathComponent
-        let ownerSidecar = try StoreProcessLock.sidecar(resource, purpose: "owners").lastPathComponent
-        // Location-bound lock identities survive data purge; no attachment content remains.
-        #expect(Set(files) == ["Engine", "consumer-export.bin", writerSidecar, ownerSidecar])
+        let anchor = try SQLiteStoreCoordination.directory(resource, create: false).lastPathComponent
+        #expect(Set(files) == ["Engine", "consumer-export.bin", anchor])
         await #expect(throws: (any Error).self) { try await alias.read { _ in () } }
         var changes = observation.makeAsyncIterator()
         while await changes.next() != nil {}
@@ -249,7 +252,7 @@ private actor RemovalGate {
     @Test func purgeDrainsAdmittedNativeWorkAndRejectsNewReads() async throws {
         let f = try await fixture(), gate = RemovalGate()
         defer { try? FileManager.default.removeItem(at: f.root) }
-        let admitted = Task { try await f.graph.nativeOperation { _ in await gate.enter() } }
+        let admitted = Task { try await f.graph.nativeOperation { _ in try gate.blockAccessor() } }
         await gate.wait()
         let leave = Task { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
         while try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .active { await Task.yield() }
@@ -258,9 +261,15 @@ private actor RemovalGate {
         #expect(try await leave.value.phase == .removed)
         try await f.graph.close(); try await f.manager.stopCloudSession(f.config)
     }
-    private actor FailureOnce {
-        var remaining = 1
-        func fail() throws { if remaining > 0 { remaining -= 1; throw GraphCloudError.persistence } }
+    private final class FailureOnce: Sendable {
+        private let failed = OSAllocatedUnfairLock(initialState: false)
+        func fail() throws {
+            try failed.withLock { value in
+                guard !value else { return }
+                value = true
+                throw GraphCloudError.persistence
+            }
+        }
     }
     @Test func appGroupCloseAfterNativeDestructionFailureRetainsClaimUntilRetry() async throws {
         let failed = OSAllocatedUnfairLock(initialState: false)
@@ -293,8 +302,8 @@ private actor RemovalGate {
     @Test(arguments: [false, true]) func failedNativeDestructionRetainsClaimsAndCanResume(_ after: Bool) async throws {
         let failure = FailureOnce()
         var hooks = StoreLifecycleHooks()
-        if after { hooks.didDestroy = { try await failure.fail() } }
-        else { hooks.beforeDestroy = { try await failure.fail() } }
+        if after { hooks.didDestroy = { try failure.fail() } }
+        else { hooks.beforeDestroy = { try failure.fail() } }
         let registry = StoreRegistry(hooks: hooks), f = try await fixture(registry: registry)
         defer { try? FileManager.default.removeItem(at: f.root) }
         await #expect(throws: (any Error).self) { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
@@ -340,17 +349,19 @@ private actor RemovalGate {
     @Test func purgeRetriesWhenReplicaDisappearsWhileOpening() async throws {
         let contended = AsyncStream<Void>.makeStream()
         var hooks = StoreLifecycleHooks()
-        hooks.didContendProcessLock = { contended.continuation.yield(()) }
+        hooks.didSubmitSQLiteAccess = { contended.continuation.yield(()) }
         let f = try await fixture(registry: StoreRegistry(hooks: hooks))
         defer { try? FileManager.default.removeItem(at: f.root) }
         let id = f.graph.id
         try await f.graph.close()
         let resolved = try ResolvedStore(.init(location: .sqlite(f.url), exclusiveGraphID: id.rawValue))
-        let writer = try await StoreProcessLock.acquire(resolved)
+        let writer = try await TestSQLiteWriteGrant.acquire(resolved)
         defer { writer.release() }
         let leaving = Task { try await f.manager.leaveCloudShare(for: id, configuration: f.config) }
         defer { leaving.cancel() }
         var signals = contended.stream.makeAsyncIterator()
+        // Setup also opened the original replica.
+        _ = await signals.next()
         _ = await signals.next()
         let coordinator = NSPersistentStoreCoordinator(managedObjectModel: GraphRuntimeSchema.typedProperties.makeModel())
         try coordinator.destroyPersistentStore(at: f.url, ofType: NSSQLiteStoreType, options: nil)
@@ -359,6 +370,7 @@ private actor RemovalGate {
             if FileManager.default.fileExists(atPath: path) { try FileManager.default.removeItem(atPath: path) }
         }
         writer.release()
+        try await writer.settle()
         await #expect {
             try await leaving.value
         } throws: { error in
@@ -494,8 +506,8 @@ private actor RemovalGate {
     @Test(arguments: [false, true]) func retryAfterDestructionRejectsReplacementAndCanResumeAfterRepair(_ cleaned: Bool) async throws {
         let failure = FailureOnce()
         var hooks = StoreLifecycleHooks()
-        if cleaned { hooks.didDestroy = { try await failure.fail() } }
-        else { hooks.beforeDestroyedArtifactCleanup = { try await failure.fail() } }
+        if cleaned { hooks.didDestroy = { try failure.fail() } }
+        else { hooks.beforeDestroyedArtifactCleanup = { try failure.fail() } }
         let f = try await fixture(registry: StoreRegistry(hooks: hooks))
         defer { try? FileManager.default.removeItem(at: f.root) }
         await #expect(throws: (any Error).self) { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }
@@ -681,7 +693,7 @@ private actor RemovalGate {
 
     @Test func registrationJoinsAdmittedPurgeWithoutReadingDestroyedNativeMetadata() async throws {
         let gate = RemovalGate()
-        var hooks = StoreLifecycleHooks(); hooks.beforeDestroyedArtifactCleanup = { await gate.enter() }
+        var hooks = StoreLifecycleHooks(); hooks.beforeDestroyedArtifactCleanup = { try gate.blockAccessor() }
         let f = try await fixture(registry: StoreRegistry(hooks: hooks))
         defer { try? FileManager.default.removeItem(at: f.root) }
         let leave = Task { try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config) }

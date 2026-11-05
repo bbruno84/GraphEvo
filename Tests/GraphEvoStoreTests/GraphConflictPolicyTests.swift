@@ -252,7 +252,7 @@ private final class PolicyBarrier: @unchecked Sendable {
     private func setRawDate(_ f: Fixture, id: GraphNodeID, malformed: Bool) async throws {
         _ = try await f.graph.collectSyncChanges()
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 let session = try GraphTypedStoreAdapter.Session(context, id.graphID, database: true)
                 let found = try session.node(id)
@@ -328,7 +328,7 @@ private final class PolicyBarrier: @unchecked Sendable {
         let f = try await fixture(), id = try await insert(f)
         _ = try await f.graph.prepareTransport(f.binding)
         let data = try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context -> Data in
+            try container.testNativeContext { context -> Data in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 let root = try GraphTypedStoreAdapter.controlRoot(context, id: id.graphID)
                 let raw = try #require(root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] as? Data)

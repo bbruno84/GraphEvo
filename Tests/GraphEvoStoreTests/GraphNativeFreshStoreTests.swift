@@ -47,7 +47,7 @@ private struct FreshNativeItem: GraphModel {
         let source = folder.appendingPathComponent("input.bin"); try Data([1,2,3]).write(to: source)
         let file = try await graph.importAttachment(from: source, ownedBy: edge)
         try await db.nativeOperation { native in
-            await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 for kind in [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName] {
                     #expect(context.persistentStoreCoordinator?.managedObjectModel
                         .entitiesByName[kind]?.attributesByName["ge2DataVersion"] == nil)
@@ -126,7 +126,7 @@ private struct FreshNativeItem: GraphModel {
         let db = try await GraphDatabase.inMemory(schema: .nativeIdentity), graph = try await db.createGraph(), id = graph.makeNodeID()
         _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: FreshNativeItem.graphType)) }
         try await db.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let node = try #require(session.nodes[id])
@@ -143,7 +143,7 @@ private struct FreshNativeItem: GraphModel {
         if case .failure(let error) = await iterator.next() { #expect(error is GraphStoreError) }
         else { Issue.record("An incomplete native projection must be visible as a failed refresh.") }
         try await db.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let node = try #require(session.nodes[id])

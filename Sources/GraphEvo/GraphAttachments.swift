@@ -35,7 +35,8 @@ extension GraphStore {
         } else {
             shared = try await nativeOperation { native in
                 guard let cloud = native as? NSPersistentCloudKitContainer else { return false }
-                return try await cloud.performBackgroundTask { context in
+                let context = cloud.newBackgroundContext()
+                return try context.performAndWait {
                     GraphSharingNative.prepare(context, container: cloud)
                     return try GraphTypedStoreAdapter.Session(context, graphID, database: true).isShared
                 }

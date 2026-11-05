@@ -158,7 +158,7 @@ private final class RemovalCommitGate: @unchecked Sendable {
         let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Graph.sqlite"))
         let ids = try await seed(graph), graphID = graph.id
         try await graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 let session = try GraphTypedStoreAdapter.Session(context, graphID, database: true)
                 let file = try #require(session.nodes[ids[4]])
@@ -206,7 +206,7 @@ private final class RemovalCommitGate: @unchecked Sendable {
         }
         // Inject an unsupported external writer's cross-graph dependency.
         try await db.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 let a = try GraphTypedStoreAdapter.Session(context, aGraphID, database: true)
                 let b = try GraphTypedStoreAdapter.Session(context, bGraphID, database: true)

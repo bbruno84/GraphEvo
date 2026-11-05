@@ -176,7 +176,7 @@ struct GraphNativeV1MigrationTests {
         // The failed detach intentionally quarantines its attached store until process exit.
         let root = try directory(), r = request(root)
         _ = try await seedConversionSource(r.sourceURL)
-        let registry = StoreRegistry(hooks: StoreLifecycleHooks(beforeDetach: { throw NativeV1InjectedFailure() }))
+        let registry = StoreRegistry(hooks: StoreLifecycleHooks(beforeNativePreparationDetach: { throw NativeV1InjectedFailure() }))
         let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
                                     adapter: GraphCoordinatorFactory.adapter)
         await #expect(throws: (any Error).self) { try await m.openGraph(convertingLocalV1: r) }

@@ -69,6 +69,10 @@ final class AppGroupStoreAccess: @unchecked Sendable {
                                     guard intent.url.standardizedFileURL.resolvingSymlinksInPath().path == expected else {
                                         throw StoreRuntimeError.storeReplaced(directory)
                                     }
+                                    if let identity = presenter.directoryIdentity,
+                                       try SQLiteStoreCoordination.identity(directory) != identity {
+                                        throw StoreRuntimeError.storeReplaced(directory)
+                                    }
                                     return try body()
                                 }
                             }

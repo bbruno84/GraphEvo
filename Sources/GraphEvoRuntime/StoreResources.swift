@@ -8,16 +8,18 @@ struct StoreLifecycleHooks: Sendable {
     var beforeLoad: (@Sendable () async throws -> Void)?
     var didReserveHandle: (@Sendable () async -> Void)?
     var afterCommit: (@Sendable () -> Void)?
-    var didContendProcessLock: (@Sendable () -> Void)?
+    var didSubmitSQLiteAccess: (@Sendable () -> Void)?
     var didQueueWriter: (@Sendable () async -> Void)?
     var didSubmitCoordinatedWrite: (@Sendable () -> Void)?
     var didRestrictWrites: (@Sendable () -> Void)?
     var didBeginClose: (@Sendable () async -> Void)?
     var beforeDetach: (@Sendable () async throws -> Void)?
-    var beforeDestroy: (@Sendable () async throws -> Void)?
+    var beforeDestroy: (@Sendable () throws -> Void)?
+    var beforeFailedOpenDetach: (@Sendable () throws -> Void)?
+    var beforeNativePreparationDetach: (@Sendable () throws -> Void)?
     var beforeAppGroupArtifactCleanup: (@Sendable () throws -> Void)?
-    var beforeDestroyedArtifactCleanup: (@Sendable () async throws -> Void)?
-    var didDestroy: (@Sendable () async throws -> Void)?
+    var beforeDestroyedArtifactCleanup: (@Sendable () throws -> Void)?
+    var didDestroy: (@Sendable () throws -> Void)?
     var didLoadStore: (@Sendable (URL?) throws -> Void)?
 }
 
@@ -28,9 +30,8 @@ actor StoreResources {
     private let container: NSPersistentContainer
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
-    private var maintenanceWriter: StoreProcessLock.Lease?
-    private var processPresence: StoreProcessLock.Lease?
     private var appGroupPresenter: AppGroupStorePresenter?
+    private let attachedIdentity: FileIdentity?
     private var legacyMirroring: LegacyStoreMirroring?
     private var changeObservers: [NSObjectProtocol] = []
     nonisolated let invalidations = StoreInvalidationHub()
@@ -66,9 +67,9 @@ actor StoreResources {
     private var reservationWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private var drain: CheckedContinuation<Void, Never>?
 
-    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], processPresence: StoreProcessLock.Lease? = nil, appGroupPresenter: AppGroupStorePresenter? = nil) {
+    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], appGroupPresenter: AppGroupStorePresenter? = nil, attachedIdentity: FileIdentity? = nil) {
+        self.attachedIdentity = attachedIdentity
         self.appGroupPresenter = appGroupPresenter
-        self.processPresence = processPresence
         self.gateways = gateways
         self.container = container
         self.resolved = resolved
@@ -88,23 +89,23 @@ actor StoreResources {
         let members = try resolved.resources
         let gateways = try members.map { try StoreGatewayLease.acquire($0.configuration, owner: owner) }
         // GraphContextManager's coordinated path is the single writable v2 owner gateway.
-        // Bootstrap holds the writer lock before native metadata/load. Presence prevents
-        // replacement of a live coordinator; workspaces retain an exclusive claim.
+        // Apple coordinates native metadata, attachment and mutation at the store location.
         if resolved.configuration.appGroup != nil {
             guard schema.identifier == "GraphEvo.v2.schema.4", nativeMigration == nil, mode != .openOrCreate else {
                 throw StoreRuntimeError.invalidConfiguration("App Group stores require explicit S04 creation or opening.")
             }
             try await hooks.beforeLoad?()
-            return try await openAppGroup(resolved, schema: schema, hooks: hooks, gateways: gateways,
+            return try await openCoordinated(resolved, schema: schema, hooks: hooks, gateways: gateways,
                 mode: mode, expectedIdentity: expectedIdentity)
         }
-        let processWriter = try await acquireProcessWriter(resolved, hooks: hooks)
-        defer { processWriter?.release() }
-        let presence: StoreProcessLock.Lease?
-        if processWriter != nil {
-            presence = try await StoreProcessLock.acquire(resolved, purpose: "owners",
-                mode: resolved.configuration.workspaceID == nil ? .shared : .exclusive, wait: false)
-        } else { presence = nil }
+        if try SQLiteStoreCoordination.participates(resolved) {
+            try await hooks.beforeLoad?()
+            return try await openCoordinated(resolved, schema: schema, hooks: hooks, gateways: gateways,
+                mode: mode, expectedIdentity: expectedIdentity, nativeMigration: nativeMigration)
+        }
+        guard nativeMigration == nil else {
+            throw StoreRuntimeError.invalidConfiguration("Native migration requires an isolated local SQLite workspace.")
+        }
         try await hooks.beforeLoad?()
         try validateOpeningIntent(resolved, mode: mode, expectedIdentity: expectedIdentity)
         let model = schema.makeModel()
@@ -113,14 +114,9 @@ actor StoreResources {
               schema.requiredModelVersionIdentifier.map({ model.versionIdentifiers == [AnyHashable($0)] }) ?? true else {
             throw StoreRuntimeError.invalidModel(schema.identifier)
         }
-        if let nativeMigration {
-            try nativeMigration.seed(resolved)
-            try await prepareNativeMigration(nativeMigration, resolved: resolved, hooks: hooks, gateways: gateways, presence: presence)
-        }
         let descriptions = try members.map { member in
             try storeDescription(member, model: model, requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier,
-                                 nativeMirroring: resolved.configuration.cloudKitContainerIdentifier != nil,
-                                 nativeMigration: nativeMigration)
+                                 nativeMirroring: resolved.configuration.cloudKitContainerIdentifier != nil)
         }
         let container: NSPersistentContainer
         if resolved.configuration.cloudKitContainerIdentifier != nil {
@@ -128,10 +124,9 @@ actor StoreResources {
                 descriptions: descriptions, configuration: resolved.configuration)
         } else { container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model) }
         container.persistentStoreDescriptions = descriptions
-        let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways, processPresence: presence)
+        let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways)
         do {
             try await resources.load()
-            if let nativeMigration { try await resources.finishNativeMigration(nativeMigration) }
         }
         catch {
             let failure = StoreRuntimeError.loadFailed(resolved.url, underlying: error)
@@ -146,24 +141,29 @@ actor StoreResources {
     }
 
     /// Registration and synchronous native open share one Apple grant.
-    private static func openAppGroup(_ resolved: ResolvedStore, schema: StoreSchema,
+    private static func openCoordinated(_ resolved: ResolvedStore, schema: StoreSchema,
                               hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease],
-                              mode: StoreOpeningMode, expectedIdentity: FileIdentity?) async throws -> StoreResources {
+                              mode: StoreOpeningMode, expectedIdentity: FileIdentity?,
+                              nativeMigration: StoreNativeMigration? = nil) async throws -> StoreResources {
         guard let url = resolved.url else { throw StoreRuntimeError.resourceReserved }
-        let directory = url.deletingLastPathComponent()
-        // The coordination target is a stable directory that purge never removes.
-        if mode == .new { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-        let presenter = AppGroupStorePresenter(directory: directory)
+        if mode == .new, resolved.configuration.appGroup != nil {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        let directory = try SQLiteStoreCoordination.directory(resolved)
+        let directoryIdentity = try resolved.configuration.appGroup == nil ? SQLiteStoreCoordination.identity(directory) : nil
+        let presenter = AppGroupStorePresenter(directory: directory, directoryIdentity: directoryIdentity)
         let recovery = mode.isAppGroupPurgeRecovery
+        let exclusive = recovery || resolved.configuration.workspaceID != nil
         let request = AppGroupStoreAccess(presenter: presenter, associatePresenter: false,
-                                          options: recovery ? .forDeleting : [], reportDenial: recovery)
+                                          options: exclusive ? .forDeleting : [], reportDenial: exclusive,
+                                          onSubmit: resolved.configuration.appGroup == nil ? hooks.didSubmitSQLiteAccess : nil)
         let resources: StoreResources
         do {
             resources = try await request.run {
                 let model = schema.makeModel()
-                guard !schema.entityVersionHashes.isEmpty,
+                guard !schema.identifier.isEmpty, !schema.entityVersionHashes.isEmpty,
                       model.entityVersionHashesByName == schema.entityVersionHashes,
-                      model.versionIdentifiers == [AnyHashable(schema.identifier)] else {
+                      schema.requiredModelVersionIdentifier.map({ model.versionIdentifiers == [AnyHashable($0)] }) ?? true else {
                     throw StoreRuntimeError.invalidModel(schema.identifier)
                 }
                 try validateOpeningIntent(resolved, mode: mode, expectedIdentity: expectedIdentity)
@@ -172,46 +172,63 @@ actor StoreResources {
                     try AppGroupOwnerClaims.requireNoClaims(for: resolved)
                     try validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
                 }
-                let description = try storeDescription(resolved, model: model,
-                    requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier, nativeMirroring: false)
-                description.shouldAddStoreAsynchronously = false
-                let container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model)
-                container.persistentStoreDescriptions = [description]
-                let resource = StoreResources(container: container, resolved: resolved, hooks: hooks,
-                                              gateways: gateways, appGroupPresenter: presenter)
-                try AppGroupOwnerClaims.publish(presenter.generation, for: resolved, creating: mode == .new)
+                let initialDescription = try nativeMigration == nil ? storeDescription(resolved, model: model,
+                    requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier, nativeMirroring: false) : nil
+                try AppGroupOwnerClaims.publish(presenter.generation, for: resolved,
+                    creating: mode == .new || (mode == .openOrCreate && !FileManager.default.fileExists(atPath: url.path)))
                 presenter.register()
-                let loaded = OSAllocatedUnfairLock<Result<Void, any Error>?>(initialState: nil)
-                container.loadPersistentStores { description, error in
-                    let loadedURL = description.url
-                    loaded.withLock { result in
-                        result = Result {
-                            if let error { throw error }
-                            try hooks.didLoadStore?(loadedURL)
+                var container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model)
+                do {
+                    if let nativeMigration {
+                        try nativeMigration.seed(resolved)
+                        if let prepare = nativeMigration.prepare {
+                            let source = nativeMigration.sourceSchema, sourceModel = source.makeModel()
+                            let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
+                            if sourceModel.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) {
+                                let description = try storeDescription(resolved, model: sourceModel,
+                                    requiredModelVersionIdentifier: source.requiredModelVersionIdentifier, nativeMirroring: false)
+                                let target = container
+                                container = NSPersistentContainer(name: source.identifier, managedObjectModel: sourceModel)
+                                try loadSynchronous(container, description: description, hooks: hooks)
+                                try prepare(container)
+                                do {
+                                    try hooks.beforeNativePreparationDetach?()
+                                    try detachStores(container)
+                                } catch {
+                                    let resource = StoreResources(container: container, resolved: resolved, hooks: hooks,
+                                        gateways: gateways, appGroupPresenter: presenter)
+                                    throw StoreOpenQuarantine(resources: resource,
+                                        failure: StoreRuntimeError.shutdownFailed(url, underlying: error))
+                                }
+                                container = target
+                            }
                         }
                     }
-                }
-                guard let result = loaded.withLock({ $0 }) else {
-                    throw StoreOpenQuarantine(resources: resource,
-                        failure: StoreRuntimeError.shutdownFailed(url, underlying: StoreRuntimeError.resourceReserved))
-                }
-                do {
-                    try result.get()
-                    guard container.persistentStoreCoordinator.persistentStores.count == 1 else {
-                        throw StoreRuntimeError.resourceReserved
-                    }
+                    let description = try initialDescription ?? storeDescription(resolved, model: model,
+                        requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier, nativeMirroring: false,
+                        nativeMigration: nativeMigration)
+                    try loadSynchronous(container, description: description, hooks: hooks)
+                    try nativeMigration?.finish(container)
+                    let identity = try resolved.fileIdentity()
+                    guard identity != nil else { throw StoreRuntimeError.missingStore(url) }
+                    return StoreResources(container: container, resolved: resolved, hooks: hooks,
+                        gateways: gateways, appGroupPresenter: presenter, attachedIdentity: identity)
+                } catch let quarantine as StoreOpenQuarantine {
+                    throw quarantine
                 } catch {
                     let failure = StoreRuntimeError.loadFailed(url, underlying: error)
                     do {
-                        try detachAppGroupStores(container, presenter: presenter, resolved: resolved)
+                        try hooks.beforeFailedOpenDetach?()
+                        try detachCoordinatedStores(container, presenter: presenter, resolved: resolved)
                     }
                     catch {
+                        let resource = StoreResources(container: container, resolved: resolved, hooks: hooks,
+                            gateways: gateways, appGroupPresenter: presenter)
                         throw StoreOpenQuarantine(resources: resource,
                             failure: StoreRuntimeError.shutdownFailed(url, underlying: error))
                     }
                     throw failure
                 }
-                return resource
             }
         } catch is AppGroupAccessDenied {
             throw StoreRuntimeError.resourceReserved
@@ -224,7 +241,10 @@ actor StoreResources {
                                               expectedIdentity: FileIdentity?) throws {
         guard let url = resolved.url else { return }
         switch mode {
-        case .openOrCreate: break
+        case .openOrCreate:
+            if let expectedIdentity, try resolved.fileIdentity() != expectedIdentity {
+                throw StoreRuntimeError.storeReplaced(url)
+            }
         case .existing, .appGroupPurgeRecovery:
             guard let expectedIdentity, let identity = try resolved.fileIdentity() else {
                 throw StoreRuntimeError.missingStore(url)
@@ -237,12 +257,35 @@ actor StoreResources {
         }
     }
 
-    private static func detachAppGroupStores(_ container: NSPersistentContainer, presenter: AppGroupStorePresenter,
-                                      resolved: ResolvedStore) throws {
+    private static func loadSynchronous(_ container: NSPersistentContainer,
+                                        description: NSPersistentStoreDescription, hooks: StoreLifecycleHooks) throws {
+        description.shouldAddStoreAsynchronously = false
+        container.persistentStoreDescriptions = [description]
+        let loaded = OSAllocatedUnfairLock<Result<Void, any Error>?>(initialState: nil)
+        container.loadPersistentStores { description, error in
+            let url = description.url
+            loaded.withLock { result in
+                result = Result {
+                    if let error { throw error }
+                    try hooks.didLoadStore?(url)
+                }
+            }
+        }
+        guard let result = loaded.withLock({ $0 }) else { throw StoreRuntimeError.resourceReserved }
+        try result.get()
+        guard container.persistentStoreCoordinator.persistentStores.count == 1 else { throw StoreRuntimeError.resourceReserved }
+    }
+
+    private static func detachStores(_ container: NSPersistentContainer) throws {
         let coordinator = container.persistentStoreCoordinator
         for store in coordinator.persistentStores { try coordinator.remove(store) }
         guard coordinator.persistentStores.isEmpty else { throw StoreRuntimeError.resourceReserved }
-        try AppGroupOwnerClaims.remove(presenter.generation, for: resolved)
+    }
+
+    private static func detachCoordinatedStores(_ container: NSPersistentContainer, presenter: AppGroupStorePresenter,
+                                      resolved: ResolvedStore) throws {
+        try detachStores(container)
+        try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.presentedItemURL)
         presenter.unregister()
     }
 
@@ -305,38 +348,6 @@ actor StoreResources {
         return description
     }
 
-    private func finishNativeMigration(_ migration: StoreNativeMigration) throws {
-        try migration.finish(container)
-    }
-
-    private func performNativePreparation(_ body: @Sendable (NSPersistentContainer) throws -> Void) throws {
-        try body(container)
-    }
-
-    private static func prepareNativeMigration(_ migration: StoreNativeMigration, resolved: ResolvedStore,
-                                              hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], presence: StoreProcessLock.Lease?) async throws {
-        guard let prepare = migration.prepare, let url = resolved.url else { return }
-        let model = migration.sourceSchema.makeModel()
-        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
-        if !model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) { return }
-        let description = try storeDescription(resolved, model: model,
-            requiredModelVersionIdentifier: migration.sourceSchema.requiredModelVersionIdentifier, nativeMirroring: false)
-        let container = NSPersistentContainer(name: migration.sourceSchema.identifier, managedObjectModel: model)
-        container.persistentStoreDescriptions = [description]
-        let staging = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways, processPresence: presence)
-        do {
-            try await staging.load()
-            try await staging.performNativePreparation(prepare)
-        } catch {
-            let failure = StoreRuntimeError.loadFailed(url, underlying: error)
-            do { try await staging.detach(releasing: false) }
-            catch { throw StoreOpenQuarantine(resources: staging, failure: StoreRuntimeError.shutdownFailed(url, underlying: error)) }
-            throw failure
-        }
-        do { try await staging.detach(releasing: false) }
-        catch { throw StoreOpenQuarantine(resources: staging, failure: StoreRuntimeError.shutdownFailed(url, underlying: error)) }
-    }
-
     private func installLoadObservers() {
         let hub = invalidations, coordinator = container.persistentStoreCoordinator
         changeObservers.append(NotificationCenter.default.addObserver(forName: .NSManagedObjectContextDidSave,
@@ -365,6 +376,8 @@ actor StoreResources {
             }
         }
     }
+
+    var usesSQLiteCoordination: Bool { appGroupPresenter != nil }
 
     func cloudSetup() -> StoreCloudSetup {
         let identifiers: [String] = container.persistentStoreCoordinator.persistentStores.map(\.identifier)
@@ -423,10 +436,9 @@ actor StoreResources {
         return try await withTaskCancellationHandler {
             try await acquireWriter(request, cancellation: cancellation)
             defer { releaseWriter() }
-            let processWriter = try await acquireOwnedWriter()
-            defer { processWriter?.release() }
             let hooks = hooks, configuration = resolved.configuration, container = container
-            let held = processWriter == nil && appGroupPresenter == nil ? StoreProcessLock.held : StoreProcessLock.held.union([resolved.key])
+            let resolved = resolved, identity = attachedIdentity
+            let held = appGroupPresenter == nil ? SQLiteStoreCoordination.held : SQLiteStoreCoordination.held.union([resolved.key])
             let native: @Sendable (NSManagedObjectContext) throws -> Value = { context in
                 Self.prepare(context, configuration: configuration, container: container)
                 context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
@@ -445,15 +457,17 @@ actor StoreResources {
                 return value
             }
             if let presenter = appGroupPresenter {
-                let request = AppGroupStoreAccess(presenter: presenter, onSubmit: hooks.didSubmitCoordinatedWrite)
+                let request = AppGroupStoreAccess(presenter: presenter,
+                    onSubmit: hooks.didSubmitCoordinatedWrite ?? hooks.didSubmitSQLiteAccess)
                 return try await request.run {
+                    try Self.validateAttachedFile(resolved, identity)
                     let context = container.newBackgroundContext()
                     return try context.performAndWait {
-                        try StoreProcessLock.$held.withValue(held) { try native(context) }
+                        try SQLiteStoreCoordination.$held.withValue(held) { try native(context) }
                     }
                 }
             }
-            return try await StoreProcessLock.$held.withValue(held) {
+            return try await SQLiteStoreCoordination.$held.withValue(held) {
                 try await container.performBackgroundTask(native)
             }
         } onCancel: {
@@ -483,12 +497,10 @@ actor StoreResources {
         return try await withTaskCancellationHandler {
             try await acquireWriter(request, cancellation: cancellation)
             defer { releaseWriter() }
-            let processWriter = try await acquireOwnedWriter()
-            defer { processWriter?.release() }
-            let held = StoreProcessLock.held.union([resolved.key])
+            let held = SQLiteStoreCoordination.held.union([resolved.key])
             let configuration = resolved.configuration, container = container, hooks = hooks
-            let presenter = appGroupPresenter, resolved = resolved
-            return try await StoreProcessLock.$held.withValue(held) {
+            let presenter = appGroupPresenter, resolved = resolved, identity = attachedIdentity
+            return try await SQLiteStoreCoordination.$held.withValue(held) {
                 let context = container.newBackgroundContext()
                 let check: StoreNativeContext.CancellationCheck = { try cancellation.check(); try accountPermit.check() }
                 var staged: Prepared?
@@ -498,6 +510,7 @@ actor StoreResources {
                         context.userInfo[StoreNativeContext.cancellationKey] = check
                         context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
                         try check()
+                        try Self.validateAttachedFile(resolved, identity)
                         let boundary = try presenter.map { _ in try Self.preparationBoundary(context, resolved: resolved) }
                         return (try prepare(context), boundary)
                     }
@@ -533,7 +546,7 @@ actor StoreResources {
     private struct PreparationBoundary: Sendable {
         let file: FileIdentity
         let storeID: String
-        let historyToken: Data
+        let historyToken: Data?
     }
 
     private static func preparationBoundary(_ context: NSManagedObjectContext,
@@ -541,24 +554,33 @@ actor StoreResources {
         guard let file = try resolved.fileIdentity(),
               let coordinator = context.persistentStoreCoordinator,
               coordinator.persistentStores.count == 1, let store = coordinator.persistentStores.first,
-              let storeID = coordinator.metadata(for: store)[NSStoreUUIDKey] as? String,
-              let token = coordinator.currentPersistentHistoryToken(fromStores: [store]) else {
+              let storeID = coordinator.metadata(for: store)[NSStoreUUIDKey] as? String else {
             throw StoreRuntimeError.resourceReserved
         }
         return PreparationBoundary(file: file, storeID: storeID,
-            historyToken: try NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true))
+            historyToken: try coordinator.currentPersistentHistoryToken(fromStores: [store]).map {
+                try NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true)
+            })
     }
 
     private static func validatePreparationBoundary(_ boundary: PreparationBoundary, in context: NSManagedObjectContext,
                                                     resolved: ResolvedStore) throws {
-        guard let url = resolved.url, let graphID = resolved.configuration.exclusiveGraphID,
-              try resolved.fileIdentity() == boundary.file else { throw StoreRuntimeError.resourceReserved }
-        try validateDestructionIdentity(url, graphID: graphID, storeID: boundary.storeID)
-        guard let coordinator = context.persistentStoreCoordinator,
+        guard let url = resolved.url, try resolved.fileIdentity() == boundary.file,
+              let coordinator = context.persistentStoreCoordinator,
               coordinator.persistentStores.count == 1, let store = coordinator.persistentStores.first,
-              let before = try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: boundary.historyToken),
-              let now = coordinator.currentPersistentHistoryToken(fromStores: [store]), before.isEqual(now),
+              coordinator.metadata(for: store)[NSStoreUUIDKey] as? String == boundary.storeID,
               let fetch = NSPersistentHistoryTransaction.fetchRequest else { throw StoreRuntimeError.resourceReserved }
+        if let graphID = resolved.configuration.exclusiveGraphID,
+           coordinator.metadata(for: store)[StoreNativeContext.historySyncGraphKey] != nil {
+            try validateDestructionIdentity(url, graphID: graphID, storeID: boundary.storeID)
+        }
+        let before = try boundary.historyToken.flatMap {
+            try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: $0)
+        }
+        let now = coordinator.currentPersistentHistoryToken(fromStores: [store])
+        guard (before == nil && now == nil) || (before?.isEqual(now) == true) else {
+            throw StoreRuntimeError.resourceReserved
+        }
         let request = NSPersistentHistoryChangeRequest.fetchHistory(after: before)
         request.resultType = .transactionsOnly
         request.affectedStores = [store]
@@ -577,7 +599,7 @@ actor StoreResources {
         guard let presenter else { return try await context.perform(body) }
         return try await AppGroupStoreAccess(presenter: presenter).run {
             try context.performAndWait {
-                try StoreProcessLock.$held.withValue(held, operation: body)
+                try SQLiteStoreCoordination.$held.withValue(held, operation: body)
             }
         }
     }
@@ -595,10 +617,47 @@ actor StoreResources {
 
     /// Privileged framework work; the completion must settle before this owner can detach.
     func nativeOperation<Value: Sendable>(
-        _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
+        _ body: @escaping @Sendable (NSPersistentContainer) throws -> Value
     ) async throws -> Value {
         try Self.checkProcessReentry(resolved)
         guard resolved.configuration.appGroup == nil else { throw StoreRuntimeError.resourceReserved }
+        guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
+        let accountPermit = try effectiveAccountAccess.permit()
+        try admit(write: true)
+        defer { finish(write: true) }
+        let cancellation = OperationCancellation(), request = UUID()
+        return try await withTaskCancellationHandler {
+            try await acquireWriter(request, cancellation: cancellation)
+            defer { releaseWriter() }
+            let container = container, resolved = resolved, identity = attachedIdentity
+            let held = SQLiteStoreCoordination.held.union([resolved.key])
+            let operation: @Sendable () throws -> Value = {
+                try cancellation.check(); try accountPermit.check()
+                try Self.validateAttachedFile(resolved, identity)
+                return try SQLiteStoreCoordination.$held.withValue(held) { try body(container) }
+            }
+            defer { invalidations.publish(.nativeOperation) }
+            if let presenter = appGroupPresenter {
+                return try await AppGroupStoreAccess(presenter: presenter).run(operation)
+            }
+            return try operation()
+        } onCancel: {
+            cancellation.cancel()
+            Task { await self.cancelWriter(request) }
+        }
+    }
+
+    private static func validateAttachedFile(_ resolved: ResolvedStore, _ identity: FileIdentity?) throws {
+        if let identity, let url = resolved.url, try resolved.fileIdentity() != identity {
+            throw StoreRuntimeError.storeReplaced(url)
+        }
+    }
+
+    func nativeOperation<Value: Sendable>(
+        _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
+    ) async throws -> Value {
+        try Self.checkProcessReentry(resolved)
+        guard appGroupPresenter == nil else { throw StoreRuntimeError.resourceReserved }
         guard resolved.configuration.access == .readWrite else { throw StoreRuntimeError.readOnlyStore }
         let accountPermit = try effectiveAccountAccess.permit()
         try admit(write: true)
@@ -607,13 +666,11 @@ actor StoreResources {
         return try await withTaskCancellationHandler {
             try await acquireWriter(request, cancellation: cancellation)
             defer { releaseWriter() }
-            let processWriter = try await acquireOwnedWriter()
-            defer { processWriter?.release() }
             try cancellation.check(); try accountPermit.check()
             // Native APIs own their cancellation semantics once started. Await their real outcome.
             defer { invalidations.publish(.nativeOperation) }
-            let held = processWriter == nil ? StoreProcessLock.held : StoreProcessLock.held.union([resolved.key])
-            return try await StoreProcessLock.$held.withValue(held) {
+            let held = appGroupPresenter == nil ? SQLiteStoreCoordination.held : SQLiteStoreCoordination.held.union([resolved.key])
+            return try await SQLiteStoreCoordination.$held.withValue(held) {
                 let result = try await body(container)
                 try accountPermit.check()
                 return result
@@ -625,52 +682,8 @@ actor StoreResources {
     }
 
     private static func checkProcessReentry(_ resolved: ResolvedStore) throws {
-        guard !StoreProcessLock.held.contains(resolved.key) else {
+        guard !SQLiteStoreCoordination.held.contains(resolved.key) else {
             throw StoreRuntimeError.invalidConfiguration("A native operation cannot reenter its owned store while holding writer admission.")
-        }
-    }
-
-    private static func acquireProcessWriter(_ resolved: ResolvedStore, hooks: StoreLifecycleHooks,
-                                             cancellable: Bool = true) async throws -> StoreProcessLock.Lease? {
-        try checkProcessReentry(resolved)
-        guard resolved.configuration.appGroup == nil,
-              let url = resolved.url, !resolved.configuration.legacyReadOnly,
-              resolved.configuration.cloudKitContainerIdentifier == nil,
-              resolved.configuration.sharedStoreURL == nil else { return nil }
-        do {
-            if resolved.configuration.access == .readOnly {
-                guard FileManager.default.fileExists(atPath: url.path) else { throw StoreRuntimeError.missingStore(url) }
-                // Preserve read-only unmarked/archive sources without requiring a writable
-                // directory. Coordinated replicas participate in the live-owner protocol.
-                let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType,
-                    at: url, options: [NSReadOnlyPersistentStoreOption: true])
-                guard metadata[StoreNativeContext.historySyncGraphKey] != nil else { return nil }
-            }
-            return try await StoreProcessLock.acquire(resolved, cancellable: cancellable,
-                                                       contended: hooks.didContendProcessLock)
-        } catch is CancellationError { throw CancellationError() }
-        catch let error as StoreRuntimeError { throw error }
-        catch { throw StoreRuntimeError.loadFailed(url, underlying: error) }
-    }
-
-    private func acquireOwnedWriter(cancellable: Bool = true) async throws -> StoreProcessLock.Lease? {
-        try Self.checkProcessReentry(resolved)
-        if let borrowed = maintenanceWriter?.retained() { return borrowed }
-        return try await Self.acquireProcessWriter(resolved, hooks: hooks, cancellable: cancellable)
-    }
-
-    /// Called under the process writer lock. Never destroy a store with another live coordinator.
-    /// Failure restores our presence mode, retaining ownership for a safe later close/retry.
-    private func requireSoleProcessOwner() async throws {
-        guard resolved.configuration.appGroup == nil else { throw StoreRuntimeError.resourceReserved }
-        guard processPresence != nil else { return }
-        processPresence?.release(); processPresence = nil
-        do {
-            processPresence = try await StoreProcessLock.acquire(resolved, purpose: "owners", wait: false, cancellable: false)
-        } catch {
-            processPresence = try await StoreProcessLock.acquire(resolved, purpose: "owners",
-                mode: resolved.configuration.workspaceID == nil ? .shared : .exclusive, cancellable: false)
-            throw error
         }
     }
 
@@ -727,14 +740,7 @@ actor StoreResources {
                 }
                 try Task.checkCancellation()
                 guard !closing else { throw StoreRuntimeError.closedHandle }
-                if mode == .all {
-                    let lock = try await Self.acquireProcessWriter(resolved, hooks: hooks)
-                    do {
-                        try Task.checkCancellation()
-                        guard !closing, reservations[id] == .all else { throw StoreRuntimeError.closedHandle }
-                        maintenanceWriter = lock
-                    } catch { lock?.release(); throw error }
-                }
+
             } onCancel: { Task { await self.cancelReservation(id) } }
         } catch { releaseReservation(id); throw error }
     }
@@ -748,7 +754,6 @@ actor StoreResources {
         let mode = reservations.removeValue(forKey: id)
         reservationWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
         if mode == .all {
-            maintenanceWriter?.release(); maintenanceWriter = nil
             invalidations.publish(.storeChange)
         }
     }
@@ -769,15 +774,22 @@ actor StoreResources {
         closing = true; invalidations.finish()
         if admitted > 0 { await withCheckedContinuation { drain = $0 } }
         accountAccess.finish(); cancelAccountParent?(); cancelAccountParent = nil
-        let processWriter = try await acquireOwnedWriter(cancellable: false)
-        defer { processWriter?.release() }
-        try await requireSoleProcessOwner()
-        do { try await detach(releasing: false) }
-        catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
-        try body()
-        processPresence?.release(); processPresence = nil
-        maintenanceWriter?.release(); maintenanceWriter = nil
-        for gateway in gateways { gateway.release() }
+        guard let presenter = appGroupPresenter else { throw StoreRuntimeError.resourceReserved }
+        try await hooks.beforeDetach?()
+        let container = container, resolved = resolved
+        do {
+            try await AppGroupStoreAccess(presenter: presenter, cancellable: false,
+                                           options: .forDeleting, reportDenial: true).run {
+                try AppGroupOwnerClaims.requireSoleClaim(presenter.generation, for: resolved)
+                do { try Self.detachStores(container) }
+                catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
+                try body()
+                try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.presentedItemURL)
+                presenter.unregister()
+            }
+        } catch is AppGroupAccessDenied { throw StoreRuntimeError.resourceReserved }
+        appGroupPresenter = nil
+        finishDetached(releasing: true)
     }
 
     /// Workspace sealing cannot use the separate original-store publication capability.
@@ -811,10 +823,12 @@ actor StoreResources {
         try admit(write: true, reservation: reservation)
         defer { finish(write: true) }
         let cancellation = OperationCancellation(), container = container, configuration = resolved.configuration, hooks = hooks
+        let presenter = appGroupPresenter, held = SQLiteStoreCoordination.held.union([resolved.key])
+        let resolved = resolved, identity = attachedIdentity
         return try await withTaskCancellationHandler {
-            let processWriter = try await acquireOwnedWriter()
-            defer { processWriter?.release() }
-            return try await container.performBackgroundTask { @Sendable context in
+            let context = container.newBackgroundContext()
+            return try await Self.performPreparedPhase(context, presenter: presenter, held: held) {
+                try Self.validateAttachedFile(resolved, identity)
                 Self.prepare(context, configuration: configuration, container: container)
                 context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
                 context.userInfo[StoreNativeContext.cancellationKey] = { @Sendable in try cancellation.check(); try accountPermit.check() } as StoreNativeContext.CancellationCheck
@@ -831,7 +845,9 @@ actor StoreResources {
         } onCancel: { cancellation.cancel() }
     }
 
-    func copyStore(to destination: URL, reservation: UUID) async throws {
+    func copyStore<Value: Sendable>(to destination: URL, reservation: UUID,
+        alongside: @escaping @Sendable (NSManagedObjectContext, URL, CoordinatedFiles.CancellationCheck) throws -> Value
+    ) async throws -> Value {
         guard resolved.configuration.appGroup == nil else { throw StoreRuntimeError.resourceReserved }
         try AppGroupStoreLocation.rejectUncoordinated(destination)
         try Self.checkProcessReentry(resolved)
@@ -845,15 +861,13 @@ actor StoreResources {
         }
         try admit(reservation: reservation)
         defer { finish() }
-        let sourceFence = maintenanceWriter?.retained()
-        defer { sourceFence?.release() }
         let destinationResource = try ResolvedStore(.init(location: .sqlite(destination)))
         guard destinationResource.key != resolved.key else { throw StoreRuntimeError.configurationConflict(destination) }
         if resolved.configuration.legacyReadOnly, let target = destinationResource.url {
             // The v1 caller has already stopped the source writers. Coordinate
             // the native snapshot and its private destination together.
             let container = container
-            try await CoordinatedFiles.run([.read(source), .write(target)]) {
+            let value = try await CoordinatedFiles.run([.read(source), .write(target)]) { check in
                 try accountPermit.check()
                 let files = FileManager.default
                 guard !files.fileExists(atPath: target.path),
@@ -864,29 +878,49 @@ actor StoreResources {
                 try copier.replacePersistentStore(at: target, destinationOptions: nil,
                     withPersistentStoreFrom: source, sourceOptions: [NSReadOnlyPersistentStoreOption: true],
                     ofType: NSSQLiteStoreType)
+                let context = container.newBackgroundContext()
+                return try context.performAndWait { try alongside(context, target, check) }
             }
             try accountPermit.check()
-            return
+            return value
         }
-        let lockedResources = (processPresence == nil || sourceFence != nil ? [destinationResource] : [resolved, destinationResource]).sorted {
-            guard case .sqlite(let left) = $0.key, case .sqlite(let right) = $1.key else { return false }
-            return left < right
-        }
-        var locks: [StoreProcessLock.Lease] = []
-        defer { for lock in locks.reversed() { lock.release() } }
-        for resource in lockedResources { locks.append(try await StoreProcessLock.acquire(resource)) }
-        // An existing destination must not be replaced while another coordinator owns it.
-        let destinationOwner = try await StoreProcessLock.acquire(destinationResource, purpose: "owners", wait: false)
-        defer { destinationOwner.release() }
-        guard !FileManager.default.fileExists(atPath: destination.path) else { throw StoreRuntimeError.configurationConflict(destination) }
+        guard let target = destinationResource.url else { throw StoreRuntimeError.resourceReserved }
+        let destinationAnchor = try SQLiteStoreCoordination.directory(destinationResource)
+        let destinationAnchorIdentity = try SQLiteStoreCoordination.identity(destinationAnchor)
+        let sourceAnchorIdentity = appGroupPresenter?.directoryIdentity
+        let sourceAccess: CoordinatedFiles.Access = if let presenter = appGroupPresenter,
+            let directory = presenter.presentedItemURL { .read(directory) } else { .read(source) }
         let container = container, readOnly = resolved.configuration.access == .readOnly
-        try await container.performBackgroundTask { _ in
-            try accountPermit.check()
-            let copier = NSPersistentStoreCoordinator(managedObjectModel: container.managedObjectModel)
-            try copier.replacePersistentStore(at: destination, destinationOptions: nil,
-                withPersistentStoreFrom: source, sourceOptions: readOnly ? [NSReadOnlyPersistentStoreOption: true] : nil, ofType: NSSQLiteStoreType)
-        }
+        let sourceIdentity = try attachedIdentity ?? resolved.fileIdentity(), resolved = resolved
+        let value: Value
+        do {
+            value = try await CoordinatedFiles.run([sourceAccess, .delete(destinationAnchor)], presenter: appGroupPresenter) { check in
+                try accountPermit.check()
+                try check()
+                guard try SQLiteStoreCoordination.identity(destinationAnchor) == destinationAnchorIdentity else {
+                    throw StoreRuntimeError.storeReplaced(target)
+                }
+                if let sourceAnchorIdentity, try SQLiteStoreCoordination.identity(sourceAccess.url) != sourceAnchorIdentity {
+                    throw StoreRuntimeError.storeReplaced(source)
+                }
+                guard let sourceIdentity, try resolved.fileIdentity() == sourceIdentity else {
+                    throw StoreRuntimeError.storeReplaced(source)
+                }
+                try AppGroupOwnerClaims.requireNoClaims(for: destinationResource, allowMissing: true)
+                guard try destinationResource.fileIdentity() == nil,
+                      (try? FileManager.default.destinationOfSymbolicLink(atPath: target.path)) == nil else {
+                    throw StoreRuntimeError.configurationConflict(target)
+                }
+                let copier = NSPersistentStoreCoordinator(managedObjectModel: container.managedObjectModel)
+                try copier.replacePersistentStore(at: target, destinationOptions: nil,
+                    withPersistentStoreFrom: source, sourceOptions: readOnly ? [NSReadOnlyPersistentStoreOption: true] : nil,
+                    ofType: NSSQLiteStoreType)
+                let context = container.newBackgroundContext()
+                return try context.performAndWait { try alongside(context, target, check) }
+            }
+        } catch is CoordinatedFiles.Denied { throw StoreRuntimeError.resourceReserved }
         try accountPermit.check()
+        return value
     }
 
     private func acquireWriter(_ request: UUID, cancellation: OperationCancellation) async throws {
@@ -918,21 +952,19 @@ actor StoreResources {
             await withCheckedContinuation { drain = $0 }
         }
         accountAccess.finish(); cancelAccountParent?(); cancelAccountParent = nil
-        let processWriter = try await acquireOwnedWriter(cancellable: false)
-        defer { processWriter?.release() }
         do {
-            if resolved.configuration.appGroup != nil { try await detachAppGroupOwner() }
+            if appGroupPresenter != nil { try await detachCoordinatedOwner() }
             else { try await detach() }
         } catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
     }
 
     /// A normal Apple grant detaches this owner without deleting data.
-    private func detachAppGroupOwner() async throws {
+    private func detachCoordinatedOwner() async throws {
         guard let presenter = appGroupPresenter else { throw StoreRuntimeError.resourceReserved }
         try await hooks.beforeDetach?()
         let container = container, resolved = resolved
         try await AppGroupStoreAccess(presenter: presenter, cancellable: false).run {
-            try Self.detachAppGroupStores(container, presenter: presenter, resolved: resolved)
+            try Self.detachCoordinatedStores(container, presenter: presenter, resolved: resolved)
         }
         appGroupPresenter = nil
         finishDetached(releasing: true)
@@ -953,62 +985,13 @@ actor StoreResources {
     /// Invalidate every lease and drain admitted work. Release claims only after
     /// destruction succeeds or a pre-destruction refusal has safely detached.
     func destroy(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
-        if resolved.configuration.appGroup != nil { return try await destroyAppGroup(graphID: graphID, storeID: storeID) }
-        try Self.checkProcessReentry(resolved)
-        guard resolved.configuration.exclusiveGraphID == graphID,
-              resolved.configuration.access == .readWrite,
-              resolved.configuration.cloudKitContainerIdentifier == nil,
-              resolved.configuration.sharedStoreURL == nil, let url = resolved.url else {
-            throw StoreRuntimeError.invalidConfiguration("Only an exclusive coordinated graph can be destroyed.")
-        }
-        closing = true; invalidations.finish()
-        if admitted > 0 { await withCheckedContinuation { drain = $0 } }
-        accountAccess.finish(); cancelAccountParent?(); cancelAccountParent = nil
-        let processWriter = try await acquireOwnedWriter(cancellable: false)
-        defer { processWriter?.release() }
-        try await requireSoleProcessOwner()
-        if !destructionIssued, FileManager.default.fileExists(atPath: url.path) {
-            try Self.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
-            try await hooks.beforeDetach?()
-            try await hooks.beforeDestroy?()
-            try autoreleasepool {
-                try container.persistentStoreCoordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
-            }
-            destructionIssued = true
-            destructionArtifacts = try Self.destructionURLs(url).reduce(into: [:]) { result, artifact in
-                if let identity = try Self.destructionArtifact(artifact) { result[artifact] = identity }
-            }
-            try await detach(releasing: false, runHook: false)
-        } else {
-            try await detach(releasing: false)
-        }
-        try await hooks.beforeDestroyedArtifactCleanup?()
-        // Core Data destroys the store/content first. Remove only its explicitly owned SQLite artifacts;
-        // some SDK versions retain empty SQLite/WAL/SHM placeholders after the native destruction.
-        guard destructionIssued, destructionArtifacts != nil else { throw StoreRuntimeError.storeReplaced(url) }
-        // A path that was absent, replaced, modified or already cleaned is never adopted by a retry.
-        for artifact in Self.destructionURLs(url) {
-            if let current = try Self.destructionArtifact(artifact), destructionArtifacts?[artifact] != current {
-                throw StoreRuntimeError.storeReplaced(artifact)
-            }
-        }
-        for artifact in Self.destructionURLs(url) {
-            do {
-                if FileManager.default.fileExists(atPath: artifact.path) { try FileManager.default.removeItem(at: artifact) }
-            } catch let error as CocoaError where error.code == .fileNoSuchFile { }
-            destructionArtifacts?.removeValue(forKey: artifact)
-        }
-        try await hooks.didDestroy?()
-        processPresence?.release(); processPresence = nil
-        maintenanceWriter?.release(); maintenanceWriter = nil
-        for gateway in gateways { gateway.release() }
-        return .removed
+        try await destroyCoordinated(graphID: graphID, storeID: storeID)
     }
 
     /// One Apple deletion grant covers identity, native destruction and cleanup.
-    private func destroyAppGroup(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
+    private func destroyCoordinated(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
         try Self.checkProcessReentry(resolved)
-        guard resolved.configuration.exclusiveGraphID == graphID,
+        guard resolved.configuration.exclusiveGraphID == graphID, resolved.configuration.access == .readWrite,
               let url = resolved.url, let presenter = appGroupPresenter else {
             throw StoreRuntimeError.invalidConfiguration("Only a dedicated App Group graph can use coordinated destruction.")
         }
@@ -1017,7 +1000,6 @@ actor StoreResources {
         accountAccess.finish(); cancelAccountParent?(); cancelAccountParent = nil
         if !destructionIssued {
             try await hooks.beforeDetach?()
-            try await hooks.beforeDestroy?()
         }
         struct Progress: Sendable {
             var started: Bool
@@ -1037,7 +1019,13 @@ actor StoreResources {
                 if !progress.withLock({ $0.issued }) {
                     try Self.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
                     let coordinator = container.persistentStoreCoordinator
-                    progress.withLock { $0.started = true }
+                    if !progress.withLock({ $0.started }) {
+                        if resolved.configuration.appGroup == nil {
+                            try AppGroupOwnerClaims.markRetiring(presenter.generation, for: resolved)
+                        }
+                        progress.withLock { $0.started = true }
+                    }
+                    try hooks.beforeDestroy?()
                     try autoreleasepool {
                         try coordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
                     }
@@ -1053,14 +1041,24 @@ actor StoreResources {
                     throw StoreRuntimeError.storeReplaced(url)
                 }
                 try hooks.beforeAppGroupArtifactCleanup?()
-                for item in Self.destructionURLs(url) {
-                    if try Self.destructionArtifact(item) != artifacts[item] { throw StoreRuntimeError.storeReplaced(item) }
+                try hooks.beforeDestroyedArtifactCleanup?()
+                let items = Self.destructionURLs(url)
+                let existing = try items.filter { item in
+                    guard let current = try Self.destructionArtifact(item) else {
+                        if resolved.configuration.appGroup != nil, artifacts[item] != nil {
+                            throw StoreRuntimeError.storeReplaced(item)
+                        }
+                        return false
+                    }
+                    guard current == artifacts[item] else { throw StoreRuntimeError.storeReplaced(item) }
+                    return true
                 }
-                for item in Self.destructionURLs(url) where artifacts[item] != nil {
+                for item in existing {
                     try FileManager.default.removeItem(at: item)
                     progress.withLock { _ = $0.artifacts?.removeValue(forKey: item) }
                 }
-                try AppGroupOwnerClaims.remove(presenter.generation, for: resolved)
+                try hooks.didDestroy?()
+                try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.presentedItemURL)
                 presenter.unregister()
             }
         } catch {
@@ -1071,7 +1069,7 @@ actor StoreResources {
             if !phase.started {
                 switch error {
                 case is AppGroupAccessDenied, StoreRuntimeError.resourceReserved:
-                    do { try await detachAppGroupOwner() }
+                    do { try await detachCoordinatedOwner() }
                     catch { throw StoreRuntimeError.shutdownFailed(url, underlying: error) }
                     return .deferredAfterDetach
                 default: break
@@ -1138,7 +1136,6 @@ actor StoreResources {
         changeObservers.removeAll()
         invalidations.finish()
         if releasing {
-            processPresence?.release(); processPresence = nil
             for gateway in gateways { gateway.release() }
         }
     }

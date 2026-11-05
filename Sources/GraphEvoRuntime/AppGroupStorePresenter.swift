@@ -6,8 +6,10 @@ final class AppGroupStorePresenter: NSObject, NSFilePresenter, @unchecked Sendab
     let presentedItemURL: URL?
     let presentedItemOperationQueue: OperationQueue
     let generation = UUID()
+    let directoryIdentity: FileIdentity?
 
-    init(directory: URL) {
+    init(directory: URL, directoryIdentity: FileIdentity? = nil) {
+        self.directoryIdentity = directoryIdentity
         presentedItemURL = directory
         presentedItemOperationQueue = OperationQueue()
         presentedItemOperationQueue.maxConcurrentOperationCount = 1

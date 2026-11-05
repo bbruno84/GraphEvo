@@ -147,7 +147,7 @@ private actor CoordinatorGate {
         let original = try await GraphDatabase.open(at: orphanURL, schema: .nativeIdentity)
         let graph = try await original.createGraph(), originalID = graph.id
         try await original.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let facade = GraphTypedStoreAdapter.facade(context)
                 let orphan = Entity("orphan", graph: facade)
                 try GraphNativeIdentityColumns.stamp(orphan, graphID: GraphID(), nodeID: UUID())
@@ -241,7 +241,8 @@ private actor CoordinatorGate {
         for failDuringLoad in [false, true] {
             let root = try directory(), url = root.appendingPathComponent("A.sqlite"), id = GraphID()
             let seed = manager(), graph = try await seed.createGraph(id: id, at: url); try await graph.close()
-            let hooks = StoreLifecycleHooks(beforeDetach: { throw InjectedFailure() }, didLoadStore: { _ in
+            let hooks = StoreLifecycleHooks(beforeDetach: { throw InjectedFailure() },
+                beforeFailedOpenDetach: { throw InjectedFailure() }, didLoadStore: { _ in
                 if failDuringLoad { throw InjectedFailure() }
             })
             let owner = manager(StoreRegistry(hooks: hooks))
@@ -279,11 +280,11 @@ extension GraphCoordinatorTests {
         }
 
         let resource = try ResolvedStore(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
-        let writer = try await StoreProcessLock.acquire(resource)
+        let writer = try await TestSQLiteWriteGrant.acquire(resource)
         defer { writer.release() }
         let contended = AsyncStream<Void>.makeStream()
         var hooks = StoreLifecycleHooks()
-        hooks.didContendProcessLock = { contended.continuation.yield(()) }
+        hooks.didSubmitSQLiteAccess = { contended.continuation.yield(()) }
         let competing = manager(StoreRegistry(hooks: hooks))
         let opening = Task {
             switch scenario {
@@ -314,6 +315,7 @@ extension GraphCoordinatorTests {
             expectedBytes = try Data(contentsOf: url)
         }
         writer.release()
+        try await writer.settle()
 
         await #expect {
             try await opening.value

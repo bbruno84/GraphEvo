@@ -75,7 +75,7 @@ import GraphEvoStore
         let node = graph.makeNodeID()
         _ = try await graph.transaction { try $0.insert(GraphRecord(id: node, type: "S04.Item", properties: ["value": .integer(1)])) }
         try await graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let request = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityPropertyName)
                 request.predicate = NSPredicate(format: "name == %@", "value")
                 let row = try #require(context.fetch(request).first)

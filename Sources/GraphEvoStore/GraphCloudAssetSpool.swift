@@ -324,34 +324,41 @@ package struct GraphCloudAssetSpool: Sendable {
     /// Copy a frozen outgoing attempt alongside a native snapshot under the caller's maintenance reservation.
     package func copyOwnedRoot(to destination: URL) async throws {
         try await GraphAttachmentIO.perform {
-            var value = stat()
-            if lstat(self.root.path, &value) != 0 {
-                guard errno == ENOENT else { throw GraphCloudError.invalidState }
-                return
-            }
-            try Self.checkPrivateDirectory(self.root)
-            try Self.checkMarker(self.root)
-            for namespace in try FileManager.default.contentsOfDirectory(atPath: self.root.path) where namespace != "format-1" {
-                guard let id = UUID(uuidString: namespace), id.uuidString == namespace else { throw GraphCloudError.invalidState }
-                let directory = self.root.appendingPathComponent(namespace, isDirectory: true)
-                try Self.checkPrivateDirectory(directory)
-                for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
-                    guard let id = UUID(uuidString: name), id.uuidString == name else { throw GraphCloudError.invalidState }
-                    let path = directory.appendingPathComponent(name)
-                    guard lstat(path.path, &value) == 0, (value.st_mode & S_IFMT) == S_IFREG,
-                          value.st_uid == getuid(), value.st_nlink == 1, value.st_mode & 0o077 == 0 else {
-                        throw GraphCloudError.invalidState
-                    }
+            try copyOwnedRoot(to: destination, check: { try Task.checkCancellation() })
+        }
+    }
+
+    func copyOwnedRoot(to destination: URL, check: () throws -> Void) throws {
+        try check()
+        var value = stat()
+        if lstat(self.root.path, &value) != 0 {
+            guard errno == ENOENT else { throw GraphCloudError.invalidState }
+            return
+        }
+        try Self.checkPrivateDirectory(self.root)
+        try Self.checkMarker(self.root)
+        for namespace in try FileManager.default.contentsOfDirectory(atPath: self.root.path) where namespace != "format-1" {
+            guard let id = UUID(uuidString: namespace), id.uuidString == namespace else { throw GraphCloudError.invalidState }
+            let directory = self.root.appendingPathComponent(namespace, isDirectory: true)
+            try Self.checkPrivateDirectory(directory)
+            for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
+                try check()
+                guard let id = UUID(uuidString: name), id.uuidString == name else { throw GraphCloudError.invalidState }
+                let path = directory.appendingPathComponent(name)
+                guard lstat(path.path, &value) == 0, (value.st_mode & S_IFMT) == S_IFREG,
+                      value.st_uid == getuid(), value.st_nlink == 1, value.st_mode & 0o077 == 0 else {
+                    throw GraphCloudError.invalidState
                 }
             }
-            try Self.ensurePrivateDirectory(destination.deletingLastPathComponent())
-            let temporary = destination.deletingLastPathComponent().appendingPathComponent(".GraphEvoAssetCopy-" + UUID().uuidString)
-            defer { try? FileManager.default.removeItem(at: temporary) }
-            try FileManager.default.copyItem(at: self.root, to: temporary)
-            try Self.checkPrivateDirectory(temporary)
-            try Self.checkMarker(temporary)
-            try GraphAttachmentIO.publishExclusive(temporary, at: destination)
         }
+        try Self.ensurePrivateDirectory(destination.deletingLastPathComponent())
+        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".GraphEvoAssetCopy-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try FileManager.default.copyItem(at: self.root, to: temporary)
+        try Self.checkPrivateDirectory(temporary)
+        try Self.checkMarker(temporary)
+        try check()
+        try GraphAttachmentIO.publishExclusive(temporary, at: destination)
     }
 
     private static func removeFile(_ path: URL) throws {

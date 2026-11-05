@@ -34,12 +34,12 @@ private actor WorkspaceOpenFailure {
     }
     private func boundary(_ graph: GraphStore) async throws -> GraphMigrationBoundary {
         try await graph.nativeOperation { container in
-            try await container.performBackgroundTask { try GraphMigrationBoundary.capture($0) }
+            try container.testNativeContext { try GraphMigrationBoundary.capture($0) }
         }
     }
     private func changes(after boundary: GraphMigrationBoundary, in graph: GraphStore) async throws -> [String] {
         try await graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let token = try NSKeyedUnarchiver.unarchivedObject(ofClass: NSPersistentHistoryToken.self, from: boundary.token)
                 let request = NSPersistentHistoryChangeRequest.fetchHistory(after: token)
                 request.resultType = .transactionsAndChanges
@@ -74,7 +74,7 @@ private actor WorkspaceOpenFailure {
         #expect(try await changes(after: workspace.descriptor.baseline, in: workspace.graph).isEmpty)
         await #expect(throws: (any Error).self) { try await workspace.graph.collectSyncChanges() }
         let controls = try await workspace.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let root = try GraphTypedStoreAdapter.controlRoot(context, id: source.id)
                 return root[dynamicMember: GraphSyncCheckpointAdapter.stateKey] == nil && root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] == nil
             }
@@ -282,7 +282,7 @@ private actor WorkspaceOpenFailure {
         let frozen = try await source.prepareTransport(binding)
         let workspace = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         let metadata = try await workspace.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let session = try GraphTypedStoreAdapter.Session(context, source.id, database: true)
                 let control = try GraphTypedStoreAdapter.controlRoot(context, id: source.id)
                 return (control[dynamicMember: GraphSyncCheckpointAdapter.transportKey] == nil,

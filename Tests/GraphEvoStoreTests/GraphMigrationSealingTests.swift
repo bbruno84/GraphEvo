@@ -36,7 +36,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
     }
     private func mutateNative(_ graph: GraphStore, author: String, _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Void) async throws {
         try await graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.transactionAuthor = author
                 try body(context)
                 try context.save()
@@ -199,7 +199,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         let w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         if kind == "pruned" {
             try await w.graph.nativeOperation { container in
-                try await container.performBackgroundTask { context in
+                try container.testNativeContext { context in
                     _ = try context.execute(NSPersistentHistoryChangeRequest.deleteHistory(before: Date.distantFuture))
                 }
             }
@@ -261,7 +261,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         let w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         let descriptor = w.descriptor, native = try #require(GraphCoordinatorFactory.adapter.workspace)
         let committed = try await w.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let result = try native.seal(context, descriptor, .init())
                 try context.save()
                 return result
@@ -393,7 +393,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         try await w.close()
         let before = try Data(contentsOf: w.directory.appendingPathComponent("workspace.json"))
         try await source.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 _ = try context.execute(NSPersistentHistoryChangeRequest.deleteHistory(before: Date.distantFuture))
             }
         }

@@ -46,7 +46,7 @@ private final class PublicationGate: @unchecked Sendable {
     }
     private func originalIdentity(_ graph: GraphStore) async throws -> String {
         try await graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let coordinator = try #require(context.persistentStoreCoordinator), store = try #require(coordinator.persistentStores.first)
                 return try #require(coordinator.metadata(for: store)[NSStoreUUIDKey] as? String)
             }
@@ -186,7 +186,7 @@ private final class PublicationGate: @unchecked Sendable {
         #expect(try await source.read { try $0.record(for: fresh) } == expected)
         #expect(try await source.read { try $0.record(for: edge)?.endpoints } == .relationship(subject: fresh, object: a))
         let modified = try await source.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let session = try GraphTypedStoreAdapter.Session(context, source.id, database: true)
                 let node = try #require(session.nodes[fresh])
                 return try GraphMutationMetadata.modifiedAt(node)

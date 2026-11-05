@@ -102,13 +102,12 @@ private struct PreparedCommitGate: Sendable {
         await closing.waitForArrivals()
         close.cancel(); preparing.cancel()
         await #expect(throws: StoreRuntimeError.self) {
-            try await StoreProcessLock.acquire(resolved, purpose: "owners", wait: false)
+            try AppGroupOwnerClaims.requireNoClaims(for: resolved)
         }
         await filePhase.release()
         await #expect(throws: CancellationError.self) { try await preparing.value }
         try await close.value
-        let presence = try await StoreProcessLock.acquire(resolved, purpose: "owners", wait: false)
-        presence.release()
+        try AppGroupOwnerClaims.requireNoClaims(for: resolved)
         let reopened = try await registry.open(config, schema: fixtureSchema())
         #expect(try await reopened.read(preparedValues).isEmpty)
         try await reopened.close()
