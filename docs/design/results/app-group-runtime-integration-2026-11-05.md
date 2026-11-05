@@ -96,7 +96,16 @@ restore refuse the destination without creating files there, and the
 source backup still verifies.
 
 The aligned runtime passed 719 macOS and 717 iOS 18.5 simulator tests
-in the local v2 profile. A signed iPad build succeeded, but XCTest
-timed out enabling automation before the first physical app/widget
-cycle. Xcode's interaction tool available to this run accepts simulators
-only. The 30-cycle physical gate remains open.
+in the local v2 profile. The signed iPad build completed a native purge
+of a fresh fixture. The reported result was `destroyed`, and the
+downloaded store slot contained no files. XCTest timed out enabling
+automation before the first physical app/widget cycle. Xcode's interaction
+tool available to this run accepts simulators only. The 30-cycle physical
+gate remains open.
+
+The same runtime passed a separate signed iOS 18.5 simulator UI run of 30
+Home, widget write and app reopen cycles. A trace and inventory verifier
+confirmed separate host and widget processes, host close before widget open,
+widget completion before app readback, exact identities and order for 32
+records, and matching hashes for two 4 MiB payloads. It found no advisory
+lock sidecars in the store slot.
