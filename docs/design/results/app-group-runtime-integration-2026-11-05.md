@@ -116,3 +116,17 @@ waiting showed the system's Enable UI Automation dialog asking for Touch ID.
 The runner had started but was waiting for that authorization before entering
 the test. The next physical run requires confirmation on the iPad when the
 dialog appears.
+
+## Physical app and widget replay completed
+
+After the maintainer confirmed Touch ID, XCTest completed all 30 Home,
+widget write and app reopen cycles on a wired tenth-generation iPad
+running iPadOS 27.0 (24A437). The harness used the aligned runtime at
+`ac3ebe04` with the laboratory bridge outside the library.
+
+The App Group traces showed separate host and widget processes. For
+every cycle, the host closed before the widget opened, and the widget
+completed before the host read back the graph. The verifier matched
+all 32 ordered record identities, the hashes of both 4 MiB payloads,
+and the absence of advisory lock sidecars in the replica directory.
+This closes the physical replay gate for PR #173.

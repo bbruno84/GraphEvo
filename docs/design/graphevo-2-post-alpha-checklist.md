@@ -132,7 +132,7 @@ proposes Apple-only interprocess coordination on the fresh package-only
 App Group path. Purge retains unresolved lifecycle evidence and runs native
 destruction and cleanup within one grant.
 The [integration validation](results/app-group-runtime-integration-2026-11-05.md)
-records the scoped results and the pending physical app/widget replay.
+records the scoped results and 30 successful physical iPad app/widget cycles.
 No PA02 acceptance box closes. Public process roles, real CloudKit, physical
 XR, and layout/migration-workspace cases remain pre-beta work.
 
