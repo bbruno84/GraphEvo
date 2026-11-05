@@ -1,184 +1,86 @@
-name: CI
+name: CI timeout investigation
 
 on:
   workflow_dispatch:
-    inputs:
-      profile:
-        description: Validation scope (v2 is available on codex branches)
-        type: choice
-        options: [full, v2]
-        default: full
-      diagnostics:
-        description: Retain the full failed iOS xcresult bundle
-        type: boolean
-        default: false
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    branches:
-      - develop
-      - master
-      - codex/graphevo-2
-      - "release/**"
-  push:
-    branches:
-      - develop
-      - master
-      - "release/**"
-
-env:
-  DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
-  GRAPHEVO_CI_PROFILE: ${{ ((github.event_name == 'pull_request' && github.base_ref == 'codex/graphevo-2' && !contains(github.event.pull_request.labels.*.name, 'ci-full-checkpoint')) || (github.event_name == 'workflow_dispatch' && inputs.profile == 'v2' && startsWith(github.ref, 'refs/heads/codex/'))) && 'v2' || 'full' }}
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'pull_request' && github.base_ref == 'codex/graphevo-2' && !(github.event.action == 'labeled' && (github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint'))) && github.run_id || 'validation' }}
-  cancel-in-progress: ${{ (github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint')) || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/codex/graphevo-2' }}
+env:
+  DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
 
 jobs:
-  test:
-    # Alpha checkpoints use v2 suites; full checkpoints and v1/releases keep every suite.
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.base_ref != 'codex/graphevo-2' ||
-      (github.event.action == 'labeled' &&
-       (github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint'))
-    name: Swift package validation
+  compare:
     runs-on: macos-15
-    timeout-minutes: 20
-
+    timeout-minutes: 18
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Show toolchain versions
+      - uses: actions/checkout@v4
+      - name: Toolchain and baseline build
         run: |
           sw_vers
           xcodebuild -version
           swift --version
-
-      - name: Validate package manifest
-        run: swift package dump-package
-
-      - name: Prepare iOS 18.5 simulator
+          sysctl hw.ncpu hw.memsize
+          git rev-parse HEAD
+          swift build --build-tests
+      - name: Compare isolated, full, and paced tests
         run: |
-          sudo xcode-select --switch "$DEVELOPER_DIR"
-          sudo xcodebuild -runFirstLaunch
-          for attempt in 1 2 3; do
-            if xcrun simctl list runtimes --json > "$RUNNER_TEMP/graphevo-runtimes.json"; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ]; then exit 1; fi
-            sleep 3
-          done
-          if ! python3 -c 'import json,sys; r=json.load(open(sys.argv[1]))["runtimes"]; sys.exit(not any(x["identifier"] == "com.apple.CoreSimulator.SimRuntime.iOS-18-5" and x.get("isAvailable") for x in r))' "$RUNNER_TEMP/graphevo-runtimes.json"; then
-            xcodebuild -downloadPlatform iOS -buildVersion 18.5
-          fi
-          GRAPHEVO_SIMULATOR_ID="$(xcrun simctl create 'GraphEvo CI' com.apple.CoreSimulator.SimDeviceType.iPhone-16 com.apple.CoreSimulator.SimRuntime.iOS-18-5)"
-          xcrun simctl boot "$GRAPHEVO_SIMULATOR_ID"
-          # Xcode waits for readiness; boot proceeds while compilation starts.
-          echo "GRAPHEVO_SIMULATOR_ID=$GRAPHEVO_SIMULATOR_ID" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/graphevo-177"
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import signal
+          import subprocess
+          import time
 
-      - name: Validate test profiles
-        run: python3 -m unittest discover -s Scripts/tests
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'graphevo-177'
 
-      - name: Build and run ${{ env.GRAPHEVO_CI_PROFILE }} tests on iOS Simulator
-        run: |
-          set -o pipefail
-          python3 Scripts/run_ci_tests.py --platform ios --profile "$GRAPHEVO_CI_PROFILE" \
-            --destination "platform=iOS Simulator,id=$GRAPHEVO_SIMULATOR_ID" \
-            --result-bundle "$RUNNER_TEMP/graphevo-ios.xcresult" \
-            2>&1 | tee "$RUNNER_TEMP/graphevo-ios.log"
+          def test(name, args, sample=False):
+              path = out / (name + '.log')
+              start = time.monotonic()
+              with path.open('w') as log:
+                  task = subprocess.Popen(['swift', 'test', '--skip-build', *args],
+                                          stdout=log, stderr=subprocess.STDOUT,
+                                          start_new_session=True)
+                  try:
+                      if sample:
+                          for offset in (13, 32):
+                              if task.poll() is not None:
+                                  break
+                              time.sleep(max(0, start + offset - time.monotonic()))
+                              matching = subprocess.run(['pgrep', '-f', r'/GraphEvoPackageTests\.xctest/Contents/MacOS/GraphEvoPackageTests'], text=True, capture_output=True)
+                              pids = matching.stdout.split()
+                              if len(pids) == 1:
+                                  with (out / f'sample-{offset}.log').open('w') as report:
+                                      subprocess.run(['sample', pids[0], '1', '10'], stdout=report, stderr=subprocess.STDOUT, timeout=8, check=False)
+                      result = task.wait(timeout=max(1, 175 - (time.monotonic() - start)))
+                  except subprocess.TimeoutExpired:
+                      os.killpg(task.pid, signal.SIGTERM)
+                      task.wait(timeout=10)
+                      result = 'watchdog'
+              print(f'{name}: exit={result} duration={time.monotonic() - start:.2f}s', flush=True)
+              for line in path.read_text(errors='replace').splitlines():
+                  if 'Test run with' in line or 'recorded an issue' in line or 'Wait expired' in line:
+                      print(line, flush=True)
 
-      - name: Summarize failed iOS test results
-        if: failure()
-        run: |
-          if [ -d "$RUNNER_TEMP/graphevo-ios.xcresult" ]; then
-            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/graphevo-ios.xcresult" > "$RUNNER_TEMP/graphevo-ios.summary.json"
-            python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print({k:s.get(k) for k in ("passedTests", "failedTests", "skippedTests", "totalTestCount")})' "$RUNNER_TEMP/graphevo-ios.summary.json"
-          fi
-
-      - name: Retain failed iOS text diagnostics
-        if: failure()
+          focused = 'GraphAutomaticIntegrationTests|AppGroupCoordinationTests|SQLiteStoreCoordinationTests|GraphCoordinatorTests'
+          test('isolated-original', ['--filter', focused])
+          test('full-original', [], sample=True)
+          path = pathlib.Path('Tests/GraphEvoStoreTests/GraphAutomaticIntegrationTests.swift')
+          original = path.read_text()
+          before = '            await Task.yield()'
+          assert original.count(before) == 1
+          path.write_text(original.replace(before, '            try await Task.sleep(for: .milliseconds(10))'))
+          with (out / 'paced-build.log').open('w') as build:
+              subprocess.run(['swift', 'build', '--build-tests'], stdout=build, stderr=subprocess.STDOUT, check=True)
+          test('full-paced', [])
+          path.write_text(original)
+          PY
+      - name: Retain diagnostic text
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: graphevo-ios-failure-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/graphevo-ios.log
-            ${{ runner.temp }}/graphevo-ios.summary.json
+          name: graphevo-177-timeout-investigation
+          path: ${{ runner.temp }}/graphevo-177
           if-no-files-found: ignore
           retention-days: 1
-
-      - name: Retain explicitly requested native diagnostics
-        if: failure() && (inputs.diagnostics == true || contains(github.event.pull_request.labels.*.name, 'ci-diagnostics'))
-        uses: actions/upload-artifact@v4
-        with:
-          name: graphevo-ios-xcresult-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/graphevo-ios.xcresult
-          if-no-files-found: ignore
-          retention-days: 1
-
-      - name: Check diff formatting
-        run: git diff --check
-
-  macos:
-    # Alpha checkpoints use v2 suites; full checkpoints and v1/releases keep every suite.
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.base_ref != 'codex/graphevo-2' ||
-      (github.event.action == 'labeled' &&
-       (github.event.label.name == 'ci-checkpoint' || github.event.label.name == 'ci-full-checkpoint'))
-    name: Swift package validation (macOS)
-    runs-on: macos-15
-    timeout-minutes: 20
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Show toolchain versions
-        run: |
-          sw_vers
-          xcodebuild -version
-          swift --version
-
-      - name: Validate package manifest
-        run: swift package dump-package
-
-      - name: Validate test profiles
-        run: python3 -m unittest discover -s Scripts/tests
-
-      - name: Build and run ${{ env.GRAPHEVO_CI_PROFILE }} tests on macOS
-        run: python3 Scripts/run_ci_tests.py --platform macos --profile "$GRAPHEVO_CI_PROFILE"
-
-      - name: Check diff formatting
-        run: git diff --check
-      - name: Run Swift 6 model consumer
-        run: swift run --package-path IntegrationTests/PackageConsumer ModelConsumer
-
-      - name: Validate independent-process local read-only access
-        run: swift run --package-path IntegrationTests/PackageConsumer ProcessConsumer
-
-  package-consumer:
-    name: Package consumer integration fixture
-    if: >-
-      github.ref == 'refs/heads/master' ||
-      (github.event_name == 'pull_request' && github.base_ref == 'master')
-    runs-on: macos-15
-    timeout-minutes: 20
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Show toolchain versions
-        run: |
-          sw_vers
-          swift --version
-
-      - name: Run package consumer fixture
-        run: swift run --package-path IntegrationTests/PackageConsumer PackageConsumer
-
-      - name: Check diff formatting
-        run: git diff --check
