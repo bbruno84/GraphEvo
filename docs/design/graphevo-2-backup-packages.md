@@ -84,10 +84,19 @@ MF01 ownership-marked stage; existing incomplete-stage cleanup recovers it.
 This is atomic package visibility and coherent source capture, not a power-loss
 durability or atomic SQLite/JSON/cloud snapshot certificate.
 
+The catalog coordination candidate uses finite Foundation grants on the
+canonical collection directory for discovery, package copying, retention and
+publication. Verification works from a private snapshot after the read grant
+ends. A live stage presents its directory to Foundation and refuses coordinated
+deletion. Recovery checks the stage identity and journal before removal. Stop
+all processes using the previous catalog protocol before switching to this
+candidate. Existing packages and stage journals remain readable. The previous
+catalog lock file is ignored.
+
 ## Export, import and restoration
 
-- `backups.export(at:to:) async` verifies the source, copies its existing compressed
-  representation to an owned stage, verifies and publishes a new `.geb`. It does
+- `backups.export(at:to:) async` copies the existing compressed representation
+  to an owned stage, verifies that copy and publishes a new `.geb`. It does
   not snapshot the live graph or recompress an existing package. Legacy directory
   export performs compression. Existing destinations and paths inside the source
   are refused before directory creation, including aliases/missing descendants.
