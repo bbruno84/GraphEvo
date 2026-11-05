@@ -13,7 +13,7 @@ private actor ExportValidationGate {
     private var continuation: CheckedContinuation<Void, Never>?
     func visit() async {
         calls += 1
-        if calls == 2 {
+        if calls == 1 {
             entered = true
             let waiting = waiters; waiters.removeAll(); for waiter in waiting { waiter.resume() }
             await withCheckedContinuation { continuation = $0 }
@@ -179,6 +179,36 @@ private actor ExportValidationGate {
         try await graph.close()
     }
 
+    @Test func restoreUsesItsVerifiedSnapshotIfTheSourceIsRemoved() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let owner = manager()
+        let graph = try await owner.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
+        let node = graph.makeNodeID()
+        _ = try await graph.transaction { try $0.insert(.init(id: node, type: "Preserved")) }
+        let backup = try await owner.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
+        let gate = ExportValidationGate()
+        let service = GraphBackupManager(schemaIdentifier: backup.manifest.schemaIdentifier) { _, _ in
+            await gate.visit()
+            return backup.manifest.nativeStoreID
+        }
+        let target = root.appendingPathComponent("Restored")
+        let operation = Task { try await service.restore(at: backup.url, to: target) }
+        await gate.waitForCopiedPackage()
+        do { try await manager().backups.remove(at: backup.url) }
+        catch {
+            await gate.release()
+            _ = try? await operation.value
+            throw error
+        }
+        await gate.release()
+        let restored = try await operation.value
+        #expect(!FileManager.default.fileExists(atPath: backup.url.path))
+        let reader = try await manager().openGraph(id: graph.id, at: restored.storeURL)
+        #expect(try await reader.read { try $0.record(for: node)?.type } == "Preserved")
+        try await reader.close()
+        try await graph.close()
+    }
+
     @Test func cancelledExportAfterCopyNeverPublishesOrReleasesSourceRetention() async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
@@ -190,6 +220,13 @@ private actor ExportValidationGate {
         let destination = root.appendingPathComponent("Exports/Cancelled.geb")
         let operation = Task { try await service.export(at: backup.url, to: destination) }
         await gate.waitForCopiedPackage()
+        do {
+            #expect(try await manager().backups.discardIncomplete(in: destination.deletingLastPathComponent()) == 0)
+        } catch {
+            await gate.release()
+            _ = try? await operation.value
+            throw error
+        }
         _ = try await graph.transaction { _ in true }
         operation.cancel(); await gate.release()
         await #expect(throws: CancellationError.self) { try await operation.value }
@@ -199,6 +236,32 @@ private actor ExportValidationGate {
         #expect(try await m.backups.retentionOwners(at: backup.url) == [owner])
         _ = try await m.backups.verify(at: backup.url)
         await retention.release(); try await graph.close()
+    }
+
+    @Test func backupPublicationRefusesMissingDestinationsInsideAnAliasedAppGroupPath() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let m = manager()
+        let graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
+        let backup = try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups"))
+        let group = AppGroupStoreLocation(container: root)
+        let slot = group.storeURL(for: UUID()).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: slot, withIntermediateDirectories: true)
+        let alias = root.appendingPathComponent("Alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: slot)
+        let destination = alias.appendingPathComponent("Missing/Output.geb")
+        await #expect(throws: StoreRuntimeError.self) {
+            try await m.backups.export(at: backup.url, to: destination)
+        }
+        await #expect(throws: StoreRuntimeError.self) {
+            try await m.backups.importBackup(at: backup.url, in: destination.deletingLastPathComponent())
+        }
+        await #expect(throws: StoreRuntimeError.self) {
+            try await m.backups.restore(at: backup.url, to: destination)
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: slot.path).isEmpty)
+        _ = try await m.backups.verify(at: backup.url)
+        try await graph.close()
     }
 
     @Test(arguments: [false, true]) func rejectedLegacyImportCollectionPreservesSource(throughAlias: Bool) async throws {

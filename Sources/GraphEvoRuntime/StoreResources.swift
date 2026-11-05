@@ -849,6 +849,25 @@ actor StoreResources {
         defer { sourceFence?.release() }
         let destinationResource = try ResolvedStore(.init(location: .sqlite(destination)))
         guard destinationResource.key != resolved.key else { throw StoreRuntimeError.configurationConflict(destination) }
+        if resolved.configuration.legacyReadOnly, let target = destinationResource.url {
+            // The v1 caller has already stopped the source writers. Coordinate
+            // the native snapshot and its private destination together.
+            let container = container
+            try await CoordinatedFiles.run([.read(source), .write(target)]) {
+                try accountPermit.check()
+                let files = FileManager.default
+                guard !files.fileExists(atPath: target.path),
+                      (try? files.destinationOfSymbolicLink(atPath: target.path)) == nil else {
+                    throw StoreRuntimeError.configurationConflict(target)
+                }
+                let copier = NSPersistentStoreCoordinator(managedObjectModel: container.managedObjectModel)
+                try copier.replacePersistentStore(at: target, destinationOptions: nil,
+                    withPersistentStoreFrom: source, sourceOptions: [NSReadOnlyPersistentStoreOption: true],
+                    ofType: NSSQLiteStoreType)
+            }
+            try accountPermit.check()
+            return
+        }
         let lockedResources = (processPresence == nil || sourceFence != nil ? [destinationResource] : [resolved, destinationResource]).sorted {
             guard case .sqlite(let left) = $0.key, case .sqlite(let right) = $1.key else { return false }
             return left < right

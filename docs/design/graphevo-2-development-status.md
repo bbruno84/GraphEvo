@@ -35,6 +35,16 @@ no new implementation, acceptance result or release is implied by this audit.
 
 ## Current focused work
 
+The [backup catalog coordination candidate](graphevo-2-backup-packages.md#capture-publication-and-cancellation)
+uses Foundation grants for the catalog and for native copying from a stopped,
+read-only v1 source. Ordinary v2 store ownership, online v2 migration and
+CloudKit owner election continue to use their existing protocols. A macOS
+independent-process control with a synthetic payload preserves a live stage,
+reclaims the stage after process termination, and verifies the previously
+published package byte for byte. [PR #174](https://github.com/bbruno84/GraphEvo/pull/174)
+delivers the catalog and stopped-source copy independently of App Group
+ownership.
+
 The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.md)
 is exercised in the separate [N laboratory result](results/apple-owner-priority-tests-2026-11-04.md):
 51 macOS controls and 99 existing adapter tests pass, as do thirty actual iPad
