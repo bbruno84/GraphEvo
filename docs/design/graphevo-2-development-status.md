@@ -39,9 +39,13 @@ The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.
 is exercised in the separate [N laboratory result](results/apple-owner-priority-tests-2026-11-04.md):
 51 macOS controls and 99 existing adapter tests pass, as do thirty actual iPad
 Home/widget/app cycles with exact identities, content and detach/grant ordering.
-Physical fault/background tests remain incomplete after loss of Mac UI access;
-XR iOS 18.7.11 automation is blocked by Device Hub's iOS 27 requirement on this
-Mac. Coupled outbox/ack/account and public observation lifecycle remain unverified.
+The [iPad fault continuation](results/apple-owner-ipad-faults-2026-11-05.md)
+verifies refusal during background quarantine and exact cold recovery after
+process exit. Controlled pre/post-save interruption preserves the expected
+store contents and leaves temporary preparation files in both cases. Recovery
+cleanup after process death is required. XR iOS 18.7.11 automation is blocked
+by Device Hub's iOS 27 requirement on this Mac. Coupled outbox/ack/account and
+public observation lifecycle remain unverified.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
 runtime unchanged. No remote CI is requested for this laboratory/documentation work.
 

@@ -81,9 +81,12 @@ The [pre-integration priority protocol](graphevo-2-apple-owner-test-protocol.md)
 has [N evidence](results/apple-owner-priority-tests-2026-11-04.md): 51 macOS
 controls, 99 existing adapter tests and thirty actual iPad lifecycle cycles pass.
 Partial opening, retained-task cancellation and actual session/backup lease
-release have bounded positive evidence. **NO GO for production adoption**:
-physical fault/background, XR iOS 18 interaction and coupled transport/public
-observation checks remain incomplete. No PA02 acceptance box closes. Deferred
+release have bounded positive evidence. The [iPad fault continuation](results/apple-owner-ipad-faults-2026-11-05.md)
+verifies background quarantine and exact cold readback, including controlled
+pre/post-save interruptions. Both interrupted preparation directories remain on
+disk. **NO GO for production adoption** pending cleanup after process death,
+XR iOS 18 interaction and coupled transport/public observation checks.
+No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 
 ## How to close an item
