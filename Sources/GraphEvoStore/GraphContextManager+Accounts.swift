@@ -46,7 +46,7 @@ extension GraphContextManager {
         guard let authority = accountAuthorities[key] else { return }
         accountAuthorities[key]!.query = UUID()
         accountAuthorities[key]!.verification = nil
-        if authority.wantsCloud, let configuration = authority.configuration {
+        if authority.wantsCloud, !publicBackgroundSessions.contains(key), let configuration = authority.configuration {
             _ = try await startCloudSession(configuration, adapter: authority.adapter, disk: authority.disk)
         } else {
             let verification = try await verifyAccount(key)

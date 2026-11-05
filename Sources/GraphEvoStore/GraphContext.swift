@@ -69,7 +69,7 @@ public actor GraphContext {
         try Task.checkCancellation()
         foreground = active
         backgrounded = !active
-        let keys = connections.keys.filter { connections[$0]?.closing == nil }
+        let keys = Array(connections.keys)
         if active {
             for key in keys { start(key) }
             await prepareMonitoring()
@@ -97,7 +97,8 @@ public actor GraphContext {
     }
 
     private func suspend(_ key: String) -> Task<Void, any Error>? {
-        guard let entry = connections[key], entry.closing == nil else { return nil }
+        guard let entry = connections[key] else { return nil }
+        if let closing = entry.closing { return closing }
         if let suspension = entry.suspension { return suspension }
         entry.startup?.cancel()
         entry.retry?.cancel()
@@ -314,7 +315,7 @@ extension GraphContextManager {
         // prevents it from constructing a session after this transition.
         if let opening = cloudSessions[key] {
             guard opening.configuration == configuration else { throw GraphCloudError.ownershipConflict }
-            try await stopCloudSession(configuration)
+            try await stopCloudSession(configuration, accountRecovery: false, discardFailedOpening: true)
         }
         await publishCloudConnectionState(key)
     }

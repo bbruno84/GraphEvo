@@ -1,6 +1,7 @@
 import CloudKit
 import Foundation
 import Testing
+import os
 @testable import GraphEvo
 @testable import GraphEvoStore
 @testable import GraphEvoRuntime
@@ -263,6 +264,65 @@ private final class PublicAccountDriver: @unchecked Sendable {
         await gate.release()
         try await connection.close()
         #expect(driver.restored.isEmpty)
+    }
+
+    @available(iOS 17, macOS 14, *)
+    @Test func backgroundWaitsForAnAlreadyClosingConnectionToUnlock() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let driver = PublicAccountDriver(), owner = context(driver), config = try configuration(root)
+        let connection = try await owner.connectCloud(using: config)
+        try await wait { try await connection.state == .ready }
+
+        let gate = PublicAccountGate()
+        driver.setStopHook { await gate.enter() }
+        let closing = Task { try await connection.close() }
+        await gate.wait()
+        let background = Task {
+            try await owner.setForegroundActive(false)
+            let acquired = try GraphCloudDirectoryLease(directory: config.directory)
+            withExtendedLifetime(acquired) {}
+        }
+        // Leave the driver's cancellation pending while the background call is admitted.
+        try await Task.sleep(for: .milliseconds(100))
+        await gate.release()
+        try await background.value
+        try await closing.value
+    }
+
+    @available(iOS 17, macOS 14, *)
+    @Test func foregroundCanRestartAfterAnOpeningFailsDuringBackgroundDrain() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let manager = GraphContextManager(registry: .shared, schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID())
+        let config = try configuration(root)
+        let attempt = OSAllocatedUnfairLock(initialState: 0)
+        let proceed = DispatchSemaphore(value: 0)
+        let entered = AsyncStream<Void>.makeStream()
+        let adapter = GraphCloudAdapter(account: { _ in "public-account" }, make: { _, _, _, _ in
+            let first = attempt.withLock { value in value += 1; return value == 1 }
+            if first {
+                entered.continuation.yield(())
+                guard proceed.wait(timeout: .now() + 10) == .success else { throw CancellationError() }
+                throw GraphCloudError.persistence
+            }
+            return GraphCloudDriver(fetch: { _ in }, cancel: {})
+        })
+        let owner = GraphContext(manager: manager, adapter: adapter)
+        try await owner.setForegroundActive(true)
+        let connection = try await owner.connectCloud(using: config)
+        var arrivals = entered.stream.makeAsyncIterator()
+        _ = await arrivals.next()
+        #expect(await manager.ledgerSessionGeneration(config.native) != nil)
+        let background = Task { try await owner.setForegroundActive(false) }
+        try await wait { await manager.ledgerSessionGeneration(config.native) == nil }
+        proceed.signal()
+        try await background.value
+        #expect(try await connection.state == .temporarilyUnavailable)
+
+        try await owner.setForegroundActive(true)
+        try await wait { try await connection.state == .ready }
+        #expect(attempt.withLock { $0 } == 2)
+        try await connection.close()
     }
 
     @available(iOS 17, macOS 14, *)

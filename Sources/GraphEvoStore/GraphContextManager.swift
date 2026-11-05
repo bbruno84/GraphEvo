@@ -173,8 +173,9 @@ package actor GraphContextManager {
     }
 
     func cloud(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudSession {
-        guard automaticClosing[configuration.namespace] == nil else { throw GraphCloudError.stopping }
-        guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { throw GraphCloudError.stopped }
+        let key = configuration.namespace
+        guard automaticClosing[key] == nil, !publicBackgroundSessions.contains(key) else { throw GraphCloudError.stopping }
+        guard let opening = cloudSessions[key], opening.configuration == configuration else { throw GraphCloudError.stopped }
         return try await opening.task.value
     }
 
@@ -318,7 +319,8 @@ package actor GraphContextManager {
     package func stopCloudSession(_ configuration: GraphCloudConfiguration) async throws {
         try await stopCloudSession(configuration, accountRecovery: false)
     }
-    func stopCloudSession(_ configuration: GraphCloudConfiguration, accountRecovery: Bool) async throws {
+    func stopCloudSession(_ configuration: GraphCloudConfiguration, accountRecovery: Bool,
+                          discardFailedOpening: Bool = false) async throws {
         if !accountRecovery {
             accountAuthorities[configuration.namespace]?.wantsCloud = false
             accountAutomaticActivity[configuration.namespace] = false
@@ -340,6 +342,8 @@ package actor GraphContextManager {
         catch {
             if cloudSessions[configuration.namespace]?.id == opening.id { cloudSessions.removeValue(forKey: configuration.namespace) }
             if automaticClosing[configuration.namespace] == opening.id { automaticClosing.removeValue(forKey: configuration.namespace) }
+            // A failed opening without quarantine already released its resources.
+            if discardFailedOpening { return }
             throw error
         }
         let revision = (automaticActivityRevision[configuration.namespace] ?? 0) + 1
