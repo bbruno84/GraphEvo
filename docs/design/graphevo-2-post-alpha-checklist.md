@@ -90,7 +90,10 @@ native recovery controls on macOS. The iPad continuation verifies controlled
 host interruptions during preparation and before and after native save. A separate iOS 18.5 simulator control passes
 thirty Home/widget/app cycles with N. **NO GO for production adoption** pending
 remaining device coverage, including the XR iOS 18 and widget-private paths, and
-coupled transport/public observation checks.
+physical lifecycle checks. The [P macOS experiment](results/apple-owner-runtime-lifecycle-2026-11-05.md)
+verifies the presenter attachment, transport drain and fresh public observation
+with existing runtime fences active. The replacement fence, native coordination
+and context admission transition remain open.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 
