@@ -6,7 +6,7 @@ public enum GraphCloudScope: String, Codable, Sendable { case `private`, shared 
 public enum GraphCloudEnvironment: String, Codable, Sendable { case development, production }
 package enum GraphCloudError: Error, Equatable {
     case attachmentTimeout, graphPaused
-    case ownershipConflict, invalidConfiguration, invalidState, accountUnavailable, accountChanged
+    case ownershipConflict, directoryBusy, invalidConfiguration, invalidState, accountUnavailable, accountChanged
     case persistence, inboxLimit, unsupportedAsset, unexpectedUpload, stopped, stopping, busy, zoneUnavailable, transportUnavailable
 }
 
@@ -151,7 +151,9 @@ final class GraphCloudDirectoryLease: @unchecked Sendable {
         let descriptor = Darwin.open(directory.appendingPathComponent("session.lock").path, O_CREAT | O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else { throw GraphCloudError.persistence }
         guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
-            Darwin.close(descriptor); throw GraphCloudError.ownershipConflict
+            let contended = errno == EWOULDBLOCK
+            Darwin.close(descriptor)
+            throw contended ? GraphCloudError.directoryBusy : GraphCloudError.persistence
         }
         self.descriptor = descriptor
     }

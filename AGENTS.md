@@ -1494,7 +1494,11 @@ managers and share only process/resource admission guards. Preserve context owne
 identity through canonicalization, bootstrap and workspaces. Keep account monitors
 independent of transport: synchronized local opens verify identity even without a
 cloud connection, while local-only stores never query accounts. Foreground state
-belongs to the context. Native staged conversion preserves Data/serialized payloads;
+belongs to the context. An explicit aggregate background transition drains the
+session and releases the directory lock after native shutdown. The iOS host
+holds background execution time until that call settles. Foreground startup
+restores durable state and retries directory contention. Native staged
+conversion preserves Data/serialized payloads;
 attachment optimization is consumer-owned. Do not expose native executors/adapters
 or treat connection readiness as graph, activation or peer completion.
 

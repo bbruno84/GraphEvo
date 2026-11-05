@@ -22,12 +22,14 @@ private final class PublicAccountDriver: @unchecked Sendable {
     private let lock = NSLock()
     private var availability: GraphCloudAccountAvailability = .available("public-account")
     private var hook: (@Sendable () async -> Void)?
+    private var stopHook: (@Sendable () async -> Void)?
     private var received: (@Sendable (GraphCloudEvent) async -> Void)?
     private var reads = 0
     private var states: [Data?] = []
     let notification = Notification.Name("GraphEvo.PublicAccount." + UUID().uuidString)
     func set(_ value: GraphCloudAccountAvailability) { lock.withLock { availability = value } }
     func setHook(_ value: (@Sendable () async -> Void)?) { lock.withLock { hook = value } }
+    func setStopHook(_ value: (@Sendable () async -> Void)?) { lock.withLock { stopHook = value } }
     var queryCount: Int { lock.withLock { reads } }
     var restored: [Data?] { lock.withLock { states } }
     func notify() { NotificationCenter.default.post(name: notification, object: nil) }
@@ -35,7 +37,7 @@ private final class PublicAccountDriver: @unchecked Sendable {
     var adapter: GraphCloudAdapter {
         var result = GraphCloudAdapter(account: { _ in "public-account" }, make: { [self] _, _, data, receive in
             lock.withLock { states.append(data); received = receive }
-            return GraphCloudDriver(fetch: { _ in }, cancel: {})
+            return GraphCloudDriver(fetch: { _ in }, cancel: { [self] in await lock.withLock { stopHook }?() })
         })
         result.accountAvailability = { [self] _ in
             let callback = lock.withLock { reads += 1; return hook }
@@ -60,11 +62,12 @@ private final class PublicAccountDriver: @unchecked Sendable {
         try .init(containerIdentifier: "iCloud.public." + container, environment: .development, directory: root.appendingPathComponent("Session"))
     }
     @available(iOS 17, macOS 14, *)
-    private func wait(_ body: () async throws -> Bool) async throws {
+    private func wait(sourceLocation: SourceLocation = #_sourceLocation, _ body: () async throws -> Bool) async throws {
         for _ in 0..<2000 {
             if try await body() { return }
             try await Task.sleep(for: .milliseconds(5))
         }
+        Issue.record("Expected state was not reached", sourceLocation: sourceLocation)
         throw GraphCloudError.invalidState
     }
     @available(iOS 17, macOS 14, *)
@@ -187,6 +190,90 @@ private final class PublicAccountDriver: @unchecked Sendable {
         try await owner.setForegroundActive(false)
         #expect(await owner.manager.accountAutomaticActivity[config.native.namespace] == false)
         try await b.close()
+    }
+
+    @available(iOS 17, macOS 14, *)
+    @Test func backgroundDrainsBeforeUnlockAndRapidForegroundRestoresTheCheckpoint() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let driver = PublicAccountDriver(), owner = context(driver), config = try configuration(root)
+        let connection = try await owner.connectCloud(using: config)
+        try await wait { try await connection.state == .ready }
+        try await owner.setForegroundActive(true)
+        #expect(await owner.manager.accountAutomaticActivity[config.native.namespace] == true)
+        let checkpoint = Data([4, 2])
+        await driver.emit(.state(checkpoint))
+        let gate = PublicAccountGate()
+        driver.setStopHook { await gate.enter() }
+        let background = Task { try await owner.setForegroundActive(false) }
+        await gate.wait()
+        let drainingState = try await connection.state
+        #expect(drainingState == .temporarilyUnavailable)
+        #expect(throws: GraphCloudError.directoryBusy) { try GraphCloudDirectoryLease(directory: config.directory) }
+
+        try await owner.setForegroundActive(true)
+        #expect(driver.restored.count == 1)
+        driver.setStopHook(nil)
+        await gate.release()
+        try await background.value
+        try await wait { try await connection.state == .ready }
+        #expect(driver.restored == [nil, checkpoint])
+
+        try await owner.setForegroundActive(false)
+        let peer = try GraphCloudDirectoryLease(directory: config.directory)
+        withExtendedLifetime(peer) {}
+        #expect(try await connection.state == .temporarilyUnavailable)
+        try await connection.close()
+    }
+
+    @available(iOS 17, macOS 14, *)
+    @Test func backgroundDoesNotWaitForAnAccountCheckThatOwnsNoDirectoryLock() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let driver = PublicAccountDriver(), gate = PublicAccountGate(), owner = context(driver)
+        let config = try configuration(root)
+        driver.setHook { await gate.enter() }
+        let connection = try await owner.connectCloud(using: config)
+        await gate.wait()
+
+        try await owner.setForegroundActive(false)
+        #expect(try await connection.state == .temporarilyUnavailable)
+        do {
+            let lease = try GraphCloudDirectoryLease(directory: config.directory)
+            withExtendedLifetime(lease) {}
+        }
+        driver.setHook(nil)
+        await gate.release()
+        try await connection.close()
+        #expect(driver.restored.isEmpty)
+    }
+
+    @available(iOS 17, macOS 14, *)
+    @Test func foregroundRetriesDirectoryContentionAndBackgroundCancelsRetry() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let driver = PublicAccountDriver(), owner = context(driver), config = try configuration(root)
+        try await owner.setForegroundActive(false)
+        let connection = try await owner.connectCloud(using: config)
+        try await wait { try await connection.state == .temporarilyUnavailable }
+        #expect(driver.restored.isEmpty)
+
+        var peer: GraphCloudDirectoryLease? = try GraphCloudDirectoryLease(directory: config.directory)
+        try await owner.setForegroundActive(true)
+        try await wait { try await connection.state == .failed(.init(category: .ownership)) }
+        #expect(driver.restored.isEmpty)
+        try await owner.setForegroundActive(false)
+        #expect(peer != nil)
+        peer = nil
+        driver.notify()
+        try await wait { driver.queryCount >= 2 }
+        #expect(driver.restored.isEmpty)
+
+        peer = try GraphCloudDirectoryLease(directory: config.directory)
+        try await owner.setForegroundActive(true)
+        try await wait { try await connection.state == .failed(.init(category: .ownership)) }
+        #expect(peer != nil)
+        peer = nil
+        try await wait { try await connection.state == .ready }
+        #expect(driver.restored.count == 1)
+        try await connection.close()
     }
 
     @available(iOS 17, macOS 14, *)

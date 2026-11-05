@@ -39,7 +39,7 @@ public struct GraphCloudConnectionFailure: Sendable, Equatable {
     init(_ error: any Error) {
         switch error {
         case GraphCloudError.invalidConfiguration, GraphCloudConnectionError.invalidConfiguration, GraphCloudNodeError.limitExceeded, GraphCloudActivationError.limitExceeded: category = .configuration
-        case GraphCloudError.ownershipConflict, GraphCloudConnectionError.ownershipConflict, GraphStoreError.ownershipConflict, GraphStoreError.foreignGraph: category = .ownership
+        case GraphCloudError.ownershipConflict, GraphCloudError.directoryBusy, GraphCloudConnectionError.ownershipConflict, GraphStoreError.ownershipConflict, GraphStoreError.foreignGraph: category = .ownership
         case GraphCloudError.persistence: category = .persistence
         case GraphCloudDiscoveryError.invalidDescriptor, GraphCloudDiscoveryError.unsupportedDescriptor, GraphCloudDiscoveryError.invalidJoin, GraphCloudDiscoveryError.sessionUpgradeRequired, GraphCloudError.invalidState, GraphCloudActivationError.recoveryRequired, GraphCloudActivationError.authorityConflict, GraphCloudActivationError.zoneNotEmpty, GraphCloudActivationError.invalidState: category = .recoveryRequired
         default: category = .transport
@@ -60,7 +60,7 @@ public enum GraphCloudConnectionError: Error {
     case operationFailed(GraphCloudConnectionFailure, underlying: any Error)
     static func translate(_ error: any Error) -> any Error {
         if error is CancellationError || error is GraphCloudConnectionError { return error }
-        if case GraphCloudError.ownershipConflict = error { return Self.ownershipConflict }
+        if let cloud = error as? GraphCloudError, cloud == .ownershipConflict || cloud == .directoryBusy { return Self.ownershipConflict }
         if case GraphCloudError.invalidConfiguration = error { return Self.invalidConfiguration }
         return Self.operationFailed(GraphCloudConnectionFailure(error), underlying: error)
     }
@@ -121,21 +121,22 @@ extension GraphContextManager {
             await publishCloudConnectionState(namespace)
             return
         }
-        guard let authority = accountAuthorities[namespace] else { hub.publish(.verifyingAccount); return }
-        if let reason = authority.isolation {
+        let authority = accountAuthorities[namespace]
+        if let reason = authority?.isolation {
             if case .isolated(let publicReason) = GraphCloudAccountState(.isolated(reason)) { hub.publish(.isolated(publicReason)) }
             return
         }
-        if authority.temporary { hub.publish(.temporarilyUnavailable); return }
+        if authority?.temporary == true { hub.publish(.temporarilyUnavailable); return }
+        if publicBackgroundSessions.contains(namespace) { hub.publish(.temporarilyUnavailable); return }
         if let failure {
             if case GraphCloudError.accountChanged = failure, sessionStatus != nil,
-               sessionStatus?.failure == nil, authority.verifiedAccount != nil {
+               sessionStatus?.failure == nil, authority?.verifiedAccount != nil {
                 hub.publish(.ready)
             } else { hub.publish(.failed(.init(failure))) }
             return
         }
         if let error = sessionStatus?.failure { hub.publish(.failed(.init(error))); return }
-        hub.publish(authority.verifiedAccount != nil && sessionStatus != nil ? .ready : .verifyingAccount)
+        hub.publish(authority?.verifiedAccount != nil && sessionStatus != nil ? .ready : .verifyingAccount)
     }
 }
 
