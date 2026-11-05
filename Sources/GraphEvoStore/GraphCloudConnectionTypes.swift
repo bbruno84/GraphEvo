@@ -10,6 +10,7 @@ public struct GraphCloudConnectionConfiguration: Sendable, Equatable {
     public let maximumBytes: Int
     /// Explicitly permits a validated, lossless session-document upgrade; never resets engine state.
     public let allowsSessionUpgradeFromV8: Bool
+    let native: GraphCloudConfiguration
 
     /// Creates a configuration without creating directories or starting account verification.
     public init(containerIdentifier: String, environment: GraphCloudEnvironment, directory: URL,
@@ -20,13 +21,12 @@ public struct GraphCloudConnectionConfiguration: Sendable, Equatable {
             throw GraphCloudConnectionError.invalidConfiguration
         }
         self.containerIdentifier = containerIdentifier; self.environment = environment
-        self.directory = URL(fileURLWithPath: directory.standardizedFileURL.resolvingSymlinksInPath().path, isDirectory: true)
+        let native = GraphCloudConfiguration(containerIdentifier: containerIdentifier, environment: environment, directory: directory,
+            maximumEvents: maximumEvents, maximumBytes: maximumBytes, allowsSessionUpgradeFromV8: allowsSessionUpgradeFromV8)
+        self.native = native
+        self.directory = native.directory
         self.maximumEvents = maximumEvents; self.maximumBytes = maximumBytes
         self.allowsSessionUpgradeFromV8 = allowsSessionUpgradeFromV8
-    }
-    var native: GraphCloudConfiguration {
-        .init(containerIdentifier: containerIdentifier, environment: environment, directory: directory,
-              maximumEvents: maximumEvents, maximumBytes: maximumBytes, allowsSessionUpgradeFromV8: allowsSessionUpgradeFromV8)
     }
 }
 

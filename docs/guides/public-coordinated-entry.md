@@ -61,6 +61,11 @@ observable.
 
 ## Optional private cloud connection
 
+
+Derive the session directory from the current container URL and a relative
+subdirectory. GraphEvo resolves the runtime directory once when the
+configuration is created, including when the subdirectory is still missing.
+
 ```swift
 let configuration = try GraphCloudConnectionConfiguration(
     containerIdentifier: containerIdentifier,

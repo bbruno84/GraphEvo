@@ -312,7 +312,10 @@ extension GraphContextManager {
         await publishCloudConnectionState(key)
         // A pending account check owns no directory lease. The admission guard
         // prevents it from constructing a session after this transition.
-        if cloudSessions[key] != nil { try await stopCloudSession(configuration) }
+        if let opening = cloudSessions[key] {
+            guard opening.configuration == configuration else { throw GraphCloudError.ownershipConflict }
+            try await stopCloudSession(configuration)
+        }
         await publishCloudConnectionState(key)
     }
 }

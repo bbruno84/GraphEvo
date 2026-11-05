@@ -20,10 +20,25 @@ package struct GraphCloudConfiguration: Equatable, Sendable {
     package init(containerIdentifier: String, environment: GraphCloudEnvironment, directory: URL,
                  maximumEvents: Int = 4096, maximumBytes: Int = 32 * 1024 * 1024, allowsSessionUpgradeFromV8: Bool = false) {
         self.containerIdentifier = containerIdentifier; self.environment = environment
-        self.directory = URL(fileURLWithPath: directory.standardizedFileURL.resolvingSymlinksInPath().path, isDirectory: true)
+        self.directory = Self.canonicalDirectory(directory)
         self.maximumEvents = maximumEvents; self.maximumBytes = maximumBytes
         self.allowsSessionUpgradeFromV8 = allowsSessionUpgradeFromV8
     }
+    /// Resolve existing parents even when the session directory has not been created.
+    private static func canonicalDirectory(_ directory: URL) -> URL {
+        var ancestor = directory.standardizedFileURL
+        var suffix: [String] = []
+        while !FileManager.default.fileExists(atPath: ancestor.path) {
+            let parent = ancestor.deletingLastPathComponent()
+            guard parent.path != ancestor.path else { break }
+            suffix.append(ancestor.lastPathComponent)
+            ancestor = parent
+        }
+        var resolved = ancestor.resolvingSymlinksInPath()
+        for component in suffix.reversed() { resolved.appendPathComponent(component, isDirectory: true) }
+        return URL(fileURLWithPath: resolved.path, isDirectory: true)
+    }
+
     var namespace: String { environment.rawValue + ":" + containerIdentifier }
 }
 

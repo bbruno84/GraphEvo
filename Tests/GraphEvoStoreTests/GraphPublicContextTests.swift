@@ -193,6 +193,25 @@ private final class PublicAccountDriver: @unchecked Sendable {
     }
 
     @available(iOS 17, macOS 14, *)
+    @Test func sessionDirectoryIdentitySurvivesCreationThroughAnAlias() throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        let real = root.appendingPathComponent("Real", isDirectory: true)
+        let alias = root.appendingPathComponent("Alias", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: real)
+        let missing = alias.appendingPathComponent("New/Session", isDirectory: true)
+        func configuration(_ directory: URL) throws -> GraphCloudConnectionConfiguration {
+            try .init(containerIdentifier: "iCloud.alias", environment: .development, directory: directory)
+        }
+        let before = try configuration(missing)
+        let admitted = before.native
+        try FileManager.default.createDirectory(at: missing, withIntermediateDirectories: true)
+        #expect(before.native == admitted)
+        #expect(try configuration(missing) == before)
+        #expect(try configuration(real.appendingPathComponent("New/Session", isDirectory: true)) == before)
+    }
+
+    @available(iOS 17, macOS 14, *)
     @Test func backgroundDrainsBeforeUnlockAndRapidForegroundRestoresTheCheckpoint() async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let driver = PublicAccountDriver(), owner = context(driver), config = try configuration(root)
