@@ -5,6 +5,13 @@ package enum StoreOpeningMode: Sendable, Equatable {
     case openOrCreate
     case existing
     case new
+    /// A cold purge cannot borrow an ordinary graph owner or attach ahead of a peer.
+    case appGroupPurgeRecovery(storeID: String)
+
+    var isAppGroupPurgeRecovery: Bool {
+        if case .appGroupPurgeRecovery = self { return true }
+        return false
+    }
 }
 
 /// Value-only diagnostics, distinct from domain identity and cloud readiness.
@@ -257,6 +264,7 @@ package actor StoreRegistry {
         let resolved: ResolvedStore
         let schema: StoreSchema
         let nativeMigrationDocument: Data?
+        let recoveringAppGroupPurge: Bool
         let opening: Task<StoreResources, any Error>
         var fileIdentities: [StoreKey: FileIdentity] = [:]
         var tokens: Set<UUID> = []
@@ -290,6 +298,12 @@ package actor StoreRegistry {
                       mode: StoreOpeningMode = .openOrCreate) async throws -> StoreHandle {
         try Task.checkCancellation()
         let resolved = try ResolvedStore(configuration)
+        if mode.isAppGroupPurgeRecovery, configuration.appGroup == nil {
+            throw StoreRuntimeError.invalidConfiguration("App Group purge recovery requires App Group admission.")
+        }
+        if configuration.appGroup != nil, mode == .openOrCreate {
+            throw StoreRuntimeError.invalidConfiguration("App Group stores require explicit creation or opening.")
+        }
         try validateContextClaim(resolved)
         while true {
             if let entry = entries[resolved.key], let shutdown = entry.shutdown {
@@ -313,6 +327,9 @@ package actor StoreRegistry {
             }
             if let entry = entries[resolved.key] {
                 if mode == .new, let url = resolved.url { throw StoreRuntimeError.storeAlreadyExists(url) }
+                guard !mode.isAppGroupPurgeRecovery, !entry.recoveringAppGroupPurge else {
+                    throw StoreRuntimeError.resourceReserved
+                }
                 guard try entry.resolved.isCompatible(with: resolved), entry.schema.isCompatible(with: schema),
                       entry.nativeMigrationDocument == nativeMigration?.document else {
                     throw StoreRuntimeError.configurationConflict(resolved.url)
@@ -325,6 +342,7 @@ package actor StoreRegistry {
                         nativeMigration: nativeMigration, mode: mode, expectedIdentity: expectedIdentity)
                 }
                 entries[resolved.key] = Entry(resolved: resolved, schema: schema, nativeMigrationDocument: nativeMigration?.document,
+                                             recoveringAppGroupPurge: mode.isAppGroupPurgeRecovery,
                                              opening: opening, fileIdentities: identities)
             }
             let token = UUID()

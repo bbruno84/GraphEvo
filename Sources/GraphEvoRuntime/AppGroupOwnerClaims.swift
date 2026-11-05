@@ -56,6 +56,14 @@ enum AppGroupOwnerClaims {
         try FileManager.default.removeItem(at: entry)
     }
 
+    static func requireNoClaims(for resolved: ResolvedStore) throws {
+        let directory = try directory(for: resolved)
+        try verifyDirectory(directory)
+        guard try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty else {
+            throw StoreRuntimeError.resourceReserved
+        }
+    }
+
     static func requireSoleClaim(_ generation: UUID, for resolved: ResolvedStore) throws {
         let directory = try directory(for: resolved)
         try verifyDirectory(directory)

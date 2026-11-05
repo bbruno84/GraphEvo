@@ -318,14 +318,24 @@ extension GraphContextManager {
             if entries[id] == nil {
                 let registry = registry, schema = schema, adapter = adapter
                 let configuration = graphStoreConfiguration(id, at: location.url)
-                let task = Task.detached { try await GraphCoordinator.recoverForPurge(id: id, configuration: configuration, registry: registry, schema: schema, adapter: adapter) }
+                let task = Task.detached { try await GraphCoordinator.recoverForPurge(id: id, configuration: configuration, storeID: storeID, registry: registry, schema: schema, adapter: adapter) }
                 entries[id] = Entry(key: location.key, url: location.url, creating: false, initialPolicy: .lastEditWins, opening: task)
             }
             let entry = entries[id]!
             let owner: GraphCoordinator
             do { owner = try await entry.opening.value }
             catch let error as StoreRuntimeError {
-                if case .missingStore = error { removeClosedEntry(id, generation: entry.generation) }
+                switch error {
+                case .missingStore:
+                    removeClosedEntry(id, generation: entry.generation)
+                case .shutdownFailed:
+                    break // Retain a quarantined native owner.
+                default:
+                    if appGroup != nil { removeClosedEntry(id, generation: entry.generation) }
+                }
+                throw error
+            } catch {
+                if appGroup != nil { removeClosedEntry(id, generation: entry.generation) }
                 throw error
             }
             #if DEBUG

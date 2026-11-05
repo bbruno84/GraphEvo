@@ -163,6 +163,11 @@ actor StoreResources {
                 throw StoreRuntimeError.invalidModel(schema.identifier)
             }
             try validateOpeningIntent(resolved, mode: mode, expectedIdentity: expectedIdentity)
+            if case .appGroupPurgeRecovery(let storeID) = mode {
+                guard let graphID = resolved.configuration.exclusiveGraphID else { throw StoreRuntimeError.resourceReserved }
+                try AppGroupOwnerClaims.requireNoClaims(for: resolved)
+                try validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
+            }
             let description = try storeDescription(resolved, model: model,
                 requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier, nativeMirroring: false)
             description.shouldAddStoreAsynchronously = false
@@ -213,7 +218,7 @@ actor StoreResources {
         guard let url = resolved.url else { return }
         switch mode {
         case .openOrCreate: break
-        case .existing:
+        case .existing, .appGroupPurgeRecovery:
             guard let expectedIdentity, let identity = try resolved.fileIdentity() else {
                 throw StoreRuntimeError.missingStore(url)
             }
