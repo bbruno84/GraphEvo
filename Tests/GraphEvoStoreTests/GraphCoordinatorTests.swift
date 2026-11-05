@@ -254,3 +254,85 @@ private actor CoordinatorGate {
         }
     }
 }
+
+extension GraphCoordinatorTests {
+    enum QueuedOpening: CaseIterable {
+        case deletedExisting
+        case replacedExisting
+        case occupiedCreation
+    }
+
+    @Test(arguments: QueuedOpening.allCases)
+    func queuedOpeningRechecksDestinationBeforeLoading(_ scenario: QueuedOpening) async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Replica.sqlite")
+        let otherURL = root.appendingPathComponent("Other.sqlite")
+        let id = GraphID(), setup = manager()
+        if scenario != .occupiedCreation {
+            let initial = try await setup.createGraph(id: id, at: url)
+            try await initial.close()
+        }
+        if scenario != .deletedExisting {
+            let other = try await setup.createGraph(id: GraphID(), at: otherURL)
+            try await other.close()
+        }
+
+        let resource = try ResolvedStore(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue))
+        let writer = try await StoreProcessLock.acquire(resource)
+        defer { writer.release() }
+        let contended = AsyncStream<Void>.makeStream()
+        var hooks = StoreLifecycleHooks()
+        hooks.didContendProcessLock = { contended.continuation.yield(()) }
+        let competing = manager(StoreRegistry(hooks: hooks))
+        let opening = Task {
+            switch scenario {
+            case .deletedExisting, .replacedExisting:
+                try await competing.openGraph(id: id, at: url)
+            case .occupiedCreation:
+                try await competing.createGraph(id: id, at: url)
+            }
+        }
+        defer { opening.cancel() }
+        var signals = contended.stream.makeAsyncIterator()
+        _ = await signals.next()
+
+        let sidecars = ["-wal", "-shm"].map { url.path + $0 }
+        if scenario != .occupiedCreation {
+            let model = GraphRuntimeSchema.typedProperties.makeModel()
+            let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+            try coordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
+            for path in [url.path] + sidecars where FileManager.default.fileExists(atPath: path) {
+                try FileManager.default.removeItem(atPath: path)
+            }
+        }
+        let expectedBytes: Data?
+        if scenario == .deletedExisting {
+            expectedBytes = nil
+        } else {
+            try FileManager.default.moveItem(at: otherURL, to: url)
+            expectedBytes = try Data(contentsOf: url)
+        }
+        writer.release()
+
+        await #expect {
+            try await opening.value
+        } throws: { error in
+            switch (scenario, error as? GraphStoreError) {
+            case (.deletedExisting, .missingStore?), (.occupiedCreation, .duplicateIdentity?):
+                return true
+            case (.replacedExisting, .persistence(let underlying)?):
+                if case .storeReplaced = underlying as? StoreRuntimeError { return true }
+                return false
+            default:
+                return false
+            }
+        }
+        if let expectedBytes {
+            #expect(try Data(contentsOf: url) == expectedBytes)
+        } else {
+            #expect(!FileManager.default.fileExists(atPath: url.path))
+        }
+        for path in sidecars { #expect(!FileManager.default.fileExists(atPath: path)) }
+    }
+}

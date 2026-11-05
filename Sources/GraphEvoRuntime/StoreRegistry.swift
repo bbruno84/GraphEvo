@@ -1,6 +1,12 @@
 import CoreData
 import Foundation
 
+package enum StoreOpeningMode: Sendable, Equatable {
+    case openOrCreate
+    case existing
+    case new
+}
+
 /// Value-only diagnostics, distinct from domain identity and cloud readiness.
 package struct StoreRuntimeSnapshot: Sendable, Equatable {
     package let runtimeID: UUID
@@ -266,7 +272,8 @@ package actor StoreRegistry {
     init(hooks: StoreLifecycleHooks = StoreLifecycleHooks()) { self.hooks = hooks }
 
     package func open(_ configuration: StoreConfiguration, schema: StoreSchema,
-                      nativeMigration: StoreNativeMigration? = nil) async throws -> StoreHandle {
+                      nativeMigration: StoreNativeMigration? = nil,
+                      mode: StoreOpeningMode = .openOrCreate) async throws -> StoreHandle {
         try Task.checkCancellation()
         let resolved = try ResolvedStore(configuration)
         try validateContextClaim(resolved)
@@ -291,14 +298,18 @@ package actor StoreRegistry {
                 }
             }
             if let entry = entries[resolved.key] {
+                if mode == .new, let url = resolved.url { throw StoreRuntimeError.storeAlreadyExists(url) }
                 guard try entry.resolved.isCompatible(with: resolved), entry.schema.isCompatible(with: schema),
                       entry.nativeMigrationDocument == nativeMigration?.document else {
                     throw StoreRuntimeError.configurationConflict(resolved.url)
                 }
                 try validateIdentities(entry.fileIdentities, current: identities, resolved: resolved)
             } else {
-                let hooks = hooks, owner = owner
-                let opening = Task.detached { try await StoreResources.open(resolved, schema: schema, hooks: hooks, owner: owner, nativeMigration: nativeMigration) }
+                let hooks = hooks, owner = owner, expectedIdentity = identities[resolved.key]
+                let opening = Task.detached {
+                    try await StoreResources.open(resolved, schema: schema, hooks: hooks, owner: owner,
+                        nativeMigration: nativeMigration, mode: mode, expectedIdentity: expectedIdentity)
+                }
                 entries[resolved.key] = Entry(resolved: resolved, schema: schema, nativeMigrationDocument: nativeMigration?.document,
                                              opening: opening, fileIdentities: identities)
             }

@@ -311,7 +311,12 @@ extension GraphContextManager {
                 entries[id] = Entry(key: location.key, url: location.url, creating: false, initialPolicy: .lastEditWins, opening: task)
             }
             let entry = entries[id]!
-            let owner = try await entry.opening.value
+            let owner: GraphCoordinator
+            do { owner = try await entry.opening.value }
+            catch let error as StoreRuntimeError {
+                if case .missingStore = error { removeClosedEntry(id, generation: entry.generation) }
+                throw error
+            }
             #if DEBUG
             try await purgeProbeBarrier?(id)
             #endif
