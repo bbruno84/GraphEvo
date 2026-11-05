@@ -68,6 +68,13 @@ public actor GraphDatabase {
 
     /// Privileged native operations share the same admission and writer ownership as typed edits.
     package func nativeOperation<Value: Sendable>(
+        _ body: @escaping @Sendable (NSPersistentContainer) throws -> Value
+    ) async throws -> Value {
+        do { return try await handle.nativeOperation(body) }
+        catch { throw GraphStore.translate(error) }
+    }
+
+    package func nativeOperation<Value: Sendable>(
         _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
     ) async throws -> Value {
         do { return try await handle.nativeOperation(body) }

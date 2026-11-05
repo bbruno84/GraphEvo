@@ -97,7 +97,7 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
             try scope.insert(GraphRecord(id: a, type: "A")); try scope.insert(GraphRecord(id: b, type: "B"))
         }
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.rollback(); context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let target = try #require(session.nodes[b])
@@ -158,7 +158,7 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
         _ = try await a.transaction { try $0.insert(GraphRecord(id: first, type: "good")) }
         _ = try await b.transaction { try $0.insert(GraphRecord(id: second, type: "other")) }
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.rollback(); context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, b.id, database: true)
                 let node = try #require(session.nodes[second])
@@ -169,7 +169,7 @@ private final class MetadataReadProbe: NSSecureUnarchiveFromDataTransformer, @un
         #expect(try await a.read { try $0.record(for: first)?.id } == first)
         await #expect(throws: GraphStoreError.self) { try await b.read { try $0.record(for: second) } }
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.rollback(); context.reset() }
                 let facade = GraphTypedStoreAdapter.facade(context)
                 let node = try #require(GraphTypedStoreAdapter.allNodes(facade).first { $0.runtimeTypeIfPresent == "other" })

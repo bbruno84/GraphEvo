@@ -160,7 +160,7 @@ import GraphEvoModel
         let metadata = try await graph.importAttachment(from: source(root, bytes: Data([1])), ownedBy: owner)
         let orphan = try GraphAttachmentPayload(id: metadata.id, ownerID: graph.makeNodeID(), fileName: "orphan.bin", contentType: "public.data", data: Data([1])).graphRecord()
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.rollback(); context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let file = try #require(session.nodes[metadata.id])
@@ -229,7 +229,7 @@ extension GraphAttachmentTests {
         let owner = try await owner(graph)
         let metadata = try await graph.importAttachment(from: source(root, bytes: Data([1, 2])), ownedBy: owner)
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.rollback(); context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let file = try #require(session.nodes[metadata.id])

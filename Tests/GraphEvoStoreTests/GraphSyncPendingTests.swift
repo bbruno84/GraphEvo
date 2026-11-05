@@ -42,7 +42,7 @@ private actor SyncTestSignal {
     private func state(_ graph: GraphStore, replacing: Data? = nil) async throws -> Data? {
         let id = graph.id
         return try await graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 context.userInfo[StoreNativeContext.privateURLKey] = container.persistentStoreCoordinator.persistentStores.first?.url
                 let facade = GraphTypedStoreAdapter.facade(context)
@@ -102,7 +102,7 @@ private actor SyncTestSignal {
         let f = try await fixture(adapter: metadataFirstAdapter())
         defer { try? FileManager.default.removeItem(at: f.directory) }
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let request = NSPersistentHistoryChangeRequest.fetchHistory(after: nil as NSPersistentHistoryToken?)
                 request.resultType = .transactionsOnly
                 let result = try #require(try context.execute(request) as? NSPersistentHistoryResult)
@@ -283,7 +283,7 @@ private actor SyncTestSignal {
         let before = try await state(f.graph)
         try await f.graph.transaction { _ = try $0.patch(GraphRecordPatch(id: f.a, properties: ["value": .set(.integer(2))])) }
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 _ = try context.execute(NSPersistentHistoryChangeRequest.deleteHistory(before: Date.distantFuture))
             }
         }
@@ -299,7 +299,7 @@ private actor SyncTestSignal {
         if !beforeInitialCheckpoint { try await acknowledgeAll(f.graph) }
         let before = try await state(f.graph), target = f.a
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 context.userInfo[StoreNativeContext.privateURLKey] = container.persistentStoreCoordinator.persistentStores.first?.url
                 context.transactionAuthor = "unsupported-writer"
@@ -372,7 +372,7 @@ private actor SyncTestSignal {
         try await acknowledgeAll(f.graph)
         let before = try await state(f.graph)
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 context.transactionAuthor = GraphSyncCheckpointAdapter.localAuthor
                 let facade = GraphTypedStoreAdapter.facade(context)

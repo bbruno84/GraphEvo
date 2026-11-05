@@ -416,7 +416,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         let wrong = try incoming(GraphRecord(id: other, type: "Other"), f.binding.route)
         let bytes = try #require(wrong.recordArchive)
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 context.transactionAuthor = GraphSyncCheckpointAdapter.metadataAuthor
                 let facade = GraphTypedStoreAdapter.facade(context)
@@ -459,7 +459,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         _ = try await f.graph.transaction { try $0.insert(GraphRecord(id: id, type: "Item", properties: ["value": .integer(1)])) }
         let original = try await f.graph.prepareTransport(f.binding)
         let transportBytes = try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 context.userInfo[StoreNativeContext.containerKey] = container
                 let facade = GraphTypedStoreAdapter.facade(context)
                 let root = try #require(Search<Entity>(graph: facade).where(.type(GraphTypedStoreAdapter.rootType)).sync().first)

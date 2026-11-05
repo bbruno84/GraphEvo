@@ -54,66 +54,66 @@ terminal membership without retaining the failed opening.
 
 ## Cooperating process protocol
 
-Writable plain local SQLite runtime owners and coordinated read-only replicas
-use stable sidecars derived from the existing
-canonical resource key. Symbolic/case aliases resolve to the same key; hard
-links remain refused. Sidecars are regular, single-link, current-user-owned
-files with private permissions and matching descriptor/path identities. They
-are never unlinked on release or ordinary store destruction. Retiring an isolated
-workspace may remove its entire directory only after exclusive-owner admission
-and native detachment. A waiter holding an old descriptor must fail path/inode
-verification if that directory disappears or is recreated; it cannot adopt the
-new lock identity. A terminated process releases its descriptors
-through the operating system. This does not establish application crash recovery.
+Writable plain local SQLite owners and coordinated read-only replicas use
+Foundation file access on a private coordination directory derived from the
+canonical store key. Symlink and case aliases converge. Hard links are refused.
+Independent stores in the same directory have separate coordination targets.
+The workspace anchor sits beside the managed workspace directory so it
+survives workspace discard. Unmarked read-only archives and stopped v1
+sources can still open without creating coordination directories.
 
-The writer sidecar uses advisory exclusive flock. Order is runtime admission,
-local FIFO writer gate, process lock, fresh native context, body/save, context
-cleanup, process unlock and FIFO release. Bootstrap takes the same lock before
-native metadata/load/preparation. The reserved publication/workspace writer and
-privileged native-operation paths use that boundary too. A native callback must
-settle all its native work before its awaited completion. Inherited-task
-same-store native reentry is rejected; detached tasks/callbacks are not made
-generically reentrant.
+Apple grants cover native opening, transactions, close and destruction.
+Reads keep their existing query-generation snapshot. A local FIFO writer gate
+and the same-store reentry check remain in force. A native SQLite writer
+completes its synchronous callback, save and context cleanup within one
+accessor. Cancellation before the save aborts the operation. A successful
+save returns its committed result.
 
-Nonblocking probes run on a dedicated I/O queue; contention suspends with a
-cancellable 25-ms polling interval. No thread mutex is held across await and
-no blocking flock runs on the cooperative executor. This policy is not an
-intrinsic OS-lock latency or an interprocess fairness guarantee. Successful
-save remains the cancellation boundary; cleanup is not abandoned on cancellation.
+A presenter and durable owner registration follow each native coordinator.
+Close removes the registration after confirmed detachment. Destruction uses
+a deletion grant and verifies the sole registration before native changes.
+A failed or interrupted destruction can leave a retirement registration that
+blocks new owners until verified cleanup. A pre-destruction peer refusal
+detaches only the requesting owner.
 
-An all-operation maintenance reservation retains the process writer fence after
-draining local operations. Its admitted operations borrow that fence, so release
-of the reservation cannot unlock an operation still using it. Write-only holds
-remain local admission policy; they are not a distributed migration fence.
+An isolated workspace admits one owner from native bootstrap through final
+detach. After a crash, an unresolved registration blocks workspace reopening
+and cleanup. Stop every process using the workspace before offline recovery.
+The package-only `recoverOfflineMigrationWorkspace(at:generation:)` validates
+the descriptor, exact workspace and store identities, and the indicated
+generation within a deletion grant. Partial destruction remains pending.
+Use the descriptor and the UUID-named entry under the workspace anchor's
+`.owners-v1` to identify the generation. Process age and file absence are
+insufficient evidence for releasing a registration.
 
-## Live owners and destructive maintenance
+An ordinary replica purge can recover one abandoned registration at a time
+through `registerSharedReplica(id:at:recoveringOfflineGeneration:)`. The
+terminal membership supplies the expected store UUID. Native v1 conversion
+accepts the same explicit recovery parameter on its opening request and
+checks the durable intent or committed receipt. Stop all store users before
+using either path. Recovery refuses an active native owner and preserves
+retirement registrations. Native seed creation precedes owner registration
+while the exclusive grant is held.
 
-Each participating plain local owner also retains a shared presence lease until
-native detachment succeeds. Readers keep their pinned snapshots without taking
-the writer lock. Independent stores retain independent progress.
-Unmarked read-only archives and stopped-writer legacy conversion sources do not
-require sidecar creation or a writable source directory; their existing source
-quiescence prerequisites are unchanged.
+Ordinary SQLite outgoing attachment preparation sweeps unreferenced files,
+writes the bounded batch and saves its references within the same Apple grant.
+The next preparation can reclaim files after process death. Post-send cleanup
+uses the same grant so it cannot change the spool during a coordinated copy.
+Dedicated App Group preparation keeps its split-phase staging.
 
-Destroy and detached workspace cleanup acquire the writer fence and require an
-exclusive presence lease. Another process's idle open coordinator makes that
-operation fail with resourceReserved; it is not silently invalidated. Our shared
-claim is restored on refusal. Failed detachment retains native/gateway/presence
-ownership. Close only detaches its own coordinator. Backups lock a coordinated
-source and the new destination; an owned destination is not replaced. Native
-workspace bootstrap remains supported under its destination writer fence and
-requires exclusive presence before seeding, preparation and native schema load.
-Every workspace retains exclusive presence until final detachment, including a
-resumed, sealed or already converted workspace. It does not downgrade while its
-working graph is live. Failed detachment retains that claim in quarantine. A
-later ordinary coordinator opening the published graph uses shared presence. Existing
-stopped-writer source and migration publication prerequisites remain mandatory.
+Maintenance reservations drain local work. Native snapshot creation acquires
+source and destination in one Foundation request. The copy, source history
+boundary and outgoing assets are captured within that request. Compression
+and validation operate on the private copy. Publication checks the source
+identity and allowable history inside its final write grant and commits graph
+changes and the receipt in one save. The existing receipt supports retry
+after commit without applying the migration again.
 
-This protocol requires all writers to participate. Old binaries, direct external
-Core Data writers and native mirroring that continues outside our awaited
-callbacks are not covered. The role marker is not a distributed old-client
-fence. Hosts must stop such writers before adoption. Sidecar checks do not
-provide a malicious-writer or arbitrary filesystem replacement guarantee.
+Upgrade cooperating app, extension and helper processes together while all
+store users are stopped. Old binaries and direct writers use a different
+protocol. Keep the canonical SQLite locations and existing store formats.
+Leftover advisory sidecar files from an earlier version can remain in place.
+Cloud session ownership follows its separate session protocol.
 
 ## Physical App Group lifecycle finding
 

@@ -168,7 +168,7 @@ private struct TypedQueryItem: GraphModel {
             try $0.insert(GraphRecord(id: second, type: TypedQueryItem.graphType, properties: ["i": .integer(2), "body": .array([.integer(1)])]))
         }
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let fetch = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityPropertyName)
                 fetch.predicate = NSPredicate(format: "name == %@ AND ge2ValueEncoding == 1", "body")
                 let row = try #require(context.fetch(fetch).first)

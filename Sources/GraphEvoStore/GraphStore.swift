@@ -115,6 +115,13 @@ public actor GraphStore {
 
     /// Trusted platform adapter operations retain this logical handle's native owner.
     package func nativeOperation<Value: Sendable>(
+        _ body: @escaping @Sendable (NSPersistentContainer) throws -> Value
+    ) async throws -> Value {
+        do { return try await handle.nativeOperation(body) }
+        catch { throw Self.translate(error) }
+    }
+
+    package func nativeOperation<Value: Sendable>(
         _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
     ) async throws -> Value {
         do { return try await handle.nativeOperation(body) }

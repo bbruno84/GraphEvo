@@ -27,6 +27,7 @@ package struct StoreRuntimeSnapshot: Sendable, Equatable {
     package let access: StoreAccess
     package let schemaIdentifier: String
     package let usesAppGroupCoordination: Bool
+    package let usesSQLiteCoordination: Bool
 }
 
 /// One lease on an owner; close is idempotent and concurrent callers await the same outcome.
@@ -77,6 +78,13 @@ package actor StoreHandle {
 
     /// Native framework operations retain admission and the writer gate through their completion.
     package func nativeOperation<Value: Sendable>(
+        _ body: @escaping @Sendable (NSPersistentContainer) throws -> Value
+    ) async throws -> Value {
+        guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
+        return try await registry.nativeOperation(key, generation: generation, token: token, body)
+    }
+
+    package func nativeOperation<Value: Sendable>(
         _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
     ) async throws -> Value {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
@@ -112,7 +120,7 @@ package actor StoreHandle {
     /// The runtime retains writer admission, owns the sole save and always drains cleanup.
     package func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
-        materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        materialize: @escaping @Sendable (Snapshot, @escaping StoreNativeContext.CancellationCheck) async throws -> Prepared,
         discard: @escaping @Sendable (Prepared) async -> Void = { _ in },
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {
@@ -200,8 +208,15 @@ package actor StoreHandle {
         return try await registry.workspaceTransaction(key, generation: generation, token: token, reservation: reservation.id, body)
     }
     package func copyStore(to url: URL, reservation: StoreReservation) async throws {
+        try await copyStore(to: url, reservation: reservation) { _, _, _ in }
+    }
+
+    package func copyStore<Value: Sendable>(to url: URL, reservation: StoreReservation,
+        alongside: @escaping @Sendable (NSManagedObjectContext, URL, CoordinatedFiles.CancellationCheck) throws -> Value
+    ) async throws -> Value {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
-        try await registry.copyStore(key, generation: generation, token: token, to: url, reservation: reservation.id)
+        return try await registry.copyStore(key, generation: generation, token: token, to: url,
+                                            reservation: reservation.id, alongside: alongside)
     }
     @discardableResult
     package func destroy(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
@@ -301,6 +316,50 @@ package actor StoreRegistry {
         }
     }
 
+    /// The caller must establish offline process quiescence before requesting recovery.
+    package nonisolated static func recoverOfflineWorkspace(_ configuration: StoreConfiguration,
+        generation: UUID, storeID: String, validate: @escaping @Sendable () throws -> Void
+    ) async throws {
+        guard configuration.workspaceID != nil else { throw StoreRuntimeError.resourceReserved }
+        try await recoverOfflineOwner(configuration, generation: generation, storeID: storeID) { _, metadata in
+            guard metadata[StoreNativeContext.workspaceKey] as? String == configuration.workspaceID?.uuidString else {
+                throw StoreRuntimeError.resourceReserved
+            }
+            try validate()
+        }
+    }
+
+    /// Offline repair is limited to one named registration, with no native owner attached.
+    package nonisolated static func recoverOfflineOwner(_ configuration: StoreConfiguration,
+        generation: UUID, storeID: String,
+        validate: @escaping @Sendable (URL, [String: Any]) throws -> Void = { _, _ in }
+    ) async throws {
+        let resolved = try ResolvedStore(configuration)
+        guard let graph = configuration.exclusiveGraphID,
+              configuration.appGroup == nil, let url = resolved.url else { throw StoreRuntimeError.resourceReserved }
+        let gateway = try StoreGatewayLease.acquire(configuration, owner: UUID())
+        defer { gateway.release() }
+        let directory = try SQLiteStoreCoordination.directory(resolved, create: false)
+        let anchorIdentity = try SQLiteStoreCoordination.identity(directory)
+        let fileIdentity = try resolved.fileIdentity()
+        do {
+            try await CoordinatedFiles.run([.delete(directory)]) {
+                guard let fileIdentity, try resolved.fileIdentity() == fileIdentity,
+                      try SQLiteStoreCoordination.identity(directory) == anchorIdentity else {
+                    throw StoreRuntimeError.storeReplaced(url)
+                }
+                let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType,
+                    at: url, options: [NSReadOnlyPersistentStoreOption: true])
+                guard metadata[NSStoreUUIDKey] as? String == storeID,
+                      metadata[StoreNativeContext.historySyncGraphKey] as? String == graph.uuidString else {
+                    throw StoreRuntimeError.storeReplaced(url)
+                }
+                try validate(url, metadata)
+                try AppGroupOwnerClaims.recoverOffline(generation, for: resolved)
+            }
+        } catch is CoordinatedFiles.Denied { throw StoreRuntimeError.resourceReserved }
+    }
+
     package func open(_ configuration: StoreConfiguration, schema: StoreSchema,
                       nativeMigration: StoreNativeMigration? = nil,
                       mode: StoreOpeningMode = .openOrCreate) async throws -> StoreHandle {
@@ -397,6 +456,15 @@ package actor StoreRegistry {
 
     fileprivate func nativeOperation<Value: Sendable>(
         _ key: StoreKey, generation: UUID, token: UUID,
+        _ body: @escaping @Sendable (NSPersistentContainer) throws -> Value
+    ) async throws -> Value {
+        let entry = try entry(for: key, generation: generation, token: token)
+        let resources = try await entry.opening.value
+        return try await resources.nativeOperation(body)
+    }
+
+    fileprivate func nativeOperation<Value: Sendable>(
+        _ key: StoreKey, generation: UUID, token: UUID,
         _ body: @escaping @Sendable (NSPersistentContainer) async throws -> Value
     ) async throws -> Value {
         let entry = try entry(for: key, generation: generation, token: token)
@@ -419,9 +487,11 @@ package actor StoreRegistry {
     fileprivate func snapshot(_ key: StoreKey, generation: UUID, token: UUID) async throws -> StoreRuntimeSnapshot {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
+        let usesSQLiteCoordination = await resources.usesSQLiteCoordination
         return try await resources.read(control: true) { _ in
             StoreRuntimeSnapshot(runtimeID: resources.id, location: entry.resolved.configuration.location,
-                                 access: entry.resolved.configuration.access, schemaIdentifier: entry.schema.identifier, usesAppGroupCoordination: entry.resolved.configuration.appGroup != nil)
+                                 access: entry.resolved.configuration.access, schemaIdentifier: entry.schema.identifier, usesAppGroupCoordination: entry.resolved.configuration.appGroup != nil,
+                                 usesSQLiteCoordination: usesSQLiteCoordination)
         }
     }
 
@@ -446,7 +516,7 @@ package actor StoreRegistry {
     fileprivate func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
         _ key: StoreKey, generation: UUID, token: UUID,
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
-        materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        materialize: @escaping @Sendable (Snapshot, @escaping StoreNativeContext.CancellationCheck) async throws -> Prepared,
         discard: @escaping @Sendable (Prepared) async -> Void,
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {
@@ -514,9 +584,11 @@ package actor StoreRegistry {
         let value = try entry(for: key, generation: generation, token: token)
         return try await value.opening.value.workspaceTransaction(reservation: reservation, body)
     }
-    fileprivate func copyStore(_ key: StoreKey, generation: UUID, token: UUID, to url: URL, reservation: UUID) async throws {
+    fileprivate func copyStore<Value: Sendable>(_ key: StoreKey, generation: UUID, token: UUID, to url: URL,
+        reservation: UUID, alongside: @escaping @Sendable (NSManagedObjectContext, URL, CoordinatedFiles.CancellationCheck) throws -> Value
+    ) async throws -> Value {
         let value = try entry(for: key, generation: generation, token: token)
-        try await value.opening.value.copyStore(to: url, reservation: reservation)
+        return try await value.opening.value.copyStore(to: url, reservation: reservation, alongside: alongside)
     }
 
     fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
@@ -563,7 +635,7 @@ package actor StoreRegistry {
 
     fileprivate func release(_ key: StoreKey, generation: UUID, token: UUID) async throws {
         guard var entry = entries[key], entry.generation == generation else { return }
-        if entry.resolved.configuration.appGroup != nil, entry.destroyToken != nil, let shutdown = entry.shutdown {
+        if entry.destroyToken != nil, let shutdown = entry.shutdown {
             // Destruction revoked the leases. Closing one still waits for actual
             // detachment and must surface a retained owner's failure.
             return try await shutdown.value

@@ -166,7 +166,7 @@ private actor AutomaticReplicaBus {
         let node = r.graph.makeNodeID()
         _ = try await r.graph.transaction { try $0.insert(GraphRecord(id: node, type: "Item")) }
         try await r.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
                 context.transactionAuthor = "unsupported-writer"
                 try #require(session.nodes[node]).add(tags: "foreign")

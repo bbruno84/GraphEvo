@@ -181,9 +181,6 @@ package actor GraphCoordinator {
         let id = id
         try await handle.controlRead { try workspace.validateSource($0, id, boundary) }
     }
-    func migrationBoundary() async throws -> GraphMigrationBoundary {
-        try await handle.controlRead { try GraphMigrationBoundary.capture($0) }
-    }
     func validateUntouchedJoin(_ expected: GraphCloudParticipantAccess) async throws {
         guard let read = adapter.participantAccess, let validate = adapter.validateIntegrity else { throw GraphCloudError.invalidState }
         let id = id
@@ -206,11 +203,15 @@ package actor GraphCoordinator {
     func blockSharingData() async throws { try await handle.setDataAvailable(false, terminal: true) }
     func suspendLocalWrites() async throws -> StoreReservation { try await handle.suspendWrites() }
     func reserveMaintenance() async throws -> StoreReservation { try await handle.reserveMaintenance() }
-    func copyStore(to url: URL, reservation: StoreReservation, storeID: String? = nil) async throws {
-        try await handle.copyStore(to: url, reservation: reservation)
-        guard let storeID else { return }
-        let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL, storeID: storeID))
-        try await spool.copyOwnedRoot(to: GraphCloudAssetSpool.outgoingRoot(storeURL: url, storeID: storeID))
+    func copyStore(to url: URL, reservation: StoreReservation, storeID: String) async throws -> GraphMigrationBoundary {
+        let storeURL = storeURL
+        return try await handle.copyStore(to: url, reservation: reservation) { context, target, check in
+            let boundary = try GraphMigrationBoundary.capture(context)
+            guard boundary.storeID == storeID else { throw GraphMigrationWorkspaceError.staleSource }
+            let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL, storeID: storeID))
+            try spool.copyOwnedRoot(to: GraphCloudAssetSpool.outgoingRoot(storeURL: target, storeID: storeID), check: check)
+            return boundary
+        }
     }
     func participantAccess(_ value: GraphCloudParticipantAccess? = nil) async throws -> GraphCloudParticipantAccess? {
         guard let access = adapter.participantAccess else { throw GraphCloudSharingError.unavailable }

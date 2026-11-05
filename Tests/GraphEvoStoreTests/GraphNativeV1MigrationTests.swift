@@ -176,7 +176,7 @@ struct GraphNativeV1MigrationTests {
         // The failed detach intentionally quarantines its attached store until process exit.
         let root = try directory(), r = request(root)
         _ = try await seedConversionSource(r.sourceURL)
-        let registry = StoreRegistry(hooks: StoreLifecycleHooks(beforeDetach: { throw NativeV1InjectedFailure() }))
+        let registry = StoreRegistry(hooks: StoreLifecycleHooks(beforeNativePreparationDetach: { throw NativeV1InjectedFailure() }))
         let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
                                     adapter: GraphCoordinatorFactory.adapter)
         await #expect(throws: (any Error).self) { try await m.openGraph(convertingLocalV1: r) }
@@ -188,6 +188,43 @@ struct GraphNativeV1MigrationTests {
             workspaceID: r.operationID, workspaceSessionID: m.migrationIdentity)
         await #expect(throws: StoreRuntimeError.self) { try await independent.open(workspace, schema: GraphRuntimeSchema.current) }
         #expect(try !GraphStoreMetadata.isCompatible(at: r.destinationURL))
+    }
+
+    @Test(.enabled(if: nativeV1StagesAvailable)) func offlineRecoveryRequiresExactNativeConversionIntentAndGeneration() async throws {
+        guard #available(iOS 17, macOS 14, *) else { throw GraphV1ConversionError.unavailable }
+        let root = try directory(), r = request(root)
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try await seedConversionSource(r.sourceURL)
+        var adapted = GraphCoordinatorFactory.adapter
+        let native = try #require(adapted.nativeV1Migration)
+        adapted.nativeV1Migration = GraphNativeV1MigrationAdapter(inspect: native.inspect) { seed, intent, source in
+            let plan = try native.plan(seed, intent, source)
+            return StoreNativeMigration(sourceSchema: plan.sourceSchema, seedURL: plan.seedURL, document: plan.document,
+                prepare: plan.prepare, configure: plan.configure, finish: { _ in throw NativeV1InjectedFailure() })
+        }
+        let interrupted = manager(adapter: adapted)
+        await #expect(throws: StoreRuntimeError.self) { try await interrupted.openGraph(migratingNativeV1: r) }
+        let configuration = StoreConfiguration(location: .sqlite(r.destinationURL), exclusiveGraphID: r.graphID.rawValue,
+            workspaceID: r.operationID, workspaceSessionID: UUID())
+        let resolved = try ResolvedStore(configuration)
+        let anchor = try SQLiteStoreCoordination.directory(resolved)
+        let abandoned = UUID()
+        try await CoordinatedFiles.run([.write(anchor)]) {
+            try AppGroupOwnerClaims.publish(abandoned, for: resolved, creating: false)
+        }
+        let restarted = manager()
+        await #expect(throws: (any Error).self) {
+            try await restarted.openGraph(migratingNativeV1: r, recoveringOfflineGeneration: UUID())
+        }
+        let unrelated = request(root, graph: r.graphID, operation: UUID())
+        await #expect(throws: GraphV1ConversionError.conflictingDestination) {
+            try await restarted.openGraph(migratingNativeV1: unrelated, recoveringOfflineGeneration: abandoned)
+        }
+        let recovered = try await restarted.openGraph(migratingNativeV1: r, recoveringOfflineGeneration: abandoned)
+        let graph = try recovered.opening.get()
+        #expect(try await graph.validateIntegrity() == 5)
+        #expect(try await restarted.backups.list(in: r.backupRoot).count == 1)
+        try await graph.close()
     }
 
     @Test(.enabled(if: nativeV1StagesAvailable)) func callerCancellationDrainsAdmittedNativeWorkAndReportsItsCommit() async throws {

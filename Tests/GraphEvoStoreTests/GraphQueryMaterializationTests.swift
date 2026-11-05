@@ -84,7 +84,7 @@ import GraphEvoModel
             #expect(try scope.query(query).items.isEmpty)
         }
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.rollback(); context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let node = try #require(session.nodes[excluded]), execute = try #require(GraphTypedStoreAdapter.database.graph.query)
@@ -139,7 +139,7 @@ import GraphEvoModel
         }
         let query = GraphQuery<Item>(budget: try budget())
         try await database.nativeOperation { native in
-            try await native.performBackgroundTask { context in
+            try native.testNativeContext { context in
                 defer { context.rollback(); context.reset() }
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let node = try #require(session.nodes[payload.id])

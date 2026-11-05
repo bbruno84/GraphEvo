@@ -59,7 +59,8 @@ private final class V1ConversionGate: @unchecked Sendable {
     func release() { semaphore.signal() }
 }
 
-@Suite(.timeLimit(.minutes(2))) struct GraphV1ConversionTests {
+// Each case can hold multiple native stores while exercising its own concurrency.
+@Suite(.serialized, .timeLimit(.minutes(2))) struct GraphV1ConversionTests {
     private func root() throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("V1Conversion-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true); return root
@@ -208,8 +209,16 @@ private final class V1ConversionGate: @unchecked Sendable {
         if afterCommit { registry = StoreRegistry(hooks: .init(afterCommit: { gate.block() })) }
         else { registry = StoreRegistry() }
         let m = manager(registry: registry, adapter: afterCommit ? GraphCoordinatorFactory.adapter : faultAdapter { gate.block() })
-        let task = Task { try await m.convertLocalV1Store(at: source, to: target, graphID: id, operationID: operation, backupsIn: backups) }
-        for await _ in gate.arrivals.stream { break }
+        let task = Task {
+            defer { gate.arrivals.continuation.finish() }
+            return try await m.convertLocalV1Store(at: source, to: target, graphID: id, operationID: operation, backupsIn: backups)
+        }
+        var arrivals = gate.arrivals.stream.makeAsyncIterator()
+        guard await arrivals.next() != nil else {
+            _ = try await task.value
+            Issue.record("The conversion did not reach the requested commit boundary.")
+            return
+        }
         task.cancel(); gate.release()
         if afterCommit {
             let result = try await task.value

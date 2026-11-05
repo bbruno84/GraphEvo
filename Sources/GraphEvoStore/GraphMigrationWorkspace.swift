@@ -260,6 +260,23 @@ package actor GraphMigrationWorkspace {
 
 extension GraphContextManager {
     /// Reacquire source holds and prove provenance/history before any editable working access.
+    /// Explicit offline recovery after the maintainer has stopped every workspace user.
+    package func recoverOfflineMigrationWorkspace(at directory: URL, generation: UUID) async throws {
+        let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
+        let descriptor = try WorkspaceFiles.read(directory)
+        let ownership = try WorkspaceDirectoryIdentity(directory)
+        let url = directory.appendingPathComponent(descriptor.storePath)
+        let configuration = StoreConfiguration(location: .sqlite(url), exclusiveGraphID: descriptor.graphID.rawValue,
+            contextOwnerID: contextOwnerID, workspaceID: descriptor.id)
+        try await StoreRegistry.recoverOfflineWorkspace(configuration, generation: generation,
+                                                         storeID: descriptor.baseline.storeID) {
+            guard try WorkspaceFiles.read(directory) == descriptor, try WorkspaceDirectoryIdentity(directory) == ownership,
+                  try WorkspaceFileIdentity(url) == descriptor.workingFile else {
+                throw GraphMigrationWorkspaceError.invalidWorkspace
+            }
+        }
+    }
+
     package func openMigrationWorkspace(for id: GraphID, at directory: URL,
                                        limits: GraphMigrationWorkspaceLimits = .init()) async throws -> GraphMigrationWorkspace {
         try limits.validate()
@@ -339,6 +356,7 @@ extension GraphContextManager {
         var working: StoreHandle?
         var stage: URL?
         var stageOwnership: WorkspaceDirectoryIdentity?
+        var stageConfiguration: StoreConfiguration?
         var published = false
         do {
             guard let entry = entries[id] else { throw GraphStoreError.closed }
@@ -346,7 +364,7 @@ extension GraphContextManager {
             cloud = try await reserveCloudPause(for: id)
             writes = try await owner.suspendLocalWrites()
             guard try await owner.participantAccess() == nil else { throw GraphMigrationWorkspaceError.participantUnsupported }
-            let source = try await owner.migrationBoundary()
+            let storeID = try await owner.storeIdentity()
             let sourceFile = try WorkspaceFileIdentity(location.url)
             let workspaceID = UUID()
             let staging = destination.deletingLastPathComponent().appendingPathComponent(".workspace-" + workspaceID.uuidString)
@@ -356,15 +374,21 @@ extension GraphContextManager {
             stageOwnership = stagingOwnership
             try workspaceID.uuidString.data(using: .utf8)!.write(to: staging.appendingPathComponent("owner"), options: .withoutOverwriting)
             let store = staging.appendingPathComponent("Graph.sqlite")
+            let sessionID = UUID()
+            let configuration = StoreConfiguration(location: .sqlite(store), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID, workspaceID: workspaceID, workspaceSessionID: sessionID)
+            stageConfiguration = configuration
             maintenance = try await owner.reserveMaintenance()
-            try await owner.copyStore(to: store, reservation: maintenance!, storeID: source.storeID)
+            let source = try await owner.copyStore(to: store, reservation: maintenance!, storeID: storeID)
             await maintenance?.release(); maintenance = nil
             try Task.checkCancellation()
-            // Only detached, private staging files are marked through the native metadata API.
-            try WorkspaceFiles.mark(store, workspaceID: workspaceID, graphID: id)
-            let sessionID = UUID()
-            try Data(sessionID.uuidString.utf8).write(to: staging.appendingPathComponent("activation"), options: .withoutOverwriting)
-            let configuration = StoreConfiguration(location: .sqlite(store), exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID, workspaceID: workspaceID, workspaceSessionID: sessionID)
+            // Mark only the exact detached snapshot before admitting its first owner.
+            let copiedFile = try WorkspaceFileIdentity(store)
+            try await SQLiteStoreCoordination.withDetachedWorkspace(configuration) {
+                guard try WorkspaceDirectoryIdentity(staging) == stagingOwnership,
+                      try WorkspaceFileIdentity(store) == copiedFile else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+                try WorkspaceFiles.mark(store, workspaceID: workspaceID, graphID: id)
+                try Data(sessionID.uuidString.utf8).write(to: staging.appendingPathComponent("activation"), options: .withoutOverwriting)
+            }
             let handle = try await registry.open(configuration, schema: schema)
             working = handle
             try await handle.inheritAccount(owner.accountControl())
@@ -384,9 +408,12 @@ extension GraphContextManager {
             try bytes.write(to: staging.appendingPathComponent("workspace.json"), options: .withoutOverwriting)
             try await handle.close(); working = nil
             try Task.checkCancellation()
-            guard try WorkspaceDirectoryIdentity(staging) == stagingOwnership else { throw GraphMigrationWorkspaceError.invalidWorkspace }
-            // moveItem refuses an occupied destination. Neither attached stores nor originals are moved.
-            try FileManager.default.moveItem(at: staging, to: destination)
+            try await SQLiteStoreCoordination.withDetachedWorkspace(configuration, destination: destination) {
+                guard try WorkspaceDirectoryIdentity(staging) == stagingOwnership,
+                      try WorkspaceFileIdentity(store) == descriptor.workingFile,
+                      try WorkspaceFiles.read(staging) == descriptor else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+                try FileManager.default.moveItem(at: staging, to: destination)
+            }
             published = true
             let final = try await registry.open(.init(location: .sqlite(destination.appendingPathComponent(descriptor.storePath)),
                 exclusiveGraphID: id.rawValue, contextOwnerID: contextOwnerID, workspaceID: workspaceID, workspaceSessionID: sessionID), schema: schema)
@@ -417,8 +444,16 @@ extension GraphContextManager {
             if let working { do { try await working.close() } catch { cleanupFailure = error } }
             if cleanupFailure == nil, !published, let stage, let stageOwnership {
                 do {
-                    guard try WorkspaceDirectoryIdentity(stage) == stageOwnership else { throw GraphMigrationWorkspaceError.invalidWorkspace }
-                    try FileManager.default.removeItem(at: stage)
+                    let remove: @Sendable () throws -> Void = {
+                        guard try WorkspaceDirectoryIdentity(stage) == stageOwnership else { throw GraphMigrationWorkspaceError.invalidWorkspace }
+                        try FileManager.default.removeItem(at: stage)
+                    }
+                    if let stageConfiguration {
+                        // Cleanup must settle even when preparation was cancelled.
+                        try await Task.detached {
+                            try await SQLiteStoreCoordination.withDetachedWorkspace(stageConfiguration, remove)
+                        }.value
+                    } else { try remove() }
                 } catch { cleanupFailure = error }
             }
             await maintenance?.release(); await writes?.release(); await cloud?.release()

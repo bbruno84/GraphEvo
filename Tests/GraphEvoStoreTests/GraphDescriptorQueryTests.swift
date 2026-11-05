@@ -83,7 +83,7 @@ private struct CanonicalDescriptorItem: GraphModel {
             try $0.insert(GraphRecord(id: damaged, type: "Unrelated"))
         }
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let fetch = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityName)
                 fetch.predicate = NSPredicate(format: "type == %@", "Unrelated")
                 let row = try #require(context.fetch(fetch).first)
@@ -104,7 +104,7 @@ private struct CanonicalDescriptorItem: GraphModel {
             try $0.insert(GraphRecord(id: second, type: DescriptorItem.graphType, properties: ["rank": .integer(2)]))
         }
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let fetch = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityPropertyName)
                 fetch.predicate = NSPredicate(format: "name == %@ AND ge2Int64 == 1", "rank")
                 let row = try #require(context.fetch(fetch).first)
@@ -132,7 +132,7 @@ private struct CanonicalDescriptorItem: GraphModel {
             try scope.insert(GraphRecord(id: f.graph.makeNodeID(), type: "OtherAction", endpoints: .action(subjects: [a], objects: [b])))
         }
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 for name in [ModelIdentifier.relationshipPropertyName, ModelIdentifier.actionPropertyName] {
                     let fetch = NSFetchRequest<NSManagedObject>(entityName: name)
                     fetch.predicate = NSPredicate(format: "name == %@ AND node.type IN %@", GraphTypedStoreAdapter.formatsKey, ["OtherEdge", "OtherAction"])
@@ -154,7 +154,7 @@ private struct CanonicalDescriptorItem: GraphModel {
         let f = try await fixture(), id = f.graph.makeNodeID()
         try await f.graph.transaction { try $0.insert(GraphRecord(id: id, type: DescriptorItem.graphType)) }
         try await f.graph.nativeOperation { container in
-            try await container.performBackgroundTask { context in
+            try container.testNativeContext { context in
                 let fetch = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityPropertyName)
                 fetch.predicate = NSPredicate(format: "name == %@ AND node.ge2NodeID == %@", GraphTypedStoreAdapter.formatsKey, id.rawValue.uuidString)
                 let row = try #require(context.fetch(fetch).first)
