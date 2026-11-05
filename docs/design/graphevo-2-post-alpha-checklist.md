@@ -102,6 +102,9 @@ failed-close quarantine pass in that fixture. The
 passes the normal thirty-cycle App Group controls on physical iPad and iOS 18.5
 simulator. Physical XR, the full physical fault gate, actual destructive
 maintenance and other native paths remain open.
+The [background expiration follow-up](results/apple-owner-background-expiration-2026-11-05.md)
+verifies one actual expiration and exact recovery after process exit. It also
+verifies ordered writes with briefly overlapping native attachments.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 
