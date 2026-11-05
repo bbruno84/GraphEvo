@@ -97,8 +97,11 @@ passes the one-graph admission transition and ordinary Apple-coordinated native
 transactions on macOS. The [R experiment](results/apple-owner-presence-replacement-2026-11-05.md)
 passes independent-process and composed lifecycle controls without a lifetime
 presence fence on one selected macOS store. Dry-run maintenance and injected
-failed-close quarantine pass in that fixture. Physical App Group validation
-with R, actual destructive maintenance and other native paths remain open.
+failed-close quarantine pass in that fixture. The
+[R device continuation](results/apple-owner-r-device-validation-2026-11-05.md)
+passes the normal thirty-cycle App Group controls on physical iPad and iOS 18.5
+simulator. Physical XR, the full physical fault gate, actual destructive
+maintenance and other native paths remain open.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 
