@@ -22,7 +22,8 @@ private actor WorkspaceOpenFailure {
     }
 }
 
-@Suite(.timeLimit(.minutes(2))) struct GraphMigrationWorkspaceTests {
+// Each case can hold multiple native stores while exercising its own concurrency.
+@Suite(.serialized, .timeLimit(.minutes(2))) struct GraphMigrationWorkspaceTests {
     private struct Abort: Error {}
     private func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Workspace-" + UUID().uuidString)

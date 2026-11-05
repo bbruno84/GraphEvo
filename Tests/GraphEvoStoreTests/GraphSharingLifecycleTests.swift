@@ -348,8 +348,11 @@ private actor RemovalGate {
     }
     @Test func purgeRetriesWhenReplicaDisappearsWhileOpening() async throws {
         let contended = AsyncStream<Void>.makeStream()
+        let capture = OSAllocatedUnfairLock(initialState: false)
         var hooks = StoreLifecycleHooks()
-        hooks.didSubmitSQLiteAccess = { contended.continuation.yield(()) }
+        hooks.didSubmitSQLiteAccess = {
+            if capture.withLock({ $0 }) { contended.continuation.yield(()) }
+        }
         let f = try await fixture(registry: StoreRegistry(hooks: hooks))
         defer { try? FileManager.default.removeItem(at: f.root) }
         let id = f.graph.id
@@ -357,11 +360,10 @@ private actor RemovalGate {
         let resolved = try ResolvedStore(.init(location: .sqlite(f.url), exclusiveGraphID: id.rawValue))
         let writer = try await TestSQLiteWriteGrant.acquire(resolved)
         defer { writer.release() }
+        capture.withLock { $0 = true }
         let leaving = Task { try await f.manager.leaveCloudShare(for: id, configuration: f.config) }
         defer { leaving.cancel() }
         var signals = contended.stream.makeAsyncIterator()
-        // Setup also opened the original replica.
-        _ = await signals.next()
         _ = await signals.next()
         let coordinator = NSPersistentStoreCoordinator(managedObjectModel: GraphRuntimeSchema.typedProperties.makeModel())
         try coordinator.destroyPersistentStore(at: f.url, ofType: NSSQLiteStoreType, options: nil)

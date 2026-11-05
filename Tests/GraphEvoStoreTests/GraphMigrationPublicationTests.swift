@@ -32,7 +32,8 @@ private final class PublicationGate: @unchecked Sendable {
     func release() { semaphore.signal() }
 }
 
-@Suite(.timeLimit(.minutes(2))) struct GraphMigrationPublicationTests {
+// Each case can hold multiple native stores while exercising its own concurrency.
+@Suite(.serialized, .timeLimit(.minutes(2))) struct GraphMigrationPublicationTests {
     private func directory() throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Publication-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
