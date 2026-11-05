@@ -206,3 +206,42 @@ refused until workspace close; resuming without a schema change still requires
 exclusivity. Other regressions cover actual child-process lock release, namespace
 replacement refusal, reserved-fence borrowing, idle-owner destruction refusal,
 generic writable admission refusal and pending mutation/cascade/rollback behavior.
+
+## Dedicated App Group stores
+
+The package-only App Group `GraphContext` uses an entitled container and the
+reserved `GraphEvo-AppGroup-v1/<graph UUID>/Store.sqlite` location under
+`Library/Application Support`. It uses the
+same graph create/open entry and S04 schema. The namespace selects a protocol
+for fresh stores; there is no in-place change of protocol or schema migration.
+Generic SQLite, v1, native mirroring and uncoordinated maintenance must refuse
+that namespace, including through aliases. Ordinary locations retain their
+previous ownership policy. All participating processes use the same protocol;
+direct filesystem access is outside the contract.
+
+There is no lifetime owners flock for these stores. The existing stable writer
+fence is acquired before a finite `NSFileCoordinator` request. The presenter
+and durable owner generation protect the whole native attachment lifetime.
+Register and publish before attaching; on normal close, drain admitted work and
+detach before releasing the registration and presenter. On failed close,
+retain ownership and quarantine the native owner. An iOS host must start
+closing its graph leases when it becomes inactive and budget time for final
+detachment; an extension closes its own handle before returning. If the system interrupts the close,
+the claim remains. This does not make a retained presenter safe to suspend.
+Foreground re-entry opens a new handle after the old one closes.
+
+Normal reads remain generation-pinned. Writes and native prepared-transaction
+phases finish inside the granted accessor; external file preparation stays
+outside it. Participant purge uses the same App Group configuration when
+recovering after restart. Cold purge refuses an existing registration before
+attaching or creating its own. Purge verifies the native store and graph
+identities, requires the sole registered generation before and inside the deletion grant,
+and holds the writer through artifact cleanup. With another or unverified
+registration, or missing evidence after an interrupted destruction, the
+membership remains `purging`. A fresh owner can read an intact store where
+membership permits, but cannot remove an abandoned generation. PID, age and
+file absence are not release authority.
+
+The package does not expose App Group role selection or a production orphan
+recovery operation. See [PA02](graphevo-2-post-alpha-checklist.md) for remaining
+physical-device, public-role and CloudKit validation.

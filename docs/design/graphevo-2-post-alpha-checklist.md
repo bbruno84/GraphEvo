@@ -120,15 +120,20 @@ The [two-process iPad continuation](results/app-group-two-process-purge-2026-11-
 composes widget attachment, live refusal, interrupted native close,
 supervised exit and actual local leave retry. A cold app keeps the replica in
 `purging` before exact release and removes only that replica after release.
-The admission gate and CloudKit adapter are laboratory injections. Supported
-App Group recovery authority and Apple owner protocol integration remain open.
+The admission gate and CloudKit adapter are laboratory injections. Production
+authority to release abandoned App Group generations remains open.
 The [pre-integration candidate](results/app-group-preintegration-candidate-2026-11-05.md)
 combines real local purge with Apple coordination and durable owner
 registrations. The physical iPad purge results cover live refusal, cold retry
 after a supervised process exit, and normal detach. Physical iPhone XR moves
 to pre-beta validation for this candidate.
-No PA02 acceptance box closes. Deferred
-layout, migration-workspace and broader platform cases remain pre-beta work.
+The [dedicated runtime protocol](graphevo-2-controlled-store-access.md#dedicated-app-group-stores)
+integrates Apple coordination in the package-only App Group path. Purge retains
+unverified claims; no laboratory supervisor or recovery authority ships.
+The [integration validation](results/app-group-runtime-integration-2026-11-05.md)
+records the scoped results and the pending physical app/widget replay.
+No PA02 acceptance box closes. Public process roles, real CloudKit, physical
+XR, and layout/migration-workspace cases remain pre-beta work.
 
 ## How to close an item
 

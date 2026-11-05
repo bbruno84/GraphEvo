@@ -96,8 +96,8 @@ verifies actual local leave and retry on iPad with a widget attached to the
 same replica. The live owner blocks deletion. After an interruption inside
 close, a new app still refuses deletion until the laboratory supervisor
 releases the exact registration. The retry removes only the target replica.
-PA02 remains open for production recovery authority and Apple owner protocol
-integration. Cleanup stays pending without proof of the exact prior owner's exit.
+The experiment did not establish production recovery authority. Cleanup
+stays pending without proof of the exact prior owner's exit.
 
 The [pre-integration candidate](results/app-group-preintegration-candidate-2026-11-05.md)
 combines the real participant purge and Apple owner coordination without the
@@ -109,6 +109,14 @@ Nine physical lifecycle fault fixtures recover the exact baseline with the
 original registration retained. UIKit expiration and a close held behind an
 Apple accessor have separate physical traces. A controlled budget release
 while close waits preserves the registration and exact cold readback.
+
+The package-only [App Group runtime protocol](graphevo-2-controlled-store-access.md#dedicated-app-group-stores)
+uses a dedicated fresh S04 location, finite Apple grants, and durable owner
+generations. The short writer fence remains; ordinary stores and v1 conversion
+keep their previous protocol. Missing release or cleanup evidence keeps
+participant purge pending. The [runtime validation report](results/app-group-runtime-integration-2026-11-05.md)
+separates local and physical runtime checks from the pending physical app/widget
+replay. Public roles and orphan recovery remain outside this increment.
 
 The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
 extends writer-only research to presence, detach and destructive maintenance.
