@@ -44,14 +44,14 @@ jobs:
                                           start_new_session=True)
                   try:
                       if sample:
-                          for offset in (13, 32):
+                          for offset in (6, 13):
                               if task.poll() is not None:
                                   break
                               time.sleep(max(0, start + offset - time.monotonic()))
                               matching = subprocess.run(['pgrep', '-f', r'/GraphEvoPackageTests\.xctest/Contents/MacOS/GraphEvoPackageTests'], text=True, capture_output=True)
                               pids = matching.stdout.split()
                               if len(pids) == 1:
-                                  with (out / f'sample-{offset}.log').open('w') as report:
+                                  with (out / f'{name}-sample-{offset}.log').open('w') as report:
                                       subprocess.run(['sample', pids[0], '1', '10'], stdout=report, stderr=subprocess.STDOUT, timeout=8, check=False)
                       result = task.wait(timeout=max(1, 175 - (time.monotonic() - start)))
                   except subprocess.TimeoutExpired:
@@ -64,17 +64,22 @@ jobs:
                       print(line, flush=True)
 
           focused = 'GraphAutomaticIntegrationTests|AppGroupCoordinationTests|SQLiteStoreCoordinationTests|GraphCoordinatorTests'
-          test('isolated-original', ['--filter', focused])
-          test('full-original', [], sample=True)
-          path = pathlib.Path('Tests/GraphEvoStoreTests/GraphAutomaticIntegrationTests.swift')
-          original = path.read_text()
-          before = '            await Task.yield()'
-          assert original.count(before) == 1
-          path.write_text(original.replace(before, '            try await Task.sleep(for: .milliseconds(10))'))
-          with (out / 'paced-build.log').open('w') as build:
+          test('automatic-alone', ['--filter', 'GraphAutomaticIntegrationTests'], sample=True)
+          fixture = pathlib.Path('Tests/GraphEvoStoreTests/AppGroupCoordinationTests.swift')
+          # Replace only the fixture's independent accessor submission.
+          source = fixture.read_text()
+          start = source.index('        let competingAccess = Task.detached {')
+          end = source.index('        await heldGrant.reached.wait()', start)
+          fixture.write_text(source[:start] + """        let competingAccess = Task {
+                      try await CoordinatedFiles.run([.write(root)]) {
+                          heldGrant.hold()
+                      }
+                  }
+          """ + source[end:])
+          with (out / 'fixture-build.log').open('w') as build:
               subprocess.run(['swift', 'build', '--build-tests'], stdout=build, stderr=subprocess.STDOUT, check=True)
-          test('full-paced', [])
-          path.write_text(original)
+          test('isolated-fixture', ['--filter', focused])
+          test('full-fixture', [], sample=True)
           PY
       - name: Retain diagnostic text
         if: always()
