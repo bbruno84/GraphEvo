@@ -492,6 +492,7 @@ enum WorkspaceFiles {
         return descriptor
     }
     static func destination(_ url: URL, source: URL) throws -> URL {
+        try AppGroupStoreLocation.rejectUncoordinated(url)
         guard url.isFileURL, url.host == nil || url.host == "localhost", url.query == nil, url.fragment == nil else {
             throw GraphMigrationWorkspaceError.invalidDestination
         }
@@ -504,6 +505,7 @@ enum WorkspaceFiles {
         return result
     }
     static func mark(_ url: URL, workspaceID: UUID, graphID: GraphID) throws {
+        try AppGroupStoreLocation.rejectUncoordinated(url)
         var metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
         guard metadata[StoreNativeContext.workspaceKey] == nil,
               metadata[StoreNativeContext.historySyncGraphKey] as? String == graphID.rawValue.uuidString else {
@@ -513,6 +515,7 @@ enum WorkspaceFiles {
         try NSPersistentStoreCoordinator.setMetadata(metadata, forPersistentStoreOfType: NSSQLiteStoreType, at: url, options: nil)
     }
     static func remove(_ directory: URL, descriptor: GraphMigrationWorkspaceDescriptor, ownership: WorkspaceDirectoryIdentity, storeOwnership: WorkspaceFileIdentity) throws {
+        try AppGroupStoreLocation.rejectUncoordinated(directory)
         guard try WorkspaceDirectoryIdentity(directory) == ownership,
               try WorkspaceFileIdentity(directory.appendingPathComponent(descriptor.storePath)) == storeOwnership else { throw GraphMigrationWorkspaceError.invalidWorkspace }
         // Bound traversal and reject links before authorizing recursive removal of an owned directory.

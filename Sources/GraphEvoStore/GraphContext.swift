@@ -47,6 +47,12 @@ public actor GraphContext {
         return await retained(try await manager.openGraph(id: id, at: storeURL))
     }
 
+    /// The exact store location to pass to the ordinary graph open/create entry.
+    package nonisolated func appGroupStoreURL(for id: GraphID) throws -> URL {
+        guard let appGroup = manager.appGroup else { throw GraphStoreError.unsupportedLayout }
+        return appGroup.storeURL(for: id.rawValue)
+    }
+
     private func retained(_ graph: GraphStore) async -> GraphStore {
         await graph.retainPublicContext(self, identity: identity)
         return graph

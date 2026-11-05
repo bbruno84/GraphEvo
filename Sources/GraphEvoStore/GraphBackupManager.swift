@@ -147,6 +147,8 @@ package actor GraphBackupManager {
 
     /// No existing file, graph, cloud cursor or session is replaced by this operation.
     package func restore(at backup: URL, to destination: URL) async throws -> GraphRestoredBackup {
+        try AppGroupStoreLocation.rejectUncoordinated(backup)
+        try AppGroupStoreLocation.rejectUncoordinated(destination)
         let backup = backup.standardizedFileURL.resolvingSymlinksInPath()
         let destination = destination.standardizedFileURL
         guard destination.isFileURL, !FileManager.default.fileExists(atPath: destination.path),
@@ -185,6 +187,7 @@ package actor GraphBackupManager {
 
     /// Export reuses a completed package; it never takes another live graph snapshot.
     package func export(at source: URL, to destination: URL) async throws -> GraphBackup {
+        try AppGroupStoreLocation.rejectUncoordinated(destination)
         let source = source.standardizedFileURL.resolvingSymlinksInPath()
         let destination = destination.standardizedFileURL
         guard destination.isFileURL, destination.query == nil, destination.fragment == nil,
@@ -244,6 +247,7 @@ package actor GraphBackupManager {
         if retention.owners.remove(owner) != nil { try writeRetention(retention, directory: directory) }
     }
     package func remove(at directory: URL) throws {
+        try AppGroupStoreLocation.rejectUncoordinated(directory)
         let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
         let lease = try BackupRootLease(directory.deletingLastPathComponent()); defer { lease.release() }
         let manifest = try readManifest(directory)
@@ -395,6 +399,7 @@ package actor GraphBackupManager {
         return try Data(contentsOf: url)
     }
     private static func directory(_ url: URL) throws -> URL {
+        try AppGroupStoreLocation.rejectUncoordinated(url)
         guard url.isFileURL, url.query == nil, url.fragment == nil else { throw GraphBackupError.invalidDestination }
         let result = url.standardizedFileURL.resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: result, withIntermediateDirectories: true)

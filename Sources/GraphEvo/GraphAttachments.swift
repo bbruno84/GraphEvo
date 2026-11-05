@@ -29,11 +29,16 @@ extension GraphStore {
         let payload = try GraphAttachmentPayload(id: makeNodeID(), ownerID: ownerID,
             fileName: fileName ?? source.lastPathComponent, contentType: contentType, data: data)
         let graphID = id
-        let shared = try await nativeOperation { native in
-            guard let cloud = native as? NSPersistentCloudKitContainer else { return false }
-            return try await cloud.performBackgroundTask { context in
-                GraphSharingNative.prepare(context, container: cloud)
-                return try GraphTypedStoreAdapter.Session(context, graphID, database: true).isShared
+        let shared: Bool
+        if usesCoordinatedStore {
+            shared = false
+        } else {
+            shared = try await nativeOperation { native in
+                guard let cloud = native as? NSPersistentCloudKitContainer else { return false }
+                return try await cloud.performBackgroundTask { context in
+                    GraphSharingNative.prepare(context, container: cloud)
+                    return try GraphTypedStoreAdapter.Session(context, graphID, database: true).isShared
+                }
             }
         }
         if shared { _ = try await insertShared(payload) }

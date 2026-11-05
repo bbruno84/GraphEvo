@@ -271,6 +271,20 @@ package actor StoreRegistry {
 
     init(hooks: StoreLifecycleHooks = StoreLifecycleHooks()) { self.hooks = hooks }
 
+    /// Check a restart-supplied App Group path without admitting a second native owner.
+    package nonisolated static func validateAppGroupIdentity(_ configuration: StoreConfiguration, storeID: String) async throws {
+        let resolved = try ResolvedStore(configuration)
+        guard configuration.appGroup != nil, let url = resolved.url, let graphID = configuration.exclusiveGraphID else {
+            throw StoreRuntimeError.resourceReserved
+        }
+        let writer = try await StoreProcessLock.acquire(resolved)
+        defer { writer.release() }
+        let presenter = AppGroupStorePresenter(directory: url.deletingLastPathComponent())
+        try await AppGroupStoreAccess(presenter: presenter, associatePresenter: false).run {
+            try StoreResources.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
+        }
+    }
+
     package func open(_ configuration: StoreConfiguration, schema: StoreSchema,
                       nativeMigration: StoreNativeMigration? = nil,
                       mode: StoreOpeningMode = .openOrCreate) async throws -> StoreHandle {
