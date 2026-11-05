@@ -90,10 +90,14 @@ loading Core Data. A purge recovery interrupted by file removal can retry.
 fix and regression after 50 focused macOS and 49 iOS 18.5 simulator tests.
 The [participant purge device result](results/app-group-participant-purge-device-2026-11-05.md)
 verifies terminal read refusal, exact replica removal on retry and neighboring
-store integrity on a physical iPad and iPhone XR. The private build uses an
-injected claim and CloudKit adapter. PA02 remains open for the combined
-multiprocess purge and owner recovery. Cleanup stays pending without proof
-of the exact prior owner's exit.
+store integrity on a physical iPad and iPhone XR. The
+[two-process continuation](results/app-group-two-process-purge-2026-11-05.md)
+verifies actual local leave and retry on iPad with a widget attached to the
+same replica. The live owner blocks deletion. After an interruption inside
+close, a new app still refuses deletion until the laboratory supervisor
+releases the exact registration. The retry removes only the target replica.
+PA02 remains open for production recovery authority and Apple owner protocol
+integration. Cleanup stays pending without proof of the exact prior owner's exit.
 
 The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
 extends writer-only research to presence, detach and destructive maintenance.
