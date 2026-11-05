@@ -110,13 +110,14 @@ original registration retained. UIKit expiration and a close held behind an
 Apple accessor have separate physical traces. A controlled budget release
 while close waits preserves the registration and exact cold readback.
 
-The package-only [App Group runtime protocol](graphevo-2-controlled-store-access.md#dedicated-app-group-stores)
-uses a dedicated fresh S04 location, finite Apple grants, and durable owner
-generations. The short writer fence remains; ordinary stores and v1 conversion
-keep their previous protocol. Missing release or cleanup evidence keeps
-participant purge pending. The [runtime validation report](results/app-group-runtime-integration-2026-11-05.md)
-separates local and physical runtime checks from the pending physical app/widget
-replay. Public roles and orphan recovery remain outside this increment.
+The proposed package-only [App Group runtime protocol](graphevo-2-controlled-store-access.md#dedicated-app-group-stores)
+uses a fresh S04 namespace and Apple as the only source of interprocess
+exclusion on that store path. Durable owner generations describe interrupted
+lifecycle work. Purge uses one deletion grant, and prepared CloudKit writes
+revalidate Persistent History before saving. The
+[runtime validation report](results/app-group-runtime-integration-2026-11-05.md)
+distinguishes this candidate from the prior hybrid and tracks the pending
+physical app/widget replay. Public roles and orphan recovery remain open.
 
 The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
 extends writer-only research to presence, detach and destructive maintenance.

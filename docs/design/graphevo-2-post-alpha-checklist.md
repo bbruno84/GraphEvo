@@ -128,8 +128,9 @@ registrations. The physical iPad purge results cover live refusal, cold retry
 after a supervised process exit, and normal detach. Physical iPhone XR moves
 to pre-beta validation for this candidate.
 The [dedicated runtime protocol](graphevo-2-controlled-store-access.md#dedicated-app-group-stores)
-integrates Apple coordination in the package-only App Group path. Purge retains
-unverified claims; no laboratory supervisor or recovery authority ships.
+proposes Apple-only interprocess coordination on the fresh package-only
+App Group path. Purge retains unresolved lifecycle evidence and runs native
+destruction and cleanup within one grant.
 The [integration validation](results/app-group-runtime-integration-2026-11-05.md)
 records the scoped results and the pending physical app/widget replay.
 No PA02 acceptance box closes. Public process roles, real CloudKit, physical

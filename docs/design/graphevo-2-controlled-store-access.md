@@ -209,42 +209,41 @@ generic writable admission refusal and pending mutation/cascade/rollback behavio
 
 ## Dedicated App Group stores
 
-The package-only App Group `GraphContext` uses an entitled container and the
-reserved `GraphEvo-AppGroup-v1/<graph UUID>/Store.sqlite` location under
-`Library/Application Support`. It uses the
-same graph create/open entry and S04 schema. The namespace selects a protocol
-for fresh stores; there is no in-place change of protocol or schema migration.
-Generic SQLite, v1, native mirroring and uncoordinated maintenance must refuse
-that namespace, including through aliases. Ordinary locations retain their
-previous ownership policy. All participating processes use the same protocol;
-direct filesystem access is outside the contract.
+The package-only App Group `GraphContext` uses an entitled container and
+`GraphEvo-AppGroup-v2/<graph UUID>/Store.sqlite` under
+`Library/Application Support`. It uses the same graph create/open entry and
+S04 schema. Both App Group namespaces are reserved against generic SQLite,
+v1, native mirroring and uncoordinated maintenance, including through aliases.
+The new protocol admits fresh v2 locations only. It does not adopt v1
+experimental locations. All processes accessing a v2 store must participate
+through the same canonical directory.
 
-There is no lifetime owners flock for these stores. The existing stable writer
-fence is acquired before a finite `NSFileCoordinator` request. The presenter
-and durable owner generation protect the whole native attachment lifetime.
-Register and publish before attaching; on normal close, drain admitted work and
-detach before releasing the registration and presenter. On failed close,
-retain ownership and quarantine the native owner. An iOS host must start
-closing its graph leases when it becomes inactive and budget time for final
-detachment; an extension closes its own handle before returning. If the system interrupts the close,
-the claim remains. This does not make a retained presenter safe to suspend.
-Foreground re-entry opens a new handle after the old one closes.
+`NSFileCoordinator` provides interprocess exclusion for opening, writes,
+identity validation, close and purge. These paths do not acquire advisory
+writer or owner sidecars. Local admission drains in-flight operations before
+close; ordinary reads remain generation-pinned. The native owner registers its
+presenter and records its generation before attaching Core Data under an Apple
+grant. Close detaches before clearing both. The host starts closing its graph
+leases on inactivity, and the extension closes its handle before returning.
+If the system interrupts close or native detachment fails, the registration
+records that its detach was not confirmed.
 
-Normal reads remain generation-pinned. Writes and native prepared-transaction
-phases finish inside the granted accessor; external file preparation stays
-outside it. Participant purge uses the same App Group configuration when
-recovering after restart. Cold purge refuses an existing registration before
-attaching or creating its own. Purge verifies the native store and graph
-identities, requires the sole registered generation before and inside the deletion grant,
-and holds the writer through artifact cleanup. With another or unverified
-registration, or missing evidence after an interrupted destruction, the
-membership remains `purging`. If a peer prevents destruction before Core
-Data is asked to delete the store, the purging owner detaches and removes
-only its own registration. A later attempt reopens after the peer detaches.
-Once native destruction has been attempted, close cannot discard its cleanup
-authority. A fresh owner can read an intact store where membership permits,
-but cannot remove an abandoned generation. PID, age and
-file absence are not release authority.
+Prepared CloudKit writes capture the file and native store identity and
+Persistent History token under the first grant. They stage outgoing assets in a
+unique namespace outside that grant. A fresh context validates the boundary
+under the final grant before publishing. Changed or unavailable history causes
+rollback and cleanup of the attempt's own files. The retry starts from current
+state. An App Group staging attempt does not sweep other attempts' files.
+
+A purge requests an Apple deletion grant so active presenters can refuse it.
+After a grant, remaining foreign registrations are unresolved detach evidence.
+Cold purge checks for such evidence before attaching. Native identity
+verification, Core Data destruction, artifact cleanup and registration removal
+share one deletion grant on the stable directory. If refusal precedes native
+destruction, the purging owner detaches under a normal grant and the membership
+stays `purging` until retry. After native destruction starts, only verified
+cleanup can release ownership. Restart without sufficient evidence leaves the
+purge pending. PID, age and file absence are not release authority.
 
 The package does not expose App Group role selection or a production orphan
 recovery operation. See [PA02](graphevo-2-post-alpha-checklist.md) for remaining

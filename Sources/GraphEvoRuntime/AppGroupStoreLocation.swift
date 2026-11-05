@@ -2,7 +2,8 @@ import Foundation
 
 /// A package-only capability rooted in an entitled App Group container.
 package struct AppGroupStoreLocation: Sendable, Equatable {
-    static let namespace = "GraphEvo-AppGroup-v1"
+    static let namespace = "GraphEvo-AppGroup-v2"
+    private static let previousNamespace = "GraphEvo-AppGroup-v1"
     private let root: URL
 
     package init(identifier: String) throws {
@@ -25,7 +26,10 @@ package struct AppGroupStoreLocation: Sendable, Equatable {
     }
 
     static func isReserved(_ url: URL) -> Bool {
-        url.pathComponents.contains { $0.caseInsensitiveCompare(namespace) == .orderedSame }
+        url.pathComponents.contains {
+            $0.caseInsensitiveCompare(namespace) == .orderedSame ||
+                $0.caseInsensitiveCompare(previousNamespace) == .orderedSame
+        }
     }
 
     package static func rejectUncoordinated(_ url: URL) throws {

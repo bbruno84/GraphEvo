@@ -1,6 +1,11 @@
 import Foundation
 import os
 
+/// Distinguishes a Foundation refusal from an error thrown by native work.
+struct AppGroupAccessDenied: Error {
+    let underlying: any Error
+}
+
 /// A single finite Apple coordination request.
 final class AppGroupStoreAccess: @unchecked Sendable {
     // Foundation permits cancel() from any thread. Submission and the accessor
@@ -26,14 +31,16 @@ final class AppGroupStoreAccess: @unchecked Sendable {
     private let associatePresenter: Bool
     private let cancellable: Bool
     private let options: NSFileCoordinator.WritingOptions
+    private let reportDenial: Bool
     private let onSubmit: (@Sendable () -> Void)?
 
     init(presenter: AppGroupStorePresenter, associatePresenter: Bool = true, cancellable: Bool = true,
-         options: NSFileCoordinator.WritingOptions = [], onSubmit: (@Sendable () -> Void)? = nil) {
+         options: NSFileCoordinator.WritingOptions = [], reportDenial: Bool = false, onSubmit: (@Sendable () -> Void)? = nil) {
         self.presenter = presenter
         self.associatePresenter = associatePresenter
         self.cancellable = cancellable
         self.options = options
+        self.reportDenial = reportDenial
         self.onSubmit = onSubmit
     }
 
@@ -53,7 +60,9 @@ final class AppGroupStoreAccess: @unchecked Sendable {
                         coordinator.value.coordinate(with: [intent], queue: accessorQueue) { [self] error in
                             let result: Result<Value, any Error>
                             if let error {
-                                result = .failure(state.withLock { $0.cancelled } ? CancellationError() : error)
+                                if state.withLock({ $0.cancelled }) { result = .failure(CancellationError()) }
+                                else if reportDenial { result = .failure(AppGroupAccessDenied(underlying: error)) }
+                                else { result = .failure(error) }
                             } else {
                                 result = Result {
                                     guard !state.withLock({ $0.cancelled }) else { throw CancellationError() }

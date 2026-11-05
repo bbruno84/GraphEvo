@@ -2,6 +2,7 @@ import CloudKit
 import CoreData
 import Foundation
 import Testing
+import os
 @testable import GraphEvo
 @testable import GraphEvoModel
 @testable import GraphEvoStore
@@ -152,9 +153,10 @@ private actor RemovalGate {
         let configuration = f.manager.graphStoreConfiguration(f.graph.id, at: f.url)
         let resolved = try ResolvedStore(configuration)
         let generation = UUID()
-        let writer = try await StoreProcessLock.acquire(resolved)
-        try AppGroupOwnerClaims.publish(generation, for: resolved, creating: false)
-        writer.release()
+        let peer = AppGroupStorePresenter(directory: f.url.deletingLastPathComponent())
+        try await AppGroupStoreAccess(presenter: peer, associatePresenter: false).run {
+            try AppGroupOwnerClaims.publish(generation, for: resolved, creating: false)
+        }
 
         await #expect(throws: (any Error).self) {
             try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
@@ -169,9 +171,9 @@ private actor RemovalGate {
 
         // Simulate a successful close by the other generation. Production only
         // removes its own claim after native detachment.
-        let finish = try await StoreProcessLock.acquire(resolved)
-        try AppGroupOwnerClaims.remove(generation, for: resolved)
-        finish.release()
+        try await AppGroupStoreAccess(presenter: peer, associatePresenter: false).run {
+            try AppGroupOwnerClaims.remove(generation, for: resolved)
+        }
         try await waitRemoved(f)
         #expect(try Data(contentsOf: neighborURL) == before)
         for artifact in [f.url.path, f.url.path + "-wal", f.url.path + "-shm"] {
@@ -261,9 +263,15 @@ private actor RemovalGate {
         func fail() throws { if remaining > 0 { remaining -= 1; throw GraphCloudError.persistence } }
     }
     @Test func appGroupCloseAfterNativeDestructionFailureRetainsClaimUntilRetry() async throws {
-        let failure = FailureOnce()
+        let failed = OSAllocatedUnfairLock(initialState: false)
         var hooks = StoreLifecycleHooks()
-        hooks.beforeDestroyedArtifactCleanup = { try await failure.fail() }
+        hooks.beforeAppGroupArtifactCleanup = {
+            try failed.withLock { value in
+                guard !value else { return }
+                value = true
+                throw GraphCloudError.persistence
+            }
+        }
         let f = try await fixture(registry: StoreRegistry(hooks: hooks), appGroup: true)
         defer { try? FileManager.default.removeItem(at: f.root) }
         let owners = f.url.deletingLastPathComponent().appendingPathComponent(".owners-v1")

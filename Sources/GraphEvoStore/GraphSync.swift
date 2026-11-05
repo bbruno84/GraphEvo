@@ -142,14 +142,22 @@ actor GraphSyncSession {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
-        let location = try await handle.snapshot().location
-        guard case .sqlite(let storeURL) = location else { throw GraphCloudError.invalidConfiguration }
+        let snapshot = try await handle.snapshot()
+        guard case .sqlite(let storeURL) = snapshot.location else { throw GraphCloudError.invalidConfiguration }
+        let stagingNamespace = snapshot.usesAppGroupCoordination ? UUID() : nil
         let result = try await handle.preparedControlTransaction(
             prepare: { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) },
             materialize: { prepared, check in
                 let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL,
                                                                                               storeID: prepared.storeID))
-                return try await spool.freeze(prepared, identity: binding.identity, check: check)
+                return try await spool.freeze(prepared, identity: binding.identity,
+                                              stagingNamespace: stagingNamespace, check: check)
+            },
+            discard: { batch in
+                guard let stagingNamespace, let root = batch.assetRoot,
+                      let spool = try? GraphCloudAssetSpool(root: root) else { return }
+                let owned = batch.items.compactMap(\.assetReference).filter { $0.namespace == stagingNamespace }
+                await spool.remove(owned, retaining: [])
             },
             finish: { context, batch in
                 try cloud.finishPrepared(context, id, binding, batch, limits)

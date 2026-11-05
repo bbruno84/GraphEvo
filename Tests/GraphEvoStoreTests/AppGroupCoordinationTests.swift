@@ -32,6 +32,68 @@ private actor AsyncCheckpoint {
 @Suite(.timeLimit(.minutes(2))) struct AppGroupCoordinationTests {
     @Test
     @available(iOS 17, macOS 14, *)
+    func preparedWriteRejectsACommitByAnIndependentNativeOwner() async throws {
+        let directory = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let group = AppGroupStoreLocation(container: directory)
+        let id = GraphID(), context = appGroupContext(group)
+        let url = try context.appGroupStoreURL(for: id)
+        let graph = try await context.createGraph(id: id, at: url)
+        try await graph.close()
+
+        let resolved = try ResolvedStore(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue, appGroup: group))
+        let schema = GraphRuntimeSchema.typedProperties
+        let owner = UUID(), identity = try resolved.fileIdentity()
+        // The shared gateway UUID lets this fixture use two independent
+        // coordinators while still executing the real Apple access path.
+        let first = try await StoreResources.open(resolved, schema: schema, hooks: .init(), owner: owner,
+            nativeMigration: nil, mode: .existing, expectedIdentity: identity)
+        let peer = try await StoreResources.open(resolved, schema: schema, hooks: .init(), owner: owner,
+            nativeMigration: nil, mode: .existing, expectedIdentity: identity)
+        let ready = AsyncCheckpoint(), resume = AsyncCheckpoint()
+        let adapter = GraphCoordinatorFactory.adapter.graph
+        let stale = GraphNodeID(graphID: id), committed = GraphNodeID(graphID: id)
+        let file = directory.appendingPathComponent("staged")
+        let preparation = Task {
+            try await first.preparedControlTransaction(prepare: {
+                try adapter.insert($0, id, .init(id: stale, type: "Stale"))
+            }, materialize: { _, _ in
+                try Data([1]).write(to: file)
+                await ready.signal()
+                await resume.wait()
+                return file
+            }, discard: { url in
+                try? FileManager.default.removeItem(at: url)
+            }, finish: { _, _ in
+                Issue.record("A preparation based on old history reached finalization.")
+            })
+        }
+        await ready.wait()
+        do {
+            try await peer.transaction { try adapter.insert($0, id, .init(id: committed, type: "Peer")) }
+        } catch {
+            await resume.signal()
+            _ = try? await preparation.value
+            throw error
+        }
+        await resume.signal()
+        await #expect {
+            try await preparation.value
+        } throws: { error in
+            if case .resourceReserved? = error as? StoreRuntimeError { return true }
+            return false
+        }
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        try await peer.close()
+        try await first.close()
+        let reopened = try await context.openGraph(id: id, at: url)
+        #expect(try await reopened.read { try $0.record(for: stale) } == nil)
+        #expect(try await reopened.read { try $0.record(for: committed)?.type } == "Peer")
+        try await reopened.close()
+    }
+
+    @Test
+    @available(iOS 17, macOS 14, *)
     func dedicatedPathRefusesOrdinaryAndAliasedAdmissionAndSurvivesCleanOpenFault() async throws {
         let container = try temporaryAppGroup()
         defer { try? FileManager.default.removeItem(at: container) }
@@ -181,7 +243,7 @@ private actor AsyncCheckpoint {
         try await fresh.close()
         let files = try FileManager.default.contentsOfDirectory(atPath: root.path)
         #expect(!files.contains { $0.hasSuffix(".owners.lock") })
-        #expect(files.contains { $0.hasSuffix(".writer.lock") })
+        #expect(!files.contains { $0.hasSuffix(".writer.lock") })
     }
 }
 

@@ -26,6 +26,7 @@ package struct StoreRuntimeSnapshot: Sendable, Equatable {
     package let location: StoreLocation
     package let access: StoreAccess
     package let schemaIdentifier: String
+    package let usesAppGroupCoordination: Bool
 }
 
 /// One lease on an owner; close is idempotent and concurrent callers await the same outcome.
@@ -112,11 +113,12 @@ package actor StoreHandle {
     package func preparedControlTransaction<Snapshot: Sendable, Prepared: Sendable, Value: Sendable>(
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
         materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        discard: @escaping @Sendable (Prepared) async -> Void = { _ in },
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
         return try await registry.preparedControlTransaction(key, generation: generation, token: token,
-            prepare: prepare, materialize: materialize, finish: finish)
+            prepare: prepare, materialize: materialize, discard: discard, finish: finish)
     }
     package func inheritAccount(_ control: StoreAccountControl) async throws {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
@@ -293,8 +295,6 @@ package actor StoreRegistry {
         guard configuration.appGroup != nil, let url = resolved.url, let graphID = configuration.exclusiveGraphID else {
             throw StoreRuntimeError.resourceReserved
         }
-        let writer = try await StoreProcessLock.acquire(resolved)
-        defer { writer.release() }
         let presenter = AppGroupStorePresenter(directory: url.deletingLastPathComponent())
         try await AppGroupStoreAccess(presenter: presenter, associatePresenter: false).run {
             try StoreResources.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
@@ -421,7 +421,7 @@ package actor StoreRegistry {
         let resources = try await entry.opening.value
         return try await resources.read(control: true) { _ in
             StoreRuntimeSnapshot(runtimeID: resources.id, location: entry.resolved.configuration.location,
-                                 access: entry.resolved.configuration.access, schemaIdentifier: entry.schema.identifier)
+                                 access: entry.resolved.configuration.access, schemaIdentifier: entry.schema.identifier, usesAppGroupCoordination: entry.resolved.configuration.appGroup != nil)
         }
     }
 
@@ -447,11 +447,12 @@ package actor StoreRegistry {
         _ key: StoreKey, generation: UUID, token: UUID,
         prepare: @escaping @Sendable (NSManagedObjectContext) throws -> Snapshot,
         materialize: @escaping @Sendable (Snapshot, StoreNativeContext.CancellationCheck) async throws -> Prepared,
+        discard: @escaping @Sendable (Prepared) async -> Void,
         finish: @escaping @Sendable (NSManagedObjectContext, Prepared) throws -> Value
     ) async throws -> Value {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
-        return try await resources.preparedControlTransaction(prepare: prepare, materialize: materialize, finish: finish)
+        return try await resources.preparedControlTransaction(prepare: prepare, materialize: materialize, discard: discard, finish: finish)
     }
 
     fileprivate func inheritAccount(_ key: StoreKey, generation: UUID, token: UUID, control: StoreAccountControl) async throws {
