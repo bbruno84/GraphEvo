@@ -86,7 +86,8 @@ durability or atomic SQLite/JSON/cloud snapshot certificate.
 
 The catalog coordination candidate uses finite Foundation grants on the
 canonical collection directory for discovery, package copying, retention and
-publication. Verification works from a private snapshot after the read grant
+publication. Archive copying and legacy inventory and packing observe cancellation
+inside the read grant. Verification works from a private snapshot after the grant
 ends. A live stage presents its directory to Foundation and refuses coordinated
 deletion. Recovery checks the stage identity and journal before removal. Stop
 all processes using the previous catalog protocol before switching to this

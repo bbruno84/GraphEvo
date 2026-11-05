@@ -348,16 +348,24 @@ package actor GraphBackupManager {
     }
 
     private func snapshot(_ source: URL, to archive: URL) async throws -> (GraphBackupManifest, FileIdentity) {
-        try await Self.catalog([.read(source.deletingLastPathComponent())]) {
-            let identity = try FileIdentity(source)
-            let manifest = try self.readManifest(source)
-            if try Self.isPackage(source) {
-                try GraphBackupPackage.copy(source, to: archive, maximumBytes: self.limits.maximumPackageBytes)
-            } else {
-                guard try self.inventory(source) == manifest.files else { throw GraphBackupError.invalidBackup }
-                try GraphBackupPackage.pack(source, manifest: manifest, to: archive, limits: self.limits)
+        do {
+            return try await CoordinatedFiles.run([.read(source.deletingLastPathComponent())]) { checkCancellation in
+                let identity = try FileIdentity(source)
+                let manifest = try self.readManifest(source)
+                if try Self.isPackage(source) {
+                    try GraphBackupPackage.copy(source, to: archive, maximumBytes: self.limits.maximumPackageBytes,
+                                                checkCancellation: checkCancellation)
+                } else {
+                    guard try self.inventory(source, checkCancellation: checkCancellation) == manifest.files else {
+                        throw GraphBackupError.invalidBackup
+                    }
+                    try GraphBackupPackage.pack(source, manifest: manifest, to: archive, limits: self.limits,
+                                                checkCancellation: checkCancellation)
+                }
+                return (manifest, identity)
             }
-            return (manifest, identity)
+        } catch is CoordinatedFiles.Denied {
+            throw GraphBackupError.busy
         }
     }
 
@@ -469,10 +477,10 @@ package actor GraphBackupManager {
         }
         guard try inventory(directory) == manifest.files else { throw GraphBackupError.invalidBackup }
     }
-    private nonisolated func inventory(_ directory: URL) throws -> [GraphBackupFile] {
+    private nonisolated func inventory(_ directory: URL, checkCancellation: () throws -> Void = { try Task.checkCancellation() }) throws -> [GraphBackupFile] {
         var files: [GraphBackupFile] = [], bytes: UInt64 = 0, visited = 0
         func walk(_ current: URL, path: String) throws {
-            try Task.checkCancellation()
+            try checkCancellation()
             visited += 1
             guard visited <= limits.maximumFiles, path.split(separator: "/").count <= 64 else { throw GraphBackupError.limitExceeded }
             let attributes = try Self.attributes(current)
@@ -486,7 +494,7 @@ package actor GraphBackupManager {
                       let size = (attributes[.size] as? NSNumber)?.uint64Value,
                       size <= limits.maximumBytes - min(bytes, limits.maximumBytes), files.count < limits.maximumFiles else { throw GraphBackupError.limitExceeded }
                 bytes += size
-                files.append(GraphBackupFile(path: path, bytes: size, sha256: try Self.digest(current)))
+                files.append(GraphBackupFile(path: path, bytes: size, sha256: try Self.digest(current, checkCancellation: checkCancellation)))
             default: throw GraphBackupError.invalidBackup
             }
         }
@@ -538,10 +546,10 @@ package actor GraphBackupManager {
         let parts = value.split(separator: "/", omittingEmptySubsequences: false)
         return parts.count > 1 && ["payload", "artifacts"].contains(String(parts[0])) && parts.allSatisfy { component(String($0)) }
     }
-    private static func digest(_ url: URL) throws -> String {
+    private static func digest(_ url: URL, checkCancellation: () throws -> Void = { try Task.checkCancellation() }) throws -> String {
         let file = try FileHandle(forReadingFrom: url); defer { try? file.close() }
         var hash = SHA256()
-        while let data = try file.read(upToCount: 1024 * 1024), !data.isEmpty { try Task.checkCancellation(); hash.update(data: data) }
+        while let data = try file.read(upToCount: 1024 * 1024), !data.isEmpty { try checkCancellation(); hash.update(data: data) }
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }

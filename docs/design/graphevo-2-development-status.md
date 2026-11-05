@@ -41,7 +41,9 @@ read-only v1 source. Ordinary v2 store ownership, online v2 migration and
 CloudKit owner election continue to use their existing protocols. A macOS
 independent-process control with a synthetic payload preserves a live stage,
 reclaims the stage after process termination, and verifies the previously
-published package byte for byte. The catalog candidate awaits integration.
+published package byte for byte. [PR #174](https://github.com/bbruno84/GraphEvo/pull/174)
+delivers the catalog and stopped-source copy independently of App Group
+ownership.
 
 The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.md)
 is exercised in the separate [N laboratory result](results/apple-owner-priority-tests-2026-11-04.md):
