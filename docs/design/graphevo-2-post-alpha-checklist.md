@@ -92,8 +92,10 @@ thirty Home/widget/app cycles with N. **NO GO for production adoption** pending
 remaining device coverage, including the XR iOS 18 and widget-private paths, and
 physical lifecycle checks. The [P macOS experiment](results/apple-owner-runtime-lifecycle-2026-11-05.md)
 verifies the presenter attachment, transport drain and fresh public observation
-with existing runtime fences active. The replacement fence, native coordination
-and context admission transition remain open.
+with existing runtime fences active. The [Q experiment](results/apple-owner-coordinated-write-admission-2026-11-05.md)
+passes the one-graph admission transition and ordinary Apple-coordinated native
+transactions on macOS. The replacement presence fence, other native paths and
+physical lifecycle acceptance remain open.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 
