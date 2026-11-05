@@ -99,6 +99,17 @@ releases the exact registration. The retry removes only the target replica.
 PA02 remains open for production recovery authority and Apple owner protocol
 integration. Cleanup stays pending without proof of the exact prior owner's exit.
 
+The [pre-integration candidate](results/app-group-preintegration-candidate-2026-11-05.md)
+combines the real participant purge and Apple owner coordination without the
+lifetime owners lock. Physical iPad fixtures pass live refusal, interrupted
+close and cold retry with supervised release, and normal close without
+supervisor release. Independent macOS openers refuse to recreate the purged
+file. Thirty app/widget cycles pass on physical iPad and iOS 18.5 simulator.
+Nine physical lifecycle fault fixtures recover the exact baseline with the
+original registration retained. UIKit expiration and a close held behind an
+Apple accessor have separate physical traces. A controlled budget release
+while close waits preserves the registration and exact cold readback.
+
 The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
 extends writer-only research to presence, detach and destructive maintenance.
 M2's active presenter lease passes bounded macOS clone/generation controls and
