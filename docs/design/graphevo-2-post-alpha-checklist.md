@@ -105,6 +105,9 @@ maintenance and other native paths remain open.
 The [background expiration follow-up](results/apple-owner-background-expiration-2026-11-05.md)
 verifies one actual expiration and exact recovery after process exit. It also
 verifies ordered writes with briefly overlapping native attachments.
+The [maintenance admission experiment](results/app-group-maintenance-admission-2026-11-05.md)
+adds bounded macOS evidence for durable refusal after an interrupted close.
+Claim recovery and integration with actual participant purge remain open.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 

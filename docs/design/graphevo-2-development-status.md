@@ -75,6 +75,10 @@ grant after the owner disappeared, and task release after successful detach.
 A close queued behind the widget settled with execution time available. In
 the controlled release during queueing, the host exited with signal 9 and the
 close produced no recorded completion. Cold recovery preserved the data.
+The [maintenance admission experiment](results/app-group-maintenance-admission-2026-11-05.md)
+verifies that a durable owner claim blocks a replacement dry run after process
+exit and cold reopen on macOS. Public participant leave uses runtime destroy
+to purge the replica. Its integration and recovery policy remain open.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
 runtime unchanged. No remote CI is requested for this laboratory/documentation work.
 
