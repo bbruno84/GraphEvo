@@ -84,8 +84,12 @@ Partial opening, retained-task cancellation and actual session/backup lease
 release have bounded positive evidence. The [iPad fault continuation](results/apple-owner-ipad-faults-2026-11-05.md)
 verifies background quarantine and exact cold readback, including controlled
 pre/post-save interruptions. Both interrupted preparation directories remain on
-disk. **NO GO for production adoption** pending cleanup after process death,
-XR iOS 18 interaction and coupled transport/public observation checks.
+disk. The [O experiment](results/apple-owner-preparation-recovery-2026-11-05.md)
+passes concurrent cleanup, creation and publication fault, cancellation, and
+native recovery controls on macOS. A separate iOS 18.5 simulator control passes
+thirty Home/widget/app cycles with N. **NO GO for production adoption** pending
+physical validation of the new staging path, XR iOS 18 interaction and coupled
+transport/public observation checks.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 
