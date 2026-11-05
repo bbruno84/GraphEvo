@@ -233,8 +233,10 @@ private actor AsyncCheckpoint {
             #expect(try scope.record(for: nativeDiscard) == nil)
             #expect(try scope.record(for: committedID)?.type == "Committed")
         }
-        #expect(try await fresh.attachments(ownedBy: owner).map(\.id).sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
-            == assets.map(\.id).sorted { $0.rawValue.uuidString < $1.rawValue.uuidString })
+        let observedAssets = try await fresh.attachments(ownedBy: owner)
+        let observedIDs = observedAssets.map(\.id).sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
+        let expectedIDs = assets.map(\.id).sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
+        #expect(observedIDs == expectedIDs)
         for (index, asset) in assets.enumerated() {
             let observed = try #require(try await fresh.attachment(asset.id))
             #expect(observed.metadata == asset)
