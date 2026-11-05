@@ -42,8 +42,12 @@ Home/widget/app cycles with exact identities, content and detach/grant ordering.
 The [iPad fault continuation](results/apple-owner-ipad-faults-2026-11-05.md)
 verifies refusal during background quarantine and exact cold recovery after
 process exit. Controlled pre/post-save interruption preserves the expected
-store contents and leaves temporary preparation files in both cases. Recovery
-cleanup after process death is required. XR iOS 18.7.11 automation is blocked
+store contents and leaves temporary preparation files in both cases. The
+[O preparation recovery experiment](results/apple-owner-preparation-recovery-2026-11-05.md)
+reclaims abandoned private staging on macOS while preserving a live preparer.
+It releases temporary files before the native write starts. Physical validation
+of the new path remains required. A separate iOS 18.5 simulator control passes
+thirty Home/widget/app cycles with the N prototype. XR iOS 18.7.11 automation is blocked
 by Device Hub's iOS 27 requirement on this Mac. Coupled outbox/ack/account and
 public observation lifecycle remain unverified.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
