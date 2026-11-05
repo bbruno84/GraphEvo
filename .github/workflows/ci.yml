@@ -23,7 +23,7 @@ jobs:
           sysctl hw.ncpu hw.memsize
           git rev-parse HEAD
           swift build --build-tests
-      - name: Compare isolated, full, and paced tests
+      - name: Isolate automatic synchronization test scheduling
         run: |
           mkdir -p "$RUNNER_TEMP/graphevo-177"
           python3 - <<'PY'
@@ -63,23 +63,17 @@ jobs:
                   if 'Test run with' in line or 'recorded an issue' in line or 'Wait expired' in line:
                       print(line, flush=True)
 
-          focused = 'GraphAutomaticIntegrationTests|AppGroupCoordinationTests|SQLiteStoreCoordinationTests|GraphCoordinatorTests'
-          test('automatic-alone', ['--filter', 'GraphAutomaticIntegrationTests'], sample=True)
-          fixture = pathlib.Path('Tests/GraphEvoStoreTests/AppGroupCoordinationTests.swift')
-          # Replace only the fixture's independent accessor submission.
-          source = fixture.read_text()
-          start = source.index('        let competingAccess = Task.detached {')
-          end = source.index('        await heldGrant.reached.wait()', start)
-          fixture.write_text(source[:start] + """        let competingAccess = Task {
-                      try await CoordinatedFiles.run([.write(root)]) {
-                          heldGrant.hold()
-                      }
-                  }
-          """ + source[end:])
-          with (out / 'fixture-build.log').open('w') as build:
+          automatic = ['--filter', 'GraphAutomaticIntegrationTests']
+          test('automatic-parallel', automatic, sample=True)
+          test('automatic-serial', [*automatic, '--no-parallel'])
+          path = pathlib.Path('Tests/GraphEvoStoreTests/GraphAutomaticIntegrationTests.swift')
+          original = path.read_text()
+          before = '            await Task.yield()'
+          assert original.count(before) == 1
+          path.write_text(original.replace(before, '            try await Task.sleep(for: .milliseconds(10))'))
+          with (out / 'paced-build.log').open('w') as build:
               subprocess.run(['swift', 'build', '--build-tests'], stdout=build, stderr=subprocess.STDOUT, check=True)
-          test('isolated-fixture', ['--filter', focused])
-          test('full-fixture', [], sample=True)
+          test('automatic-paced-parallel', automatic, sample=True)
           PY
       - name: Retain diagnostic text
         if: always()
