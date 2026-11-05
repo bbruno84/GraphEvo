@@ -888,8 +888,13 @@ Connection operations are `retry()`, `bindPrivateGraph(_:zoneName:)`,
 `advanceActivation(for:)`, `activationStatus(for:)` and
 `openReplica(id:at:zoneName:)`. Startup/retry and sync requests are asynchronous
 state/work requests, not completion barriers. Final close drains transport;
-account monitoring remains with live synchronized graphs. Aggregate foreground
-activity belongs to the context and starts inactive.
+account monitoring remains with live synchronized graphs.
+`setForegroundActive(false)` drains transport and releases the session's
+directory lock while retaining connection leases. The iOS host supplies
+background execution time for this awaited call. Call it when the app as a
+whole enters the background. Foreground activation reopens from the durable
+checkpoint and retries temporary directory contention. Connection state is
+temporarily unavailable while background transport is stopped.
 
 `GraphV1BootstrapRequest` requires sourceURL, destinationURL, graphID, operationID,
 backupRoot and reason. The public path uses native staged migration.

@@ -76,6 +76,7 @@ package actor GraphContextManager {
     var accountRevision: UInt64 = 1
     var accountRefreshTasks: [String: Task<Void, Never>] = [:]
     var accountRefreshPending: Set<String> = []
+    var publicBackgroundSessions: Set<String> = []
     var accountAutomaticActivity: [String: Bool] = [:]
     var accountAutomaticClocks: [String: GraphAutomaticClock] = [:]
     private let attachmentRefresh = GraphCloudAttachmentRefresh<Void>()
@@ -94,7 +95,7 @@ package actor GraphContextManager {
                            disk: GraphCloudDisk = .live) async throws -> GraphCloudStatus {
         try Task.checkCancellation()
         let key = configuration.namespace
-        guard automaticClosing[key] == nil else { throw GraphCloudError.stopping }
+        guard automaticClosing[key] == nil, !publicBackgroundSessions.contains(key) else { throw GraphCloudError.stopping }
         if let existing = cloudSessions[key], existing.configuration != configuration { throw GraphCloudError.ownershipConflict }
         if let pending = accountOpenings[key], pending.configuration != configuration { throw GraphCloudError.ownershipConflict }
         if accountOpenings[key] == nil {
@@ -116,8 +117,8 @@ package actor GraphContextManager {
             }
         }
         let verification = try await accountOpening.task.value
-        guard automaticClosing[key] == nil, accountOpenings[key]?.stopping == false else { throw GraphCloudError.stopping }
-        let restoreAutomatic = accountAutomaticActivity[key] ?? false
+        guard automaticClosing[key] == nil, accountOpenings[key]?.stopping == false,
+              !publicBackgroundSessions.contains(key) else { throw GraphCloudError.stopping }
         if let existing = cloudSessions[key]?.session {
             let status = await existing.status()
             if status.failure == .accountChanged || status.failure == .accountUnavailable {
@@ -125,6 +126,7 @@ package actor GraphContextManager {
                 try await stopCloudSession(configuration, accountRecovery: true)
             }
         }
+        guard !publicBackgroundSessions.contains(key), automaticClosing[key] == nil else { throw GraphCloudError.stopping }
         if let existing = cloudSessions[key] {
             guard existing.configuration == configuration else { throw GraphCloudError.ownershipConflict }
         } else {
@@ -146,7 +148,9 @@ package actor GraphContextManager {
             if !(error is GraphCloudQuarantine), cloudSessions[key]?.id == opening.id { cloudSessions.removeValue(forKey: key) }
             throw error
         }
-        if cloudSessions[key]?.id == opening.id { cloudSessions[key]?.session = session }
+        guard !publicBackgroundSessions.contains(key), automaticClosing[key] == nil,
+              cloudSessions[key]?.id == opening.id else { throw GraphCloudError.stopping }
+        cloudSessions[key]?.session = session
         let status = try await session.startStatus()
         guard await session.retainedIdentity().account == verification.account else { throw GraphCloudError.accountChanged }
         try await finishAccountVerification(verification, configuration: configuration)
@@ -161,7 +165,7 @@ package actor GraphContextManager {
             guard !(await session.containsBinding(for: id)) else { throw GraphStoreMigrationError.busy }
         }
         try await restoreSharingRegistrations(configuration: configuration)
-        if restoreAutomatic {
+        if accountAutomaticActivity[key] == true, !publicBackgroundSessions.contains(key) {
             try await setAutomaticCloudSynchronizationActive(true, configuration: configuration,
                 clock: accountAutomaticClocks[key] ?? .live)
         }
@@ -169,8 +173,9 @@ package actor GraphContextManager {
     }
 
     func cloud(_ configuration: GraphCloudConfiguration) async throws -> GraphCloudSession {
-        guard automaticClosing[configuration.namespace] == nil else { throw GraphCloudError.stopping }
-        guard let opening = cloudSessions[configuration.namespace], opening.configuration == configuration else { throw GraphCloudError.stopped }
+        let key = configuration.namespace
+        guard automaticClosing[key] == nil, !publicBackgroundSessions.contains(key) else { throw GraphCloudError.stopping }
+        guard let opening = cloudSessions[key], opening.configuration == configuration else { throw GraphCloudError.stopped }
         return try await opening.task.value
     }
 
@@ -314,7 +319,8 @@ package actor GraphContextManager {
     package func stopCloudSession(_ configuration: GraphCloudConfiguration) async throws {
         try await stopCloudSession(configuration, accountRecovery: false)
     }
-    func stopCloudSession(_ configuration: GraphCloudConfiguration, accountRecovery: Bool) async throws {
+    func stopCloudSession(_ configuration: GraphCloudConfiguration, accountRecovery: Bool,
+                          discardFailedOpening: Bool = false) async throws {
         if !accountRecovery {
             accountAuthorities[configuration.namespace]?.wantsCloud = false
             accountAutomaticActivity[configuration.namespace] = false
@@ -336,6 +342,8 @@ package actor GraphContextManager {
         catch {
             if cloudSessions[configuration.namespace]?.id == opening.id { cloudSessions.removeValue(forKey: configuration.namespace) }
             if automaticClosing[configuration.namespace] == opening.id { automaticClosing.removeValue(forKey: configuration.namespace) }
+            // A failed opening without quarantine already released its resources.
+            if discardFailedOpening { return }
             throw error
         }
         let revision = (automaticActivityRevision[configuration.namespace] ?? 0) + 1

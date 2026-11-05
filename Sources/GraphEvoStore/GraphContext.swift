@@ -13,6 +13,7 @@ public actor GraphContext {
     var adapterForBootstrap: GraphCloudAdapter { adapter }
     private let identity: UUID
     private var foreground = false
+    private var backgrounded = false
     private struct ConnectionEntry {
         let generation = UUID()
         let configuration: GraphCloudConnectionConfiguration
@@ -20,6 +21,9 @@ public actor GraphContext {
         let reservation: Task<Void, any Error>
         var tokens: Set<UUID> = []
         var startup: Task<Void, Never>?
+        var suspension: Task<Void, any Error>?
+        var retry: Task<Void, Never>?
+        var retryDelay = 1
         var closing: Task<Void, any Error>?
     }
     private var connections: [String: ConnectionEntry] = [:]
@@ -59,15 +63,65 @@ public actor GraphContext {
     }
     private func prepareMonitoring() async { await manager.setLocalAccountAdapter(adapter) }
 
-    /// Forwards aggregate application scene activity; initially inactive.
+    /// Reports aggregate scene activity. On iOS, the host keeps background execution
+    /// available while awaiting the stop that releases the session directory lock.
     public func setForegroundActive(_ active: Bool) async throws {
         try Task.checkCancellation()
         foreground = active
-        await prepareMonitoring()
-        if active { await manager.refreshPublicAccounts() }
-        for entry in connections.values where entry.closing == nil {
-            await manager.setPublicForeground(active, configuration: entry.configuration.native)
+        backgrounded = !active
+        let keys = Array(connections.keys)
+        if active {
+            for key in keys { start(key) }
+            await prepareMonitoring()
+            for key in keys {
+                guard !backgrounded else { return }
+                if let entry = connections[key], entry.suspension == nil, entry.closing == nil {
+                    await manager.activatePublicTransport(entry.configuration.native)
+                }
+            }
+            if !backgrounded {
+                let starting = Set(connections.compactMap { key, entry in
+                    entry.startup != nil || entry.suspension != nil || entry.retry != nil ? key : nil
+                })
+                await manager.refreshPublicAccounts(excluding: starting)
+            }
+        } else {
+            let stops = keys.compactMap { suspend($0) }
+            var failure: (any Error)?
+            for stop in stops {
+                do { try await stop.value }
+                catch { if failure == nil { failure = error } }
+            }
+            if let failure { throw GraphCloudConnectionError.translate(failure) }
         }
+    }
+
+    private func suspend(_ key: String) -> Task<Void, any Error>? {
+        guard let entry = connections[key] else { return nil }
+        if let closing = entry.closing { return closing }
+        if let suspension = entry.suspension { return suspension }
+        entry.startup?.cancel()
+        entry.retry?.cancel()
+        connections[key]?.retry = nil
+        connections[key]?.retryDelay = 1
+        switch entry.hub.current {
+        case .isolated: break
+        default: entry.hub.publish(.temporarilyUnavailable)
+        }
+        let task = Task {
+            do {
+                try await manager.suspendPublicTransport(entry.configuration.native)
+                if connections[key]?.generation == entry.generation {
+                    connections[key]?.suspension = nil
+                    start(key)
+                }
+            } catch {
+                entry.hub.publish(.failed(.init(error)))
+                throw error
+            }
+        }
+        connections[key]?.suspension = task
+        return task
     }
 
     /// Schedules identity checks for observed accounts without starting stopped transport.
@@ -103,8 +157,8 @@ public actor GraphContext {
             try await entry.reservation.value
             try Task.checkCancellation()
             await manager.installPublicConnectionHub(entry.hub, namespace: key, adapter: adapter)
-            await manager.setPublicForeground(foreground, configuration: configuration.native)
-            start(key)
+            if backgrounded { _ = suspend(key) }
+            else { start(key) }
             return GraphCloudConnection(context: self, namespace: key, token: token, hub: entry.hub)
         } catch {
             let original = error
@@ -114,24 +168,61 @@ public actor GraphContext {
     }
 
     private func start(_ key: String) {
-        guard let entry = connections[key], entry.startup == nil, entry.closing == nil, entry.hub.current != .ready else { return }
+        guard !backgrounded, let entry = connections[key], entry.startup == nil, entry.suspension == nil,
+              entry.retry == nil, entry.closing == nil, !entry.tokens.isEmpty, entry.hub.current != .ready else { return }
         let generation = entry.generation
         connections[key]!.startup = Task { await self.startTransport(key, generation: generation) }
     }
+
     private func startTransport(_ key: String, generation: UUID) async {
         guard let entry = connections[key], entry.generation == generation else { return }
+        var contended = false
         do {
+            try Task.checkCancellation()
+            await manager.resumePublicTransport(entry.configuration.native, foreground: foreground)
+            try Task.checkCancellation()
             _ = try await manager.startCloudSession(entry.configuration.native, adapter: adapter, disk: disk)
-            await manager.setPublicForeground(foreground, configuration: entry.configuration.native)
+            try Task.checkCancellation()
             await manager.publishCloudConnectionState(key)
-        } catch { await manager.publishCloudConnectionState(key, failure: error) }
-        if connections[key]?.generation == generation { connections[key]?.startup = nil }
+        } catch {
+            if !Task.isCancelled && !backgrounded {
+                contended = error as? GraphCloudError == .directoryBusy
+                await manager.publishCloudConnectionState(key, failure: error)
+            }
+        }
+        guard connections[key]?.generation == generation else { return }
+        connections[key]?.startup = nil
+        if Task.isCancelled { start(key) }
+        else if contended, foreground { scheduleRetry(key, generation: generation) }
+        else { connections[key]?.retryDelay = 1 }
+    }
+
+    private func scheduleRetry(_ key: String, generation: UUID) {
+        guard !backgrounded, let entry = connections[key], entry.closing == nil,
+              entry.suspension == nil, entry.retry == nil else { return }
+        let delay = entry.retryDelay
+        connections[key]?.retryDelay = min(delay * 2, 8)
+        connections[key]?.retry = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) }
+            catch { return }
+            await self?.retryAfterContention(key, generation: generation)
+        }
+    }
+
+    private func retryAfterContention(_ key: String, generation: UUID) {
+        guard !Task.isCancelled, connections[key]?.generation == generation else { return }
+        connections[key]?.retry = nil
+        start(key)
     }
 
     func retry(_ key: String, token: UUID) async throws {
         let entry = try connection(key, token: token)
-        guard entry.startup == nil else { return }
+        guard !backgrounded, entry.startup == nil, entry.suspension == nil else { return }
+        entry.retry?.cancel()
+        connections[key]?.retry = nil
+        connections[key]?.retryDelay = 1
         await manager.invalidatePublicAccountQuery(key)
+        guard !backgrounded, connections[key]?.closing == nil else { return }
         entry.hub.publish(.verifyingAccount)
         start(key)
     }
@@ -145,7 +236,7 @@ public actor GraphContext {
     }
     func requireReady(_ key: String, token: UUID) throws -> GraphCloudConfiguration {
         let entry = try connection(key, token: token)
-        guard entry.hub.current == .ready else { throw GraphCloudConnectionError.notReady }
+        guard !backgrounded, entry.hub.current == .ready else { throw GraphCloudConnectionError.notReady }
         return entry.configuration.native
     }
     func bind(_ graph: GraphStore, zoneName: String, key: String, token: UUID) async throws {
@@ -160,10 +251,13 @@ public actor GraphContext {
         entry.hub.finish(owner: token)
         connections[key] = entry
         guard entry.tokens.isEmpty else { return }
-        let startup = entry.startup, reservation = entry.reservation, manager = manager, configuration = entry.configuration.native
+        entry.retry?.cancel()
+        let startup = entry.startup, suspension = entry.suspension
+        let reservation = entry.reservation, manager = manager, configuration = entry.configuration.native
         let task = Task {
             _ = try? await reservation.value
             await startup?.value
+            try await suspension?.value
             try await manager.stopCloudSession(configuration)
         }
         connections[key]!.closing = task
@@ -185,15 +279,44 @@ extension GraphContextManager {
     func installPublicConnectionHub(_ hub: GraphCloudConnectionHub, namespace: String, adapter: GraphCloudAdapter) {
         publicConnectionHubs[namespace] = hub; localAccountAdapter = adapter
     }
-    func removePublicConnectionHub(_ namespace: String) { publicConnectionHubs.removeValue(forKey: namespace) }
-    func refreshPublicAccounts() { for key in accountAuthorities.keys { scheduleAccountRefresh(key) } }
+    func removePublicConnectionHub(_ namespace: String) {
+        publicConnectionHubs.removeValue(forKey: namespace)
+        publicBackgroundSessions.remove(namespace)
+    }
+    func refreshPublicAccounts(excluding keys: Set<String> = []) {
+        for key in accountAuthorities.keys where !keys.contains(key) { scheduleAccountRefresh(key) }
+    }
     func invalidatePublicAccountQuery(_ namespace: String) {
         accountAuthorities[namespace]?.query = UUID(); accountAuthorities[namespace]?.verification = nil
     }
-    func setPublicForeground(_ active: Bool, configuration: GraphCloudConfiguration) async {
-        accountAutomaticActivity[configuration.namespace] = active
-        guard cloudSessions[configuration.namespace]?.session != nil else { return }
-        do { try await setAutomaticCloudSynchronizationActive(active, configuration: configuration, clock: .live) }
-        catch { await publishCloudConnectionState(configuration.namespace, failure: error) }
+    func resumePublicTransport(_ configuration: GraphCloudConfiguration, foreground: Bool) {
+        publicBackgroundSessions.remove(configuration.namespace)
+        accountAutomaticActivity[configuration.namespace] = foreground
+    }
+
+    func activatePublicTransport(_ configuration: GraphCloudConfiguration) async {
+        let key = configuration.namespace
+        guard !publicBackgroundSessions.contains(key) else { return }
+        accountAutomaticActivity[key] = true
+        guard cloudSessions[key]?.session != nil else { return }
+        do { try await setAutomaticCloudSynchronizationActive(true, configuration: configuration, clock: .live) }
+        catch {
+            if !publicBackgroundSessions.contains(key) { await publishCloudConnectionState(key, failure: error) }
+        }
+    }
+
+    func suspendPublicTransport(_ configuration: GraphCloudConfiguration) async throws {
+        let key = configuration.namespace
+        publicBackgroundSessions.insert(key)
+        accountAuthorities[key]?.wantsCloud = false
+        accountAutomaticActivity[key] = false
+        await publishCloudConnectionState(key)
+        // A pending account check owns no directory lease. The admission guard
+        // prevents it from constructing a session after this transition.
+        if let opening = cloudSessions[key] {
+            guard opening.configuration == configuration else { throw GraphCloudError.ownershipConflict }
+            try await stopCloudSession(configuration, accountRecovery: false, discardFailedOpening: true)
+        }
+        await publishCloudConnectionState(key)
     }
 }

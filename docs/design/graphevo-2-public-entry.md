@@ -237,16 +237,22 @@ A GraphID/zone binding survives closing handles. Graphs eligible for foreground
 scheduling retain T06's open/ready/bound requirements; a connection is not an
 implicit permanent lease over every graph in the session document.
 
-The app forwards aggregate scene activity to GraphContext.setForegroundActive.
-The context starts inactive and owns one foreground flag for its connections.
-Foreground activation and refreshCloudAccounts schedule account verification
-even without transport; refresh does not start stopped transport. Connection
-leases have no separate foreground flag, and closing one cannot suspend another. `requestSynchronization()` and matching
-container/scope notification hints schedule work; neither is a completion barrier.
-The host filters push notifications for the configured container before forwarding
-a scope. Foreground T06 timing, fair scheduling and durable queues remain the
-implementation; this adds no background/APNs guarantee or progress percentage.
-Per-graph pause drains its admitted sync work without cancelling unrelated graphs.
+The app reports aggregate foreground activity through
+`GraphContext.setForegroundActive`. Before the first lifecycle signal an
+explicit connection can start, with automatic scheduling initially inactive.
+An explicit background transition stops new session admission, drains current
+transport and releases the directory lock after confirmed shutdown. Public
+connection leases and account observation survive the transition. The iOS host
+holds background execution time while awaiting the stop. A failed stop retains
+ownership and reports the failure.
+
+Foreground activation rechecks identity and starts the retained connection from
+its durable state. A return to foreground during shutdown waits for that
+shutdown before constructing a new engine. Directory contention retries with
+a capped delay only while the context is foreground. Individual scene and
+connection leases have no independent transport lifecycle. A graph-level pause
+continues to drain only the selected graph. Synchronization requests and
+container/scope notification hints schedule work without establishing completion.
 
 Closing one connection releases only its interest. Closing the final connection
 explicitly stops/drains transport and releases engine ownership after successful

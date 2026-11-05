@@ -1027,6 +1027,11 @@ acceptance remain open.
 
 ## T06 foreground automatic synchronization follow-ups
 
+[PR #176](https://github.com/bbruno84/GraphEvo/pull/176) verifies background
+release of the session directory lock and foreground checkpoint recovery in a
+physical iPad fixture with a simulated CloudKit driver. Native CloudKit delivery
+and host background expiration remain open.
+
 - [ ] **B** Extend foreground-only T06 admission/lifecycle evidence to future
   background/APNs/silent-launch scheduling, with expiration and account/permission
   coverage. A notification hint is not proof of notification delivery.

@@ -217,7 +217,7 @@ private actor CloudSignal {
         defer { try? FileManager.default.removeItem(at: config.directory) }
         _ = try await m.startCloudSession(config, adapter: fake.adapter)
         let foreign = GraphCloudConfiguration(containerIdentifier: "other-\(UUID())", environment: .development, directory: config.directory)
-        await #expect(throws: GraphCloudError.ownershipConflict) { try await manager().startCloudSession(foreign, adapter: fake.adapter) }
+        await #expect(throws: GraphCloudError.directoryBusy) { try await manager().startCloudSession(foreign, adapter: fake.adapter) }
         try await m.stopCloudSession(config)
     }
 

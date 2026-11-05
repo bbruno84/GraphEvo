@@ -39,13 +39,32 @@ Verified same-account return can restore local access without starting transport
 Observation refresh republishes local state; `context.refreshCloudAccounts()`
 schedules network/account verification. Clear consumer cached UI on isolation.
 
-The app forwards aggregate scene activity to
-`try await context.setForegroundActive(isActive)`. The context starts inactive.
-Foreground activation rechecks observed accounts and enables foreground work for
-its connected sessions. Pausing/stopping transport does not disable account
-observation. Background execution and APNs delivery are not guaranteed.
+Use a single context for the app's scenes. Call
+`try await context.setForegroundActive(true)` when the app becomes active.
+Call it with `false` when the app as a whole enters the background, after its
+last foreground scene leaves. A temporary inactive scene can still belong
+to a foreground app.
+
+On iOS, acquire a UIKit background task in the host when starting the
+background transition and end it when the awaited call settles. The call
+drains the CloudKit session and releases the directory lock after native
+shutdown succeeds. It preserves the public connection, checkpoints and local
+graph handles. Account observation can continue while transport is stopped.
+If iOS ends the process, the operating system releases the lock.
+
+Foreground activation checks the account and restarts the retained connection
+from its durable state. If another process holds the directory lock,
+the connection reports ownership contention and retries while foreground.
+The connection reports `.temporarilyUnavailable` during background shutdown
+and while transport is stopped. Account isolation and failed shutdown remain
+observable.
 
 ## Optional private cloud connection
+
+
+Derive the session directory from the current container URL and a relative
+subdirectory. GraphEvo resolves the runtime directory once when the
+configuration is created, including when the subdirectory is still missing.
 
 ```swift
 let configuration = try GraphCloudConnectionConfiguration(
