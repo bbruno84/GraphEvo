@@ -61,8 +61,14 @@ checks pass with existing runtime fences active. The [R experiment](results/appl
 omits the lifetime presence fence for one selected macOS fixture. Independent
 processes and the composed lifecycle pass with Apple-coordinated native open
 and last detach. Dry-run maintenance is refused while an owner is live, even
-when the request was submitted before presenter registration. Actual destructive
-maintenance, other native paths and physical validation remain open.
+when the request was submitted before presenter registration. The
+[R device continuation](results/apple-owner-r-device-validation-2026-11-05.md)
+passes thirty App Group lifecycle cycles on a physical iPad and thirty on an
+iOS 18.5 simulator. The XR runner times out enabling UI automation. All nine
+injected iPad failures recover the original data after signal 9. An explicit
+background budget allows both maintenance refusals to be observed before
+controlled process exit. Natural suspension safety, actual destructive
+maintenance and other native paths remain open.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
 runtime unchanged. No remote CI is requested for this laboratory/documentation work.
 
