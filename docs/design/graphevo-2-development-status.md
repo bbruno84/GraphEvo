@@ -50,7 +50,12 @@ iPad host interruptions during preparation and before and after save verify
 private staging recovery and exact graph readback. A separate iOS 18.5 simulator control passes
 thirty Home/widget/app cycles with the N prototype. XR iOS 18.7.11 automation is blocked
 by Device Hub's iOS 27 requirement on this Mac. Coupled outbox/ack/account and
-public observation lifecycle remain unverified.
+public observation lifecycle now have a bounded macOS composition result.
+The [P lifecycle experiment](results/apple-owner-runtime-lifecycle-2026-11-05.md)
+attaches a presenter to the actual native owner and composes explicit transport
+drain, store close and fresh public observation using an injected driver.
+The existing runtime fences remain active. The context admission transition,
+Apple-coordinated native writes and physical validation remain open.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
 runtime unchanged. No remote CI is requested for this laboratory/documentation work.
 
