@@ -126,8 +126,9 @@ exclusion on that store path. Durable owner generations describe interrupted
 lifecycle work. Purge uses one deletion grant, and prepared CloudKit writes
 revalidate Persistent History before saving. The
 [runtime validation report](results/app-group-runtime-integration-2026-11-05.md)
-distinguishes this candidate from the prior hybrid and tracks the pending
-physical app/widget replay. Public roles and orphan recovery remain open.
+distinguishes this candidate from the prior hybrid and records the reconciliation
+with PR #174. Both local v2 platform profiles pass on the aligned branch.
+The physical app/widget replay, public roles and orphan recovery remain open.
 
 The [M/M2 Apple owner-lifetime experiment](results/apple-owner-coordination-2026-11-04.md)
 extends writer-only research to presence, detach and destructive maintenance.

@@ -85,3 +85,18 @@ write was 14.46 ms and 13.84 ms. The runs were sequential on one device.
 
 XCTest again stopped while enabling UI automation before starting the 30
 physical app/widget cycles. That replay remains the integration gate.
+
+## Reconciliation with backup coordination
+
+[PR #173](https://github.com/bbruno84/GraphEvo/pull/173) was aligned with
+`158ae21a` at `ac3ebe04`. Backup publication keeps Foundation catalog
+coordination and the App Group path guards. The regression uses an alias
+to an App Group directory and a missing descendant. Export, import and
+restore refuse the destination without creating files there, and the
+source backup still verifies.
+
+The aligned runtime passed 719 macOS and 717 iOS 18.5 simulator tests
+in the local v2 profile. A signed iPad build succeeded, but XCTest
+timed out enabling automation before the first physical app/widget
+cycle. Xcode's interaction tool available to this run accepts simulators
+only. The 30-cycle physical gate remains open.
