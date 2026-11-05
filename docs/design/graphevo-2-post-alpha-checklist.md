@@ -116,8 +116,12 @@ The [participant purge device result](results/app-group-participant-purge-device
 verifies the actual local leave path with an injected claim on iPad and
 iPhone XR. The original handle refuses reads during `purging`. The journal
 records removal after explicit retry while the neighboring store stays intact.
-Supported App Group recovery authority and combined multiprocess participant
-purge remain open.
+The [two-process iPad continuation](results/app-group-two-process-purge-2026-11-05.md)
+composes widget attachment, live refusal, interrupted native close,
+supervised exit and actual local leave retry. A cold app keeps the replica in
+`purging` before exact release and removes only that replica after release.
+The admission gate and CloudKit adapter are laboratory injections. Supported
+App Group recovery authority and Apple owner protocol integration remain open.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 
