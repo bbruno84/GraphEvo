@@ -45,8 +45,9 @@ process exit. Controlled pre/post-save interruption preserves the expected
 store contents and leaves temporary preparation files in both cases. The
 [O preparation recovery experiment](results/apple-owner-preparation-recovery-2026-11-05.md)
 reclaims abandoned private staging on macOS while preserving a live preparer.
-It releases temporary files before the native write starts. Physical validation
-of the new path remains required. A separate iOS 18.5 simulator control passes
+It releases temporary files before the native write starts. Controlled physical
+iPad host interruptions during preparation and before and after save verify
+private staging recovery and exact graph readback. A separate iOS 18.5 simulator control passes
 thirty Home/widget/app cycles with the N prototype. XR iOS 18.7.11 automation is blocked
 by Device Hub's iOS 27 requirement on this Mac. Coupled outbox/ack/account and
 public observation lifecycle remain unverified.

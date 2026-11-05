@@ -32,10 +32,8 @@ an independent sweep saw empty staging before the signal. Fresh GraphEvo
 readbacks recovered respectively zero and one commit with exact IDs, typed
 application values and attachment sizes and digests.
 
-The signed iOS build succeeded. Physical validation of the new private staging
-path remains blocked by Device Hub access to the Mac. Production adoption still
-requires physical iOS fault validation and the coupled synchronization and public
-observation lifecycle checks.
+The signed iOS build succeeded. Device Hub access blocked the initial physical
+run. The iPad continuation below exercises the host's private staging path.
 
 Independent review reran the verifier across 420 manifest entries, verified the
 prior N hashes and inspected the lease and native readback assertions. Private
@@ -61,3 +59,31 @@ the O staging path on hardware, and production observation remain separate gates
 
 Private simulator manifest SHA-256
 `96c3945f24d058547c9d409601e9ce378d79b0bf582b12216a5e6dbfe3fc59c2` (225 entries).
+
+## Physical iPad host recovery
+
+The same signed O build ran on iPadOS 27.0 with three fresh synthetic fixtures.
+Each run reached physical background and received a controlled SIGTERM at its
+designated checkpoint. A new process swept its private staging root and reopened
+the corresponding graph read-only.
+
+| Interruption | Private staging after exit | Graph readback |
+| --- | --- | --- |
+| After the first preparation packet | One abandoned directory with a lease file and one 4 MiB packet. The new process removes exactly that directory. | Counter 0 and the four original IDs. |
+| Before native save | Only the stable namespace file. The trace records staging release before native mutation. | Counter 0 and the four original IDs. |
+| After native save | Only the stable namespace file. The trace records staging release before native mutation. | Counter 1 and exactly one additional ID. |
+
+All three cold readbacks verify structured values and both attachment sizes and
+digests. The device inventories locate staging inside the host app container.
+The inspected App Group fixture directories contain no preparation directories.
+The interrupted save operations have no coordination completion after their
+save checkpoint. This result covers controlled host interruption and recovery.
+Widget-private recovery, physical XR coverage, automatic iOS suspension and
+termination behavior, and coupled synchronization and public observation remain
+separate acceptance work.
+
+Independent review reran the verifier over 124 entries and checked the frozen
+O macOS manifest. Private iPad report SHA-256
+`01c094b1cb8c9107fd00895942f373475052e62d7378c8b7e00bec796c109bff`.
+Private iPad manifest SHA-256
+`ac6c90aacf0335633984fd98e53cda95c381b4f6cc752baf8440cc9ece5473f1`.
