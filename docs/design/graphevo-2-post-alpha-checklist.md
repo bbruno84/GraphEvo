@@ -133,10 +133,12 @@ App Group path. Purge retains unresolved lifecycle evidence and runs native
 destruction and cleanup within one grant.
 The [integration validation](results/app-group-runtime-integration-2026-11-05.md)
 records the scoped results and 30 successful physical iPad app/widget cycles.
-The ordinary SQLite change exercises alias writers, workspace publication
-conflicts, purge contention and offline workspace recovery on macOS. Public
-process roles, real CloudKit, physical XR and broader layout validation
-remain pre-beta work.
+[PR #175](https://github.com/bbruno84/GraphEvo/pull/175) exercises ordinary
+SQLite alias writers, workspace publication conflicts and purge contention on
+macOS. Its independent-process controls verify exact offline recovery after
+termination during ordinary replica use, native v1 conversion and workspace
+publication. Public process roles, real CloudKit, physical XR and broader
+layout validation remain pre-beta work.
 
 ## How to close an item
 

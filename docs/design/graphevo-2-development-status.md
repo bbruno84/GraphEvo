@@ -44,18 +44,17 @@ published package byte for byte. [PR #174](https://github.com/bbruno84/GraphEvo/
 delivers the catalog and stopped-source copy independently of App Group
 ownership.
 
-The [ordinary SQLite coordination change](graphevo-2-controlled-store-access.md#cooperating-process-protocol)
-brings ordinary v2 stores and open-store migration under Foundation grants.
-The local v2 profiles pass 709 macOS and 708 iOS 18.5 simulator tests. In
-separate macOS processes, writers reached the same store through aliases,
-and a stale migration refused publication. A live peer refused purge and
-the requesting owner detached before retry. An opener queued during purge
-cleanup received a missing-store result. Process termination before and
-after the publication save exercised exact offline workspace recovery and
-receipt-based retry with a single verified backup. The shared coordination
-changes passed 30 app and widget cycles on a physical iPad with exact
-record and attachment readback. CloudKit session ownership remains a
-separate work item.
+[PR #175](https://github.com/bbruno84/GraphEvo/pull/175) brings
+[ordinary v2 SQLite stores and open-store migration](graphevo-2-controlled-store-access.md#cooperating-process-protocol)
+under Foundation grants. On code revision `25d1c335`, the local v2 profiles
+pass 712 macOS and 711 iOS 18.5 Simulator tests. Separate macOS processes
+verified alias writers, stale publication refusal, live-peer purge refusal,
+and a missing-store result for an opener queued during purge. Forced exits
+exercised exact offline recovery for ordinary replica purge, native v1
+conversion, and workspace publication. Recovery after a committed migration
+reused the verified backup and receipt. The earlier physical iPad run passed
+30 app and widget cycles with exact record and attachment readback. CloudKit
+session ownership remains a separate work item.
 
 The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.md)
 is exercised in the separate [N laboratory result](results/apple-owner-priority-tests-2026-11-04.md):
