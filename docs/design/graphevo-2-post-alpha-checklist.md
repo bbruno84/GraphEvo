@@ -122,6 +122,11 @@ supervised exit and actual local leave retry. A cold app keeps the replica in
 `purging` before exact release and removes only that replica after release.
 The admission gate and CloudKit adapter are laboratory injections. Supported
 App Group recovery authority and Apple owner protocol integration remain open.
+The [pre-integration candidate](results/app-group-preintegration-candidate-2026-11-05.md)
+combines real local purge with Apple coordination and durable owner
+registrations. The physical iPad purge results cover live refusal, cold retry
+after a supervised process exit, and normal detach. Physical iPhone XR moves
+to pre-beta validation for this candidate.
 No PA02 acceptance box closes. Deferred
 layout, migration-workspace and broader platform cases remain pre-beta work.
 

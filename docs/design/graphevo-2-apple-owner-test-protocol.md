@@ -76,3 +76,10 @@ platforms are outside this priority tranche. They remain mandatory acceptance
 work before beta unless an explicit supported-contract decision excludes a case.
 No priority pass closes PA02, adopts the public lifecycle contract or authorizes
 coexistence with old uncoordinated writers.
+
+## Physical matrix for the combined purge candidate
+
+The maintainer selected physical iPad and iOS 18.5 simulator coverage for the
+first integration of the combined candidate. Physical iPhone XR remains a
+pre-beta gate. The [candidate report](results/app-group-preintegration-candidate-2026-11-05.md)
+records the exact outcome of the combined Apple ownership and real purge tests.
