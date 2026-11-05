@@ -69,6 +69,12 @@ injected iPad failures recover the original data after signal 9. An explicit
 background budget allows both maintenance refusals to be observed before
 controlled process exit. Natural suspension safety, actual destructive
 maintenance and other native paths remain open.
+The [background expiration follow-up](results/apple-owner-background-expiration-2026-11-05.md)
+records an actual UIKit expiration after a failed detach, a verified dry-run
+grant after the owner disappeared, and task release after successful detach.
+A close queued behind the widget settled with execution time available. In
+the controlled release during queueing, the host exited with signal 9 and the
+close produced no recorded completion. Cold recovery preserved the data.
 The result is **NO GO for production adoption**, with PA02 open and the shipping
 runtime unchanged. No remote CI is requested for this laboratory/documentation work.
 
