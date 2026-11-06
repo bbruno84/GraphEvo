@@ -12,7 +12,7 @@ tracks the broader beta (B) and stable (R) acceptance gates.
 | Store coordination and process roles | Foundation store and backup coordination (#173–#175), foreground CloudKit session ownership (#176), and public App Group roles with direct local secondary writes on synchronized replicas (#180/#183). | Complete broader PA02 first-launch, migration, interrupted-owner recovery and supported OS/process acceptance. |
 | Public opening and sharing | H01 public contexts and staged v1 bootstrap (#150–#151). H02 Apple invitation UI, graph identity, permissions and resumable leave/rejoin (#152–#154). Demo adoption merged separately. | Recheck H02 on the current library pin, including rejoining after leave without restarting. Confirm supported device/account behavior and deploy the selected CloudKit schema for production. |
 | Account isolation | Default isolation and recovery policy (#147), public account-aware local opening and foreground CloudKit lifecycle. | Protected-data and independent-reader acceptance. Physical account-change trials and optional merge/deletion policies retain their existing beta backlog. |
-| Query, observation and attachments | Descriptor-first queries, async/Combine observation and durable CKAsset transport with bounded private device evidence (#143–#146). | Validate the live processing and rescan contract selected by O04, publish supported query and attachment limits, and validate the remaining shared/interruption paths. |
+| Query, observation and attachments | Descriptor-first queries, async/Combine observation and durable CKAsset transport (#143–#146). [O04](https://github.com/bbruno84/GraphEvo/pull/186) selects live observation and rescan. It passed local regressions and explicit CloudKit import on a physical iPad. | Publish supported query and attachment envelopes. Validate automatic delivery, broader observer cost, and the remaining shared/interruption paths. |
 | Migration and recovery | Public staged v1 bootstrap, private cloud authority and empty-peer recovery, plus native conversion and maintenance recovery under Foundation grants. | Extend the MyHomeBills result from #185 to the supported source matrix and define cloud cutover, including returning offline v1 clients. |
 
 The public App Group alpha increment is integrated. Physical evidence covers a
@@ -25,10 +25,11 @@ Extension identity verification is a future opt-in capability.
 The companion Demo pins `e0f2a07c` through
 [Demo PR #5](https://github.com/bbruno84/GraphEvoDemo/pull/5). The H02 device
 check for that pin remains open. The representative MyHomeBills migration and
-recovery passed on CloudKit Development in #185. The next library priorities
-are acceptance of the O04 live observation and rescan contract, and supported
-query and attachment limits. Enter beta after the B gates are accepted. Beta completes R
-validation, including real application adoption, performance and distribution.
+recovery passed on CloudKit Development in #185. O04 has local and bounded
+physical acceptance through #186. The next library increment defines supported
+query and attachment envelopes, including the costs visible to applications.
+Enter beta after the B gates are accepted. Beta completes R validation, including
+real application adoption, performance and distribution.
 
 ## Historical delivery audit — 2026-11-03
 

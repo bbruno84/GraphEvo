@@ -42,9 +42,11 @@ records 1,577 converted and recovered MyHomeBills nodes using the private
 Development database on a physical iPad. Historical source coverage and
 production cutover remain open.
 
-O04 selects live observation and rescan for beta. The next library work covers
-PA07 observation and recovery acceptance, and supported query and attachment
-limits.
+[PR #186](https://github.com/bbruno84/GraphEvo/pull/186) closes the O04
+alpha increment. The live observation and rescan contract passed local regressions
+and [explicit CloudKit import on a physical iPad](graphevo-2-observation.md#acceptance-and-remaining-work).
+PA07 retains automatic delivery, wider lifecycle and observer cost acceptance.
+The next library increment defines supported query and attachment envelopes.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 
