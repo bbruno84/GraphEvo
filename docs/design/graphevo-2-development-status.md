@@ -8,32 +8,36 @@ integration into the main v2 branch or beta readiness.
 
 ## Current position — 2026-11-06
 
-The v2 integration line is `b5c6f3b9` through
-[PR #177](https://github.com/bbruno84/GraphEvo/pull/177). It includes the
-Foundation store coordination work, foreground ownership of the CloudKit
-session, the Xcode 16.4 Core Data compatibility fix and serial hosted v2
-checkpoints. The [full checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/42174675689)
-passed on `c9f2aa32`, whose contents match the squash merge. macOS passed 1,050
-tests and both Swift 6 consumers. iOS 18.5 passed 1,048 tests with one skip.
+The v2 integration baseline is `e0f2a07c` through
+[PR #183](https://github.com/bbruno84/GraphEvo/pull/183). Foundation coordinates
+dedicated App Group stores, ordinary SQLite, open-store migrations and backup
+catalogs. The CloudKit session claim follows aggregate app activity. The last
+full hosted checkpoint [#42174675689](https://github.com/bbruno84/GraphEvo/actions/runs/42174675689)
+covers the reviewed #177 baseline `b5c6f3b9`. macOS passed 1,050 tests and both
+Swift 6 consumers. iOS 18.5 passed 1,048 tests with one skip.
 
-The first [public App Group increment](graphevo-2-controlled-store-access.md#public-app-group-process-contract)
-implements explicit primary and secondary roles for local graphs. A secondary
-has a read-only or opted-in transactional scope and reports its detach outcome.
-The local scope has automated coverage for first launch, role refusal,
-account-bound store refusal and failed detach after commit. Physical acceptance
-of the public path, synchronized replicas and production abandoned-owner
-recovery remain open under PA02. The Demo `develop` branch currently pins
-`6432e595`. Its next H02 physical checkpoint uses the reviewed library revision
-and checks rejoining after leave without restarting.
+[#180](https://github.com/bbruno84/GraphEvo/pull/180) introduced the public
+primary and secondary App Group roles for local graphs. #183 added direct
+transactions on existing synchronized replicas for an opted-in read-write
+secondary. The primary owns synchronization and the replica's persisted
+participant restrictions govern writes. The reviewed #183 head passed 57
+affected macOS tests and 24 iOS 18.5 Simulator tests, including concurrent
+local reads and writes and a participant patch.
 
-[PR #183](https://github.com/bbruno84/GraphEvo/pull/183) extends the App Group
-transaction to existing synchronized replicas. A read-write secondary saves
-directly to local SQLite using its App Group entitlement. The primary owns
-synchronization, and persisted participant restrictions still govern writes.
-The signed iPad widget committed with the primary process terminated. A separate
-iPhone replica received the exact record after the primary's cold restart.
-The device run used an available network. Extension identity verification
-remains a separate future capability.
+On the initial #183 implementation, a signed iPad widget saved a record after
+the primary process was terminated. An independent iPhone replica received
+the exact ID and value after the primary restarted. The run had network
+connectivity. This completes the selected alpha App Group increment. PA02
+retains broader OS/process acceptance, migration and interrupted-owner recovery.
+Extension identity verification remains a future opt-in capability.
+
+GraphEvoDemo `develop` pins `e0f2a07c` through
+[Demo PR #5](https://github.com/bbruno84/GraphEvoDemo/pull/5). The pin passed
+12 public v2 model tests and an iOS Simulator build. The physical H02 checkpoint
+on this pin still needs to verify leave and reinvitation without restarting.
+The next library delivery decisions cover representative v1 migration and
+independent recovery, observation and processing, and supported query and
+attachment limits.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 
