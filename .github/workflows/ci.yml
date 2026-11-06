@@ -28,6 +28,12 @@ on:
 env:
   DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
   GRAPHEVO_CI_PROFILE: ${{ ((github.event_name == 'pull_request' && github.base_ref == 'codex/graphevo-2' && !contains(github.event.pull_request.labels.*.name, 'ci-full-checkpoint')) || (github.event_name == 'workflow_dispatch' && inputs.profile == 'v2' && startsWith(github.ref, 'refs/heads/codex/'))) && 'v2' || 'full' }}
+  GRAPHEVO_CI_EXECUTION: >-
+    ${{ ((github.event_name == 'pull_request' && github.base_ref == 'codex/graphevo-2') ||
+    (github.event_name == 'workflow_dispatch' &&
+    (github.ref == 'refs/heads/codex/graphevo-2' ||
+    (inputs.profile == 'v2' && startsWith(github.ref, 'refs/heads/codex/'))))) &&
+    'serial' || 'parallel' }}
 
 permissions:
   contents: read
@@ -87,6 +93,7 @@ jobs:
         run: |
           set -o pipefail
           python3 Scripts/run_ci_tests.py --platform ios --profile "$GRAPHEVO_CI_PROFILE" \
+            --execution "$GRAPHEVO_CI_EXECUTION" \
             --destination "platform=iOS Simulator,id=$GRAPHEVO_SIMULATOR_ID" \
             --result-bundle "$RUNNER_TEMP/graphevo-ios.xcresult" \
             2>&1 | tee "$RUNNER_TEMP/graphevo-ios.log"
@@ -150,7 +157,7 @@ jobs:
         run: python3 -m unittest discover -s Scripts/tests
 
       - name: Build and run ${{ env.GRAPHEVO_CI_PROFILE }} tests on macOS
-        run: python3 Scripts/run_ci_tests.py --platform macos --profile "$GRAPHEVO_CI_PROFILE"
+        run: python3 Scripts/run_ci_tests.py --platform macos --profile "$GRAPHEVO_CI_PROFILE" --execution "$GRAPHEVO_CI_EXECUTION"
 
       - name: Check diff formatting
         run: git diff --check

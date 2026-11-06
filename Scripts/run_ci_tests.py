@@ -9,11 +9,15 @@ CAPACITY_TEST = "twoThousandRecordNativeSortFitsTheUnchangedStepBudget"
 V2_TARGETS = ("GraphEvoStoreTests", "GraphEvoRuntimeTests", "GraphEvoModelTests")
 
 
-def command(profile, platform, destination=None, result_bundle=None):
+def command(profile, platform, destination=None, result_bundle=None, *, execution="parallel"):
     if profile not in ("v2", "full") or platform not in ("macos", "ios"):
         raise ValueError("Unknown CI profile or platform")
+    if execution not in ("parallel", "serial"):
+        raise ValueError("Unknown CI test execution mode")
     if platform == "macos":
         args = ["swift", "test"]
+        if execution == "serial":
+            args.append("--no-parallel")
         if profile == "v2":
             args += ["--filter", "GraphEvo(Store|Runtime|Model)Tests", "--skip", CAPACITY_TEST]
         return args
@@ -22,6 +26,8 @@ def command(profile, platform, destination=None, result_bundle=None):
     args = ["xcodebuild", "-quiet", "test", "-scheme", "GraphEvo",
             "-destination", destination, "-resultBundlePath", result_bundle,
             "CODE_SIGNING_ALLOWED=NO"]
+    if execution == "serial":
+        args += ["-parallel-testing-enabled", "NO"]
     if profile == "v2":
         args += ["-only-testing:" + target for target in V2_TARGETS]
         args += ["-skip-testing:GraphEvoStoreTests/GraphTypedQueryTests/" + CAPACITY_TEST + "()"]
@@ -38,12 +44,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=("v2", "full"), required=True)
     parser.add_argument("--platform", choices=("macos", "ios"), required=True)
+    parser.add_argument("--execution", choices=("parallel", "serial"), default="parallel")
     parser.add_argument("--destination")
     parser.add_argument("--result-bundle")
     parser.add_argument("--dry-run", action="store_true")
     options = parser.parse_args()
     try:
-        args = command(options.profile, options.platform, options.destination, options.result_bundle)
+        args = command(options.profile, options.platform, options.destination, options.result_bundle,
+                       execution=options.execution)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps({"profile": options.profile, "platform": options.platform, "command": args}), flush=True)
