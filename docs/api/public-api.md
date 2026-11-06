@@ -999,6 +999,32 @@ All types below are available through `import GraphEvo` and compile in Swift 6.
 See [the typed store guide](../design/graphevo-2-typed-store.md) for identity,
 layout, complexity, adoption and migration limits.
 
+### Local App Group contexts
+
+On iOS 17 and macOS 14 or later, construct a context with
+`GraphContext(appGroup: GraphAppGroupConfiguration(...))`. The configuration
+takes the entitled group identifier, a declared `.primary` or `.secondary`
+role, secondary access (default `.readOnly`, opt-in `.readWrite`) and an optional
+`diagnosticLabel`. The label is private diagnostic metadata.
+
+The primary uses `createAppGroupGraph(id:conflictPolicy:)` or
+`openAppGroupGraph(id:)` and closes the returned `GraphStore`. The secondary
+uses `readAppGroupGraph(id:_:)` with a `GraphReadScope`, or
+`transactionAppGroupGraph(id:_:)` with a `GraphMutation`. These methods release
+their own lease and return `GraphAppGroupOperationResult<Value>`. Its
+`closePending` flag reports a failed detach separately from the successful
+`value`. A successful mutation must be treated as committed in either case.
+If the operation throws, GraphEvo still releases its lease and propagates the
+operation error. A fresh invocation takes a fresh read scope.
+
+Secondary access requires an existing graph. Missing graphs report
+`GraphStoreError.missingStore`. Secondary writes without opt-in report
+`.readOnly`. This surface supports local graphs. Account-bound or participant
+graphs require a later synchronized admission path and report
+`.accountIsolated`. Pending activation or retirement reports `.resourceReserved`.
+See the [App Group contract](../design/graphevo-2-controlled-store-access.md#public-app-group-process-contract)
+for lifecycle and acceptance details.
+
 `GraphStore` is a Sendable actor with:
 
 ```swift

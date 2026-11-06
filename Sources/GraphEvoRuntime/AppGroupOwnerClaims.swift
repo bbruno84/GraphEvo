@@ -47,10 +47,8 @@ enum AppGroupOwnerClaims {
            !(try files.contentsOfDirectory(atPath: directory.path)).isEmpty {
             throw StoreRuntimeError.resourceReserved
         }
-        if resolved.configuration.appGroup == nil {
-            for entry in try files.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
-                guard try read(entry).retiring != true else { throw StoreRuntimeError.resourceReserved }
-            }
+        for entry in try files.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+            guard try read(entry).retiring != true else { throw StoreRuntimeError.resourceReserved }
         }
         let entry = directory.appendingPathComponent(generation.uuidString)
         try JSONEncoder().encode(Claim(graph: graph, generation: generation, workspace: resolved.configuration.workspaceID)).write(to: entry, options: .withoutOverwriting)

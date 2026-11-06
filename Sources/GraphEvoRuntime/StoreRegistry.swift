@@ -371,6 +371,9 @@ package actor StoreRegistry {
         if configuration.appGroup != nil, mode == .openOrCreate {
             throw StoreRuntimeError.invalidConfiguration("App Group stores require explicit creation or opening.")
         }
+        if configuration.appGroup != nil, configuration.access == .readOnly, mode != .existing {
+            throw StoreRuntimeError.readOnlyStore
+        }
         try validateContextClaim(resolved)
         while true {
             if let entry = entries[resolved.key], let shutdown = entry.shutdown {

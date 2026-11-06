@@ -1,6 +1,20 @@
 import Foundation
 import GraphEvo
 
+/// Compiles the public App Group surface without requiring a signed test runner.
+@available(macOS 14, *)
+func compilePublicAppGroupSurface(identifier: String, graphID: GraphID) async throws {
+    let primary = try GraphContext(appGroup: .init(identifier: identifier, role: .primary))
+    try await primary.createAppGroupGraph(id: graphID).close()
+    let graph = try await primary.openAppGroupGraph(id: graphID)
+    try await graph.close()
+    let secondary = try GraphContext(appGroup: .init(identifier: identifier, role: .secondary,
+        secondaryAccess: .readWrite, diagnosticLabel: "Consumer"))
+    let read: GraphAppGroupOperationResult<Int> = try await secondary.readAppGroupGraph(id: graphID) { _ in 0 }
+    let write: GraphAppGroupOperationResult<Int> = try await secondary.transactionAppGroupGraph(id: graphID) { _ in read.value }
+    _ = write.closePending
+}
+
 /// A separate process provides a stopped v1 source using only the public legacy API.
 @MainActor func seedPublicV1Source(at url: URL) throws {
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

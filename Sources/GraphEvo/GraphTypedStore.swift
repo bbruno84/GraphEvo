@@ -128,6 +128,9 @@ extension GraphDatabase {
 @available(iOS 17, macOS 14, *)
 public typealias GraphContext = GraphEvoStore.GraphContext
 
+public typealias GraphAppGroupConfiguration = GraphEvoStore.GraphAppGroupConfiguration
+public typealias GraphAppGroupOperationResult<Value: Sendable> = GraphEvoStore.GraphAppGroupOperationResult<Value>
+
 @available(iOS 17, macOS 14, *)
 extension GraphContext {
     /// Creates an independent context using the production native adapters.
@@ -137,6 +140,15 @@ extension GraphContext {
     }
 
     /// Creates a context restricted to the dedicated store paths in this App Group.
+    public init(appGroup configuration: GraphAppGroupConfiguration) throws {
+        let group: AppGroupStoreLocation
+        do { group = try AppGroupStoreLocation(identifier: configuration.identifier) }
+        catch { throw GraphStore.translate(error) }
+        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: configuration))
+    }
+
+    /// Creates a context for internal probes of the App Group runtime.
     package init(appGroupIdentifier: String) throws {
         let group = try AppGroupStoreLocation(identifier: appGroupIdentifier)
         self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,

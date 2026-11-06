@@ -16,11 +16,13 @@ checkpoints. The [full checkpoint](https://github.com/bbruno84/GraphEvo/actions/
 passed on `c9f2aa32`, whose contents match the squash merge. macOS passed 1,050
 tests and both Swift 6 consumers. iOS 18.5 passed 1,048 tests with one skip.
 
-The maintainer selected the [public App Group contract](graphevo-2-controlled-store-access.md#public-app-group-process-contract)
-with explicit primary and secondary roles. The integrated runtime has package-only
-entry and bounded physical iPad app/widget evidence. Public implementation,
-first-launch behavior, independent-process acceptance and production
-abandoned-owner recovery remain open. The Demo `develop` branch currently pins
+The first [public App Group increment](graphevo-2-controlled-store-access.md#public-app-group-process-contract)
+implements explicit primary and secondary roles for local graphs. A secondary
+has a read-only or opted-in transactional scope and reports its detach outcome.
+The local scope has automated coverage for first launch, role refusal,
+account-bound store refusal and failed detach after commit. Physical acceptance
+of the public path, synchronized replicas and production abandoned-owner
+recovery remain open under PA02. The Demo `develop` branch currently pins
 `6432e595`. Its next H02 physical checkpoint uses the reviewed library revision
 and checks rejoining after leave without restarting.
 

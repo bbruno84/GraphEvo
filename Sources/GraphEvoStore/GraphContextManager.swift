@@ -26,6 +26,7 @@ package actor GraphContextManager {
     var localV1Bootstraps: [GraphID: LocalV1BootstrapAdmission] = [:]
     nonisolated let contextOwnerID: UUID?
     nonisolated let appGroup: AppGroupStoreLocation?
+    nonisolated let publicAppGroup: GraphAppGroupConfiguration?
     var contextClaims: [GraphID: UUID] = [:]
     var contextClaimClosing: [GraphID: Task<Void, Never>] = [:]
     let registry: StoreRegistry
@@ -848,8 +849,8 @@ package actor GraphContextManager {
     var registeredHandleCount: Int { entries.values.reduce(0) { $0 + $1.tokens.count } }
 
     package init(registry: StoreRegistry = .shared, schema: StoreSchema, adapter: GraphCoordinatorAdapter, contextOwnerID: UUID? = nil,
-                 appGroup: AppGroupStoreLocation? = nil) {
-        self.contextOwnerID = contextOwnerID; self.appGroup = appGroup
+                 appGroup: AppGroupStoreLocation? = nil, publicAppGroup: GraphAppGroupConfiguration? = nil) {
+        self.contextOwnerID = contextOwnerID; self.appGroup = appGroup; self.publicAppGroup = publicAppGroup
         self.registry = registry; self.schema = schema; self.adapter = adapter
         let source = adapter.migrationSource
         backups = GraphBackupManager(schemaIdentifier: schema.identifier, migrationSourceSchemaIdentifier: source?.schema.identifier,
@@ -907,7 +908,9 @@ package actor GraphContextManager {
     }
 
     nonisolated func graphStoreConfiguration(_ id: GraphID, at url: URL) -> StoreConfiguration {
-        StoreConfiguration(location: .sqlite(url), exclusiveGraphID: id.rawValue,
+        let access: StoreAccess = if let publicAppGroup, publicAppGroup.role == .secondary,
+                                    publicAppGroup.secondaryAccess == .readOnly { .readOnly } else { .readWrite }
+        return StoreConfiguration(location: .sqlite(url), access: access, exclusiveGraphID: id.rawValue,
                            contextOwnerID: contextOwnerID, appGroup: appGroup)
     }
 
@@ -939,9 +942,10 @@ package actor GraphContextManager {
                     guard !entries.values.contains(where: { $0.key == resolved.key }) else { throw GraphStoreError.ownershipConflict }
                     let registry = registry, schema = schema, adapter = adapter, configuration = resolved.configuration
                     let initiallyBlocked = rejoiningGraphs.contains(id)
+                    let appGroupLocalOnly = publicAppGroup != nil
                     let opening = Task.detached {
                         try await GraphCoordinator.open(id: id, configuration: configuration, creating: creating,
-                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked, initialParticipant: initialParticipant)
+                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked, initialParticipant: initialParticipant, appGroupLocalOnly: appGroupLocalOnly)
                     }
                     guard case .sqlite(let canonicalURL) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
                     entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, initialJoinID: initialParticipant?.generation, initialPolicy: conflictPolicy, opening: opening)
