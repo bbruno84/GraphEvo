@@ -27,6 +27,9 @@ package actor GraphContextManager {
     nonisolated let contextOwnerID: UUID?
     nonisolated let appGroup: AppGroupStoreLocation?
     nonisolated let publicAppGroup: GraphAppGroupConfiguration?
+    nonisolated var usesLocalSecondaryScopes: Bool {
+        publicAppGroup?.role == .secondary && publicAppGroup?.secondaryAccess == .readWrite
+    }
     var contextClaims: [GraphID: UUID] = [:]
     var contextClaimClosing: [GraphID: Task<Void, Never>] = [:]
     let registry: StoreRegistry
@@ -915,6 +918,7 @@ package actor GraphContextManager {
     }
 
     private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins, bootstrapPermit: UUID? = nil, initialParticipant: GraphCloudParticipantAccess? = nil) async throws -> GraphStore {
+        let localAppGroupWrite = usesLocalSecondaryScopes
         do {
             try Task.checkCancellation()
             guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
@@ -942,10 +946,11 @@ package actor GraphContextManager {
                     guard !entries.values.contains(where: { $0.key == resolved.key }) else { throw GraphStoreError.ownershipConflict }
                     let registry = registry, schema = schema, adapter = adapter, configuration = resolved.configuration
                     let initiallyBlocked = rejoiningGraphs.contains(id)
-                    let appGroupLocalOnly = publicAppGroup != nil
+                    let appGroupLocalOnly = publicAppGroup.map { $0.role != .primary || !$0.allowsCloudSynchronization } ?? false
                     let opening = Task.detached {
                         try await GraphCoordinator.open(id: id, configuration: configuration, creating: creating,
-                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked, initialParticipant: initialParticipant, appGroupLocalOnly: appGroupLocalOnly)
+                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked, initialParticipant: initialParticipant, appGroupLocalOnly: appGroupLocalOnly,
+                                                        localAppGroupWrite: localAppGroupWrite)
                     }
                     guard case .sqlite(let canonicalURL) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
                     entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, initialJoinID: initialParticipant?.generation, initialPolicy: conflictPolicy, opening: opening)
@@ -974,7 +979,8 @@ package actor GraphContextManager {
                     // A successful shared creation commit must return its result even if cancelled.
                     if !creating { try Task.checkCancellation() }
                     let accountAllowed: Bool
-                    if creating, let identity = initialParticipant?.identity {
+                    if localAppGroupWrite { accountAllowed = false }
+                    else if creating, let identity = initialParticipant?.identity {
                         try await claimCloudAccount(identity, for: id, owner: owner)
                         accountAllowed = true
                     } else { accountAllowed = creating ? true : try await restoreAccountOnOpen(id, owner: owner) }

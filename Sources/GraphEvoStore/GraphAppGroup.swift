@@ -12,14 +12,17 @@ public struct GraphAppGroupConfiguration: Sendable {
     public let role: Role
     public let secondaryAccess: SecondaryAccess
     public let diagnosticLabel: String?
+    /// Lets the primary connect and open synchronized graphs in this App Group.
+    public let allowsCloudSynchronization: Bool
 
     /// The label is used only in diagnostics. Secondary access applies only to the secondary role.
     public init(identifier: String, role: Role, secondaryAccess: SecondaryAccess = .readOnly,
-                diagnosticLabel: String? = nil) {
+                diagnosticLabel: String? = nil, allowsCloudSynchronization: Bool = false) {
         self.identifier = identifier
         self.role = role
         self.secondaryAccess = secondaryAccess
         self.diagnosticLabel = diagnosticLabel
+        self.allowsCloudSynchronization = allowsCloudSynchronization
     }
 }
 
@@ -42,6 +45,7 @@ extension GraphContext {
     /// Opens an existing App Group graph from the primary context.
     public func openAppGroupGraph(id: GraphID) async throws -> GraphStore {
         let group = try requireAppGroup(.primary)
+        if manager.publicAppGroup?.allowsCloudSynchronization == true { await prepareMonitoring() }
         return await retained(try await manager.openGraph(id: id, at: group.storeURL(for: id.rawValue)))
     }
 
@@ -49,7 +53,18 @@ extension GraphContext {
     public func readAppGroupGraph<Value: Sendable>(id: GraphID,
         _ body: @escaping @Sendable (GraphReadScope) throws -> Value
     ) async throws -> GraphAppGroupOperationResult<Value> {
-        try await withSecondaryGraph(id: id) { try await $0.read(body) }
+        let account = manager.adapter.account
+        return try await withSecondaryGraph(id: id) { graph in
+            try await graph.read { scope in
+                try scope.withContext { context, adapter in
+                    if let participant = try adapter.participantAccess?(context, id, nil) {
+                        throw participant.blocked ? GraphStoreError.resourceReserved : GraphStoreError.accountIsolated
+                    }
+                    guard try account?.read(context, id) == nil else { throw GraphStoreError.accountIsolated }
+                }
+                return try body(scope)
+            }
+        }
     }
 
     /// Commits one opted-in secondary transaction and releases its lease.

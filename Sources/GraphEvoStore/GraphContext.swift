@@ -63,7 +63,7 @@ public actor GraphContext {
         await graph.retainPublicContext(self, identity: identity)
         return graph
     }
-    private func prepareMonitoring() async { await manager.setLocalAccountAdapter(adapter) }
+    func prepareMonitoring() async { await manager.setLocalAccountAdapter(adapter) }
 
     /// Reports aggregate scene activity. On iOS, the host keeps background execution
     /// available while awaiting the stop that releases the session directory lock.
@@ -136,7 +136,10 @@ public actor GraphContext {
 
     /// Reserves transport and returns before account/network startup completes.
     public func connectCloud(using configuration: GraphCloudConnectionConfiguration) async throws -> GraphCloudConnection {
-        try requireOrdinaryContext()
+        if let group = manager.publicAppGroup {
+            guard group.role == .primary else { throw GraphStoreError.permissionDenied }
+            guard group.allowsCloudSynchronization else { throw GraphStoreError.unsupportedLayout }
+        }
         try Task.checkCancellation()
         guard Bundle.main.bundleURL.pathExtension != "appex" else { throw GraphCloudConnectionError.unavailableInExtension }
         var isDirectory: ObjCBool = false

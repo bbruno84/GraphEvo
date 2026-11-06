@@ -251,6 +251,126 @@ private actor AsyncCheckpoint {
 @Suite(.timeLimit(.minutes(2))) struct PublicAppGroupTests {
     @Test
     @available(iOS 17, macOS 14, *)
+    func overlappingSecondaryReadAndWriteShareTheUnboundOwner() async throws {
+        let root = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = AppGroupStoreLocation(container: root)
+        let id = GraphID(), note = GraphNodeID(graphID: id)
+        let primary = appGroupContext(group, role: .primary)
+        let graph = try await primary.createAppGroupGraph(id: id)
+        try await graph.close()
+        let secondary = appGroupContext(group, role: .secondary, access: .readWrite)
+        let entered = AsyncCheckpoint()
+        let release = DispatchSemaphore(value: 0)
+        let reading = Task {
+            try await secondary.readAppGroupGraph(id: id) { scope in
+                let before = try scope.record(for: note)
+                Task { await entered.signal() }
+                if release.wait(timeout: .now() + 10) == .timedOut { Issue.record("Concurrent writer did not finish.") }
+                let after = try scope.record(for: note)
+                return before == nil && after == nil
+            }
+        }
+        await entered.wait()
+        let written: GraphAppGroupOperationResult<GraphNodeID>
+        do {
+            written = try await secondary.transactionAppGroupGraph(id: id) { try $0.insert(.init(id: note, type: "Note")) }
+            release.signal()
+        } catch {
+            release.signal()
+            _ = try? await reading.value
+            throw error
+        }
+        #expect(written.value == note)
+        #expect(try await reading.value.value)
+        #expect(try await secondary.readAppGroupGraph(id: id) { try $0.record(for: note)?.id }.value == note)
+    }
+
+    @Test
+    @available(iOS 17, macOS 14, *)
+    func secondaryUsesPersistedParticipantWriteRestriction() async throws {
+        let root = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = AppGroupStoreLocation(container: root)
+        let id = GraphID(), setup = appGroupContext(group)
+        let graph = try await setup.createGraph(id: id, at: setup.appGroupStoreURL(for: id))
+        let entry = try #require(await setup.manager.entries[id])
+        let owner = try await entry.opening.value
+        let binding = GraphCloudBinding(zone: .init(scope: .shared, owner: "owner", name: "fixture"), graphID: id)
+        _ = try await owner.participantAccess(.init(binding: binding, account: "participant", permission: .readOnly, accepted: true))
+        try await graph.close()
+
+        let secondary = appGroupContext(group, role: .secondary, access: .readWrite)
+        await #expect {
+            _ = try await secondary.transactionAppGroupGraph(id: id) { _ in Issue.record("Read-only replica entered mutation.") }
+        } throws: { error in
+            if case .permissionDenied? = error as? GraphStoreError { return true }
+            return false
+        }
+        #expect(await secondary.manager.cloudSessions.isEmpty)
+    }
+
+    @Test
+    @available(iOS 17, macOS 14, *)
+    func optedInPrimaryBindsAndRecoversSecondaryHistory() async throws {
+        let root = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = AppGroupStoreLocation(container: root)
+        let id = GraphID(), node = GraphNodeID(graphID: id)
+        let cloud = try GraphCloudConnectionConfiguration(containerIdentifier: "iCloud.LocalAppGroup",
+            environment: .development, directory: root.appendingPathComponent("Cloud"))
+        let configuration = GraphAppGroupConfiguration(identifier: "fixture", role: .primary, allowsCloudSynchronization: true)
+        func primary(account: String) -> GraphContext {
+            let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+                adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: configuration)
+            let driver = GraphCloudAdapter(account: { _ in account }, make: { _, _, _, _ in
+                GraphCloudDriver(fetch: { _ in }, cancel: {})
+            })
+            return GraphContext(manager: manager, adapter: driver)
+        }
+        let original = primary(account: "A")
+        let graph = try await original.createAppGroupGraph(id: id)
+        let connection = try await original.connectCloud(using: cloud)
+        for _ in 0..<200 {
+            if try await connection.state == .ready { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await connection.bindPrivateGraph(graph, zoneName: "fixture")
+        try await connection.close()
+        try await graph.close()
+
+        let writer = appGroupContext(group, role: .secondary, access: .readWrite)
+        _ = try await writer.transactionAppGroupGraph(id: id) { try $0.insert(.init(id: node, type: "Note")) }
+
+        let different = primary(account: "B")
+        let isolated = try await different.openAppGroupGraph(id: id)
+        for _ in 0..<200 {
+            if try await isolated.cloudAccountState == .isolated(.differentAccount) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(try await isolated.cloudAccountState == .isolated(.differentAccount))
+        await #expect {
+            _ = try await isolated.read { try $0.record(for: node) }
+        } throws: { error in
+            if case .accountIsolated? = error as? GraphStoreError { return true }
+            return false
+        }
+        try await isolated.close()
+
+        let restarted = primary(account: "A")
+        let recovered = try await restarted.openAppGroupGraph(id: id)
+        for _ in 0..<200 {
+            if try await recovered.cloudAccountState == .available { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(try await recovered.read { try $0.record(for: node)?.id } == node)
+        let pending = try await recovered.prepareSyncBatch(maximumRecords: 2)
+        #expect(pending.items.map(\.change.id) == [node])
+        try await recovered.close()
+    }
+
+    @Test
+    @available(iOS 17, macOS 14, *)
     func roleAdmissionAndScopedLocalAccess() async throws {
         let root = try temporaryAppGroup()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -346,7 +466,7 @@ private actor AsyncCheckpoint {
 
     @Test
     @available(iOS 17, macOS 14, *)
-    func accountBoundStoreRefusesPublicLocalAccess() async throws {
+    func accountBoundStoreAllowsSecondaryLocalWriteAndPreservesPrimaryIsolation() async throws {
         let root = try temporaryAppGroup()
         defer { try? FileManager.default.removeItem(at: root) }
         let group = AppGroupStoreLocation(container: root)
@@ -356,6 +476,23 @@ private actor AsyncCheckpoint {
         let owner = try await entry.opening.value
         try await owner.claimAccount(.init(container: "iCloud.AppGroupFixture", environment: .development, account: "fixture"))
         try await graph.close()
+
+        let writer = appGroupContext(group, role: .secondary, access: .readWrite)
+        let note = GraphNodeID(graphID: id)
+        let saved = try await writer.transactionAppGroupGraph(id: id) { mutation in
+            try mutation.insert(.init(id: note, type: "OfflineNote", properties: ["value": .integer(7)]))
+        }
+        #expect(saved.value == note)
+        #expect(!saved.closePending)
+        #expect(await writer.manager.cloudSessions.isEmpty)
+        let localValue = try await writer.transactionAppGroupGraph(id: id) { try $0.record(for: note)?.properties["value"] }
+        #expect(localValue.value == .integer(7))
+        await #expect {
+            _ = try await writer.readAppGroupGraph(id: id) { _ in Issue.record("Account-bound read entered the callback.") }
+        } throws: { error in
+            if case .accountIsolated? = error as? GraphStoreError { return true }
+            return false
+        }
 
         let reader = appGroupContext(group, role: .secondary)
         await #expect {
