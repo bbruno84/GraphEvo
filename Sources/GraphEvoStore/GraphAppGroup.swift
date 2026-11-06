@@ -12,14 +12,17 @@ public struct GraphAppGroupConfiguration: Sendable {
     public let role: Role
     public let secondaryAccess: SecondaryAccess
     public let diagnosticLabel: String?
+    /// Lets the primary connect and open synchronized graphs in this App Group.
+    public let allowsCloudSynchronization: Bool
 
     /// The label is used only in diagnostics. Secondary access applies only to the secondary role.
     public init(identifier: String, role: Role, secondaryAccess: SecondaryAccess = .readOnly,
-                diagnosticLabel: String? = nil) {
+                diagnosticLabel: String? = nil, allowsCloudSynchronization: Bool = false) {
         self.identifier = identifier
         self.role = role
         self.secondaryAccess = secondaryAccess
         self.diagnosticLabel = diagnosticLabel
+        self.allowsCloudSynchronization = allowsCloudSynchronization
     }
 }
 
@@ -42,6 +45,7 @@ extension GraphContext {
     /// Opens an existing App Group graph from the primary context.
     public func openAppGroupGraph(id: GraphID) async throws -> GraphStore {
         let group = try requireAppGroup(.primary)
+        if manager.publicAppGroup?.allowsCloudSynchronization == true { await prepareMonitoring() }
         return await retained(try await manager.openGraph(id: id, at: group.storeURL(for: id.rawValue)))
     }
 
@@ -58,14 +62,14 @@ extension GraphContext {
     ) async throws -> GraphAppGroupOperationResult<Value> {
         _ = try requireAppGroup(.secondary)
         guard manager.publicAppGroup?.secondaryAccess == .readWrite else { throw GraphStoreError.readOnly }
-        return try await withSecondaryGraph(id: id) { try await $0.transaction(body) }
+        return try await withSecondaryGraph(id: id, localWrite: true) { try await $0.transaction(body) }
     }
 
-    private func withSecondaryGraph<Value: Sendable>(id: GraphID,
+    private func withSecondaryGraph<Value: Sendable>(id: GraphID, localWrite: Bool = false,
         _ operation: (GraphStore) async throws -> Value
     ) async throws -> GraphAppGroupOperationResult<Value> {
         let group = try requireAppGroup(.secondary)
-        let graph = try await manager.openGraph(id: id, at: group.storeURL(for: id.rawValue))
+        let graph = try await manager.openGraph(id: id, at: group.storeURL(for: id.rawValue), localAppGroupWrite: localWrite)
         let value: Value
         do { value = try await operation(graph) }
         catch {

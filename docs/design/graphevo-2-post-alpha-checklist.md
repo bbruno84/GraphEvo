@@ -281,6 +281,12 @@ Sources: [model contracts](graphevo-2-application-models.md),
 
 ## PA02 — runtime, concurrency and platform support
 
+The secondary local-write candidate uses the existing transaction on a
+synchronized App Group replica. Physical acceptance exercises independent
+processes without extension CloudKit entitlements and observes the exact
+record on a separate replica after the primary resumes.
+
+
 - [ ] **B** Select minimum OS/toolchain and supported process topology (O02/O03).
   Decide app/extension concurrent App Group access explicitly; a process-local
   registry does not establish cross-process safety.

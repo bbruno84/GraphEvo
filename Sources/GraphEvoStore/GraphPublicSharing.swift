@@ -67,6 +67,21 @@ extension GraphCloudConnection {
             return forwarding(try await owningContext.manager.cloud(config).observeJoin(id))
         }
     }
+    /// Opens a participant replica at its dedicated App Group path.
+    public func openAppGroupReplica(for join: GraphCloudJoin) async throws -> GraphStore {
+        let manager = owningContext.manager
+        guard let group = manager.appGroup, let appGroup = manager.publicAppGroup,
+              appGroup.role == .primary, appGroup.allowsCloudSynchronization else {
+            throw GraphStoreError.permissionDenied
+        }
+        let config = try await ready()
+        guard join.contextIdentity == owningContext.identityForBootstrap, join.namespace == config.namespace else {
+            throw GraphStoreError.foreignGraph
+        }
+        guard let id = try await join.state.graphID else { throw GraphCloudDiscoveryError.invalidJoin }
+        return try await openReplica(for: join, at: group.storeURL(for: id.rawValue))
+    }
+
     /// Creates or resumes an exact participant replica after descriptor discovery.
     public func openReplica(for join: GraphCloudJoin, at storeURL: URL) async throws -> GraphStore {
         return try await sharingOperation {

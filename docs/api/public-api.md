@@ -1019,9 +1019,20 @@ operation error. A fresh invocation takes a fresh read scope.
 
 Secondary access requires an existing graph. Missing graphs report
 `GraphStoreError.missingStore`. Secondary writes without opt-in report
-`.readOnly`. This surface supports local graphs. Account-bound or participant
-graphs require a later synchronized admission path and report
-`.accountIsolated`. Pending activation or retirement reports `.resourceReserved`.
+`.readOnly`. A configured read-write secondary can use
+`transactionAppGroupGraph(id:_:)` directly on an existing synchronized replica.
+The transaction uses the selected local SQLite file, including reads within
+the mutation scope. It does not consult CloudKit or start synchronization.
+The containing app is responsible for granting this local access to its
+secondary processes. A participant mutation still uses the permissions and
+restrictions already recorded in the local replica.
+
+The primary may set `allowsCloudSynchronization: true` to connect CloudKit,
+bind a private App Group graph, or open a participant graph with
+`GraphCloudConnection.openAppGroupReplica(for:)`. The primary retains its
+normal account and synchronization lifecycle. The standalone
+`readAppGroupGraph(id:_:)` scope remains for unbound graphs. Pending activation
+or retirement reports `.resourceReserved`.
 See the [App Group contract](../design/graphevo-2-controlled-store-access.md#public-app-group-process-contract)
 for lifecycle and acceptance details.
 

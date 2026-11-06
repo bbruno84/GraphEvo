@@ -256,17 +256,15 @@ Group identifier and declares one of two roles when configuring its context.
 GraphEvo uses that declaration for App Group admission. Bundle classification
 remains a separate platform safeguard for existing CloudKit entry points.
 
-The first public increment exposes the local-only roles through
-[`GraphContext(appGroup:)`](../api/public-api.md#local-app-group-contexts).
-The primary obtains a normal graph lease. The secondary receives a scoped read
-or mutation and the result of its detach attempt. CloudKit connection,
-conversion, maintenance and orphan recovery on public App Group contexts are
-reserved for the subsequent increment.
+The public roles use [`GraphContext(appGroup:)`](../api/public-api.md#local-app-group-contexts).
+The primary obtains a normal graph lease and can explicitly enable CloudKit
+for dedicated private or participant replicas. The secondary gets a scoped
+operation and the result of its detach attempt.
 
 | Role | Admitted operations |
 |---|---|
-| Primary | Create and open a graph, read and write, connect CloudKit, and own explicit migration, maintenance and recovery. CloudKit session ownership follows the existing foreground and directory claim contract. |
-| Secondary | Open an existing graph for local reads. The consumer can explicitly enable short local transactions. Each invocation closes its lease when its work finishes. |
+| Primary | Create and open a graph, read and write, and own an opted-in CloudKit connection and its lifecycle. |
+| Secondary | Read an unbound graph or perform an opted-in local transaction on an existing graph. Each invocation closes its lease. |
 
 An optional readable process label may accompany either role for diagnostics.
 The label contributes only to diagnostic presentation. Store location derives
@@ -285,11 +283,12 @@ consumer runs.
 If the secondary starts before the primary has created a graph, opening reports
 a missing store. An incompatible store, maintenance reservation, removal or
 unavailable protected data produces an explicit refusal. The primary owns any
-subsequent create, migration or recovery. For a synchronized graph, the same
-account and access isolation policy applies to both roles. The secondary can
-access data only when it can establish the required authorization under that
-policy. Unresolved account or permission evidence leaves the replica unavailable
-to that invocation.
+subsequent create, migration or recovery. A secondary transaction commits to
+the selected replica without querying CloudKit. Its reads and writes use the
+existing native scope and any persisted participant restrictions. A commit
+stays associated with that replica when the primary isolates it after an
+account change. The primary discovers eligible writes through persistent
+history when the original replica resumes synchronization.
 
 Foundation grants continue to provide interprocess exclusion. Durable owner
 registrations record pending lifecycle work. Close removes the registration
@@ -300,6 +299,6 @@ generation can be verified under a separate recovery protocol.
 The public acceptance checkpoint covers independent iOS processes on one
 replica: missing-store startup, concurrent reads and admitted writes, peer
 commit visibility, background and reopen, contention with maintenance, and
-interrupted close. A synchronized replica also needs verified account/access
-behavior and primary publication of a secondary commit. The existing iPad
+interrupted close. A synchronized replica also needs primary account isolation and exact peer
+observation of the secondary commit. The existing iPad
 cycles establish the package-only alternating app/widget lifecycle scope.

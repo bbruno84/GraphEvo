@@ -332,7 +332,7 @@ extension GraphContextManager {
                 let registry = registry, schema = schema, adapter = adapter
                 let configuration = graphStoreConfiguration(id, at: location.url)
                 let task = Task.detached { try await GraphCoordinator.recoverForPurge(id: id, configuration: configuration, storeID: storeID, registry: registry, schema: schema, adapter: adapter) }
-                entries[id] = Entry(key: location.key, url: location.url, creating: false, initialPolicy: .lastEditWins, opening: task)
+                entries[id] = Entry(key: location.key, url: location.url, creating: false, localAppGroupWrite: false, initialPolicy: .lastEditWins, opening: task)
             }
             let entry = entries[id]!
             let owner: GraphCoordinator
