@@ -65,6 +65,7 @@ extension GraphContext {
     /// Supply an exact recovery generation only after stopping every process using the destination.
     public func openGraph(convertingLocalV1 request: GraphV1BootstrapRequest,
                           recoveringOfflineGeneration: UUID?) async throws -> GraphV1BootstrapResult {
+        try requireOrdinaryContext()
         try Self.validateStoreURL(request.destinationURL)
         await manager.setLocalAccountAdapter(adapterForBootstrap)
         do {

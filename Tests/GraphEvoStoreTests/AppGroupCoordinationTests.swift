@@ -248,6 +248,178 @@ private actor AsyncCheckpoint {
     }
 }
 
+@Suite(.timeLimit(.minutes(2))) struct PublicAppGroupTests {
+    @Test
+    @available(iOS 17, macOS 14, *)
+    func roleAdmissionAndScopedLocalAccess() async throws {
+        let root = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = AppGroupStoreLocation(container: root)
+        let id = GraphID(), node = GraphNodeID(graphID: id)
+        let primary = appGroupContext(group, role: .primary, label: "host")
+        let reader = appGroupContext(group, role: .secondary, label: "timeline")
+        let writer = appGroupContext(group, role: .secondary, access: .readWrite, label: "action")
+        let url = try reader.appGroupStoreURL(for: id)
+
+        await #expect {
+            _ = try await reader.readAppGroupGraph(id: id) { _ in Issue.record("Missing store entered the callback.") }
+        } throws: { error in
+            if case .missingStore? = error as? GraphStoreError { return true }
+            return false
+        }
+        #expect(!FileManager.default.fileExists(atPath: url.deletingLastPathComponent().path))
+        await #expect {
+            _ = try await reader.createAppGroupGraph(id: id)
+        } throws: { error in
+            if case .permissionDenied? = error as? GraphStoreError { return true }
+            return false
+        }
+        await #expect {
+            _ = try await writer.openAppGroupGraph(id: id)
+        } throws: { error in
+            if case .permissionDenied? = error as? GraphStoreError { return true }
+            return false
+        }
+        await #expect {
+            _ = try await reader.transactionAppGroupGraph(id: id) { _ in Issue.record("Read-only context entered mutation.") }
+        } throws: { error in
+            if case .readOnly? = error as? GraphStoreError { return true }
+            return false
+        }
+        await #expect {
+            _ = try await primary.openGraph(id: id, at: url)
+        } throws: { error in
+            if case .unsupportedLayout? = error as? GraphStoreError { return true }
+            return false
+        }
+
+        let graph = try await primary.createAppGroupGraph(id: id)
+        try await graph.close()
+        let committed = try await writer.transactionAppGroupGraph(id: id) {
+            try $0.insert(GraphRecord(id: node, type: "Secondary"))
+            return node
+        }
+        #expect(committed.value == node && !committed.closePending)
+        let observed = try await reader.readAppGroupGraph(id: id) { try $0.record(for: node) }
+        #expect(observed.value?.type == "Secondary" && !observed.closePending)
+
+        let nativeReader = try await reader.manager.openGraph(id: id, at: url)
+        await #expect {
+            try await nativeReader.transaction { _ in Issue.record("Native read-only store entered mutation.") }
+        } throws: { error in
+            if case .readOnly? = error as? GraphStoreError { return true }
+            return false
+        }
+        try await nativeReader.close()
+        let renamed = appGroupContext(group, role: .primary, label: "another-host-label")
+        let reopened = try await renamed.openAppGroupGraph(id: id)
+        #expect(try await reopened.read { try $0.record(for: node)?.type } == "Secondary")
+        try await reopened.close()
+        let alias = root.appendingPathComponent("alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: url.deletingLastPathComponent())
+        await #expect(throws: (any Error).self) {
+            _ = try await GraphContext().openGraph(id: id, at: alias.appendingPathComponent("Store.sqlite"))
+        }
+        let session = root.appendingPathComponent("Engine")
+        let cloud = try GraphCloudConnectionConfiguration(containerIdentifier: "iCloud.AppGroupFixture",
+            environment: .development, directory: session)
+        await #expect {
+            _ = try await primary.connectCloud(using: cloud)
+        } throws: { error in
+            if case .unsupportedLayout? = error as? GraphStoreError { return true }
+            return false
+        }
+        #expect(!FileManager.default.fileExists(atPath: session.path))
+
+        let generation = UUID()
+        let claim = url.deletingLastPathComponent().appendingPathComponent(".owners-v1").appendingPathComponent(generation.uuidString)
+        let retiring: [String: Any] = ["graph": id.rawValue.uuidString, "generation": generation.uuidString, "retiring": true]
+        try JSONSerialization.data(withJSONObject: retiring).write(to: claim)
+        await #expect {
+            _ = try await reader.readAppGroupGraph(id: id) { _ in Issue.record("Retiring store entered the callback.") }
+        } throws: { error in
+            if case .resourceReserved? = error as? GraphStoreError { return true }
+            return false
+        }
+        #expect(FileManager.default.fileExists(atPath: claim.path))
+    }
+
+    @Test
+    @available(iOS 17, macOS 14, *)
+    func accountBoundStoreRefusesPublicLocalAccess() async throws {
+        let root = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = AppGroupStoreLocation(container: root)
+        let id = GraphID(), packageContext = appGroupContext(group)
+        let graph = try await packageContext.createGraph(id: id, at: packageContext.appGroupStoreURL(for: id))
+        let entry = try #require(await packageContext.manager.entries[id])
+        let owner = try await entry.opening.value
+        try await owner.claimAccount(.init(container: "iCloud.AppGroupFixture", environment: .development, account: "fixture"))
+        try await graph.close()
+
+        let reader = appGroupContext(group, role: .secondary)
+        await #expect {
+            _ = try await reader.readAppGroupGraph(id: id) { _ in Issue.record("Account-bound data entered the callback.") }
+        } throws: { error in
+            if case .accountIsolated? = error as? GraphStoreError { return true }
+            return false
+        }
+        let primary = appGroupContext(group, role: .primary)
+        await #expect {
+            _ = try await primary.openAppGroupGraph(id: id)
+        } throws: { error in
+            if case .accountIsolated? = error as? GraphStoreError { return true }
+            return false
+        }
+    }
+
+    @Test
+    @available(iOS 17, macOS 14, *)
+    func cancellationRollsBackAndFailedDetachDoesNotConcealCommit() async throws {
+        let root = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = AppGroupStoreLocation(container: root)
+        let id = GraphID(), primary = appGroupContext(group, role: .primary)
+        let graph = try await primary.createAppGroupGraph(id: id)
+        try await graph.close()
+
+        let writer = appGroupContext(group, role: .secondary, access: .readWrite)
+        let aborted = GraphNodeID(graphID: id), gate = CommitInterruption()
+        let pending = Task {
+            try await writer.transactionAppGroupGraph(id: id) {
+                try $0.insert(GraphRecord(id: aborted, type: "Aborted"))
+                gate.hold()
+            }
+        }
+        await gate.reached.wait()
+        pending.cancel()
+        gate.resume.signal()
+        await #expect(throws: CancellationError.self) { _ = try await pending.value }
+        let fresh = try await primary.openAppGroupGraph(id: id)
+        #expect(try await fresh.read { try $0.record(for: aborted) } == nil)
+        try await fresh.close()
+
+        let committed = GraphNodeID(graphID: id), afterSave = CommitInterruption()
+        let registry = StoreRegistry(hooks: .init(afterCommit: { afterSave.hold() }, beforeDetach: {
+            throw StoreRuntimeError.resourceReserved
+        }))
+        let failing = appGroupContext(group, role: .secondary, access: .readWrite, registry: registry)
+        let saving = Task {
+            try await failing.transactionAppGroupGraph(id: id) {
+                try $0.insert(GraphRecord(id: committed, type: "Committed"))
+                return committed
+            }
+        }
+        await afterSave.reached.wait()
+        saving.cancel()
+        afterSave.resume.signal()
+        let result = try await saving.value
+        #expect(result.value == committed && result.closePending)
+        let owners = group.storeURL(for: id.rawValue).deletingLastPathComponent().appendingPathComponent(".owners-v1")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path).count == 1)
+    }
+}
+
 private func temporaryAppGroup() throws -> URL {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
@@ -255,7 +427,10 @@ private func temporaryAppGroup() throws -> URL {
 }
 
 @available(iOS 17, macOS 14, *)
-private func appGroupContext(_ group: AppGroupStoreLocation) -> GraphContext {
-    GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
-        adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group))
+private func appGroupContext(_ group: AppGroupStoreLocation, role: GraphAppGroupConfiguration.Role? = nil,
+                             access: GraphAppGroupConfiguration.SecondaryAccess = .readOnly, label: String? = nil,
+                             registry: StoreRegistry = .shared) -> GraphContext {
+    let configuration = role.map { GraphAppGroupConfiguration(identifier: "fixture", role: $0, secondaryAccess: access, diagnosticLabel: label) }
+    return GraphContext(manager: GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
+        adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: configuration))
 }

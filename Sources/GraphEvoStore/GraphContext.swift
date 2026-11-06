@@ -39,6 +39,7 @@ public actor GraphContext {
 
     /// Creates one new graph at an exact SQLite URL, refusing existing files.
     public func createGraph(id: GraphID, at storeURL: URL, conflictPolicy: GraphConflictPolicy = .lastEditWins) async throws -> GraphStore {
+        try requireOrdinaryContext()
         try validateStoreURL(storeURL)
         await prepareMonitoring()
         return await retained(try await manager.createGraph(id: id, at: storeURL, conflictPolicy: conflictPolicy))
@@ -46,6 +47,7 @@ public actor GraphContext {
 
     /// Opens the selected existing graph without creating, converting or enabling transport.
     public func openGraph(id: GraphID, at storeURL: URL) async throws -> GraphStore {
+        try requireOrdinaryContext()
         try validateStoreURL(storeURL)
         await prepareMonitoring()
         return await retained(try await manager.openGraph(id: id, at: storeURL))
@@ -57,7 +59,7 @@ public actor GraphContext {
         return appGroup.storeURL(for: id.rawValue)
     }
 
-    private func retained(_ graph: GraphStore) async -> GraphStore {
+    func retained(_ graph: GraphStore) async -> GraphStore {
         await graph.retainPublicContext(self, identity: identity)
         return graph
     }
@@ -126,6 +128,7 @@ public actor GraphContext {
 
     /// Schedules identity checks for observed accounts without starting stopped transport.
     public func refreshCloudAccounts() async throws {
+        try requireOrdinaryContext()
         try Task.checkCancellation()
         await prepareMonitoring()
         await manager.refreshPublicAccounts()
@@ -133,6 +136,7 @@ public actor GraphContext {
 
     /// Reserves transport and returns before account/network startup completes.
     public func connectCloud(using configuration: GraphCloudConnectionConfiguration) async throws -> GraphCloudConnection {
+        try requireOrdinaryContext()
         try Task.checkCancellation()
         guard Bundle.main.bundleURL.pathExtension != "appex" else { throw GraphCloudConnectionError.unavailableInExtension }
         var isDirectory: ObjCBool = false

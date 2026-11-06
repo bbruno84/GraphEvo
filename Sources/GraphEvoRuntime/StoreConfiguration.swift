@@ -109,9 +109,10 @@ struct ResolvedStore: Sendable {
             throw StoreRuntimeError.invalidConfiguration("A workspace requires exclusive graph ownership.")
         }
         if configuration.exclusiveGraphID != nil {
-            guard case .sqlite = configuration.location, configuration.access == .readWrite,
+            guard case .sqlite = configuration.location,
+                  configuration.access == .readWrite || configuration.appGroup != nil,
                   configuration.cloudKitContainerIdentifier == nil, configuration.sharedStoreURL == nil else {
-                throw StoreRuntimeError.invalidConfiguration("Exclusive graphs require one local writable SQLite store.")
+                throw StoreRuntimeError.invalidConfiguration("Exclusive graphs require one local SQLite store and coordinated access.")
             }
         }
         switch configuration.location {

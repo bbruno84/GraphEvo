@@ -245,9 +245,9 @@ stays `purging` until retry. After native destruction starts, only verified
 cleanup can release ownership. Restart without sufficient evidence leaves the
 purge pending. PID, age and file absence are not release authority.
 
-The package does not expose App Group role selection or a production orphan
-recovery operation. See [PA02](graphevo-2-post-alpha-checklist.md) for remaining
-physical-device, public-role and CloudKit validation.
+The public local surface below uses this runtime. See
+[PA02](graphevo-2-post-alpha-checklist.md) for synchronized replicas and
+production recovery of abandoned App Group registrations.
 
 ## Public App Group process contract
 
@@ -255,6 +255,13 @@ Selected 2026-11-06 for implementation. The consumer supplies an entitled App
 Group identifier and declares one of two roles when configuring its context.
 GraphEvo uses that declaration for App Group admission. Bundle classification
 remains a separate platform safeguard for existing CloudKit entry points.
+
+The first public increment exposes the local-only roles through
+[`GraphContext(appGroup:)`](../api/public-api.md#local-app-group-contexts).
+The primary obtains a normal graph lease. The secondary receives a scoped read
+or mutation and the result of its detach attempt. CloudKit connection,
+conversion, maintenance and orphan recovery on public App Group contexts are
+reserved for the subsequent increment.
 
 | Role | Admitted operations |
 |---|---|
