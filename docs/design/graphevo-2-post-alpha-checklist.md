@@ -162,7 +162,7 @@ creating this document.
 ## Current gate interpretation — audited 2026-11-06
 
 The [current delivery plan](graphevo-2-delivery-plan.md#current-delivery-position--audited-2026-11-06)
-is pinned to `b5c6f3b9` through [#177](https://github.com/bbruno84/GraphEvo/pull/177).
+is pinned to `e0f2a07c` through [#183](https://github.com/bbruno84/GraphEvo/pull/183).
 Unchecked B/R items track broad acceptance, including cases with integrated
 implementation. The [earlier evidence map](results/roadmap-audit-2026-11-03.md)
 retains its #144 baseline. Dated S01, S03, native-mirroring and early T01 results
@@ -172,7 +172,7 @@ uses S04 and its selected transport.
 | Remaining gate group | Existing implementation | Evidence or decision still needed |
 |---|---|---|
 | PA01/PA02/PA10: public API and supported runtime | Typed scopes/models, public H01 context/open/bootstrap, two independent Swift 6 consumers | Complete Swift 6 and distribution audit, supported OS/process matrix, API/schema reconciliation |
-| PA02: App Group | Package-only S04 runtime with Foundation grants and 30 physical iPad app/widget cycles using injected transport | Implement the selected primary/secondary contract, first-launch/migration behavior and interrupted-owner recovery. Validate the public path with independent processes on the supported devices. |
+| PA02: App Group | Public primary/secondary roles and direct writes on synchronized replicas. A signed iPad widget committed with the primary terminated and an iPhone replica observed the exact record after cold restart. | Broader first-launch, migration, interrupted-owner recovery and supported OS/process acceptance. |
 | PA03/PA04: cloud lifecycle | Public H02 invitations/sharing, default account isolation, foreground CloudKit claim release/resume, bounded device evidence | Final-pin H02 rejoin, protected data and independent-reader acceptance, structural conflict scope, broader interruption/restore and spool device validation |
 | PA05/PA06: supported costs | S04/P01–P03, #142 inventory reuse, #143 descriptor queries, #144 spool | Publish supported limits; broader device/capacity acceptance and beta performance measurements |
 | PA07: observation/processing | A8 async state, Combine and live rescan hints | O04 live processing versus durable replay, recovery contract and current-backend acceptance |
@@ -281,11 +281,11 @@ Sources: [model contracts](graphevo-2-application-models.md),
 
 ## PA02 — runtime, concurrency and platform support
 
-The secondary local-write candidate uses the existing transaction on a
-synchronized App Group replica. Physical acceptance exercises independent
-processes without extension CloudKit entitlements and observes the exact
-record on a separate replica after the primary resumes.
-
+The integrated secondary local-write path uses the existing transaction on a
+synchronized App Group replica. The signed iPad widget used its App Group
+entitlement and an independent iPhone replica observed the exact record after
+cold restart of the primary. The physical run used an available network.
+Extension identity verification is a future opt-in capability.
 
 - [ ] **B** Select minimum OS/toolchain and supported process topology (O02/O03).
   Decide app/extension concurrent App Group access explicitly; a process-local
