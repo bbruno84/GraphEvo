@@ -5,7 +5,9 @@ enum GraphCloudAccountAvailability: Sendable, Equatable {
     case available(String), temporarilyUnavailable, signedOut, restricted
     static func live(_ identifier: String) async throws -> Self {
         guard Bundle.main.bundleURL.pathExtension != "appex" else { throw GraphCloudError.invalidConfiguration }
-        let container = CKContainer(identifier: identifier)
+        return try await read(from: CKContainer(identifier: identifier))
+    }
+    static func read(from container: CKContainer) async throws -> Self {
         do {
             switch try await container.accountStatus() {
             case .available: return .available(try await container.userRecordID().recordName)

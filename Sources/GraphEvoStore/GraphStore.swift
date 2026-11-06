@@ -249,9 +249,16 @@ public actor GraphStore {
     public func read<Value: Sendable>(
         _ body: @escaping @Sendable (GraphReadScope) throws -> Value
     ) async throws -> Value {
+        try await read(validating: { _ in }, body)
+    }
+
+    func read<Value: Sendable>(validating validate: @escaping @Sendable (NSManagedObjectContext) throws -> Void,
+        _ body: @escaping @Sendable (GraphReadScope) throws -> Value
+    ) async throws -> Value {
         let adapter = adapter, id = id
         do {
             return try await handle.read { context in
+                try validate(context)
                 let scope = GraphReadScope(context: context, graphID: id, adapter: adapter)
                 defer { scope.invalidate() }
                 return try body(scope)
@@ -262,9 +269,16 @@ public actor GraphStore {
     public func transaction<Value: Sendable>(
         _ body: @escaping @Sendable (GraphMutation) throws -> Value
     ) async throws -> Value {
+        try await transaction(validating: { _ in }, body)
+    }
+
+    func transaction<Value: Sendable>(validating validate: @escaping @Sendable (NSManagedObjectContext) throws -> Void,
+        _ body: @escaping @Sendable (GraphMutation) throws -> Value
+    ) async throws -> Value {
         let adapter = adapter, id = id
         do {
             return try await handle.transaction { context in
+                try validate(context)
                 let scope = GraphMutation(context: context, graphID: id, adapter: adapter)
                 defer { scope.invalidate() }
                 try adapter.beginMutation?(context, id)

@@ -9,6 +9,8 @@ public actor GraphContext {
     package let manager: GraphContextManager
     private let adapter: GraphCloudAdapter
     private let disk: GraphCloudDisk
+    let secondaryAccountVerifier: GraphAppGroupAccountVerifier?
+    var secondaryScopes: Set<GraphID> = []
     nonisolated var identityForBootstrap: UUID { identity }
     var adapterForBootstrap: GraphCloudAdapter { adapter }
     private let identity: UUID
@@ -32,8 +34,17 @@ public actor GraphContext {
         self.init(manager: manager, adapter: .live)
     }
 
-    init(manager: GraphContextManager, adapter: GraphCloudAdapter, disk: GraphCloudDisk = .live) {
+    package init(manager: GraphContextManager, verifyingPrivateCloudWith container: CKContainer) {
+        self.init(manager: manager, adapter: .live, secondaryAccountVerifier: .init(
+            container: container.containerIdentifier,
+            verify: { try await GraphCloudAccountAvailability.read(from: container) },
+            observe: { GraphCloudAccountObservation(changed: $0) }))
+    }
+
+    init(manager: GraphContextManager, adapter: GraphCloudAdapter, disk: GraphCloudDisk = .live,
+         secondaryAccountVerifier: GraphAppGroupAccountVerifier? = nil) {
         self.manager = manager; self.adapter = adapter; self.disk = disk
+        self.secondaryAccountVerifier = secondaryAccountVerifier
         identity = manager.contextOwnerID ?? UUID()
     }
 
@@ -136,7 +147,12 @@ public actor GraphContext {
 
     /// Reserves transport and returns before account/network startup completes.
     public func connectCloud(using configuration: GraphCloudConnectionConfiguration) async throws -> GraphCloudConnection {
-        try requireOrdinaryContext()
+        if let group = manager.publicAppGroup, group.role == .primary,
+           let environment = group.privateCloudEnvironment {
+            guard environment == configuration.environment else { throw GraphCloudConnectionError.invalidConfiguration }
+        } else {
+            try requireOrdinaryContext()
+        }
         try Task.checkCancellation()
         guard Bundle.main.bundleURL.pathExtension != "appex" else { throw GraphCloudConnectionError.unavailableInExtension }
         var isDirectory: ObjCBool = false

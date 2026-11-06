@@ -93,6 +93,7 @@ extension GraphCloudConnection {
     /// Prepares an immutable authoritative conversion seed from an explicit host cutover declaration.
     public func prepareActivation(for graphID: GraphID, activationID: UUID, zoneName: String,
                                   declaration: GraphCloudCutoverDeclaration) async throws -> GraphCloudActivationStatus {
+        try await owningContext.requireOrdinaryContext()
         let config = try await ready()
         return try await operation {
             try await owningContext.manager.prepareCloudActivation(for: graphID, activationID: activationID,
@@ -101,6 +102,7 @@ extension GraphCloudConnection {
     }
     /// Advances recoverable server claim, bounded seed upload and authoritative publication.
     public func advanceActivation(for graphID: GraphID) async throws -> GraphCloudActivationResult {
+        try await owningContext.requireOrdinaryContext()
         let config = try await ready()
         return try await operation { try await owningContext.manager.advanceCloudActivation(for: graphID, configuration: config) }
     }
@@ -111,6 +113,7 @@ extension GraphCloudConnection {
     }
     /// Recovers an exact authority into an empty or already-marked replica, preserving logical IDs.
     public func openReplica(id: GraphID, at storeURL: URL, zoneName: String) async throws -> GraphCloudReplicaResult {
+        try await owningContext.requireOrdinaryContext()
         try GraphContext.validateStoreURL(storeURL)
         let config = try await ready()
         do {

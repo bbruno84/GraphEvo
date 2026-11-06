@@ -26,6 +26,7 @@ extension GraphCloudConnection {
     }
     /// Accepts a native share URL and records resumable progress before GraphID is known.
     public func acceptInvitation(at url: URL) async throws -> GraphCloudJoin {
+        try await owningContext.requireOrdinaryContext()
         return try await sharingOperation {
             let config = try await ready(), session = try await owningContext.manager.cloud(config)
             let value = try await session.nativeBeginJoin(url)
@@ -69,6 +70,7 @@ extension GraphCloudConnection {
     }
     /// Creates or resumes an exact participant replica after descriptor discovery.
     public func openReplica(for join: GraphCloudJoin, at storeURL: URL) async throws -> GraphStore {
+        try await owningContext.requireOrdinaryContext()
         return try await sharingOperation {
             try GraphContext.validateStoreURL(storeURL)
             let config = try await ready()

@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import GraphEvoRuntime
 @_exported public import GraphEvoStore
@@ -146,6 +147,20 @@ extension GraphContext {
         catch { throw GraphStore.translate(error) }
         self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: configuration))
+    }
+
+    /// Creates a secondary App Group context with live account verification only.
+    /// The supplied container must be configured in the secondary target's CloudKit entitlements.
+    public init(appGroup configuration: GraphAppGroupConfiguration, verifyingPrivateCloudWith container: CKContainer) throws {
+        guard configuration.role == .secondary, configuration.privateCloudEnvironment != nil else {
+            throw GraphStoreError.permissionDenied
+        }
+        let group: AppGroupStoreLocation
+        do { group = try AppGroupStoreLocation(identifier: configuration.identifier) }
+        catch { throw GraphStore.translate(error) }
+        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: configuration),
+            verifyingPrivateCloudWith: container)
     }
 
     /// Creates a context for internal probes of the App Group runtime.

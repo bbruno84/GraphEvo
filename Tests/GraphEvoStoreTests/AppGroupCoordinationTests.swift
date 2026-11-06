@@ -1,6 +1,7 @@
 import CoreData
 import Foundation
 import Testing
+import os
 @testable import GraphEvo
 @testable import GraphEvoRuntime
 @testable import GraphEvoStore
@@ -249,6 +250,119 @@ private actor AsyncCheckpoint {
 }
 
 @Suite(.timeLimit(.minutes(2))) struct PublicAppGroupTests {
+    @Test
+    @available(iOS 17, macOS 14, *)
+    func privateCloudSecondaryVerifiesEachOperationAndRollsBackOnAccountChange() async throws {
+        let root = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = AppGroupStoreLocation(container: root)
+        let id = GraphID(), seed = GraphNodeID(graphID: id), aborted = GraphNodeID(graphID: id)
+        let container = "iCloud.AppGroupFixture"
+        let config = GraphAppGroupConfiguration(identifier: "fixture", role: .primary, privateCloudEnvironment: .development)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: config)
+        let uploads = OSAllocatedUnfairLock(initialState: Set<GraphNodeID>())
+        let adapter = GraphCloudAdapter(account: { _ in "original" }, make: { _, _, _, receive in
+            GraphCloudDriver(fetch: { _ in }, cancel: {}, send: { batch in
+                let saved = try batch.items.compactMap { item in
+                    try item.recordArchive.map {
+                        try GraphCloudRecordCodec.archive(GraphCloudRecordCodec.restore($0), scope: batch.zone.scope)
+                    }
+                }
+                uploads.withLock { $0.formUnion(batch.items.map(\.change.id)) }
+                await receive(.sent(.init(batchID: batch.id, graphID: batch.graphID, zone: batch.zone,
+                    saved: saved, deletedNames: [], failures: [])))
+            })
+        })
+        let primary = GraphContext(manager: manager, adapter: adapter)
+        let graph = try await primary.createAppGroupGraph(id: id)
+        let cloudConfiguration = try GraphCloudConnectionConfiguration(containerIdentifier: container,
+            environment: .development, directory: root.appendingPathComponent("Cloud"))
+        let connection = try await primary.connectCloud(using: cloudConfiguration)
+        for _ in 0..<300 {
+            if try await connection.state == .ready { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await connection.bindPrivateGraph(graph, zoneName: "fixture")
+        try await primary.setForegroundActive(false)
+        try await graph.close()
+        try await connection.close()
+
+        let availability = OSAllocatedUnfairLock(initialState: GraphCloudAccountAvailability.available("original"))
+        let notification = Notification.Name(UUID().uuidString)
+        let verificationCount = OSAllocatedUnfairLock(initialState: 0)
+        let invalidateDuringVerification = OSAllocatedUnfairLock(initialState: false)
+        let config2 = GraphAppGroupConfiguration(identifier: "fixture", role: .secondary,
+            secondaryAccess: .readWrite, privateCloudEnvironment: .development)
+        let manager2 = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: config2)
+        let secondary = GraphContext(manager: manager2, adapter: adapter, secondaryAccountVerifier: .init(container: container,
+            verify: {
+                #expect(await manager2.registeredGraphCount == 0)
+                verificationCount.withLock { $0 += 1 }
+                if invalidateDuringVerification.withLock({ $0 }) {
+                    NotificationCenter.default.post(name: notification, object: nil)
+                }
+                return availability.withLock { $0 }
+            }, observe: { GraphCloudAccountObservation(name: notification, changed: $0) }))
+
+        let result = try await secondary.transactionAppGroupGraph(id: id) {
+            try $0.insert(.init(id: seed, type: "Note"))
+        }
+        #expect(result.value == seed)
+        #expect(!result.closePending)
+        for denied in [GraphCloudAccountAvailability.available("other"), .signedOut, .temporarilyUnavailable] {
+            availability.withLock { $0 = denied }
+            await #expect {
+                _ = try await secondary.readAppGroupGraph(id: id) { _ in Issue.record("Unverified data was exposed.") }
+            } throws: { error in
+                if case .accountIsolated? = error as? GraphStoreError { return true }
+                return false
+            }
+        }
+        availability.withLock { $0 = .available("original") }
+        invalidateDuringVerification.withLock { $0 = true }
+        await #expect {
+            _ = try await secondary.readAppGroupGraph(id: id) { _ in Issue.record("Invalidated verification entered the scope.") }
+        } throws: { error in
+            if case .accountIsolated? = error as? GraphStoreError { return true }
+            return false
+        }
+        invalidateDuringVerification.withLock { $0 = false }
+        await #expect {
+            _ = try await secondary.transactionAppGroupGraph(id: id) {
+                _ = try $0.insert(.init(id: aborted, type: "Note"))
+                NotificationCenter.default.post(name: notification, object: nil)
+            }
+        } throws: { error in
+            if case .accountIsolated? = error as? GraphStoreError { return true }
+            return false
+        }
+        let readback = try await secondary.readAppGroupGraph(id: id) {
+            (try $0.record(for: seed)?.id, try $0.record(for: aborted)?.id)
+        }
+        #expect(readback.value.0 == seed)
+        #expect(readback.value.1 == nil)
+        #expect(verificationCount.withLock { $0 } == 7)
+        #expect(await manager2.cloudSessions.isEmpty)
+        #expect(uploads.withLock { $0.isEmpty })
+
+        let newManager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: config)
+        let restarted = GraphContext(manager: newManager, adapter: adapter)
+        let newGraph = try await restarted.openAppGroupGraph(id: id)
+        let newConnection = try await restarted.connectCloud(using: cloudConfiguration)
+        try await restarted.setForegroundActive(true)
+        for _ in 0..<500 {
+            if uploads.withLock({ $0.contains(seed) }) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(uploads.withLock { $0 } == [seed])
+        try await restarted.setForegroundActive(false)
+        try await newGraph.close()
+        try await newConnection.close()
+    }
+
     @Test
     @available(iOS 17, macOS 14, *)
     func roleAdmissionAndScopedLocalAccess() async throws {

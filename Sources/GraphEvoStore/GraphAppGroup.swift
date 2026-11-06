@@ -1,3 +1,4 @@
+import CoreData
 import Foundation
 import GraphEvoModel
 import GraphEvoRuntime
@@ -12,14 +13,17 @@ public struct GraphAppGroupConfiguration: Sendable {
     public let role: Role
     public let secondaryAccess: SecondaryAccess
     public let diagnosticLabel: String?
+    /// Enables the private CloudKit App Group path for the selected environment.
+    public let privateCloudEnvironment: GraphCloudEnvironment?
 
     /// The label is used only in diagnostics. Secondary access applies only to the secondary role.
     public init(identifier: String, role: Role, secondaryAccess: SecondaryAccess = .readOnly,
-                diagnosticLabel: String? = nil) {
+                diagnosticLabel: String? = nil, privateCloudEnvironment: GraphCloudEnvironment? = nil) {
         self.identifier = identifier
         self.role = role
         self.secondaryAccess = secondaryAccess
         self.diagnosticLabel = diagnosticLabel
+        self.privateCloudEnvironment = privateCloudEnvironment
     }
 }
 
@@ -27,6 +31,12 @@ public struct GraphAppGroupConfiguration: Sendable {
 public struct GraphAppGroupOperationResult<Value: Sendable>: Sendable {
     public let value: Value
     public let closePending: Bool
+}
+
+struct GraphAppGroupAccountVerifier: Sendable {
+    let container: String?
+    let verify: @Sendable () async throws -> GraphCloudAccountAvailability
+    let observe: @Sendable (@escaping @Sendable () -> Void) -> GraphCloudAccountObservation
 }
 
 private let appGroupLogger = Logger(subsystem: "GraphEvo", category: "AppGroup")
@@ -42,6 +52,7 @@ extension GraphContext {
     /// Opens an existing App Group graph from the primary context.
     public func openAppGroupGraph(id: GraphID) async throws -> GraphStore {
         let group = try requireAppGroup(.primary)
+        await manager.setLocalAccountAdapter(adapterForBootstrap)
         return await retained(try await manager.openGraph(id: id, at: group.storeURL(for: id.rawValue)))
     }
 
@@ -49,7 +60,7 @@ extension GraphContext {
     public func readAppGroupGraph<Value: Sendable>(id: GraphID,
         _ body: @escaping @Sendable (GraphReadScope) throws -> Value
     ) async throws -> GraphAppGroupOperationResult<Value> {
-        try await withSecondaryGraph(id: id) { try await $0.read(body) }
+        try await withSecondaryGraph(id: id) { try await $0.read(validating: $1, body) }
     }
 
     /// Commits one opted-in secondary transaction and releases its lease.
@@ -58,17 +69,64 @@ extension GraphContext {
     ) async throws -> GraphAppGroupOperationResult<Value> {
         _ = try requireAppGroup(.secondary)
         guard manager.publicAppGroup?.secondaryAccess == .readWrite else { throw GraphStoreError.readOnly }
-        return try await withSecondaryGraph(id: id) { try await $0.transaction(body) }
+        return try await withSecondaryGraph(id: id) { try await $0.transaction(validating: $1, body) }
     }
 
     private func withSecondaryGraph<Value: Sendable>(id: GraphID,
-        _ operation: (GraphStore) async throws -> Value
+        _ operation: (GraphStore, @escaping @Sendable (NSManagedObjectContext) throws -> Void) async throws -> Value
     ) async throws -> GraphAppGroupOperationResult<Value> {
         let group = try requireAppGroup(.secondary)
+        let verifiesCloud = manager.publicAppGroup?.privateCloudEnvironment != nil
+        if verifiesCloud {
+            guard secondaryScopes.insert(id).inserted else { throw GraphStoreError.resourceReserved }
+        }
+        defer { if verifiesCloud { secondaryScopes.remove(id) } }
+
+        // Verify before registering a native owner. A suspended or killed
+        // extension may otherwise leave an owner claim during the network call.
+        let fence = OSAllocatedUnfairLock(initialState: (invalidated: false, control: Optional<StoreAccountControl>.none))
+        let observation = secondaryAccountVerifier?.observe {
+            let control = fence.withLock { state in
+                state.invalidated = true
+                return state.control
+            }
+            control?.update(.isolated(.verificationRequired), revision: 2)
+        }
+        defer { observation?.cancel() }
+        let availability: GraphCloudAccountAvailability?
+        do { availability = try await secondaryAccountVerifier?.verify() }
+        catch is CancellationError { throw CancellationError() }
+        catch { availability = nil }
+        try Task.checkCancellation()
+
         let graph = try await manager.openGraph(id: id, at: group.storeURL(for: id.rawValue))
         let value: Value
-        do { value = try await operation(graph) }
-        catch {
+        do {
+            guard let entry = await manager.entries[id] else { throw GraphStoreError.closed }
+            let owner = try await entry.opening.value
+            let expected = try await owner.accountIdentity()
+            let validate = await owner.scopedAccountCheck(expected)
+            if let expected {
+                guard let verifier = secondaryAccountVerifier, verifier.container == expected.container,
+                      manager.publicAppGroup?.privateCloudEnvironment == expected.environment else {
+                    throw GraphStoreError.accountIsolated
+                }
+                guard availability == .available(expected.account) else { throw GraphStoreError.accountIsolated }
+                let control = try await owner.accountControl()
+                let admitted = fence.withLock { state in
+                    guard !state.invalidated else { return false }
+                    state.control = control
+                    return true
+                }
+                guard admitted else { throw GraphStoreError.accountIsolated }
+                // A notification can invalidate the native permit before or during the scope.
+                defer { control.update(.isolated(.verificationRequired), revision: 2) }
+                control.update(.available, revision: 1)
+                value = try await operation(graph, validate)
+            } else {
+                value = try await operation(graph, validate)
+            }
+        } catch {
             _ = await closeSecondaryGraph(graph)
             throw error
         }

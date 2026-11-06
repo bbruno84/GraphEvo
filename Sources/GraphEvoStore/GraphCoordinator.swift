@@ -51,7 +51,8 @@ package actor GraphCoordinator {
     static func open(id: GraphID, configuration: StoreConfiguration, creating: Bool,
                      registry: StoreRegistry, schema: StoreSchema, adapter: GraphCoordinatorAdapter,
                      conflictPolicy: GraphConflictPolicy = .lastEditWins, initiallyBlocked: Bool = false,
-                     initialParticipant: GraphCloudParticipantAccess? = nil, appGroupLocalOnly: Bool = false) async throws -> GraphCoordinator {
+                     initialParticipant: GraphCloudParticipantAccess? = nil, appGroupLocalOnly: Bool = false,
+                     appGroupPrivateCloud: Bool = false) async throws -> GraphCoordinator {
         guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
         let exists = FileManager.default.fileExists(atPath: url.path)
         if creating && exists { throw GraphStoreError.duplicateIdentity }
@@ -89,7 +90,7 @@ package actor GraphCoordinator {
                 if value.blocksWrites { try await handle.restrictActivation(value.authority.activationID, reads: value.peer) }
             }
             if try await owner.accountIdentity() != nil {
-                if appGroupLocalOnly { throw GraphStoreError.accountIsolated }
+                if appGroupLocalOnly && !appGroupPrivateCloud { throw GraphStoreError.accountIsolated }
                 try await handle.setAccountStatus(.isolated(.verificationRequired), revision: 0)
             }
             return owner
@@ -105,6 +106,12 @@ package actor GraphCoordinator {
     func accountIdentity() async throws -> GraphCloudSessionIdentity? {
         guard let account else { return nil }; let id = id
         return try await handle.accountControlRead { try account.read($0, id) }
+    }
+    func scopedAccountCheck(_ expected: GraphCloudSessionIdentity?) -> @Sendable (NSManagedObjectContext) throws -> Void {
+        let account = account, id = id
+        return { context in
+            guard try account?.read(context, id) == expected else { throw GraphStoreError.accountIsolated }
+        }
     }
     func claimAccount(_ identity: GraphCloudSessionIdentity) async throws {
         guard let account else { throw GraphCloudError.invalidConfiguration }; let id = id
