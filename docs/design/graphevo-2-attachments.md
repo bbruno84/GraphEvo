@@ -8,6 +8,38 @@ the [probe procedure](../../Experiments/A6NativeProbe/README.md) and the
 The replacement custom backend adds [T04 CKAsset transport](graphevo-2-cloud-assets.md).
 The native-mirroring evidence below retains its original scope.
 
+## Future file primitive
+
+An attachment is a bounded binary value with one owning node. The consumer
+loads it as `Data`, and Core Data manages its persistence. Use this for
+content such as a signature or preview whose lifetime follows the owner.
+
+A file is a graph node with fixed metadata and content accessed by URL.
+It can be a relationship endpoint or an action participant. It has a stable
+node ID and a current revision. GraphEvo owns the file bytes in a private
+directory scoped to the store.
+
+Each revision has its own immutable file. Import and replacement prepare a
+temporary file on the same volume and calculate its digest while copying.
+Publish the completed file with an atomic rename to a new revision path,
+then save its reference and metadata in Core Data. An interrupted commit
+can leave an unreferenced file. An interrupted replacement leaves the prior
+revision readable through the last committed reference.
+
+A read or CloudKit send holds the exact revision it uses. Pending sends
+retain that revision through the durable asset spool and pass its URL to
+`CKAsset`. Deletion commits the removal of the graph reference first.
+Exclusive store maintenance may reclaim abandoned preparations and old
+revisions once the store has established that no active preparation, read,
+or pending send still needs them. A backup captures the store and its
+referenced file revisions together.
+
+The local proof of concept exercised inferred S04 migration to a separate
+store, file endpoints, and exact entity queries. The lifecycle design
+still needs controlled tests for interruption between rename and commit,
+replacement during reads and uploads, and reclamation after deletion and
+reopening.
+
 ## Representation and ownership
 
 The subsequent [S01 schema review](graphevo-2-persistent-schema.md) selects the
