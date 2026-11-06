@@ -239,6 +239,70 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         try await finish(f)
     }
 
+    @Test func liveReplicaObservationReadsCurrentStateAfterClosedHandleMissesChanges() async throws {
+        let bus = TransportBus(), container = UUID().uuidString, id = GraphID()
+        let writer = try await fixture(bus: bus, container: container, graphID: id)
+        defer { try? FileManager.default.removeItem(at: writer.directory) }
+        let removed = writer.graph.makeNodeID(), survivor = writer.graph.makeNodeID(), related = writer.graph.makeNodeID()
+        let edge = writer.graph.makeNodeID()
+        try await writer.graph.transaction { scope in
+            try scope.insert(GraphRecord(id: removed, type: ObservedItem.graphType))
+            try scope.insert(GraphRecord(id: survivor, type: ObservedItem.graphType, properties: ["version": .integer(0)]))
+            try scope.insert(GraphRecord(id: related, type: "observe.related", tags: ["ready"]))
+            try scope.insert(GraphRecord(id: edge, type: "depends-on", endpoints: .relationship(subject: survivor, object: related)))
+        }
+        #expect(try await writer.manager.sendCloudChanges(for: id, configuration: writer.config).succeeded == 4)
+        try await writer.manager.stopCloudSession(writer.config)
+
+        let reader = try await fixture(bus: bus, container: container, graphID: id)
+        defer { try? FileManager.default.removeItem(at: reader.directory) }
+        let query = try observationQuery()
+        let dependency = query.where(.related(.outgoing("depends-on"), matching: .tag("ready")))
+        let live = try await reader.graph.observe(query)
+        let dependent = try await reader.graph.observe(dependency)
+        defer { live.cancel(); dependent.cancel() }
+        _ = try await waitForObservation(live) { $0.items.isEmpty }
+        _ = try await waitForObservation(dependent) { $0.items.isEmpty }
+        try await reader.manager.fetchCloudChanges(.private, configuration: reader.config)
+        _ = try await reader.manager.applyCloudInbox(for: id, configuration: reader.config)
+        let observed = try await waitForObservation(live) { $0.items.count == 2 }
+        let priorIDs = Set(observed.items.map(\.id))
+        #expect(priorIDs == [removed, survivor])
+        _ = try await waitForObservation(dependent) { $0.items.map(\.id) == [survivor] }
+        try await reader.graph.close()
+        try await reader.manager.stopCloudSession(reader.config)
+
+        _ = try await writer.manager.startCloudSession(writer.config, adapter: bus.adapter)
+        try await writer.graph.delete(removed)
+        for version in 1...3 {
+            try await writer.graph.transaction {
+                _ = try $0.patch(GraphRecordPatch(id: survivor, properties: ["version": .set(.integer(Int64(version)))]))
+            }
+        }
+        try await writer.graph.transaction { _ = try $0.patch(GraphRecordPatch(id: related, removingTags: ["ready"])) }
+        #expect(try await writer.manager.sendCloudChanges(for: id, configuration: writer.config).succeeded == 3)
+        try await finish(writer)
+
+        let reopened = try await reader.manager.openGraph(id: id, at: reader.storeURL)
+        _ = try await reader.manager.startCloudSession(reader.config, adapter: bus.adapter)
+        try await reader.manager.fetchCloudChanges(.private, configuration: reader.config)
+        _ = try await reader.manager.applyCloudInbox(for: id, configuration: reader.config)
+        let fresh = try await reopened.observe(query)
+        let freshDependency = try await reopened.observe(dependency)
+        defer { fresh.cancel(); freshDependency.cancel() }
+        var current = fresh.makeAsyncIterator(), currentDependency = freshDependency.makeAsyncIterator()
+        guard case .value(let state) = await current.next(), case .value(let dependentState) = await currentDependency.next() else {
+            throw ObservationTestFailure()
+        }
+        #expect(state.items.map(\.id) == [survivor])
+        #expect(state.items.first?.record.properties["version"] == .integer(3))
+        #expect(priorIDs.subtracting(state.items.map(\.id)) == [removed])
+        #expect(dependentState.items.isEmpty)
+        #expect(try await reopened.collectSyncChanges() == 0)
+        try await reopened.close()
+        try await reader.manager.stopCloudSession(reader.config)
+    }
+
     @Test func privatePrimitivesReplicateAndImportsDoNotFeedUpload() async throws {
         let bus = TransportBus(), container = UUID().uuidString, graphID = GraphID()
         let a = try await fixture(bus: bus, container: container, graphID: graphID)

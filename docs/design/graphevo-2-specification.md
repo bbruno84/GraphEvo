@@ -426,12 +426,11 @@ current state. Cancellation releases its resources; resubscription fetches a
 new current result. Related properties that affect membership/order/value must
 invalidate correctly, not only direct changes to the fetched entity.
 
-Processing changes is separate from coalesced query state. Before beta decide
-whether v2 supports durable replay or only a bounded live feed plus explicit
-rescan. If durable processing is included, specify consumer identity, cursor
-persistence, acknowledgement, retained-history gaps, deletion reconstruction,
-retry and idempotency. Do not promise exactly-once side effects. If replay is
-deferred, document the limitation and the application's recovery route.
+Processing changes uses the bounded live feed and explicit rescan for beta
+(O04). At opening or resubscription the consumer reads current local state and
+reconciles its own previously processed inventory. Durable replay is deferred.
+Consumers requiring intermediate mutations or durable side-effect processing
+need a separate recovery contract.
 
 Observation states include invalid/undecodable/incomplete imported data and
 unmaterialized deletions where relevant. A token or notification cannot certify
@@ -440,8 +439,8 @@ under persistence locks or inside mutation scopes in a way that permits reentry.
 
 The [A8 candidate](graphevo-2-observation.md) implements bounded newest-state
 async observation, conservative resource-group dependency invalidation and a
-cold demand-aware Combine adapter. Processing currently offers live rescan
-hints; O04's durable replay choice remains open. Recoverable query errors are
+cold demand-aware Combine adapter. Processing offers live rescan hints.
+Recoverable query errors are
 states, handle close terminates its feeds, and native account-change hints are
 sticky/terminal for query observation. These are alpha contracts, not complete
 account/cache policy, migration feasibility or beta acceptance.

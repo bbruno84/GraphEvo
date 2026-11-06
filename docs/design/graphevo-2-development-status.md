@@ -40,8 +40,13 @@ CloudKit requests and windowed first-publication recovery. The
 [representative v1 result](results/representative-v1-cloud-migration-2026-11-06.md)
 records 1,577 converted and recovered MyHomeBills nodes using the private
 Development database on a physical iPad. Historical source coverage and
-production cutover remain open. The next library delivery decisions cover
-observation and processing, and supported query and attachment limits.
+production cutover remain open.
+
+[PR #186](https://github.com/bbruno84/GraphEvo/pull/186) closes the O04
+alpha increment. The live observation and rescan contract passed local regressions
+and [explicit CloudKit import on a physical iPad](graphevo-2-observation.md#acceptance-and-remaining-work).
+PA07 retains automatic delivery, wider lifecycle and observer cost acceptance.
+The next library increment defines supported query and attachment envelopes.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 
@@ -1092,7 +1097,7 @@ signed device build and all thirteen original passed stage reports remain retain
 | A4–A5 | Graph catalog/membership, paired resources, sharing and interrupted-assignment ledgers | Account/offline/conflict/recovery and scale gates |
 | A6 files | Separate attachment identity, exclusive owner, split metadata/content, binary Data, integrity and cascades | Whole-content backups, providers and physical resource envelopes |
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
-| A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | Live hints are not durable processing; O04 remains open |
+| A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | O04 selects live hints and rescan for beta. PA07 acceptance remains open. |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |
 | CF01 / T01 transport | Logical node CKRecords, manual engine send/import, durable attempts, server metadata/effect receipts (#110/#111); bounded private device recovery reported separately | Bounded real collisions verified in T02; consumer resolution/rebase, structural conflicts, assets and public activation remain open; S03 unchanged |
 | Engine foundation | ContextManager-owned private/shared sessions, path-free zone routes, persisted inbox/results (#109/#111) | Package-only manual scheduling; broad account/sharing and automatic/background acceptance remain open |

@@ -1577,8 +1577,8 @@ Changes/changePublisher emit only live rescan hints; IDs are ephemeral and are
 neither ordered transaction identities nor durable history cursors. Rescan on
 startup/reconnect and reconcile the application's prior inventory. No per-node
 deletions, durable replay, acknowledgements, exactly-once effects or cloud-import
-completion are supplied. O04 remains a consolidation choice, not a completed
-replay feature. Different query shapes still execute independently. Sequential
+completion are supplied. O04 selects live hints and an explicit fresh read
+at opening or resubscription for beta. Different query shapes execute independently. Sequential
 subscription startup and heavy/slow application decoders remain consolidation
 work; sharing is not a total memory/time bound. See the
 [consolidation adoption](../design/graphevo-2-observation.md#c04-consolidation-adoption)

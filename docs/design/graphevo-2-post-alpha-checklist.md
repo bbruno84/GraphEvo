@@ -175,7 +175,7 @@ uses S04 and its selected transport.
 | PA02: App Group | Public primary/secondary roles and direct writes on synchronized replicas. A signed iPad widget committed with the primary terminated and an iPhone replica observed the exact record after cold restart. | Broader first-launch, migration, interrupted-owner recovery and supported OS/process acceptance. |
 | PA03/PA04: cloud lifecycle | Public H02 invitations/sharing, default account isolation, foreground CloudKit claim release/resume, bounded device evidence | Final-pin H02 rejoin, protected data and independent-reader acceptance, structural conflict scope, broader interruption/restore and spool device validation |
 | PA05/PA06: supported costs | S04/P01–P03, #142 inventory reuse, #143 descriptor queries, #144 spool | Publish supported limits; broader device/capacity acceptance and beta performance measurements |
-| PA07: observation/processing | A8 async state, Combine and live rescan hints | O04 live processing versus durable replay, recovery contract and current-backend acceptance |
+| PA07: observation/processing | A8 async state, Combine and live rescan hints. #186 verifies O04 with local tests and explicit private CloudKit import on a physical iPad. | Validate automatic delivery, wider lifecycle and observer cost. |
 | PA08/PA09: migration/recovery | MF01–MF11, public staged v1 bootstrap and private recovery, coordinated native conversion, workspace publication and backup catalog | [One representative v1 end-to-end run](results/representative-v1-cloud-migration-2026-11-06.md) passed. Historical/production source matrix, host old-client cutover, interruption and restoration acceptance remain open. |
 | PA10: stable release | Independent consumers and reviewed CI checkpoints | Real application adoption, full production acceptance, distribution and release evidence (R) |
 
@@ -517,8 +517,9 @@ Sources: [A7 contract](graphevo-2-queries.md),
 ## PA07 — observation and processing
 
 - [ ] **B** Complete A8's three consumer contracts: one-shot results, observed
-  current state and change processing. Resolve live feed/rescan versus durable
-  replay (O04), with explicit application recovery if replay is excluded.
+  current state and change processing. O04 selects live delivery and rescan.
+  Verify that opening or resubscribing reads current local state and that a
+  consumer can reconcile disappeared IDs after downtime.
 - [ ] **B** Demonstrate dependency invalidation for related-node/action filters,
   ordering, membership and attachments; close the retained V07 relationship gap.
 - [ ] **B** Specify buffering/coalescing, slow consumers, cancellation, resource
@@ -526,8 +527,8 @@ Sources: [A7 contract](graphevo-2-queries.md),
   whole-resource query refresh with many observers, Combine demand and any
   downstream scheduler queues against the supported production cost envelope.
 - [ ] **R** Validate real remote edits/deletions, access/account changes, relaunch,
-  pending work and close. If durable replay is selected, validate cursor retention,
-  acknowledgements, duplicate delivery and history-gap recovery.
+  pending work and close. Verify application reconciliation from current state
+  after relaunch and resubscription.
 - [ ] **R** Verify query/observation behavior on migrated fixtures and the real
   application. No event, mapping or save callback establishes cloud completion
   or exactly-once processing.
@@ -535,8 +536,10 @@ Sources: [A7 contract](graphevo-2-queries.md),
 Sources: [A8 candidate](graphevo-2-observation.md),
 [physical/local results](results/a8-live-observation-2026-10-27.md), specification S10, V07,
 D06/O04. The alpha implements async state and Combine over conservative
-resource invalidation, with live rescan hints for processing. This does not
-close O04 or mark the wider beta/stable items above complete.
+resource invalidation, with live rescan hints for processing. O04 selects that
+delivery contract for beta. The [physical iPad result](graphevo-2-observation.md#acceptance-and-remaining-work)
+covers live and reopened observation with explicit private CloudKit import.
+The broader acceptance items above remain open.
 
 ## PA08 — mandatory v1 local and cloud migration
 

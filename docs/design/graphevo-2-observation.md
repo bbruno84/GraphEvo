@@ -14,15 +14,14 @@ current query states. `changes()` provides bounded live invalidation hints for
 consumers that explicitly rescan/reconcile local state. These are distinct from
 an ordered durable stream of per-node mutations.
 
-The A8 processing candidate is live invalidation plus rescan. O04's stable-release
-choice of durable replay remains open for consolidation. There is no persisted
-consumer cursor, acknowledgement, history retention/purge policy, old deletion
-payload reconstruction or exactly-once side effect guarantee. Applications must
-rescan on startup/resubscription and reconcile their own previously processed
-inventory, including disappeared IDs. Work requiring every intermediate change,
-retained deletion content or recovery after a crash is not supported by this
-live feed. Selecting durable processing would require additional implementation
-and acceptance; do not mark it satisfied by these signals.
+O04 selects live invalidation and an explicit rescan for beta. Start each
+opening or new subscription with a fresh read of local state. The async and
+Combine query observers supply current query state. Consumers using the general
+change feed rescan on its initial and subsequent hints and reconcile their own
+inventory, including disappeared IDs. Hints and query states may coalesce.
+Recovery reconstructs current state after downtime or interruption. Work that
+depends on every intermediate mutation, prior deletion contents or durable
+acknowledgements requires a separate contract. Durable replay is deferred.
 
 ## Async current state
 
@@ -157,10 +156,27 @@ for the actual iPad/XR async/Combine related-query and deletion run. Existing Pe
 unchanged; this increment neither consumes nor purges their cursors.
 
 Consolidation must assess repeated full-query costs with many observers and
-file-heavy graphs, native remote/background/account/access-change coverage and
-O04's durable-processing choice. Migrated fixtures, full account/cache policy,
-app integration and mandatory v1 local/cloud migration still gate beta/stable
-under the delivery plan. A8 implementation is not permission to declare beta.
+file-heavy graphs and native remote/background/account/access-change coverage.
+Beta acceptance exercises the same contract on independent library fixtures:
+local and imported inserts, edits and deletions, relationship and attachment
+dependencies, writes during downtime, slow consumers, cancellation and reopening.
+The O04 regression suite uses independent SQLite graphs and injected CloudKit
+transport. It verifies live query refresh after import, initial query state
+after reopening, reconciliation of a disappeared ID, relationship membership
+and an attachment rescan after imported content replacement. A slow reader
+reaches the final committed state without manually requesting refresh.
+Migrated fixtures complement these cases.
+
+On 2026-11-06 a signed synthetic probe pinned to `54d66765` passed on a
+physical iPad in a fresh private CloudKit Development zone. A direct CloudKit
+writer supplied records and an explicit fetch/import exercised the production
+reader. Live observation reflected imports and a related-node membership change.
+After the reader closed its SQLite handle and cloud session, the writer performed
+three edits, a deletion and a relationship-membership change. The reopened
+reader's first query state reflected the final value, missing ID and restored
+membership, with zero outgoing changes. This is single-device evidence with
+explicit import. Full account/cache policy, automatic delivery and broader
+device acceptance remain under the delivery plan.
 
 
 ## C04 consolidation adoption
