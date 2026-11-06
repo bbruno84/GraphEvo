@@ -615,7 +615,9 @@ package enum GraphTypedStoreAdapter {
             guard patch.properties.keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.reservedName }
             try requireWriteAccess(completing: operationID)
             guard let node = try node(patch.id) else { throw GraphStoreError.missingNode }
-            guard !(node.node is ManagedGraphFile) else { throw GraphFileError.fixedMetadata }
+            if node.node is ManagedGraphFile, !patch.properties.isEmpty || patch.endpoints != nil {
+                throw GraphFileError.fixedMetadata
+            }
             let current = try snapshot(node, id: patch.id)
             let updated = try patch.applying(to: current)
             if isShared {

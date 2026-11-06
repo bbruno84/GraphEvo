@@ -872,7 +872,9 @@ context.
 `GraphNodeKind.file` and `GraphEndpoints.file` identify a file node. A
 `Relationship` or `Action` endpoint can name its `GraphNodeID`. Entity
 queries exclude the file subtype. File nodes have fixed metadata and their
-content has a separate lifetime from the source URL.
+content has a separate lifetime from the source URL. Use `GraphRecordPatch`
+to add or remove tags and groups on the file node. These classifications
+survive content replacement and support tag and group query predicates.
 
 - `GraphStore.importFile(from:name:contentType:)` copies content into the
   graph and returns a `GraphFile`.

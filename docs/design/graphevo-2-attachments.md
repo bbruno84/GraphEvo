@@ -16,8 +16,9 @@ content such as a signature or preview whose lifetime follows the owner.
 
 A file is a graph node with fixed metadata and content accessed by URL.
 It can be a relationship endpoint or an action participant. It has a stable
-node ID and a current revision. GraphEvo owns the file bytes in a private
-directory scoped to the store.
+node ID and a current revision. Tags and groups classify the node and
+remain attached when its content revision changes. GraphEvo owns the
+file bytes in a private directory scoped to the store.
 
 Each revision has its own immutable file. Import and replacement prepare a
 temporary file on the same volume and calculate its digest while copying.

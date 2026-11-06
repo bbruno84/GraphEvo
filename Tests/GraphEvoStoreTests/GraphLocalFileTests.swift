@@ -90,6 +90,7 @@ import Testing
         let newEdge = graph.makeNodeID(), sameType = graph.makeNodeID()
         try await graph.transaction { scope in
             try scope.insert(GraphRecord(id: sameType, type: FileAsEntity.graphType))
+            _ = try scope.patch(GraphRecordPatch(id: file.id, addingTags: ["invoice"], addingGroups: ["expenses"]))
             _ = try scope.patch(GraphRecordPatch(id: relation, endpoints: .relationship(subject: a, object: file.id)))
             try scope.insert(GraphRecord(id: newEdge, type: "edge", endpoints: .relationship(subject: file.id, object: a)))
             _ = try scope.patch(GraphRecordPatch(id: action, endpoints: .action(subjects: [a, file.id], objects: [file.id])))
@@ -105,14 +106,30 @@ import Testing
         #expect(try await reopened.query(asEntity).items.map(\.id) == [sameType])
         #expect(try await reopened.count(asEntity).value == 1)
         #expect(try await reopened.project(asEntity, properties: []).rows.map(\.id) == [sameType])
-        #expect(try await reopened.query(fileQuery).items.map(\.id) == [file.id])
+        let classified = fileQuery.where(.tag("invoice") && .group("expenses"))
+        #expect(try await reopened.query(classified).items.map(\.id) == [file.id])
+        await #expect(throws: GraphFileError.fixedMetadata) {
+            try await reopened.transaction { scope in
+                try scope.patch(GraphRecordPatch(id: file.id, properties: ["name": .set(.string("changed"))],
+                    addingTags: ["invalid"]))
+            }
+        }
+        #expect(try await reopened.read { try $0.record(for: file.id)?.tags } == ["invoice"])
         #expect(try await reopened.read { try $0.record(for: newEdge)?.endpoints } == .relationship(subject: file.id, object: a))
         #expect(try await reopened.read { try $0.record(for: action)?.endpoints } == .action(subjects: [a, file.id], objects: [file.id]))
         try await reopened.transaction { scope in
             _ = try scope.patch(GraphRecordPatch(id: b, addingTags: ["pending"]))
             #expect(try scope.count(asEntity).value == 1)
-            #expect(try scope.count(fileQuery).value == 1)
+            let updated = try scope.patch(GraphRecordPatch(id: file.id,
+                addingTags: ["paid"], removingTags: ["invoice"],
+                addingGroups: ["archive"], removingGroups: ["expenses"]))
+            #expect(updated.tags == ["paid"])
+            #expect(updated.groups == ["archive"])
+            #expect(try scope.count(classified).value == 0)
+            #expect(try scope.count(fileQuery.where(.tag("paid") && .group("archive"))).value == 1)
         }
+        #expect(try await reopened.count(classified).value == 0)
+        #expect(try await reopened.count(fileQuery.where(.tag("paid") && .group("archive"))).value == 1)
         try await reopened.close()
     }
 
@@ -152,6 +169,9 @@ import Testing
         let source = root.appendingPathComponent("source")
         try Data("old".utf8).write(to: source)
         let file = try await graph.importFile(from: source)
+        try await graph.transaction { scope in
+            _ = try scope.patch(GraphRecordPatch(id: file.id, addingTags: ["retained"], addingGroups: ["documents"]))
+        }
         try Data("new".utf8).write(to: source)
         let ready = AsyncStream<Void>.makeStream()
         let release = DispatchSemaphore(value: 0)
@@ -200,6 +220,9 @@ import Testing
         try await reopened.close()
         let restored = try await GraphContext.localFiles().openGraph(id: id, at: copy)
         #expect(try await restored.file(file.id) == replacement)
+        let record = try await restored.read { try $0.record(for: file.id) }
+        #expect(record?.tags == ["retained"])
+        #expect(record?.groups == ["documents"])
         #expect(try await restored.withFileURL(file.id) { try Data(contentsOf: $0) } == Data("new".utf8))
         #expect(try await restored.reclaimFiles() == 0)
         try await restored.close()
