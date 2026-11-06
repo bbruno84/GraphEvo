@@ -26,6 +26,12 @@ recovery remain open under PA02. The Demo `develop` branch currently pins
 `6432e595`. Its next H02 physical checkpoint uses the reviewed library revision
 and checks rejoining after leave without restarting.
 
+The [second-increment probes](results/app-group-cloud-and-recovery-probes-2026-11-06.md)
+verify direct CloudKit account/permission inspection on two signed app
+processes and exact offline recovery after a supervised macOS child exit.
+CloudKit authorization inside the widget, production recovery authority and
+end-to-end publication of a secondary App Group commit remain open.
+
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 
 The [private device result](results/durable-asset-spool-device-2026-11-04.md)
