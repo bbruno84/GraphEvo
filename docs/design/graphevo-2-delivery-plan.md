@@ -9,17 +9,17 @@ tracks the broader beta (B) and stable (R) acceptance gates.
 
 | Workstream | Integrated alpha scope | Remaining delivery work |
 |---|---|---|
-| Store coordination and process roles | Foundation coordination for dedicated App Group stores, ordinary SQLite, open-store migration and backup catalog operations (#173–#175). The CloudKit session claim follows aggregate app activity (#176). | Define the public App Group roles, synchronization ownership, visibility across processes, first launch, migration and interrupted-owner recovery. Validate that public path with independent iOS processes. |
+| Store coordination and process roles | Foundation coordination for dedicated App Group stores, ordinary SQLite, open-store migration and backup catalog operations (#173–#175). The CloudKit session claim follows aggregate app activity (#176). | Implement the selected public App Group roles, visibility across processes, first launch, migration and interrupted-owner recovery. Validate that public path with independent iOS processes. |
 | Public opening and sharing | H01 public contexts and staged v1 bootstrap (#150–#151). H02 Apple invitation UI, graph identity, permissions and resumable leave/rejoin (#152–#154). Demo adoption merged separately. | Recheck H02 on the current library pin, including rejoining after leave without restarting. Confirm supported device/account behavior and deploy the selected CloudKit schema for production. |
 | Account isolation | Default isolation and recovery policy (#147), public account-aware local opening and foreground CloudKit lifecycle. | Protected-data and independent-reader acceptance. Physical account-change trials and optional merge/deletion policies retain their existing beta backlog. |
 | Query, observation and attachments | Descriptor-first queries, async/Combine observation and durable CKAsset transport with bounded private device evidence (#143–#146). | Decide live processing versus durable replay (O04), publish supported query and attachment limits, and validate the remaining shared/interruption paths. |
 | Migration and recovery | Public staged v1 bootstrap, private cloud authority and empty-peer recovery, plus native conversion and maintenance recovery under Foundation grants. | Validate representative v1 copies and define the supported source matrix and cloud cutover, including returning offline v1 clients. |
 
-The next implementation decision is the **public App Group contract (PA02/O03)**.
-Start with what a second process can do when the app is active, backgrounded or
-has never opened the graph. Settle reads and interactive writes, CloudKit
-ownership and recovery policy before extending the public API. Then validate the
-chosen behavior on a shared local replica with independent processes. The
+The next increment implements the selected
+[public App Group contract (PA02/O03)](graphevo-2-controlled-store-access.md#public-app-group-process-contract).
+Apply the declared process roles to admission and define the recovery protocol
+for unverified detach. Validate the chosen behavior on a shared local replica
+with independent processes. The
 [30-cycle iPad result](results/app-group-runtime-integration-2026-11-05.md)
 covers the integrated package-only runtime and uses injected CloudKit transport.
 

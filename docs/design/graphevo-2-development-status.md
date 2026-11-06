@@ -16,9 +16,9 @@ checkpoints. The [full checkpoint](https://github.com/bbruno84/GraphEvo/actions/
 passed on `c9f2aa32`, whose contents match the squash merge. macOS passed 1,050
 tests and both Swift 6 consumers. iOS 18.5 passed 1,048 tests with one skip.
 
-The [current delivery plan](graphevo-2-delivery-plan.md#current-delivery-position--audited-2026-11-06)
-puts the public App Group contract next. The integrated runtime has package-only
-entry and bounded physical iPad app/widget evidence. Public process roles,
+The maintainer selected the [public App Group contract](graphevo-2-controlled-store-access.md#public-app-group-process-contract)
+with explicit primary and secondary roles. The integrated runtime has package-only
+entry and bounded physical iPad app/widget evidence. Public implementation,
 first-launch behavior, independent-process acceptance and production
 abandoned-owner recovery remain open. The Demo `develop` branch currently pins
 `6432e595`. Its next H02 physical checkpoint uses the reviewed library revision
