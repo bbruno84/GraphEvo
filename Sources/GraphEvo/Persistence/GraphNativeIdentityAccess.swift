@@ -242,6 +242,46 @@ struct GraphNativeIdentityAccess: Sendable {
 
     /// Validate only selected identities, their owned metadata and direct endpoints.
     /// Missing native routing outside this selection remains an explicit audit concern.
+    func attachmentMetadata(_ context: NSManagedObjectContext, graphID: GraphID) throws -> [GraphAttachmentMetadata] {
+        try GraphValueDecodingDiagnostics.checking {
+            try checkGraph(context, graphID: graphID)
+            let check = StoreNativeContext.cancellationCheck(in: context)
+            let predicate = NSPredicate(format: "%K == %@ AND type == %@", graphAttribute,
+                                        graphID.rawValue.uuidString, GraphAttachmentPayload.graphType)
+            for kind in [ModelIdentifier.relationshipName, ModelIdentifier.actionName] {
+                try check()
+                let request = NSFetchRequest<NSFetchRequestResult>(entityName: kind)
+                request.predicate = predicate
+                request.includesPendingChanges = true
+                request.fetchLimit = 1
+                guard try context.count(for: request) == 0 else { throw GraphAttachmentError.notAnAttachment }
+            }
+            let request = NSFetchRequest<ManagedEntity>(entityName: ModelIdentifier.entityName)
+            request.predicate = predicate
+            request.includesPendingChanges = true
+            let files = try context.fetch(request)
+            var nodes: [GraphNodeID: Entity] = [:]
+            for file in files {
+                try check()
+                guard let text = file.value(forKey: nodeAttribute) as? String, let uuid = UUID(uuidString: text) else {
+                    throw GraphStoreError.corruptIdentity
+                }
+                let id = GraphNodeID(graphID: graphID, rawValue: uuid)
+                guard nodes.updateValue(Entity(managedNode: file), forKey: id) == nil else {
+                    throw GraphStoreError.duplicateIdentity
+                }
+            }
+            // Reuse the same identity, store and membership checks as a scoped query.
+            let checked = try queryHeaders(context, graphID: graphID, ids: Set(nodes.keys))
+            return try checked.map { record in
+                try check()
+                guard let node = nodes[record.id], record.type == GraphAttachmentPayload.graphType,
+                      record.endpoints.kind == .entity else { throw GraphStoreError.corruptIdentity }
+                return try GraphTypedStoreAdapter.nativeAttachmentMetadata(node, id: record.id)
+            }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
+        }
+    }
+
     func queryHeaders(_ context: NSManagedObjectContext, graphID: GraphID, ids: Set<GraphNodeID>) throws -> [GraphRecord] {
         guard !ids.isEmpty else { return [] }
         let check = StoreNativeContext.cancellationCheck(in: context)

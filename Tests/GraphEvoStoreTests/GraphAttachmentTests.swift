@@ -3,6 +3,8 @@ import Foundation
 import Testing
 @testable import GraphEvo
 import GraphEvoModel
+@testable import GraphEvoRuntime
+@testable import GraphEvoStore
 
 @Suite(.timeLimit(.minutes(2))) struct GraphAttachmentTests {
     private struct Abort: Error {}
@@ -221,6 +223,53 @@ extension GraphAttachmentTests {
         #expect(try await reopened.attachment(old.id) == nil)
         #expect(try await reopened.attachment(fresh.id) == nil)
         try await reopened.close()
+    }
+
+    @Test func sqliteListingValidatesAttachmentsWithoutAuditingUnrelatedNodes() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+                                          adapter: GraphCoordinatorFactory.adapter)
+        let graph = try await manager.createGraph(id: GraphID(), at: root.appendingPathComponent("Graph.sqlite"))
+        let firstOwner = try await owner(graph), secondOwner = try await owner(graph)
+        let unrelated = graph.makeNodeID()
+        try await graph.transaction { try $0.insert(GraphRecord(id: unrelated, type: "unrelated")) }
+        let input = try source(root, bytes: Data([1, 2, 3]))
+        let split = try await graph.importAttachment(from: input, ownedBy: firstOwner)
+        let other = try await graph.importAttachment(from: input, ownedBy: secondOwner)
+        let legacy = try GraphAttachmentPayload(id: graph.makeNodeID(), ownerID: firstOwner,
+            fileName: "legacy.bin", contentType: "public.data", data: Data([4, 5]))
+        let legacyRecord = try legacy.graphRecord(legacy: true)
+        try await graph.transaction { try $0.insert(legacyRecord) }
+        let expected = [split, legacy.content.metadata].sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
+
+        try await graph.nativeOperation { native in
+            try native.testNativeContext { context in
+                let fetch = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityName)
+                fetch.predicate = NSPredicate(format: "%K == %@", GraphNativeIdentityColumns.nodeAttribute, unrelated.rawValue.uuidString)
+                let row = try #require(context.fetch(fetch).first)
+                row.setValue(nil, forKey: GraphNativeIdentityColumns.nodeAttribute)
+                try context.save()
+            }
+        }
+        #expect(try await graph.attachments(ownedBy: firstOwner) == expected)
+        #expect(try await graph.attachments(ownedBy: secondOwner) == [other])
+        await #expect(throws: (any Error).self) { try await graph.validateIntegrity() }
+
+        try await graph.nativeOperation { native in
+            try native.testNativeContext { context in
+                let fetch = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityName)
+                fetch.predicate = NSPredicate(format: "%K == %@", GraphNativeIdentityColumns.nodeAttribute, split.id.rawValue.uuidString)
+                let row = try #require(context.fetch(fetch).first)
+                row.setValue(nil, forKey: GraphNativeIdentityColumns.nodeAttribute)
+                try context.save()
+            }
+        }
+        await #expect { try await graph.attachments(ownedBy: firstOwner) } throws: { error in
+            if case GraphStoreError.corruptIdentity = error { return true }
+            return false
+        }
+        try await graph.close()
     }
 
     @Test func metadataProjectionSkipsInvalidBodyWhileContentAndSharingIntegrityStillFail() async throws {

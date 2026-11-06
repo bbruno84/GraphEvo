@@ -26,6 +26,17 @@ package enum GraphTypedStoreAdapter {
         upgrade: { try upgrade($0, backupRoot: $1) }
     )
 
+    static func nativeAttachmentMetadata(_ node: Node, id: GraphNodeID) throws -> GraphAttachmentMetadata {
+        // Split files read only metadata. The legacy envelope stores metadata with its body.
+        let available = try GraphNativePropertyStorage.keys(node)
+        let key = available.contains(GraphAttachmentPayload.metadataKey) ? GraphAttachmentPayload.metadataKey : GraphAttachmentPayload.contentKey
+        guard let value = try GraphNativePropertyStorage.properties(node, keys: [key])[key] else {
+            throw GraphStoreError.corruptIdentity
+        }
+        let record = try GraphRecord(id: id, type: node.type, properties: [key: value])
+        return try GraphAttachmentPayload.metadata(from: record)
+    }
+
     private static func makeAdapter(database: Bool) -> GraphStoreAdapter {
         var adapter = GraphStoreAdapter(
             initialize: { context, backup in
@@ -48,18 +59,15 @@ package enum GraphTypedStoreAdapter {
                 return try session.nodes.compactMap { id, node -> GraphAttachmentMetadata? in
                     guard node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType else { return nil }
                     guard session.kind(node) == .entity else { throw GraphAttachmentError.notAnAttachment }
-                    // A metadata projection must not decode the body or unrelated application values.
-                    let available = GraphNativePropertyStorage.enabled(context) ? try GraphNativePropertyStorage.keys(node) : try session.encodedKeys(node)
-                    let key = available.contains(GraphAttachmentPayload.metadataKey) ? GraphAttachmentPayload.metadataKey : GraphAttachmentPayload.contentKey
-                    let value: GraphValue
                     if GraphNativePropertyStorage.enabled(context) {
-                        guard let stored = try GraphNativePropertyStorage.properties(node, keys: [key])[key] else { throw GraphStoreError.corruptIdentity }
-                        value = stored
-                    } else {
-                        guard available.contains(key), let bytes = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
-                        value = try GraphValueCodec.decode(bytes)
+                        return try nativeAttachmentMetadata(node, id: id)
                     }
-                    let record = try GraphRecord(id: id, type: node.type, properties: [key: value])
+                    let available = try session.encodedKeys(node)
+                    let key = available.contains(GraphAttachmentPayload.metadataKey) ? GraphAttachmentPayload.metadataKey : GraphAttachmentPayload.contentKey
+                    guard available.contains(key), let bytes = node[dynamicMember: key] as? Data else {
+                        throw GraphStoreError.corruptIdentity
+                    }
+                    let record = try GraphRecord(id: id, type: node.type, properties: [key: GraphValueCodec.decode(bytes)])
                     return try GraphAttachmentPayload.metadata(from: record)
                 }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
             },

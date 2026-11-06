@@ -42,6 +42,10 @@ enum GraphNativeIdentityDatabaseAdapter {
                 try access.checkGraph(context, graphID: graphID)
                 try base.graph.delete(context, graphID, id)
             }, attachmentMetadata: { context, graphID in
+                if !allowsMirroring, GraphNativePropertyStorage.enabled(context),
+                   context.persistentStoreCoordinator?.persistentStores.allSatisfy({ $0.type == NSSQLiteStoreType }) == true {
+                    return try access.attachmentMetadata(context, graphID: graphID)
+                }
                 _ = try access.validateIdentityInventory(context, graphID: graphID)
                 guard let list = base.graph.attachmentMetadata else { throw GraphStoreError.unsupportedLayout }
                 return try list(context, graphID)
