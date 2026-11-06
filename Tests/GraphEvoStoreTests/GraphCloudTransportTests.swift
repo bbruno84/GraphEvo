@@ -12,6 +12,8 @@ private final class TransportBus: @unchecked Sendable {
     private var records: [String: GraphCloudIncoming] = [:]
     private var fail = Set<String>()
     private var sends = 0
+    private var offered: [[String]] = []
+    var offers: [[String]] { lock.withLock { offered } }
     func failNames(_ names: Set<String>) { lock.withLock { fail = names } }
     var sendCount: Int { lock.withLock { sends } }
     func inject(_ incoming: GraphCloudIncoming) { lock.withLock { records[incoming.recordName ?? UUID().uuidString] = incoming } }
@@ -36,9 +38,36 @@ private final class TransportBus: @unchecked Sendable {
     func fetch(_ zones: [GraphCloudZone]) -> [GraphCloudIncoming] {
         lock.withLock { records.values.filter { zones.contains($0.zone) }.sorted { ($0.recordName ?? "") < ($1.recordName ?? "") } }
     }
-    var adapter: GraphCloudAdapter {
+    var adapter: GraphCloudAdapter { adapterWithLimit() }
+    func adapterWithLimit(_ limit: (@Sendable (GraphCloudOutgoingBatch) -> Bool)? = nil,
+                          rejected: String? = nil, individual: Bool = false) -> GraphCloudAdapter {
         GraphCloudAdapter(account: { _ in "transport-account" }, make: { [self] _, scope, _, callback in
             GraphCloudDriver(fetch: { zones in await callback(.incoming(self.fetch(zones))) }, cancel: {}, send: { batch in
+                self.lock.withLock { self.offered.append(batch.items.map(\.recordName)) }
+                if limit?(batch) == true {
+                    // One operation committed before the server rejected the rest of the request.
+                    let accepted = Array(batch.items.prefix(1))
+                    let part = GraphCloudOutgoingBatch(id: batch.id, graphID: batch.graphID, zone: batch.zone, items: accepted)
+                    let receipt = try self.send(part)
+                    if individual {
+                        let failures = batch.items.dropFirst().map {
+                            GraphCloudRecordFailure(recordName: $0.recordName, code: CKError.Code.limitExceeded.rawValue)
+                        }
+                        await callback(.sent(.init(batchID: batch.id, graphID: batch.graphID, zone: batch.zone,
+                            saved: receipt.saved, deletedNames: receipt.deletedNames, failures: failures)))
+                        throw NSError(domain: CKErrorDomain, code: CKError.Code.partialFailure.rawValue)
+                    }
+                    await callback(.sent(receipt))
+                    throw NSError(domain: CKErrorDomain, code: CKError.Code.limitExceeded.rawValue)
+                }
+                if let rejected, batch.items.contains(where: { item in
+                    guard item.recordName == rejected else { return false }
+                    if item.assetReference != nil { return true }
+                    guard let archive = item.recordArchive, let native = try? GraphCloudRecordCodec.restore(archive), let body = native["payload"] as? Data else { return false }
+                    return body.count > 1_000_000
+                }) {
+                    throw NSError(domain: CKErrorDomain, code: CKError.Code.limitExceeded.rawValue)
+                }
                 await callback(.sent(try self.send(batch)))
                 await callback(.state(Data([1])))
             })
@@ -65,12 +94,12 @@ private final class TransportFailureSwitch: @unchecked Sendable {
     }
     private func fixture(bus: TransportBus, container: String = UUID().uuidString, graphID: GraphID = GraphID(),
                          adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter,
-                         disk: GraphCloudDisk = .live) async throws -> Fixture {
+                         cloud: GraphCloudAdapter? = nil, disk: GraphCloudDisk = .live) async throws -> Fixture {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Transport-\(UUID())")
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.transport." + container, environment: .development, directory: dir.appendingPathComponent("Cloud"))
         let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
         let graph = try await manager.createGraph(id: graphID, at: dir.appendingPathComponent("Graph.sqlite"))
-        _ = try await manager.startCloudSession(config, adapter: bus.adapter, disk: disk)
+        _ = try await manager.startCloudSession(config, adapter: cloud ?? bus.adapter, disk: disk)
         let zone = GraphCloudZone(scope: .private, owner: "owner", name: "graph")
         try await manager.bindCloudZone(zone, to: graphID, configuration: config)
         let route = try #require(try await manager.cloudBinding(for: zone, configuration: config))
@@ -85,6 +114,129 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         let base = GraphCoordinatorFactory.adapter, sync = try #require(base.sync), cloud = try #require(sync.cloud)
         return GraphCoordinatorAdapter(graph: base.graph, sync: GraphSyncAdapter(cloud: modify(cloud), collect: sync.collect,
             prepare: sync.prepare, acknowledge: sync.acknowledge, importPatches: sync.importPatches), account: base.account, initialize: base.initialize)
+    }
+
+    @Test func requestCountIncludesEveryOperation() {
+        var sizing = GraphCloudBatchSizing()
+        for _ in 0..<250 {
+            let admitted = sizing.append(1_100)
+            #expect(admitted)
+        }
+        let overflow = sizing.append(1_100)
+        #expect(!overflow)
+    }
+
+    @Test func byteBudgetGroupsEncodedRecordsAndIndependentReplicaReadsThem() async throws {
+        let bus = TransportBus(), namespace = UUID().uuidString
+        let sender = try await fixture(bus: bus, container: namespace)
+        defer { try? FileManager.default.removeItem(at: sender.directory) }
+        let sizes = [400_000, 400_000, 400_000, 400_000, 720_000, 10]
+        var expected: [GraphRecord] = []
+        for size in sizes {
+            let record = try GraphRecord(id: sender.graph.makeNodeID(), type: "Item",
+                                         properties: ["value": .string(String(repeating: "x", count: size))])
+            try await sender.graph.transaction { try $0.insert(record) }
+            expected.append(record)
+        }
+
+        for count in [3, 1, 1, 1] {
+            let report = try await sender.manager.sendCloudChanges(for: sender.graph.id, configuration: sender.config)
+            #expect(report.succeeded == count && report.failures.isEmpty && report.transportError == nil)
+        }
+        let names = try expected.map { try GraphCloudNodeCodec.recordID(for: $0.id, binding: sender.binding.route).recordName }
+        #expect(bus.offers == [Array(names.prefix(3)), [names[3]], [names[4]], [names[5]]])
+        try await sender.manager.stopCloudSession(sender.config)
+
+        let peer = try await fixture(bus: bus, container: namespace, graphID: sender.graph.id)
+        defer { try? FileManager.default.removeItem(at: peer.directory) }
+        try await peer.manager.fetchCloudChanges(.private, configuration: peer.config)
+        #expect(try await peer.manager.applyCloudInbox(for: peer.graph.id, configuration: peer.config).applied == sizes.count)
+        for record in expected {
+            #expect(try await peer.graph.read { try $0.record(for: record.id)?.properties } == record.properties)
+        }
+        try await finish(peer)
+        try await sender.graph.close()
+    }
+
+    @Test(arguments: [false, true])
+    func sizeRejectionSplitsOnlyUnconfirmedOperations(_ individual: Bool) async throws {
+        let bus = TransportBus(), graph = GraphID()
+        let cloud = bus.adapterWithLimit({ $0.items.count == 3 }, individual: individual)
+        let f = try await fixture(bus: bus, graphID: graph, cloud: cloud)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        let deleted = try GraphRecord(id: f.graph.makeNodeID(), type: "Item")
+        try await f.graph.transaction { try $0.insert(deleted) }
+        _ = try await f.manager.sendCloudChanges(for: graph, configuration: f.config)
+        let a = try GraphRecord(id: f.graph.makeNodeID(), type: "Item")
+        let b = try GraphRecord(id: f.graph.makeNodeID(), type: "Item")
+        try await f.graph.delete(deleted.id)
+        try await f.graph.transaction { try $0.insert(a); try $0.insert(b) }
+        let report = try await f.manager.sendCloudChanges(for: graph, configuration: f.config)
+        #expect(report.succeeded == 3 && report.failures.isEmpty && report.transportError == nil)
+        let offers = bus.offers
+        #expect(offers.count == 4)
+        let first = try #require(offers.dropFirst().first)
+        #expect(offers.dropFirst(2).flatMap { $0 } == Array(first.dropFirst()))
+        #expect(try await f.graph.prepareTransport(f.binding).items.isEmpty)
+        try await finish(f)
+    }
+
+    @Test func rejectedSingletonCanBeCorrectedLocallyAndResent() async throws {
+        let bus = TransportBus(), graph = GraphID(), node = GraphNodeID(graphID: graph)
+        let name = "node." + node.rawValue.uuidString.lowercased()
+        let cloud = bus.adapterWithLimit(rejected: name)
+        let f = try await fixture(bus: bus, graphID: graph, cloud: cloud)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        let large = String(repeating: "x", count: 820_000)
+        try await f.graph.transaction {
+            try $0.insert(GraphRecord(id: node, type: "Item", properties: ["value": .string(large)]))
+        }
+        let rejected = try await f.manager.sendCloudChanges(for: graph, configuration: f.config)
+        #expect(rejected.succeeded == 0 && rejected.failures == [.init(recordName: name, code: CKError.Code.limitExceeded.rawValue)])
+        #expect(try await f.graph.read { try $0.record(for: node)?.properties["value"] } == .string(large))
+        try await f.graph.transaction {
+            _ = try $0.patch(GraphRecordPatch(id: node, properties: ["value": .set(.string("short"))]))
+        }
+        let accepted = try await f.manager.sendCloudChanges(for: graph, configuration: f.config)
+        #expect(accepted.succeeded == 1 && accepted.failures.isEmpty && accepted.transportError == nil)
+        #expect(bus.offers == [[name], [name]])
+        try await finish(f)
+    }
+
+    @Test func failedReplacementKeepsTheRejectedAttemptAssetUntilCommit() async throws {
+        let bus = TransportBus(), graph = GraphID(), owner = GraphNodeID(graphID: graph), attachment = GraphNodeID(graphID: graph)
+        let cloud = bus.adapterWithLimit(rejected: "node." + attachment.rawValue.uuidString.lowercased())
+        let failure = TransportFailureSwitch()
+        let adapter = try injected { base in
+            GraphCloudStoreAdapter(prepare: base.prepare, finishPrepared: { context, id, binding, batch, limits in
+                try base.finishPrepared(context, id, binding, batch, limits)
+                try failure.failOnce()
+            }, currentAttempt: base.currentAttempt, sent: base.sent, apply: base.apply, trim: base.trim)
+        }
+        let f = try await fixture(bus: bus, graphID: graph, adapter: adapter, cloud: cloud)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        try await f.graph.transaction { try $0.insert(GraphRecord(id: owner, type: "Document")) }
+        _ = try await f.manager.sendCloudChanges(for: graph, configuration: f.config)
+        let payload = try GraphAttachmentPayload(id: attachment, ownerID: owner, fileName: "file.bin",
+            contentType: "public.data", data: Data(repeating: 1, count: 4096))
+        let record = try payload.graphRecord()
+        try await f.graph.transaction { try $0.insert(record) }
+
+        let attempt = try await f.graph.prepareTransport(f.binding)
+        let reference = try #require(attempt.items.first?.assetReference)
+        let root = try #require(attempt.assetRoot)
+        let file = root.appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
+        let rejected = try await f.manager.sendCloudChanges(for: graph, configuration: f.config)
+        #expect(rejected.failures.map(\.code) == [CKError.Code.limitExceeded.rawValue])
+
+        try await f.graph.delete(attachment)
+        failure.enable()
+        await #expect(throws: GraphCloudError.persistence) { try await f.graph.prepareTransport(f.binding) }
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        let accepted = try await f.manager.sendCloudChanges(for: graph, configuration: f.config)
+        #expect(accepted.succeeded == 1 && accepted.failures.isEmpty && accepted.transportError == nil)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        try await finish(f)
     }
 
     @Test func privatePrimitivesReplicateAndImportsDoNotFeedUpload() async throws {

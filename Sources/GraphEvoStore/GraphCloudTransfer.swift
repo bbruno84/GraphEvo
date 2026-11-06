@@ -81,8 +81,11 @@ package struct GraphCloudPreparedOutgoing: Sendable {
     package let batch: GraphCloudOutgoingBatch
     package let storeID: String
     package let epoch: UUID
-    package init(batch: GraphCloudOutgoingBatch, storeID: String, epoch: UUID) {
+    let previousAssets: [GraphCloudAssetReference]
+    package init(batch: GraphCloudOutgoingBatch, storeID: String, epoch: UUID,
+                 previousAssets: [GraphCloudAssetReference] = []) {
         self.batch = batch; self.storeID = storeID; self.epoch = epoch
+        self.previousAssets = previousAssets
     }
 }
 

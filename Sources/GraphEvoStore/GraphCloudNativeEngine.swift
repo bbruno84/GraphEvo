@@ -42,7 +42,12 @@ extension GraphCloudAdapter {
                     try await engine.sendChanges(.init(scope: .zoneIDs([zoneID])))
                     try await delegate.outbox.finish()
                 } catch {
-                    try? await delegate.outbox.finish()
+                    if (error as? CKError)?.code == .limitExceeded {
+                        // A zone failure cannot be resolved by dividing the record changes.
+                        try await delegate.outbox.finish()
+                    } else {
+                        try? await delegate.outbox.finish()
+                    }
                     throw error
                 }
             }, forget: { zone in

@@ -120,9 +120,27 @@ IDs remain protected. Restoring mismatched session/native backups is not certifi
 
 ## Bounds and result meaning
 
-Creation selects at most 100 records per attempt (caller may choose fewer).
-Resuming an existing frozen attempt preserves its original selection. Existing PH
-and CF01 limits still apply. Per-graph transport state is bounded at 32 MiB encoded,
+Creation selects at most 100 operations per frozen attempt. A caller may choose
+fewer. Each request stays under the CKSyncEngine ceiling of 250 saves and deletes
+combined. The batcher aims for 1,800,000 estimated bytes per request, allowing
+headroom under CloudKit's 2 MB guideline. It counts the encoded fields and
+operation metadata. Asset bodies are excluded and retain their separate bounds.
+Records estimated above 900,000 bytes are logged and sent separately, against
+Apple's [1 MB record limit](https://developer.apple.com/documentation/cloudkit/ckrecord).
+The node
+codec accepts payloads up to 2,000,000 bytes on both encode and decode as a local
+safety bound. CloudKit remains the authority on the size of a submitted record.
+[CKSyncEngine](https://developer.apple.com/documentation/CloudKit/CKSyncEngine-5sie5)
+and [limitExceeded](https://developer.apple.com/documentation/cloudkit/ckerror/code/limitexceeded)
+describe the server limits.
+
+Resuming an existing frozen attempt preserves its identity and can use multiple
+requests. On a server size rejection, the sender subdivides the unconfirmed work
+and keeps all already committed receipts. A rejected single record is reported
+with its CloudKit code and remains pending. A newer local revision can replace
+that rejected intent on retry. The same batcher serves ordinary changes and seed
+uploads. First publication and replica verification have separate aggregate
+inventory bounds. Existing persistent history limits still apply. Per-graph transport state is bounded at 32 MiB encoded,
 100,000 metadata entries and 4,096 retained receipts. The session's configurable
 count budget charges incoming records and individual successful/failed send results;
 its byte budget includes the complete document. There is no automatic budget increase.
@@ -130,7 +148,7 @@ its byte budget includes the complete document. There is no automatic budget inc
 These are count/encoded-state bounds, not total heap, CPU, I/O, batch/server-size
 or production-envelope guarantees. Full graph validation, full retained PH cuts,
 metadata maps and whole-document rewriting remain cost/retention measurement gates.
-Oversized attempts fail before sending; callers can reduce their creation count.
+A codec safety limit can reject a record locally before sending.
 
 Reports describe observed successful receipts, failures and handled incoming
 envelopes (including replay/echo/zone events), not global sync completion or changed

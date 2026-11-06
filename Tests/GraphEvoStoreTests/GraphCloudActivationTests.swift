@@ -15,6 +15,8 @@ actor ActivationServer {
     var ambiguousClaim = false
     var ambiguousPublication = false
     var failRecordOnce = false
+    private var sizeRejectedRecord: String?
+    func rejectSize(of record: GraphNodeID) { sizeRejectedRecord = "node." + record.rawValue.uuidString.lowercased() }
     func configure(offline: Bool = false, claim: Bool = false, publication: Bool = false, record: Bool = false) {
         self.offline = offline; ambiguousClaim = claim; ambiguousPublication = publication; failRecordOnce = record
     }
@@ -44,6 +46,10 @@ actor ActivationServer {
         try check(); sends += 1
         var saved: [GraphCloudIncoming] = [], deleted: [String] = [], failed: [GraphCloudRecordFailure] = []
         for item in batch.items {
+            if item.recordName == sizeRejectedRecord {
+                failed.append(.init(recordName: item.recordName, code: CKError.Code.limitExceeded.rawValue))
+                continue
+            }
             if failRecordOnce { failRecordOnce = false; failed.append(.init(recordName: item.recordName, code: CKError.networkFailure.rawValue)); continue }
             if let archive = item.recordArchive {
                 let record = try GraphCloudRecordCodec.restore(archive)
@@ -149,6 +155,18 @@ actor ActivationServer {
     }
     private func patch(_ graph: GraphStore, id: GraphNodeID) async throws {
         _ = try await graph.transaction { try $0.patch(.init(id: id, properties: ["name": .set(.string("Later"))])) }
+    }
+
+    @Test func seedRecordSizeRejectionIsReportedWithoutPublishing() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        await server.rejectSize(of: f.invoice)
+        _ = try await prepare(f)
+        let result = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect((result.operationError as? CKError)?.code == .limitExceeded)
+        #expect(result.status.phase != .published)
+        #expect(try await server.fetch(f.route)?.value.published == false)
+        try await close(f)
     }
 
     @Test func preparesImmutableSeedBlocksAliasesAndPublishesBeforeUnlocking() async throws {

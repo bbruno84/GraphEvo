@@ -57,8 +57,10 @@ graph transport and engine document limits still apply to serialized control
 metadata and ordinary payloads, not the sum of CKAsset bodies. MF10 seed and
 verification manifests charge inline payload bytes separately and process
 records individually. A complete initial replica can exceed 32 MiB in total
-asset content. The 512 KiB per-record ordinary payload limit, 10 MiB
-per-attachment limit, record-count and native-row limits remain. No total
+asset content. The 10 MiB per-attachment limit and the record-count and
+native-row limits remain. The
+[transport policy](graphevo-2-record-transport.md) defines the current ordinary
+payload and per-request limits. No total
 database byte limit is inferred from the temporary work window.
 
 The engine session format advances from 7 to 8 and the graph transport format

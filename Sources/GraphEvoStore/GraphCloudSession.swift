@@ -1,6 +1,7 @@
 import Foundation
 import CloudKit
 import GraphEvoModel
+import OSLog
 
 /// Native delegates convert to detached events before calling the session.
 enum GraphCloudEvent: Sendable {
@@ -72,7 +73,13 @@ actor GraphCloudSession {
     private var activeFetches = Set<GraphCloudScope>()
     private var shareCreation: UUID?
     private var fetches = 0
-    private var outbound: [GraphCloudScope: GraphCloudOutgoingBatch] = [:]
+    private struct OutboundRequest {
+        let batch: GraphCloudOutgoingBatch
+        var reported = Set<String>()
+        var sizeRejections = Set<String>()
+    }
+    private static let sizingLog = Logger(subsystem: "GraphEvo", category: "CloudKitBatch")
+    private var outbound: [GraphCloudScope: OutboundRequest] = [:]
     private var drains: [CheckedContinuation<Void, Never>] = []
 
     private init(configuration: GraphCloudConfiguration, owner: UUID, adapter: GraphCloudAdapter,
@@ -426,23 +433,34 @@ actor GraphCloudSession {
                 }
                 if !changes.isEmpty { try publish(next, reservingControl: true) }
             case .sent(var receipt):
-                guard let batch = outbound[scope], receipt.batchID == batch.id, receipt.graphID == batch.graphID,
+                guard let batch = outbound[scope]?.batch, receipt.batchID == batch.id, receipt.graphID == batch.graphID,
                       receipt.zone == batch.zone, receipt.zone.scope == scope else { throw GraphCloudError.invalidState }
                 let member = document.memberships.first { $0.binding.graphID == receipt.graphID && $0.role == .participant }
                 if member?.terminal == true { return }
                 let items = Dictionary(uniqueKeysWithValues: batch.items.map { ($0.recordName, $0.change.operation) })
                 let names = receipt.saved.compactMap(\.recordName) + receipt.deletedNames + receipt.failures.map(\.recordName)
                 if names.isEmpty { return }
-                guard Set(names).count == names.count,
+                guard Set(names).count == names.count, outbound[scope]!.reported.isDisjoint(with: names),
                       receipt.saved.allSatisfy({ $0.kind == .recordChanged && $0.zone == batch.zone && $0.recordName.flatMap { items[$0] } == .save }),
                       receipt.deletedNames.allSatisfy({ items[$0] == .delete }),
                       receipt.failures.allSatisfy({ items[$0.recordName] != nil }) else { throw GraphCloudError.invalidState }
+                outbound[scope]!.reported.formUnion(names)
+                var finalFailures = receipt.failures
+                if batch.items.count > 1 {
+                    // Size failures can be retried with a smaller request. Persist the other results now.
+                    finalFailures.removeAll { failure in
+                        guard failure.code == CKError.Code.limitExceeded.rawValue, failure.serverRecord == nil else { return false }
+                        outbound[scope]!.sizeRejections.insert(failure.recordName)
+                        return true
+                    }
+                    if receipt.saved.isEmpty, receipt.deletedNames.isEmpty, finalFailures.isEmpty { return }
+                }
                 let route = GraphCloudBinding(zone: receipt.zone, graphID: receipt.graphID)
                 let identity = GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
                 let spool = try GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets"))
                 let saved = try receipt.saved.map { try GraphCloudRecordCodec.freeze($0, identity: identity,
                     binding: route, spool: spool, namespace: receipt.id) }
-                let failures = try receipt.failures.map { failure -> GraphCloudRecordFailure in
+                let failures = try finalFailures.map { failure -> GraphCloudRecordFailure in
                     let server = try failure.serverRecord.map { try GraphCloudRecordCodec.freeze($0, identity: identity,
                         binding: route, spool: spool, namespace: receipt.id) }
                     return GraphCloudRecordFailure(recordName: failure.recordName, code: failure.code, serverRecord: server)
@@ -627,19 +645,71 @@ actor GraphCloudSession {
         guard document.bindings.contains(where: { $0.zone == batch.zone && $0.graphID == batch.graphID }) else { throw GraphCloudError.invalidState }
         guard activeFetches.insert(scope).inserted else { throw GraphCloudError.busy }
         retryAdvice[scope] = nil
-        fetches += 1; outbound[scope] = batch
+        fetches += 1
         defer {
             outbound.removeValue(forKey: scope); activeFetches.remove(scope); fetches -= 1
             if fetches == 0 { let values = drains; drains.removeAll(); for value in values { value.resume() } }
         }
         do {
-            try await send(batch)
-            if let failure { throw failure }
+            let requests = try GraphCloudBatchSizing.requests(for: batch)
+            for items in requests.isEmpty ? [[]] : requests {
+                try await sendRequest(items, from: batch, send: send)
+            }
             return GraphCloudSendOutcome(transportError: nil, retryAfter: retryAdvice[scope])
         } catch {
             return GraphCloudSendOutcome(transportError: error, retryAfter: retryAdvice[scope])
         }
     }
+    private func sendRequest(_ items: [GraphCloudOutgoingNode], from attempt: GraphCloudOutgoingBatch,
+                             send: @Sendable (GraphCloudOutgoingBatch) async throws -> Void) async throws {
+        try check()
+        try Task.checkCancellation()
+        let scope = attempt.zone.scope
+        guard !document.memberships.contains(where: {
+            $0.binding.graphID == attempt.graphID && $0.role == .participant && $0.terminal
+        }) else { throw GraphCloudError.zoneUnavailable }
+        let batch = GraphCloudOutgoingBatch(id: attempt.id, graphID: attempt.graphID, zone: attempt.zone,
+                                           items: items, assetRoot: attempt.assetRoot)
+        if items.count == 1, let item = items.first {
+            let bytes = try GraphCloudBatchSizing.estimate(item, zone: batch.zone)
+            if bytes > GraphCloudBatchSizing.recordWarning {
+                Self.sizingLog.warning("CloudKit record \(item.recordName, privacy: .private) is approximately \(bytes) bytes without assets. Sending separately.")
+            }
+        }
+
+        outbound[scope] = OutboundRequest(batch: batch)
+        var error: (any Error)?
+        do { try await send(batch) } catch let caught { error = caught }
+        try check()
+        let request = outbound[scope]!
+        let native = error.map { $0 as NSError }
+        let code = native?.domain == CKErrorDomain ? native?.code : nil
+        let wholeRequestExceeded = code == CKError.Code.limitExceeded.rawValue
+        let reportedPartial = code == CKError.Code.partialFailure.rawValue && request.reported.count == items.count
+        if let error, !wholeRequestExceeded && !(reportedPartial && !request.sizeRejections.isEmpty) { throw error }
+
+        let retry = items.filter {
+            request.sizeRejections.contains($0.recordName) ||
+                (wholeRequestExceeded && !request.reported.contains($0.recordName))
+        }
+        if retry.isEmpty {
+            if items.isEmpty, let error { throw error }
+            return
+        }
+        if items.count == 1, let item = retry.first {
+            await receive(.sent(GraphCloudSentReceipt(batchID: batch.id, graphID: batch.graphID, zone: batch.zone,
+                saved: [], deletedNames: [], failures: [.init(recordName: item.recordName, code: CKError.Code.limitExceeded.rawValue)])),
+                scope: scope)
+            try check()
+            return
+        }
+        let middle = (retry.count + 1) / 2
+        try await sendRequest(Array(retry.prefix(middle)), from: attempt, send: send)
+        if middle < retry.count {
+            try await sendRequest(Array(retry.dropFirst(middle)), from: attempt, send: send)
+        }
+    }
+
     func sentReceipts(for graph: GraphID) throws -> [GraphCloudSentReceipt] {
         try check(); return document.sent.filter { $0.graphID == graph }
     }

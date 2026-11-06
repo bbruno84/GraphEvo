@@ -256,14 +256,23 @@ extension GraphContextManager {
         let permit = document.authority.activationID
         return try await withTransport(document.authority.graphID, configuration: configuration, activationPermit: permit) { session, graph, binding, _ in
             let previous = try await Self.drainSent(session, graph: graph, binding: binding)
-            guard previous.failures.isEmpty else { throw GraphCloudActivationError.recoveryRequired }
+            if let error = Self.seedUploadError(previous) {
+                return .init(empty: false, cleanupPending: previous.cleanupPending, operationError: error)
+            }
             let batch = try await graph.prepareTransport(binding, maximum: 100)
             if batch.items.isEmpty { return .init(empty: true, cleanupPending: previous.cleanupPending, operationError: nil) }
             let outcome = try await session.sendWithAdvice(batch, activationPermit: permit)
             let result = try await Self.drainSent(session, graph: graph, binding: binding)
-            guard result.failures.isEmpty else { throw GraphCloudActivationError.recoveryRequired }
-            return .init(empty: false, cleanupPending: previous.cleanupPending || result.cleanupPending, operationError: outcome.transportError)
+            return .init(empty: false, cleanupPending: previous.cleanupPending || result.cleanupPending,
+                         operationError: Self.seedUploadError(result) ?? outcome.transportError)
         }
+    }
+
+    private static func seedUploadError(_ report: GraphCloudSendReport) -> (any Error)? {
+        if report.failures.contains(where: { $0.code == CKError.Code.limitExceeded.rawValue }) {
+            return CKError(.limitExceeded)
+        }
+        return report.failures.isEmpty ? nil : GraphCloudActivationError.recoveryRequired
     }
 
     private static func seedManifest(_ inventory: [GraphCloudIncoming], session: GraphCloudSession,
