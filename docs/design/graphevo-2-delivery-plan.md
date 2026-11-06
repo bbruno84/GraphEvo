@@ -1,6 +1,36 @@
 # GraphEvo 2 — delivery plan
 
-## Current delivery position — audited 2026-11-03
+## Current delivery position — audited 2026-11-06
+
+The integration baseline is `b5c6f3b9` ([PR #177](https://github.com/bbruno84/GraphEvo/pull/177)).
+The [development status](graphevo-2-development-status.md) records integrated
+revisions and evidence. The [post-alpha checklist](graphevo-2-post-alpha-checklist.md)
+tracks the broader beta (B) and stable (R) acceptance gates.
+
+| Workstream | Integrated alpha scope | Remaining delivery work |
+|---|---|---|
+| Store coordination and process roles | Foundation coordination for dedicated App Group stores, ordinary SQLite, open-store migration and backup catalog operations (#173–#175). The CloudKit session claim follows aggregate app activity (#176). | Define the public App Group roles, synchronization ownership, visibility across processes, first launch, migration and interrupted-owner recovery. Validate that public path with independent iOS processes. |
+| Public opening and sharing | H01 public contexts and staged v1 bootstrap (#150–#151). H02 Apple invitation UI, graph identity, permissions and resumable leave/rejoin (#152–#154). Demo adoption merged separately. | Recheck H02 on the current library pin, including rejoining after leave without restarting. Confirm supported device/account behavior and deploy the selected CloudKit schema for production. |
+| Account isolation | Default isolation and recovery policy (#147), public account-aware local opening and foreground CloudKit lifecycle. | Protected-data and independent-reader acceptance. Physical account-change trials and optional merge/deletion policies retain their existing beta backlog. |
+| Query, observation and attachments | Descriptor-first queries, async/Combine observation and durable CKAsset transport with bounded private device evidence (#143–#146). | Decide live processing versus durable replay (O04), publish supported query and attachment limits, and validate the remaining shared/interruption paths. |
+| Migration and recovery | Public staged v1 bootstrap, private cloud authority and empty-peer recovery, plus native conversion and maintenance recovery under Foundation grants. | Validate representative v1 copies and define the supported source matrix and cloud cutover, including returning offline v1 clients. |
+
+The next implementation decision is the **public App Group contract (PA02/O03)**.
+Start with what a second process can do when the app is active, backgrounded or
+has never opened the graph. Settle reads and interactive writes, CloudKit
+ownership and recovery policy before extending the public API. Then validate the
+chosen behavior on a shared local replica with independent processes. The
+[30-cycle iPad result](results/app-group-runtime-integration-2026-11-05.md)
+covers the integrated package-only runtime and uses injected CloudKit transport.
+
+In parallel, align the companion Demo with the reviewed library revision and
+finish the bounded H02 physical check. Before beta, resolve the remaining public
+contracts, reconcile schema and API, and demonstrate representative v1
+conversion and independent recovery. Enter beta after the B gates are accepted.
+Use beta to complete the R validation, including real application adoption,
+performance and distribution.
+
+## Historical delivery audit — 2026-11-03
 
 The audit is pinned to integrated `38f24f6` (PR #144). See the
 [audit and evidence map](results/roadmap-audit-2026-11-03.md) for source/test
@@ -32,7 +62,7 @@ These are implemented alpha capabilities with bounded evidence. They do not
 close the complete beta gates. Package-only coordination is not an available
 public custom-sync opening API.
 
-Proposed delivery order:
+Delivery order proposed at that checkpoint:
 
 1. Retain the [completed bounded private spool checkpoint](results/durable-asset-spool-device-2026-11-04.md)
    for #144. Cooperating-process/current app-widget and broader interruption
