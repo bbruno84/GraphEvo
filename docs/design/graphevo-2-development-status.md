@@ -72,6 +72,14 @@ behind its own queue and uses a Core Data background task for the single-phase
 migration write. The existing file grants, cancellation checks and save
 boundaries still apply.
 
+The [hosted scheduling comparison](https://github.com/bbruno84/GraphEvo/actions/runs/42115248383)
+isolates a tight polling loop in the automatic sync tests on a three-core
+runner. All six isolated cases pass in parallel when the poll sleeps for 10 ms
+between checks, with the same 15-second deadline. The App Group cancellation
+fixture also submits its competing grant on a Foundation operation queue so
+that holding it does not block a Swift cooperative worker. Both changes retain
+the existing assertions and affect only tests.
+
 The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.md)
 is exercised in the separate [N laboratory result](results/apple-owner-priority-tests-2026-11-04.md):
 51 macOS controls and 99 existing adapter tests pass, as do thirty actual iPad

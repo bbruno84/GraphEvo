@@ -154,11 +154,10 @@ private actor AsyncCheckpoint {
         let handle = try await registry.open(configuration, schema: schema, mode: .existing)
         let discarded = GraphNodeID(graphID: graphID), nativeDiscard = GraphNodeID(graphID: graphID)
         let heldGrant = CommitInterruption()
-        let competingAccess = Task.detached {
-            let coordinator = NSFileCoordinator(filePresenter: nil)
-            var failure: NSError?
-            coordinator.coordinate(writingItemAt: root, options: [], error: &failure) { _ in heldGrant.hold() }
-            if let failure { throw failure }
+        let competingAccess = Task {
+            try await CoordinatedFiles.run([.write(root)]) {
+                heldGrant.hold()
+            }
         }
         await heldGrant.reached.wait()
         let waitingForApple = Task {
