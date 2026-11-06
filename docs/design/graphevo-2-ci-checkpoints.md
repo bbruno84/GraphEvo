@@ -1,6 +1,6 @@
 # GraphEvo 2 — explicit CI checkpoints
 
-Updated: 2026-11-04. Maintainer-selected alpha policy: review and adequate affected
+Updated: 2026-11-06. Maintainer-selected alpha policy: review and adequate affected
 local checks are the default merge gate. Remote CI runs only at agreed,
 explicitly requested checkpoints, not on every increment, correction, pin or
 push. Runner capacity/service failures do not block an otherwise verified and
@@ -39,6 +39,15 @@ stated boundaries; fast validation never certifies a full milestone.
 its unit tests guard the target selection, full-profile absence of exclusions,
 invalid requests and empty/failed iOS result rejection. Full means no test
 filters. There is no changed-file guesser or silent native/platform fallback.
+
+On the Xcode 16.4 hosted runners, checkpoints targeting `codex/graphevo-2`
+execute tests serially. This also applies to manual dispatches on the integration
+branch and to explicit `profile=v2` dispatches on `codex/*`. Test selection,
+deadlines and concurrency inside individual tests still follow their contracts.
+Local invocation defaults to parallel execution, as do v1, stable and release
+jobs. Use `--execution serial` to reproduce hosted scheduling locally. The
+[runner comparison](https://github.com/bbruno84/GraphEvo/actions/runs/42171566128)
+passed all 719 v2 macOS tests in series and the full iOS profile with one skip.
 
 ```sh
 python3 Scripts/run_ci_tests.py --profile v2 --platform macos

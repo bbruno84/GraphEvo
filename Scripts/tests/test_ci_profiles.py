@@ -25,6 +25,19 @@ class Profiles(unittest.TestCase):
             args = ci.command("full", platform, "platform=iOS Simulator,id=fixture", "/tmp/fixture.xcresult")
             self.assertFalse(any(x.startswith(("--filter", "--skip", "-skip-testing:", "-only-testing:")) for x in args))
 
+    def test_serial_execution_changes_scheduling_only(self):
+        for profile in ("v2", "full"):
+            with self.subTest(profile=profile, platform="macos"):
+                default = ci.command(profile, "macos")
+                serial = ci.command(profile, "macos", execution="serial")
+                self.assertEqual(serial, default[:2] + ["--no-parallel"] + default[2:])
+            with self.subTest(profile=profile, platform="ios"):
+                options = (profile, "ios", "fixture", "/tmp/fixture.xcresult")
+                default = ci.command(*options)
+                serial = ci.command(*options, execution="serial")
+                index = default.index("CODE_SIGNING_ALLOWED=NO") + 1
+                self.assertEqual(serial, default[:index] + ["-parallel-testing-enabled", "NO"] + default[index:])
+
     def test_capacity_exclusion_names_a_real_test_and_scheme_is_the_library(self):
         root = Path(__file__).parents[2]
         fixture = root / "Tests/GraphEvoStoreTests/GraphTypedQueryTests.swift"
@@ -42,6 +55,8 @@ class Profiles(unittest.TestCase):
         for args in [("typo", "macos"), ("v2", "typo"), ("v2", "ios")]:
             with self.assertRaises(ValueError):
                 ci.command(*args)
+        with self.assertRaises(ValueError):
+            ci.command("full", "macos", execution="typo")
 
 
 if __name__ == "__main__":

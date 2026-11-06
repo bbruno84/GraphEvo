@@ -85,7 +85,7 @@ private actor AutomaticReplicaBus {
             catch GraphSyncError.busy { }
             catch GraphCloudError.busy { }
             guard ContinuousClock.now < deadline else { Issue.record("Wait expired at integration line \(line)"); throw GraphCloudError.invalidState }
-            await Task.yield()
+            try await Task.sleep(for: .milliseconds(10))
         }
     }
     private func close(_ r: Replica, remove: Bool = true) async throws {

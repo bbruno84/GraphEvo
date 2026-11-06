@@ -507,11 +507,11 @@ actor StoreResources {
             let configuration = resolved.configuration, container = container, hooks = hooks
             let presenter = appGroupPresenter, resolved = resolved, identity = attachedIdentity
             return try await SQLiteStoreCoordination.$held.withValue(held) {
-                let context = container.newBackgroundContext()
+                let phases = PreparedContext(container.newBackgroundContext())
                 let check: StoreNativeContext.CancellationCheck = { try cancellation.check(); try accountPermit.check() }
                 var staged: Prepared?
                 do {
-                    let (snapshot, boundary) = try await Self.performPreparedPhase(context, presenter: presenter, held: held) {
+                    let (snapshot, boundary) = try await phases.perform(presenter: presenter, held: held) { context in
                         Self.prepare(context, configuration: configuration, container: container)
                         context.userInfo[StoreNativeContext.cancellationKey] = check
                         context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()
@@ -522,7 +522,7 @@ actor StoreResources {
                     }
                     let prepared = try await materialize(snapshot, check)
                     staged = prepared
-                    let value = try await Self.performPreparedPhase(context, presenter: presenter, held: held) {
+                    let value = try await phases.perform(presenter: presenter, held: held) { context in
                         try check()
                         if let boundary {
                             let verification = container.newBackgroundContext()
@@ -535,10 +535,10 @@ actor StoreResources {
                         if context.hasChanges { try context.save(); hooks.afterCommit?() }
                         return value
                     }
-                    await Self.resetPreparedContext(context)
+                    await phases.reset()
                     return value
                 } catch {
-                    await Self.resetPreparedContext(context)
+                    await phases.reset()
                     if let staged { await discard(staged) }
                     throw error
                 }
@@ -598,25 +598,35 @@ actor StoreResources {
         }
     }
 
-    private static func performPreparedPhase<Value: Sendable>(
-        _ context: NSManagedObjectContext, presenter: AppGroupStorePresenter?, held: Set<StoreKey>,
-        _ body: @escaping @Sendable () throws -> Value
-    ) async throws -> Value {
-        guard let presenter else { return try await context.perform(body) }
-        return try await AppGroupStoreAccess(presenter: presenter).run {
-            try context.performAndWait {
-                try SQLiteStoreCoordination.$held.withValue(held, operation: body)
+    /// The context spans preparation and commit. All access to its state is
+    /// confined to its Core Data queue, including cleanup after cancellation.
+    /// Older Core Data SDKs do not declare the context Sendable.
+    private final class PreparedContext: @unchecked Sendable {
+        private let context: NSManagedObjectContext
+
+        init(_ context: NSManagedObjectContext) {
+            self.context = context
+        }
+
+        func perform<Value: Sendable>(presenter: AppGroupStorePresenter?, held: Set<StoreKey>,
+                                     _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value) async throws -> Value {
+            guard let presenter else { return try await context.perform { try body(self.context) } }
+            return try await AppGroupStoreAccess(presenter: presenter).run {
+                try self.context.performAndWait {
+                    try SQLiteStoreCoordination.$held.withValue(held) { try body(self.context) }
+                }
             }
         }
-    }
 
-    private static func resetPreparedContext(_ context: NSManagedObjectContext) async {
-        // Cleanup is queued and awaited even when the initiating task is cancelled.
-        await withCheckedContinuation { continuation in
-            context.perform {
-                StoreNativeContext.clearMutationSession(in: context)
-                context.rollback(); context.reset()
-                continuation.resume()
+        func reset() async {
+            // Cleanup is queued and awaited even when the initiating task is cancelled.
+            await withCheckedContinuation { continuation in
+                context.perform {
+                    StoreNativeContext.clearMutationSession(in: self.context)
+                    self.context.rollback()
+                    self.context.reset()
+                    continuation.resume()
+                }
             }
         }
     }
@@ -829,11 +839,9 @@ actor StoreResources {
         try admit(write: true, reservation: reservation)
         defer { finish(write: true) }
         let cancellation = OperationCancellation(), container = container, configuration = resolved.configuration, hooks = hooks
-        let presenter = appGroupPresenter, held = SQLiteStoreCoordination.held.union([resolved.key])
         let resolved = resolved, identity = attachedIdentity
         return try await withTaskCancellationHandler {
-            let context = container.newBackgroundContext()
-            return try await Self.performPreparedPhase(context, presenter: presenter, held: held) {
+            try await container.performBackgroundTask { @Sendable context in
                 try Self.validateAttachedFile(resolved, identity)
                 Self.prepare(context, configuration: configuration, container: container)
                 context.userInfo[StoreNativeContext.mutationSessionKey] = configuration.exclusiveGraphID == nil ? nil : StoreMutationSession()

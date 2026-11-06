@@ -64,6 +64,22 @@ using a UIKit background task and a simulated CloudKit driver verified lock
 release in the App Group and same-process checkpoint recovery after an observed
 execution gap. Cross-process exclusion still follows the session directory.
 
+The [full checkpoint after #176](https://github.com/bbruno84/GraphEvo/actions/runs/42103253686)
+on `a0bd8ead` stopped in compilation on macOS and iOS with Xcode 16.4.
+The Core Data SDK rejected context captures in the prepared transaction and
+reserved migration callbacks. The compatibility fix keeps the prepared context
+behind its own queue and uses a Core Data background task for the single-phase
+migration write. The existing file grants, cancellation checks and save
+boundaries still apply.
+
+The [hosted scheduling comparison](https://github.com/bbruno84/GraphEvo/actions/runs/42115248383)
+isolates a tight polling loop in the automatic sync tests on a three-core
+runner. All six isolated cases pass in parallel when the poll sleeps for 10 ms
+between checks, with the same 15-second deadline. The App Group cancellation
+fixture also submits its competing grant on a Foundation operation queue so
+that holding it does not block a Swift cooperative worker. Both changes retain
+the existing assertions and affect only tests.
+
 The [Apple owner pre-integration protocol](graphevo-2-apple-owner-test-protocol.md)
 is exercised in the separate [N laboratory result](results/apple-owner-priority-tests-2026-11-04.md):
 51 macOS controls and 99 existing adapter tests pass, as do thirty actual iPad

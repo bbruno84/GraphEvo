@@ -154,11 +154,10 @@ private actor AsyncCheckpoint {
         let handle = try await registry.open(configuration, schema: schema, mode: .existing)
         let discarded = GraphNodeID(graphID: graphID), nativeDiscard = GraphNodeID(graphID: graphID)
         let heldGrant = CommitInterruption()
-        let competingAccess = Task.detached {
-            let coordinator = NSFileCoordinator(filePresenter: nil)
-            var failure: NSError?
-            coordinator.coordinate(writingItemAt: root, options: [], error: &failure) { _ in heldGrant.hold() }
-            if let failure { throw failure }
+        let competingAccess = Task {
+            try await CoordinatedFiles.run([.write(root)]) {
+                heldGrant.hold()
+            }
         }
         await heldGrant.reached.wait()
         let waitingForApple = Task {
@@ -233,8 +232,10 @@ private actor AsyncCheckpoint {
             #expect(try scope.record(for: nativeDiscard) == nil)
             #expect(try scope.record(for: committedID)?.type == "Committed")
         }
-        #expect(try await fresh.attachments(ownedBy: owner).map(\.id).sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
-            == assets.map(\.id).sorted { $0.rawValue.uuidString < $1.rawValue.uuidString })
+        let observedAssets = try await fresh.attachments(ownedBy: owner)
+        let observedIDs = observedAssets.map(\.id).sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
+        let expectedIDs = assets.map(\.id).sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }
+        #expect(observedIDs == expectedIDs)
         for (index, asset) in assets.enumerated() {
             let observed = try #require(try await fresh.attachment(asset.id))
             #expect(observed.metadata == asset)
