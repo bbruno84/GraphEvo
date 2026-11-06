@@ -8,6 +8,42 @@ the [probe procedure](../../Experiments/A6NativeProbe/README.md) and the
 The replacement custom backend adds [T04 CKAsset transport](graphevo-2-cloud-assets.md).
 The native-mirroring evidence below retains its original scope.
 
+## Local file primitive candidate
+
+An attachment is a bounded binary value with one owning node. The consumer
+loads it as `Data`, and Core Data manages its persistence. Use this for
+content such as a signature or preview whose lifetime follows the owner.
+
+A file is a graph node with fixed metadata and content accessed by URL.
+It can be a relationship endpoint or an action participant. It has a stable
+node ID and a current revision. Tags and groups classify the node and
+remain attached when its content revision changes. GraphEvo owns the
+file bytes in a private directory scoped to the store.
+
+Each revision has its own immutable file. Import and replacement prepare a
+temporary file on the same volume and calculate its digest while copying.
+Publish the completed file with an atomic rename to a new revision path,
+then save its reference and metadata in Core Data. An interrupted commit
+can leave an unreferenced file. An interrupted replacement leaves the prior
+revision readable through the last committed reference.
+
+A read or CloudKit send holds the exact revision it uses. Pending sends
+retain that revision through the durable asset spool and pass its URL to
+`CKAsset`. Deletion commits the removal of the graph reference first.
+Exclusive store maintenance may reclaim abandoned preparations and old
+revisions once the store has established that no active preparation, read,
+or pending send still needs them. A backup captures the store and its
+referenced file revisions together.
+
+The first increment selects an opt-in, local SQLite schema. It uses
+Core Data's inferred S04 mapping to a separate store and publishes the
+destination as a directory. Source owners must stop before migration.
+File revisions are currently prepared under the existing store writer
+admission. Reads use Foundation coordination on the exact revision and
+reclamation runs under the store writer grant. The live copy API captures
+and verifies the referenced revisions with the SQLite snapshot. Cloud
+publication remains a separate increment.
+
 ## Representation and ownership
 
 The subsequent [S01 schema review](graphevo-2-persistent-schema.md) selects the

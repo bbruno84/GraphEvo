@@ -860,6 +860,36 @@ public actor GraphContext {
 }
 ```
 
+### Local file nodes
+
+`GraphContext.localFiles()` selects the local SQLite schema with file
+nodes. Use its ordinary `createGraph(id:at:)` and `openGraph(id:at:)` APIs.
+`GraphContext.migrateClosedS04Store(from:into:)` migrates a stopped local S04
+source into a new directory and returns the new SQLite URL. The source must
+remain closed through the copy. Cloud connections are unavailable in this
+context.
+
+`GraphNodeKind.file` and `GraphEndpoints.file` identify a file node. A
+`Relationship` or `Action` endpoint can name its `GraphNodeID`. Entity
+queries exclude the file subtype. File nodes have fixed metadata and their
+content has a separate lifetime from the source URL. Use `GraphRecordPatch`
+to add or remove tags and groups on the file node. These classifications
+survive content replacement and support tag and group query predicates.
+
+- `GraphStore.importFile(from:name:contentType:)` copies content into the
+  graph and returns a `GraphFile`.
+- `GraphStore.file(_:)` and `files()` read fixed metadata. Their synchronous
+  counterparts are available on `GraphReadScope`.
+- `GraphStore.withFileURL(_:_:)` gives the synchronous accessor a read-only
+  URL to a specific revision. The accessor can copy the file for later use.
+- `GraphStore.replaceFile(_:from:name:contentType:)` preserves node identity
+  and fails on a stale revision. `deleteFile(_:)` removes the node and applies
+  the normal entity endpoint deletion rules.
+- `GraphStore.reclaimFiles()` removes abandoned preparations and retired
+  revisions. `copyLocalFileGraph(into:)` captures an independent SQLite store
+  and its referenced files. Restore by opening the returned SQLite URL with
+  a local-files context.
+
 After an interrupted native v1 conversion, stop every process using the
 destination. The recovery overload takes the UUID of the abandoned
 registration under the destination coordination directory's `.owners-v1`.
@@ -931,9 +961,10 @@ available for v1 stores. See the
   read-only `rawValue`.
 - `GraphNodeID(graphID: GraphID, rawValue: UUID = UUID())`: Sendable, Hashable,
   Codable node identity; read-only `graphID` and `rawValue`.
-- `GraphNodeKind`: `.entity`, `.relationship`, `.action`.
+- `GraphNodeKind`: `.entity`, `.relationship`, `.action`, `.file`.
 - `GraphEndpoints`: `.entity`, `.relationship(subject: GraphNodeID?, object:
-  GraphNodeID?)`, `.action(subjects: Set<GraphNodeID>, objects: Set<GraphNodeID>)`;
+  GraphNodeID?)`, `.action(subjects: Set<GraphNodeID>, objects: Set<GraphNodeID>)`,
+  `.file`;
   read-only `kind`.
 - `GraphValue`: `.null`, `.boolean(Bool)`, `.integer(Int64)`,
   `.unsignedInteger(UInt64)`, `.floatingPoint(Double)`, `.decimal(Decimal)`,

@@ -26,6 +26,7 @@ struct GraphSharedInsertionPlan: Codable, Sendable {
         init(_ record: GraphRecord) throws {
             id = record.id; type = record.type
             switch record.endpoints {
+            case .file: throw GraphFileError.localOnly
             case .entity: kind = "entity"; subjects = []; objects = []
             case .relationship(let subject, let object): kind = "relationship"; subjects = subject.map { [$0] } ?? []; objects = object.map { [$0] } ?? []
             case .action(let first, let second): kind = "action"; subjects = Array(first); objects = Array(second)
@@ -96,6 +97,7 @@ struct GraphSharedInsertionPlan: Codable, Sendable {
         self.patch = try Patch(patch, current: current)
         let empty: GraphEndpoints
         switch current.endpoints.kind {
+        case .file: throw GraphFileError.localOnly
         case .entity: empty = .entity
         case .relationship: empty = .relationship(subject: nil, object: nil)
         case .action: empty = .action(subjects: [], objects: [])
@@ -209,6 +211,7 @@ extension GraphTypedStoreAdapter {
         for (record, row) in zip(records, plan.rows) {
             let node: Node
             switch record.endpoints.kind {
+            case .file: throw GraphFileError.localOnly
             case .entity: node = Entity(record.type, graph: session.graph)
             case .relationship: node = Relationship(record.type, graph: session.graph)
             case .action: node = Action(record.type, graph: session.graph)
@@ -228,7 +231,7 @@ extension GraphTypedStoreAdapter {
 
     static func references(_ endpoints: GraphEndpoints) -> Set<GraphNodeID> {
         switch endpoints {
-        case .entity: return []
+        case .entity, .file: return []
         case .relationship(let a, let b): return Set([a, b].compactMap { $0 })
         case .action(let a, let b): return a.union(b)
         }

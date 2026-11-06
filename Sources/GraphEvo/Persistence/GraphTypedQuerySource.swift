@@ -25,9 +25,10 @@ final class GraphTypedQuerySource {
          work: GraphQueryWorkCounter) throws {
         self.context = context; self.graphID = graphID; self.request = request; self.work = work
         check = StoreNativeContext.cancellationCheck(in: context)
-        for kind in [GraphNodeKind.entity, .relationship, .action] {
+        for kind in Self.kinds(in: context) {
             try check(); try work.consume()
             let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: Self.name(kind))
+            fetch.includesSubentities = false
             fetch.includesPendingChanges = true
             let count = try context.count(for: fetch); fetches += 1
             guard count >= 0, count <= request.budget.maximumCandidates - nativeCandidateCount else {
@@ -53,12 +54,13 @@ final class GraphTypedQuerySource {
             let edgeIDs = Set(nodes.filter { !($0.value is Entity) }.keys)
             records = try access.queryHeaders(context, graphID: graphID, ids: edgeIDs)
             for (id, node) in nodes where node is Entity {
-                records.append(try GraphRecord(id: id, type: node.type, tags: Set(node.tags),
+                let endpoints: GraphEndpoints = node.node is ManagedGraphFile ? .file : .entity
+                records.append(try GraphRecord(id: id, type: node.type, endpoints: endpoints, tags: Set(node.tags),
                     groups: Set(node.groups), createdDate: node.createdDateIfPresent))
             }
             return
         }
-        let kinds = [GraphNodeKind.entity, .relationship, .action].filter { topology.includes($0) }
+        let kinds = Self.kinds(in: context).filter { topology.includes($0) }
         var projected: [GraphNodeID: (String, Date?, GraphNodeKind)] = [:]
         for kind in kinds {
             let graphScope = NSPredicate(format: "%K == %@ AND %K != nil AND NOT (type BEGINSWITH %@) AND NONE propertySet.name == %@",
@@ -81,25 +83,36 @@ final class GraphTypedQuerySource {
         }
         // Only relationship/action kinds and edge types actually named by the descriptor
         // require topology. Entity routing headers do not audit their unrelated edges.
-        let edgeIDs = Set(projected.filter { $0.value.2 != .entity }.keys)
+        let edgeIDs = Set(projected.filter { $0.value.2 == .relationship || $0.value.2 == .action }.keys)
         records = try access.queryHeaders(context, graphID: graphID, ids: edgeIDs)
         let tags = try names(ModelIdentifier.entityTagName), groups = try names(ModelIdentifier.entityGroupName)
-        for (id, value) in projected where value.2 == .entity {
-            records.append(try GraphRecord(id: id, type: value.0, tags: tags[id] ?? [], groups: groups[id] ?? [], createdDate: value.1))
+        for (id, value) in projected where value.2 == .entity || value.2 == .file {
+            let endpoints: GraphEndpoints = value.2 == .file ? .file : .entity
+            records.append(try GraphRecord(id: id, type: value.0, endpoints: endpoints, tags: tags[id] ?? [], groups: groups[id] ?? [], createdDate: value.1))
         }
     }
 
+    private static func kinds(in context: NSManagedObjectContext) -> [GraphNodeKind] {
+        let ordinary: [GraphNodeKind] = [.entity, .relationship, .action]
+        return context.persistentStoreCoordinator?.managedObjectModel.entitiesByName[ManagedGraphFile.entityName] == nil
+            ? ordinary : ordinary + [.file]
+    }
     private func nodeKind(_ node: Node) -> GraphNodeKind {
+        if node.node is ManagedGraphFile { return .file }
         if node is Entity { return .entity }; if node is Relationship { return .relationship }; return .action
     }
     static func name(_ kind: GraphNodeKind) -> String {
-        switch kind { case .entity: return ModelIdentifier.entityName
+        switch kind {
+        case .entity: return ModelIdentifier.entityName
+        case .file: return ManagedGraphFile.entityName
         case .relationship: return ModelIdentifier.relationshipName
-        case .action: return ModelIdentifier.actionName }
+        case .action: return ModelIdentifier.actionName
+        }
     }
     private func rows(_ name: String, properties: [Any], predicate: NSPredicate, distinct: Bool = false) throws -> [NSDictionary] {
         try check()
         let fetch = NSFetchRequest<NSDictionary>(entityName: name)
+        fetch.includesSubentities = false
         fetch.resultType = .dictionaryResultType; fetch.propertiesToFetch = properties
         fetch.predicate = predicate; fetch.returnsDistinctResults = distinct; fetch.includesPendingChanges = false
         // One extra row makes allowance rejection explicit before partial output.
@@ -131,7 +144,7 @@ final class GraphTypedQuerySource {
         let expected = Dictionary(uniqueKeysWithValues: output.records.map { ($0.id, $0) })
         for record in validated {
             guard let original = expected[record.id] else {
-                guard record.endpoints.kind == .entity else { throw GraphStoreError.corruptIdentity }
+                guard record.endpoints.kind == .entity || record.endpoints.kind == .file else { throw GraphStoreError.corruptIdentity }
                 continue
             }
             guard record.type == original.type,
@@ -159,7 +172,7 @@ private struct GraphQueryTopologyPlan {
     }
     func includes(_ kind: GraphNodeKind, type: String? = nil) -> Bool {
         if kind == definition.kind, type == nil || type == definition.type { return true }
-        if kind == .entity, !relations.isEmpty { return true }
+        if (kind == .entity || kind == .file), !relations.isEmpty { return true }
         return relations.contains { relation in
             let expected: GraphNodeKind, name: String?
             switch relation {

@@ -31,6 +31,7 @@ enum GraphMigrationNativePublication {
                     for text in record.groups { try GraphQueryStoredCost.charge(text.utf8.count, remaining: &remaining) }
                     switch record.endpoints {
                     case .entity: break
+                    case .file: throw GraphFileError.localOnly
                     case .relationship: try GraphQueryStoredCost.charge(64, remaining: &remaining)
                     case .action(let subjects, let objects):
                         for _ in subjects { try GraphQueryStoredCost.charge(32, remaining: &remaining) }

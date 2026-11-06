@@ -48,6 +48,12 @@ and [explicit CloudKit import on a physical iPad](graphevo-2-observation.md#acce
 PA07 retains automatic delivery, wider lifecycle and observer cost acceptance.
 The next library increment defines supported query and attachment envelopes.
 
+[PR #189](https://github.com/bbruno84/GraphEvo/pull/189) adds the opt-in
+[local File primitive](graphevo-2-attachments.md#local-file-primitive-candidate).
+The increment covers S04 migration to a separate store, typed endpoints and
+queries, immutable revisions, reclamation and file-aware backup and restore.
+The File transport and replica compatibility checks remain a separate increment.
+
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 
 The [private device result](results/durable-asset-spool-device-2026-11-04.md)

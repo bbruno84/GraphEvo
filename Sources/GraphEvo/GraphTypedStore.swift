@@ -139,6 +139,12 @@ extension GraphContext {
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()))
     }
 
+    /// Opens and creates local SQLite graphs with first-class files.
+    public static func localFiles() -> GraphContext {
+        GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.localFiles,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()))
+    }
+
     /// Creates a context restricted to the dedicated store paths in this App Group.
     public init(appGroup configuration: GraphAppGroupConfiguration) throws {
         let group: AppGroupStoreLocation

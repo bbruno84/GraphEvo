@@ -98,6 +98,7 @@ enum GraphV1NativeInventory {
         let kind: String, subjects: [GraphNodeID], objects: [GraphNodeID]
         switch record.endpoints {
         case .entity: kind = "entity"; subjects = []; objects = []
+        case .file: throw GraphStoreMigrationError.unsupportedSource
         case .relationship(let subject, let object): kind = "relationship"; subjects = subject.map { [$0] } ?? []; objects = object.map { [$0] } ?? []
         case .action(let left, let right): kind = "action"; subjects = Array(left); objects = Array(right)
         }

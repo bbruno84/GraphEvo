@@ -139,7 +139,7 @@ enum GraphSyncCheckpointAdapter {
     })
 
     private static func nativeKind(_ kind: GraphNodeKind) -> String {
-        switch kind { case .entity: return ModelIdentifier.entityName; case .relationship: return ModelIdentifier.relationshipName; case .action: return ModelIdentifier.actionName }
+        switch kind { case .entity: return ModelIdentifier.entityName; case .file: return ManagedGraphFile.entityName; case .relationship: return ModelIdentifier.relationshipName; case .action: return ModelIdentifier.actionName }
     }
 
     static func ordered(_ a: GraphSyncChange, _ b: GraphSyncChange) -> Bool {

@@ -57,7 +57,7 @@ final class GraphTypedQueryExecution {
     }
     private func charge(_ count: Int) throws { try GraphQueryStoredCost.charge(count, remaining: &remaining) }
     private func entityName(_ kind: GraphNodeKind) -> String {
-        switch kind { case .entity: return ModelIdentifier.entityPropertyName
+        switch kind { case .entity, .file: return ModelIdentifier.entityPropertyName
         case .relationship: return ModelIdentifier.relationshipPropertyName
         case .action: return ModelIdentifier.actionPropertyName }
     }

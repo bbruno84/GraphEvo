@@ -16,7 +16,7 @@ package enum GraphQueryValidation {
             case .all, .none, .type, .tag, .group: break
             case .id(let id): if let graphID, id.graphID != graphID { throw GraphQueryError.foreignGraph }
             case .subject(let id), .object(let id):
-                guard kind != .entity else { throw GraphQueryError.unsupportedComparison }
+                guard kind == .relationship || kind == .action else { throw GraphQueryError.unsupportedComparison }
                 if let graphID, id.graphID != graphID { throw GraphQueryError.foreignGraph }
             case .exists(let name): try key(name)
             case .property(let name, let op, let value):
@@ -29,7 +29,7 @@ package enum GraphQueryValidation {
             case .and(let values), .or(let values): for value in values { try expression(value, depth: depth + 1, hops: hops, kind: kind) }
             case .not(let value): try expression(value, depth: depth + 1, hops: hops, kind: kind)
             case .related(_, let matching):
-                guard kind == .entity else { throw GraphQueryError.unsupportedComparison }
+                guard kind == .entity || kind == .file else { throw GraphQueryError.unsupportedComparison }
                 try expression(matching, depth: depth + 1, hops: hops + 1, kind: .entity)
             }
         }
@@ -174,7 +174,7 @@ package final class GraphQueryEvaluation {
         }
         return try ids.sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }.map {
             try step()
-            guard let record = byID[$0], record.endpoints.kind == .entity else { throw GraphModelError.crossGraphReference }
+            guard let record = byID[$0], [.entity, .file].contains(record.endpoints.kind) else { throw GraphModelError.crossGraphReference }
             return record
         }
     }
@@ -263,7 +263,7 @@ package final class GraphQueryEvaluation {
             var frontier = Set(traversal.origins), visited = frontier
             for id in frontier {
                 try step()
-                guard byID[id]?.endpoints.kind == .entity else { throw GraphQueryError.invalidOrigin }
+                guard let kind = byID[id]?.endpoints.kind, [.entity, .file].contains(kind) else { throw GraphQueryError.invalidOrigin }
             }
             var visits: [GraphTraversalVisit] = []
             if traversal.maximumDepth > 0 {

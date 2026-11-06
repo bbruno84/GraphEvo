@@ -36,7 +36,12 @@ private actor MigrationReadGate {
         let lab = try await GraphDataMigrationLaboratory.open(at: root.appendingPathComponent("Source/Store.sqlite"))
         let graphID = await lab.graphID
         let endpoints: GraphEndpoints
-        switch kind { case .entity: endpoints = .entity; case .relationship: endpoints = .relationship(subject: nil, object: nil); case .action: endpoints = .action(subjects: [], objects: []) }
+        switch kind {
+        case .entity: endpoints = .entity
+        case .relationship: endpoints = .relationship(subject: nil, object: nil)
+        case .action: endpoints = .action(subjects: [], objects: [])
+        case .file: throw GraphFileError.localOnly
+        }
         let rows = try (0..<2).map { n in
             try GraphDataMigrationRow(record: GraphRecord(id: GraphNodeID(graphID: graphID), type: "migration.item", endpoints: endpoints,
                 properties: ["old": .integer(Int64(n)), "unknown": .object(["max": .unsignedInteger(UInt64.max), "null": .null, "bytes": .data(Data([0,255]))])],
