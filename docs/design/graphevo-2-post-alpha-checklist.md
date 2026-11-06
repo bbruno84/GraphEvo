@@ -497,6 +497,14 @@ Sources: [A6 contract](graphevo-2-attachments.md),
   measurements are complete; representative selective/file-heavy workloads and
   candidate amplification still need acceptance. Retain A7 memory evaluation
   where explicitly selected; do not restart a planner already integrated.
+- [ ] **Beta development** Evaluate a native search planner using the existing
+  descriptors first. Start with the measured prototype for a direct relationship
+  filtered by a destination tag, then test compound predicates, action endpoints,
+  serialized properties, exact Swift comparisons, and pending transaction views.
+  Verify equivalent results, cancellation and budget accounting on native and
+  in-memory paths. Consider a public search API change only if a measured use case
+  needs information the existing descriptors cannot express. See the
+  [XR comparison](results/related-query-cost-xr-2026-11-06.md).
 - [ ] **B** Finalize AND composition, literal strings, null/missing, numeric
   precision, ordering, count/projection/aggregate and traversal semantics with
   application adaptation examples. Decide scope of optional grouped aggregates,

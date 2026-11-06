@@ -46,7 +46,10 @@ production cutover remain open.
 alpha increment. The live observation and rescan contract passed local regressions
 and [explicit CloudKit import on a physical iPad](graphevo-2-observation.md#acceptance-and-remaining-work).
 PA07 retains automatic delivery, wider lifecycle and observer cost acceptance.
-The next library increment defines supported query and attachment envelopes.
+The query and attachment envelope work starts with a bounded relationship lookup.
+[XR measurements](results/related-query-cost-xr-2026-11-06.md) distinguish the
+alpha evaluator change from native search planning deferred to beta.
+Attachment metadata listing costs and broader envelope acceptance remain open.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 
