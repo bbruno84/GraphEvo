@@ -78,7 +78,8 @@ extension GraphCloudConnection {
         guard join.contextIdentity == owningContext.identityForBootstrap, join.namespace == config.namespace else {
             throw GraphStoreError.foreignGraph
         }
-        guard let id = try await join.state.graphID else { throw GraphCloudDiscoveryError.invalidJoin }
+        let session = try await manager.cloud(config)
+        guard let id = try await session.nativeJoin(join.id).graphID else { throw GraphCloudDiscoveryError.invalidJoin }
         return try await openReplica(for: join, at: group.storeURL(for: id.rawValue))
     }
 

@@ -251,6 +251,43 @@ private actor AsyncCheckpoint {
 @Suite(.timeLimit(.minutes(2))) struct PublicAppGroupTests {
     @Test
     @available(iOS 17, macOS 14, *)
+    func overlappingSecondaryReadAndWriteShareTheUnboundOwner() async throws {
+        let root = try temporaryAppGroup()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let group = AppGroupStoreLocation(container: root)
+        let id = GraphID(), note = GraphNodeID(graphID: id)
+        let primary = appGroupContext(group, role: .primary)
+        let graph = try await primary.createAppGroupGraph(id: id)
+        try await graph.close()
+        let secondary = appGroupContext(group, role: .secondary, access: .readWrite)
+        let entered = AsyncCheckpoint()
+        let release = DispatchSemaphore(value: 0)
+        let reading = Task {
+            try await secondary.readAppGroupGraph(id: id) { scope in
+                let before = try scope.record(for: note)
+                Task { await entered.signal() }
+                if release.wait(timeout: .now() + 10) == .timedOut { Issue.record("Concurrent writer did not finish.") }
+                let after = try scope.record(for: note)
+                return before == nil && after == nil
+            }
+        }
+        await entered.wait()
+        let written: GraphAppGroupOperationResult<GraphNodeID>
+        do {
+            written = try await secondary.transactionAppGroupGraph(id: id) { try $0.insert(.init(id: note, type: "Note")) }
+            release.signal()
+        } catch {
+            release.signal()
+            _ = try? await reading.value
+            throw error
+        }
+        #expect(written.value == note)
+        #expect(try await reading.value.value)
+        #expect(try await secondary.readAppGroupGraph(id: id) { try $0.record(for: note)?.id }.value == note)
+    }
+
+    @Test
+    @available(iOS 17, macOS 14, *)
     func secondaryUsesPersistedParticipantWriteRestriction() async throws {
         let root = try temporaryAppGroup()
         defer { try? FileManager.default.removeItem(at: root) }

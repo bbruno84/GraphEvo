@@ -11,7 +11,6 @@ package actor GraphContextManager {
         let key: StoreKey
         let url: URL
         let creating: Bool
-        let localAppGroupWrite: Bool
         var initialJoinID: UUID? = nil
         let initialPolicy: GraphConflictPolicy
         let opening: Task<GraphCoordinator, any Error>
@@ -28,6 +27,9 @@ package actor GraphContextManager {
     nonisolated let contextOwnerID: UUID?
     nonisolated let appGroup: AppGroupStoreLocation?
     nonisolated let publicAppGroup: GraphAppGroupConfiguration?
+    nonisolated var usesLocalSecondaryScopes: Bool {
+        publicAppGroup?.role == .secondary && publicAppGroup?.secondaryAccess == .readWrite
+    }
     var contextClaims: [GraphID: UUID] = [:]
     var contextClaimClosing: [GraphID: Task<Void, Never>] = [:]
     let registry: StoreRegistry
@@ -882,8 +884,8 @@ package actor GraphContextManager {
     func createJoiningGraph(id: GraphID, at url: URL, access: GraphCloudParticipantAccess) async throws -> GraphStore {
         try await request(id: id, url: url, creating: true, initialParticipant: access)
     }
-    package func openGraph(id: GraphID, at url: URL, localAppGroupWrite: Bool = false) async throws -> GraphStore {
-        try await request(id: id, url: url, creating: false, localAppGroupWrite: localAppGroupWrite)
+    package func openGraph(id: GraphID, at url: URL) async throws -> GraphStore {
+        try await request(id: id, url: url, creating: false)
     }
 
     func openBootstrappedGraph(id: GraphID, at url: URL, permit: UUID) async throws -> GraphStore {
@@ -915,13 +917,9 @@ package actor GraphContextManager {
                            contextOwnerID: contextOwnerID, appGroup: appGroup)
     }
 
-    private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins, bootstrapPermit: UUID? = nil, initialParticipant: GraphCloudParticipantAccess? = nil, localAppGroupWrite: Bool = false) async throws -> GraphStore {
+    private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins, bootstrapPermit: UUID? = nil, initialParticipant: GraphCloudParticipantAccess? = nil) async throws -> GraphStore {
+        let localAppGroupWrite = usesLocalSecondaryScopes
         do {
-            if localAppGroupWrite {
-                guard publicAppGroup?.role == .secondary, publicAppGroup?.secondaryAccess == .readWrite, !creating else {
-                    throw GraphStoreError.permissionDenied
-                }
-            }
             try Task.checkCancellation()
             guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
             let resolved = try StoreRegistry.resolve(graphStoreConfiguration(id, at: url))
@@ -941,7 +939,6 @@ package actor GraphContextManager {
                         removeClosedEntry(id, generation: entry.generation)
                         continue
                     }
-                    guard entry.localAppGroupWrite == localAppGroupWrite else { throw GraphStoreError.resourceReserved }
                     if creating && entry.initialJoinID != initialParticipant?.generation { throw GraphStoreError.ownershipConflict }
                     if creating && entry.initialPolicy != conflictPolicy { throw GraphStoreError.ownershipConflict }
                     if creating && (entry.ready || !entry.creating) { throw GraphStoreError.duplicateIdentity }
@@ -956,7 +953,7 @@ package actor GraphContextManager {
                                                         localAppGroupWrite: localAppGroupWrite)
                     }
                     guard case .sqlite(let canonicalURL) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
-                    entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, localAppGroupWrite: localAppGroupWrite, initialJoinID: initialParticipant?.generation, initialPolicy: conflictPolicy, opening: opening)
+                    entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, initialJoinID: initialParticipant?.generation, initialPolicy: conflictPolicy, opening: opening)
                 }
                 let token = UUID()
                 entries[id]!.tokens.insert(token)

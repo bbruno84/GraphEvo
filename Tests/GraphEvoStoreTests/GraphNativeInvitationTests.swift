@@ -192,6 +192,46 @@ private actor NativeInviteGate {
         #expect(try await connection.sharingStatus(for: second.id).phase == .active)
         try await second.close(); try await connection.close()
     }
+    @available(iOS 17, macOS 14, *)
+    @Test func publicAppGroupParticipantCanPatchAnImportedRecordFromTheSecondary() async throws {
+        let native = config(), server = NativeInvitationServer(permission: .readWrite)
+        defer { try? FileManager.default.removeItem(at: native.directory) }
+        let group = AppGroupStoreLocation(container: native.directory)
+        let context = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group,
+            publicAppGroup: .init(identifier: "fixture", role: .primary, allowsCloudSynchronization: true)), adapter: server.adapter)
+        let id = await server.graphID, note = GraphNodeID(graphID: id)
+        await server.available()
+        await server.seedRemote(try .init(id: note, type: "Note", properties: ["value": .integer(1)]))
+        let connection = try await context.connectCloud(using: .init(containerIdentifier: native.containerIdentifier,
+            environment: native.environment, directory: native.directory.appendingPathComponent("Session")))
+        try await context.setForegroundActive(true)
+        for _ in 0..<200 {
+            if try await connection.state == .ready { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let join = try await connection.acceptInvitation(at: server.url)
+        let graph = try await connection.openAppGroupReplica(for: join)
+        for _ in 0..<200 {
+            if try await graph.read({ try $0.record(for: note) }) != nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(try await graph.read { try $0.record(for: note)?.properties["value"] } == .integer(1))
+        try await context.setForegroundActive(false)
+        try await graph.close()
+        try await connection.close()
+
+        let secondary = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group,
+            publicAppGroup: .init(identifier: "fixture", role: .secondary, secondaryAccess: .readWrite)))
+        let result = try await secondary.transactionAppGroupGraph(id: id) {
+            try $0.patch(.init(id: note, properties: ["value": .set(.integer(2))]))
+        }
+        #expect(result.value.properties["value"] == .integer(2))
+        #expect(!result.closePending)
+        #expect(await secondary.manager.cloudSessions.isEmpty)
+    }
+
     enum RemovalPath: String, CaseIterable, Sendable { case leave, deferredLeave, revocation }
 
     @available(iOS 17, macOS 14, *)

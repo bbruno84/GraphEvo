@@ -26,6 +26,15 @@ recovery remain open under PA02. The Demo `develop` branch currently pins
 `6432e595`. Its next H02 physical checkpoint uses the reviewed library revision
 and checks rejoining after leave without restarting.
 
+[PR #183](https://github.com/bbruno84/GraphEvo/pull/183) extends the App Group
+transaction to existing synchronized replicas. A read-write secondary saves
+directly to local SQLite using its App Group entitlement. The primary owns
+synchronization, and persisted participant restrictions still govern writes.
+The signed iPad widget committed with the primary process terminated. A separate
+iPhone replica received the exact record after the primary's cold restart.
+The device run used an available network. Extension identity verification
+remains a separate future capability.
+
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 
 The [private device result](results/durable-asset-spool-device-2026-11-04.md)

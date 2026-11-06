@@ -53,7 +53,18 @@ extension GraphContext {
     public func readAppGroupGraph<Value: Sendable>(id: GraphID,
         _ body: @escaping @Sendable (GraphReadScope) throws -> Value
     ) async throws -> GraphAppGroupOperationResult<Value> {
-        try await withSecondaryGraph(id: id) { try await $0.read(body) }
+        let account = manager.adapter.account
+        return try await withSecondaryGraph(id: id) { graph in
+            try await graph.read { scope in
+                try scope.withContext { context, adapter in
+                    if let participant = try adapter.participantAccess?(context, id, nil) {
+                        throw participant.blocked ? GraphStoreError.resourceReserved : GraphStoreError.accountIsolated
+                    }
+                    guard try account?.read(context, id) == nil else { throw GraphStoreError.accountIsolated }
+                }
+                return try body(scope)
+            }
+        }
     }
 
     /// Commits one opted-in secondary transaction and releases its lease.
@@ -62,14 +73,14 @@ extension GraphContext {
     ) async throws -> GraphAppGroupOperationResult<Value> {
         _ = try requireAppGroup(.secondary)
         guard manager.publicAppGroup?.secondaryAccess == .readWrite else { throw GraphStoreError.readOnly }
-        return try await withSecondaryGraph(id: id, localWrite: true) { try await $0.transaction(body) }
+        return try await withSecondaryGraph(id: id) { try await $0.transaction(body) }
     }
 
-    private func withSecondaryGraph<Value: Sendable>(id: GraphID, localWrite: Bool = false,
+    private func withSecondaryGraph<Value: Sendable>(id: GraphID,
         _ operation: (GraphStore) async throws -> Value
     ) async throws -> GraphAppGroupOperationResult<Value> {
         let group = try requireAppGroup(.secondary)
-        let graph = try await manager.openGraph(id: id, at: group.storeURL(for: id.rawValue), localAppGroupWrite: localWrite)
+        let graph = try await manager.openGraph(id: id, at: group.storeURL(for: id.rawValue))
         let value: Value
         do { value = try await operation(graph) }
         catch {

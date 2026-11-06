@@ -81,7 +81,6 @@ package actor GraphCoordinator {
                 if let value = try await handle.controlRead({ try access($0, id, nil) }) {
                     if localAppGroupWrite {
                         guard !value.blocked else { throw GraphStoreError.resourceReserved }
-                        guard value.writable else { throw GraphStoreError.permissionDenied }
                     } else {
                         if appGroupLocalOnly {
                             throw value.blocked ? GraphStoreError.resourceReserved : GraphStoreError.accountIsolated
