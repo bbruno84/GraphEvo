@@ -10,17 +10,17 @@ package enum GraphCloudNodeError: Error, Equatable {
 
 /// Transport budgets, not a guarantee that CloudKit accepts a record's total server-side size.
 package struct GraphCloudNodeLimits: Sendable {
-    package let maximumPayloadBytes: Int
+    package let maximumPayloadBytes: Int?
     package let maximumProperties: Int
     package let maximumCollectionItems: Int
     package let maximumSystemFieldsBytes: Int
-    package init(maximumPayloadBytes: Int = 2_000_000, maximumProperties: Int = 4096,
+    package init(maximumPayloadBytes: Int? = nil, maximumProperties: Int = 4096,
                  maximumCollectionItems: Int = 4096, maximumSystemFieldsBytes: Int = 64 * 1024) {
         self.maximumPayloadBytes = maximumPayloadBytes; self.maximumProperties = maximumProperties
         self.maximumCollectionItems = maximumCollectionItems; self.maximumSystemFieldsBytes = maximumSystemFieldsBytes
     }
     func validate() throws {
-        guard maximumPayloadBytes > 0, maximumProperties > 0, maximumCollectionItems > 0,
+        guard maximumPayloadBytes.map({ $0 > 0 }) ?? true, maximumProperties > 0, maximumCollectionItems > 0,
               maximumSystemFieldsBytes > 0 else { throw GraphCloudNodeError.limitExceeded }
     }
 }
@@ -155,7 +155,7 @@ package enum GraphCloudNodeCodec {
               native["kind"] as? String == "entity",
               native["type"] as? String == GraphAttachmentPayload.graphType,
               native["asset"] as? Data == Data(),
-              let bytes = native["payload"] as? Data, bytes.count <= GraphCloudNodeLimits().maximumPayloadBytes,
+              let bytes = native["payload"] as? Data,
               let body = try? JSONDecoder().decode(Body.self, from: bytes),
               let metadata = body.attachment?.metadata,
               metadata.id == id else { throw GraphCloudError.invalidState }
@@ -190,7 +190,7 @@ package enum GraphCloudNodeCodec {
             data = try encoder.encode(value)
         } catch let error as GraphCloudNodeError { throw error }
         catch { throw GraphCloudNodeError.invalidRecord }
-        guard data.count <= limits.maximumPayloadBytes else { throw GraphCloudNodeError.limitExceeded }
+        if let maximum = limits.maximumPayloadBytes, data.count > maximum { throw GraphCloudNodeError.limitExceeded }
         let native = try systemFields.map { try self.native($0, limits: limits) } ?? CKRecord(recordType: recordType, recordID: id)
         guard native.recordType == recordType, native.recordID == id else { throw GraphCloudNodeError.invalidSystemFields }
         let attachment = record.type == GraphAttachmentPayload.graphType
@@ -218,7 +218,7 @@ package enum GraphCloudNodeCodec {
         guard native["nodeID"] as? String == id.rawValue.uuidString.lowercased(),
               let type = native["type"] as? String, let expectedKind = native["kind"] as? String,
               let data = native["payload"] as? Data else { throw GraphCloudNodeError.invalidRecord }
-        guard data.count <= limits.maximumPayloadBytes else { throw GraphCloudNodeError.limitExceeded }
+        if let maximum = limits.maximumPayloadBytes, data.count > maximum { throw GraphCloudNodeError.limitExceeded }
         let body: Body
         do { body = try JSONDecoder().decode(Body.self, from: data) }
         catch { throw GraphCloudNodeError.invalidRecord }

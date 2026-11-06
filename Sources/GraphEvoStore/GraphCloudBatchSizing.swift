@@ -3,9 +3,9 @@ import Foundation
 
 /// Estimates the CloudKit request, whose server-side encoding is opaque.
 package struct GraphCloudBatchSizing {
-    static let engineMaximumOperations = 250
-    static let requestBudget = 1_800_000
-    static let recordWarning = 900_000
+    package static let engineMaximumOperations = 250
+    static let requestBudget = 2_000_000
+    static let recordWarning = 1_000_000
 
     private var count = 0
     private var bytes = 0

@@ -440,7 +440,7 @@ package actor GraphContextManager {
             resolvedConflicts: resolved, pendingRetry: !retry.isEmpty, retryIDs: retry, pendingIDs: pendingIDs)
     }
     package func sendCloudChanges(for graphID: GraphID, configuration: GraphCloudConfiguration,
-                                  maximumRecords: Int = 100) async throws -> GraphCloudSendReport {
+                                  maximumRecords: Int = GraphCloudBatchSizing.engineMaximumOperations) async throws -> GraphCloudSendReport {
         try await withTransport(graphID, configuration: configuration) { session, graph, binding, _ in
             let previous = try await Self.drainSent(session, graph: graph, binding: binding)
             let incoming = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: 4096)

@@ -2,12 +2,49 @@ import CloudKit
 import Foundation
 import GraphEvoModel
 
+/// A complete zone cut keeps record envelopes on disk and only indexes names in memory.
+struct GraphCloudActivationInventory: Sendable {
+    private final class Directory: Sendable {
+        let url: URL
+        init() throws {
+            url = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvoActivation-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false,
+                                                    attributes: [.posixPermissions: 0o700])
+        }
+        deinit { try? FileManager.default.removeItem(at: url) }
+    }
+    private let directory: Directory
+    private var files: [String: URL] = [:]
+    var names: [String] { files.keys.sorted() }
+    var isEmpty: Bool { files.isEmpty }
+    var count: Int { files.count }
+
+    init() throws { directory = try Directory() }
+
+    mutating func store(_ value: GraphCloudIncoming) throws {
+        guard let name = value.recordName else { throw GraphCloudActivationError.invalidState }
+        let file = files[name] ?? directory.url.appendingPathComponent(UUID().uuidString)
+        try JSONEncoder().encode(value).write(to: file, options: .atomic)
+        files[name] = file
+    }
+
+    mutating func remove(_ name: String) throws {
+        guard let file = files.removeValue(forKey: name) else { return }
+        try FileManager.default.removeItem(at: file)
+    }
+
+    func record(_ name: String) throws -> GraphCloudIncoming {
+        guard let file = files[name] else { throw GraphCloudActivationError.invalidState }
+        return try JSONDecoder().decode(GraphCloudIncoming.self, from: Data(contentsOf: file))
+    }
+}
+
 /// Direct control and verification requests use the existing session scope gate, never another engine.
 struct GraphCloudActivationService: Sendable {
     let ensureZone: @Sendable (GraphCloudConfiguration, GraphCloudBinding) async throws -> Void
     let fetch: @Sendable (GraphCloudConfiguration, GraphCloudBinding) async throws -> GraphCloudAuthorityRemote?
     let save: @Sendable (GraphCloudConfiguration, GraphCloudBinding, GraphCloudAuthority, GraphCloudAuthorityRemote?) async throws -> GraphCloudAuthorityRemote
-    let inventory: @Sendable (GraphCloudConfiguration, GraphCloudSessionIdentity, GraphCloudBinding, GraphCloudActivationLimits) async throws -> [GraphCloudIncoming]
+    let inventory: @Sendable (GraphCloudConfiguration, GraphCloudSessionIdentity, GraphCloudBinding, GraphCloudActivationLimits) async throws -> GraphCloudActivationInventory
 
     static let live = Self(ensureZone: { config, binding in
         guard binding.zone.scope == .private else { throw GraphCloudActivationError.invalidRequest }
@@ -30,8 +67,8 @@ struct GraphCloudActivationService: Sendable {
         let namespace = UUID()
         let zoneID = GraphCloudAuthorityCodec.id(binding).zoneID
         var token: CKServerChangeToken?
-        var current: [String: GraphCloudIncoming] = [:]
-        var consulted = 0, bytes = 0
+        var current = try GraphCloudActivationInventory()
+        var consulted = 0
         repeat {
             try Task.checkCancellation()
             let page = try await database.recordZoneChanges(inZoneWith: zoneID, since: token, resultsLimit: 100)
@@ -43,18 +80,14 @@ struct GraphCloudActivationService: Sendable {
                 let archived = try GraphCloudRecordCodec.archive(record, scope: .private)
                 let value = try GraphCloudRecordCodec.freeze(archived, identity: identity, binding: binding,
                                                               spool: spool, namespace: namespace)
-                let count = value.recordArchive?.count ?? 0
-                // The bounded archive contains the record envelope and a reference, not asset bytes.
-                guard count <= limits.maximumPayloadBytes + 4 * 1024 * 1024 - bytes else { throw GraphCloudActivationError.limitExceeded }
-                bytes += count
-                current[id.recordName] = value
+                try current.store(value)
                 guard current.count <= limits.maximumRecords + 3 else { throw GraphCloudActivationError.limitExceeded }
             }
-            for deletion in page.deletions { current.removeValue(forKey: deletion.recordID.recordName) }
+            for deletion in page.deletions { try current.remove(deletion.recordID.recordName) }
             token = page.changeToken
             if !page.moreComing { break }
         } while true
-        return current.values.sorted { ($0.recordName ?? "") < ($1.recordName ?? "") }
+        return current
     })
 }
 

@@ -46,7 +46,7 @@ extension GraphSyncCheckpointAdapter {
                   rejected.isSubset(of: Set(attempt.items.map(\.recordName))) else { throw GraphCloudError.invalidState }
         }
         if let attempt = state.attempt {
-            guard attempt.graphID == binding.route.graphID, attempt.zone == binding.route.zone, attempt.items.count <= 100,
+            guard attempt.graphID == binding.route.graphID, attempt.zone == binding.route.zone, attempt.items.count <= GraphCloudBatchSizing.engineMaximumOperations,
                   Set(attempt.items.map { $0.change.id }).count == attempt.items.count else { throw GraphCloudError.invalidState }
         }
         if let attempt = state.attempt {
@@ -186,7 +186,7 @@ extension GraphSyncCheckpointAdapter {
 
     static let cloudAdapter = GraphCloudStoreAdapter(prepare: { context, id, binding, maximum, limits, onlyIDs in
         try GraphValueDecodingDiagnostics.checking {
-            guard maximum > 0, maximum <= 100 else { throw GraphCloudError.invalidConfiguration }
+            guard maximum > 0, maximum <= GraphCloudBatchSizing.engineMaximumOperations else { throw GraphCloudError.invalidConfiguration }
             var value = try load(context, id: id, limits: limits)
             try reconcile(context, value: &value, limits: limits)
             var state = try loadTransport(value, binding: binding)

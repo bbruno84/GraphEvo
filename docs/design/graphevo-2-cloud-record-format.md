@@ -79,9 +79,9 @@ serverRecordChanged; that persistence must be part of the next effect/receipt
 protocol before real upload acknowledgements are enabled.
 
 The original CF01 payload bound was 512 KiB. The current
-[transport policy](graphevo-2-record-transport.md) uses 2,000,000 encoded payload
-bytes on both encode and decode. The other defaults are 4,096 properties and
-4,096 entries in each
+[transport policy](graphevo-2-record-transport.md) accepts explicit byte budgets
+and leaves the default inline payload size to the transport and CloudKit. The
+codec defaults to 4,096 properties and 4,096 entries in each
 bounded tag/group/endpoint collection, plus 64 KiB of encoded system fields. Limits
 are configurable and refusal returns no partial record/batch. These limits do
 not bound total allocations, nesting work, batch bytes, header strings, secure

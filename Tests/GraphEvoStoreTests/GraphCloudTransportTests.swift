@@ -130,7 +130,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         let bus = TransportBus(), namespace = UUID().uuidString
         let sender = try await fixture(bus: bus, container: namespace)
         defer { try? FileManager.default.removeItem(at: sender.directory) }
-        let sizes = [400_000, 400_000, 400_000, 400_000, 720_000, 10]
+        let sizes = [400_000, 400_000, 400_000, 400_000, 760_000, 10]
         var expected: [GraphRecord] = []
         for size in sizes {
             let record = try GraphRecord(id: sender.graph.makeNodeID(), type: "Item",
@@ -187,7 +187,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         let cloud = bus.adapterWithLimit(rejected: name)
         let f = try await fixture(bus: bus, graphID: graph, cloud: cloud)
         defer { try? FileManager.default.removeItem(at: f.directory) }
-        let large = String(repeating: "x", count: 820_000)
+        let large = String(repeating: "x", count: 1_600_000)
         try await f.graph.transaction {
             try $0.insert(GraphRecord(id: node, type: "Item", properties: ["value": .string(large)]))
         }
@@ -285,11 +285,11 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         let bus = TransportBus(), container = UUID().uuidString, id = GraphID()
         let a = try await fixture(bus: bus, container: container, graphID: id)
         defer { try? FileManager.default.removeItem(at: a.directory) }
-        let ids = (0..<137).map { _ in a.graph.makeNodeID() }
+        let ids = (0..<287).map { _ in a.graph.makeNodeID() }
         try await a.graph.transaction { scope in
             for node in ids { try scope.insert(GraphRecord(id: node, type: "Removal.Bulk")) }
         }
-        #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 100)
+        #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 250)
         #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 37)
         try await a.manager.stopCloudSession(a.config)
         let b = try await fixture(bus: bus, container: container, graphID: id)
@@ -300,10 +300,10 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         try await b.manager.stopCloudSession(b.config)
         _ = try await a.manager.startCloudSession(a.config, adapter: bus.adapter)
         let ledger = try await a.manager.updateGraphLedger(for: id, configuration: a.config, mutation: .information(Data("{\"keep\":true}".utf8)))
-        #expect(try await a.graph.removeAll() == 137)
+        #expect(try await a.graph.removeAll() == 287)
         #expect(try await a.manager.graphLedger(for: id, configuration: a.config) == ledger)
         #expect(try await a.manager.cloudBinding(for: a.binding.route.zone, configuration: a.config) == a.binding.route)
-        #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 100)
+        #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 250)
         #expect(try await a.graph.collectSyncChanges() == 37)
         #expect(try await a.manager.sendCloudChanges(for: id, configuration: a.config).succeeded == 37)
         #expect(try await a.graph.collectSyncChanges() == 0)
