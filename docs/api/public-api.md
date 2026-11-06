@@ -961,9 +961,10 @@ available for v1 stores. See the
   read-only `rawValue`.
 - `GraphNodeID(graphID: GraphID, rawValue: UUID = UUID())`: Sendable, Hashable,
   Codable node identity; read-only `graphID` and `rawValue`.
-- `GraphNodeKind`: `.entity`, `.relationship`, `.action`.
+- `GraphNodeKind`: `.entity`, `.relationship`, `.action`, `.file`.
 - `GraphEndpoints`: `.entity`, `.relationship(subject: GraphNodeID?, object:
-  GraphNodeID?)`, `.action(subjects: Set<GraphNodeID>, objects: Set<GraphNodeID>)`;
+  GraphNodeID?)`, `.action(subjects: Set<GraphNodeID>, objects: Set<GraphNodeID>)`,
+  `.file`;
   read-only `kind`.
 - `GraphValue`: `.null`, `.boolean(Bool)`, `.integer(Int64)`,
   `.unsignedInteger(UInt64)`, `.floatingPoint(Double)`, `.decimal(Decimal)`,

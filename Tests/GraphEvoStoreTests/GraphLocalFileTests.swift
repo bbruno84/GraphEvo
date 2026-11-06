@@ -56,13 +56,18 @@ import Testing
         let graphID = GraphID(), local = GraphContext()
         let original = try await local.createGraph(id: graphID, at: s04)
         let a = original.makeNodeID(), b = original.makeNodeID(), relation = original.makeNodeID(), action = original.makeNodeID()
+        let legacyBytes = Data(repeating: 0xA5, count: 2 * 1024 * 1024)
+        let attachmentSource = root.appendingPathComponent("ExistingAttachment.bin")
+        try legacyBytes.write(to: attachmentSource)
         let records = [
-            try GraphRecord(id: a, type: EntityView.graphType, properties: ["rank": .integer(7)]),
+            try GraphRecord(id: a, type: EntityView.graphType, properties: ["rank": .integer(7), "legacyBytes": .data(legacyBytes)]),
             try GraphRecord(id: b, type: EntityView.graphType),
             try GraphRecord(id: relation, type: "edge", endpoints: .relationship(subject: a, object: b)),
             try GraphRecord(id: action, type: "action", endpoints: .action(subjects: [a], objects: [b]))
         ]
         try await original.transaction { scope in for record in records { try scope.insert(record) } }
+        let attachment = try await original.importAttachment(from: attachmentSource, ownedBy: a)
+        try FileManager.default.removeItem(at: attachmentSource)
         let destination = root.appendingPathComponent("Migrated")
         do {
             _ = try await GraphContext.migrateClosedS04Store(from: s04, into: destination)
@@ -77,6 +82,9 @@ import Testing
 
         let fileContext = GraphContext.localFiles()
         let graph = try await fileContext.openGraph(id: graphID, at: migrated)
+        let migratedAttachment = try await graph.attachment(attachment.id)
+        #expect(migratedAttachment?.metadata == attachment)
+        #expect(migratedAttachment?.data == legacyBytes)
         try await graph.read { scope in
             for record in records {
                 let loaded = try scope.record(for: record.id)
