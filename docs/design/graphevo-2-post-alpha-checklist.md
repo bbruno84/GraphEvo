@@ -537,7 +537,9 @@ Sources: [A8 candidate](graphevo-2-observation.md),
 [physical/local results](results/a8-live-observation-2026-10-27.md), specification S10, V07,
 D06/O04. The alpha implements async state and Combine over conservative
 resource invalidation, with live rescan hints for processing. O04 selects that
-delivery contract for beta. The acceptance items above remain open.
+delivery contract for beta. The [physical iPad result](graphevo-2-observation.md#acceptance-and-remaining-work)
+covers live and reopened observation with explicit private CloudKit import.
+The broader acceptance items above remain open.
 
 ## PA08 — mandatory v1 local and cloud migration
 

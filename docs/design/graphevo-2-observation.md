@@ -165,9 +165,18 @@ transport. It verifies live query refresh after import, initial query state
 after reopening, reconciliation of a disappeared ID, relationship membership
 and an attachment rescan after imported content replacement. A slow reader
 reaches the final committed state without manually requesting refresh.
-Migrated fixtures complement these cases. Full account/cache policy,
-app integration and mandatory v1 local/cloud migration still gate beta/stable
-under the delivery plan. A8 implementation is not permission to declare beta.
+Migrated fixtures complement these cases.
+
+On 2026-11-06 a signed synthetic probe pinned to `54d66765` passed on a
+physical iPad in a fresh private CloudKit Development zone. A direct CloudKit
+writer supplied records and an explicit fetch/import exercised the production
+reader. Live observation reflected imports and a related-node membership change.
+After the reader closed its SQLite handle and cloud session, the writer performed
+three edits, a deletion and a relationship-membership change. The reopened
+reader's first query state reflected the final value, missing ID and restored
+membership, with zero outgoing changes. This is single-device evidence with
+explicit import. Full account/cache policy, automatic delivery and broader
+device acceptance remain under the delivery plan.
 
 
 ## C04 consolidation adoption
