@@ -917,6 +917,7 @@ package actor GraphContextManager {
     private func request(id: GraphID, url: URL, creating: Bool, conflictPolicy: GraphConflictPolicy = .lastEditWins, bootstrapPermit: UUID? = nil, initialParticipant: GraphCloudParticipantAccess? = nil) async throws -> GraphStore {
         do {
             try Task.checkCancellation()
+            guard initialParticipant == nil || publicAppGroup == nil else { throw GraphStoreError.accountIsolated }
             guard !blockedSharingGraphs.contains(id) else { throw GraphCloudError.zoneUnavailable }
             let resolved = try StoreRegistry.resolve(graphStoreConfiguration(id, at: url))
             if let existing = locations[id], existing.key != resolved.key { throw GraphStoreError.ownershipConflict }
@@ -943,9 +944,10 @@ package actor GraphContextManager {
                     let registry = registry, schema = schema, adapter = adapter, configuration = resolved.configuration
                     let initiallyBlocked = rejoiningGraphs.contains(id)
                     let appGroupLocalOnly = publicAppGroup != nil
+                    let appGroupPrivateCloud = publicAppGroup?.privateCloudEnvironment != nil
                     let opening = Task.detached {
                         try await GraphCoordinator.open(id: id, configuration: configuration, creating: creating,
-                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked, initialParticipant: initialParticipant, appGroupLocalOnly: appGroupLocalOnly)
+                                                        registry: registry, schema: schema, adapter: adapter, conflictPolicy: conflictPolicy, initiallyBlocked: initiallyBlocked, initialParticipant: initialParticipant, appGroupLocalOnly: appGroupLocalOnly, appGroupPrivateCloud: appGroupPrivateCloud)
                     }
                     guard case .sqlite(let canonicalURL) = resolved.configuration.location else { throw GraphStoreError.unsupportedLayout }
                     entries[id] = Entry(key: resolved.key, url: canonicalURL, creating: creating, initialJoinID: initialParticipant?.generation, initialPolicy: conflictPolicy, opening: opening)

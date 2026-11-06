@@ -256,17 +256,29 @@ Group identifier and declares one of two roles when configuring its context.
 GraphEvo uses that declaration for App Group admission. Bundle classification
 remains a separate platform safeguard for existing CloudKit entry points.
 
-The first public increment exposes the local-only roles through
+The default public roles use local graphs through
 [`GraphContext(appGroup:)`](../api/public-api.md#local-app-group-contexts).
-The primary obtains a normal graph lease. The secondary receives a scoped read
-or mutation and the result of its detach attempt. CloudKit connection,
-conversion, maintenance and orphan recovery on public App Group contexts are
-reserved for the subsequent increment.
+A primary obtains a normal graph lease. A secondary gets a scoped read or
+mutation and the result of its detach attempt.
+
+The private cloud opt-in lets the primary bind a dedicated graph in the
+declared environment. A secondary supplies a named, entitled CloudKit
+container and verifies the current account before acquiring a native lease for
+each scope. The verification
+lives for the admitted scope. A native read or write checks the persisted
+binding again on its own Core Data context, including the race with an
+initial bind in another process. An account-change notification invalidates
+the active scope through the existing native account permit. A closed primary
+can later collect the resulting persistent history on startup.
 
 | Role | Admitted operations |
 |---|---|
-| Primary | Create and open a graph, read and write, connect CloudKit, and own explicit migration, maintenance and recovery. CloudKit session ownership follows the existing foreground and directory claim contract. |
-| Secondary | Open an existing graph for local reads. The consumer can explicitly enable short local transactions. Each invocation closes its lease when its work finishes. |
+| Primary | Create and open a graph, read and write, and connect CloudKit for an opted-in private graph. Session ownership follows the existing foreground and directory claim contract. |
+| Secondary | Scoped reads and opted-in transactions. Private synchronized graphs require fresh account verification. Each invocation closes its lease. |
+
+Public participant access, conversion, destructive maintenance and abandoned
+owner recovery have separate admission requirements. Physical acceptance for
+a secondary with a CloudKit-enabled signing profile remains open.
 
 An optional readable process label may accompany either role for diagnostics.
 The label contributes only to diagnostic presentation. Store location derives

@@ -1019,9 +1019,25 @@ operation error. A fresh invocation takes a fresh read scope.
 
 Secondary access requires an existing graph. Missing graphs report
 `GraphStoreError.missingStore`. Secondary writes without opt-in report
-`.readOnly`. This surface supports local graphs. Account-bound or participant
-graphs require a later synchronized admission path and report
-`.accountIsolated`. Pending activation or retirement reports `.resourceReserved`.
+`.readOnly`. Pending activation or retirement reports `.resourceReserved`.
+
+For a private synchronized graph, set `privateCloudEnvironment` on both
+configurations. The primary opens or creates the graph through its App Group
+entry point, calls `connectCloud(using:)` in the selected environment, and binds
+the graph with `bindPrivateGraph(_:zoneName:)`. It manages foreground
+synchronization through the normal context lifecycle.
+
+Construct the secondary with
+`GraphContext(appGroup:verifyingPrivateCloudWith:)`, passing a named
+`CKContainer` configured in that target's CloudKit entitlements. Before each
+scope on the account-bound store, GraphEvo checks the exact container,
+configured environment and current CloudKit identity. A failed check reports
+`.accountIsolated`; a conflicting concurrent scope for the same verified
+secondary graph reports `.resourceReserved`. The secondary commits to local
+SQLite. The primary exports pending history when its sync session is running.
+A CloudKit account notification observed before native save invalidates the
+scope and rolls back the mutation. Participant stores require separate sharing
+authorization and report `.accountIsolated` on these App Group entry points.
 See the [App Group contract](../design/graphevo-2-controlled-store-access.md#public-app-group-process-contract)
 for lifecycle and acceptance details.
 

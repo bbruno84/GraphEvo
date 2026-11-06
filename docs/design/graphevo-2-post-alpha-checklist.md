@@ -281,6 +281,13 @@ Sources: [model contracts](graphevo-2-application-models.md),
 
 ## PA02 — runtime, concurrency and platform support
 
+The private App Group access candidate verifies the account before each
+secondary scope and exercises rollback on an observed account change with
+injected transport. Physical acceptance requires a CloudKit-enabled secondary
+signing profile, a cold primary restart and observation on an independent
+replica. Shared participants require a separate current-permission gate.
+
+
 - [ ] **B** Select minimum OS/toolchain and supported process topology (O02/O03).
   Decide app/extension concurrent App Group access explicitly; a process-local
   registry does not establish cross-process safety.
