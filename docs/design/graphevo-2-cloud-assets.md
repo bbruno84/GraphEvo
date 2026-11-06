@@ -65,6 +65,15 @@ maximumRecords rather than silently increasing budgets. This is not streaming,
 a process-memory cap, a production size envelope or a native SQL placement claim.
 Native external binary placement remains Core Data's decision.
 
+The native transport checks a ceiling of 50,000,000,000 bytes per CKAsset,
+interpreting Apple's 50 GB figure in decimal units. Incoming SDK files are
+checked before reading their bodies. GraphEvo's current Core Data attachment
+representation buffers whole contents and supports files through 10 MiB.
+Native acceptance also depends on the available iCloud storage.
+[Apple's native CKAsset clarification](https://developer.apple.com/forums/thread/827897)
+and the [CloudKit Web Services size table](https://developer.apple.com/library/archive/documentation/DataManagement/Conceptual/CloudKitWebServicesReference/PropertyMetrics.html)
+describe the two API limits.
+
 Engine document3 and graph transport2 structures do not change: their opaque
 archives now support portable format3 attachments. Old runtimes cannot consume
 new asset records and no alpha downgrade is supported. Production CloudKit schema

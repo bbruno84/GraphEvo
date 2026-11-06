@@ -8,6 +8,7 @@ package enum GraphCloudError: Error, Equatable {
     case attachmentTimeout, graphPaused
     case ownershipConflict, directoryBusy, invalidConfiguration, invalidState, accountUnavailable, accountChanged
     case persistence, inboxLimit, unsupportedAsset, unexpectedUpload, stopped, stopping, busy, zoneUnavailable, transportUnavailable
+    case assetSizeLimitExceeded
 }
 
 package struct GraphCloudConfiguration: Equatable, Sendable {

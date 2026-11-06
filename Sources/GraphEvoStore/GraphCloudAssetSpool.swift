@@ -193,7 +193,9 @@ package struct GraphCloudAssetSpool: Sendable {
                         stagingNamespace: UUID? = nil, check: () throws -> Void) throws -> GraphCloudOutgoingBatch {
         let batch = prepared.batch
         let binding = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)
-        if stagingNamespace == nil { try reconcileBlocking(retaining: batch.items.compactMap(\.assetReference), check: check) }
+        if stagingNamespace == nil {
+            try reconcileBlocking(retaining: prepared.previousAssets + batch.items.compactMap(\.assetReference), check: check)
+        }
         var items: [GraphCloudOutgoingNode] = []
         var preparedBytes = 0
         var staged: [GraphCloudAssetReference] = []

@@ -59,7 +59,7 @@ extension GraphContextManager {
             if await session.containsBinding(for: id), await session.activationRoute(for: id) == nil { throw GraphCloudActivationError.invalidRequest }
             if let prior = try await owner.activationDocument() {
                 guard prior.authority.activationID == activationID, prior.binding == binding,
-                      prior.declaration == declaration, prior.limits == limits else { throw GraphCloudActivationError.authorityConflict }
+                      prior.declaration == declaration, limits.acceptsPersisted(prior.limits) else { throw GraphCloudActivationError.authorityConflict }
                 return prior.status
             }
             let pause = try await manager.reserveCloudPause(for: id)
@@ -212,21 +212,13 @@ extension GraphContextManager {
                     guard let latest = try await service.fetch(configuration, route), latest.value.published,
                           latest.value.matches(remote.value) else { throw GraphCloudActivationError.recoveryRequired }
                     let inventory = try await service.inventory(configuration, identity, route, limits)
-                    _ = try await Self.seedManifest(inventory, session: session, binding: route,
-                                                    authority: remote.value, limits: limits)
-                    var events = inventory.filter { !GraphCloudAuthorityCodec.isControl($0) && !GraphCloudGraphDescriptor.isControl($0) && !GraphCloudShareControl.isControl($0) }
-                    // Only this unexposed replica may be reconciled against a complete verified zone cut.
-                    // A retry can otherwise retain an earlier import whose row was subsequently deleted remotely.
-                    let present = Set(events.compactMap(\.recordName))
-                    for nodeID in try await owner.activationReplicaIDs().sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
-                        let name = try GraphCloudNodeCodec.recordID(for: nodeID, binding: route).recordName
-                        if !present.contains(name) {
-                            events.append(.init(kind: .recordDeleted, zone: zone, recordName: name, recordType: GraphCloudNodeCodec.recordType))
-                        }
-                    }
-                    try await session.stageActivationSnapshot(events, for: route, activationID: remote.value.activationID)
+                    let manifest = try await Self.seedManifest(inventory, session: session, binding: route,
+                                                               authority: remote.value, limits: limits)
+                    let previous = try await owner.activationReplicaIDs()
+                    try await Self.importActivationInventory(inventory, manifest: manifest, previous: previous,
+                        session: session, graph: graph, binding: binding, activationID: remote.value.activationID,
+                        configuration: configuration)
                 }
-                _ = try await Self.drainIncoming(session, graph: graph, binding: binding, maximumEvents: configuration.maximumEvents)
                 guard try await graph.collectSyncChanges() == 0 else { throw GraphSyncError.pendingImport }
                 _ = try await owner.validateActivationReplica()
                 current.phase = .published
@@ -256,23 +248,92 @@ extension GraphContextManager {
         let permit = document.authority.activationID
         return try await withTransport(document.authority.graphID, configuration: configuration, activationPermit: permit) { session, graph, binding, _ in
             let previous = try await Self.drainSent(session, graph: graph, binding: binding)
-            guard previous.failures.isEmpty else { throw GraphCloudActivationError.recoveryRequired }
-            let batch = try await graph.prepareTransport(binding, maximum: 100)
+            if let error = Self.seedUploadError(previous) {
+                return .init(empty: false, cleanupPending: previous.cleanupPending, operationError: error)
+            }
+            let batch = try await graph.prepareTransport(binding)
             if batch.items.isEmpty { return .init(empty: true, cleanupPending: previous.cleanupPending, operationError: nil) }
             let outcome = try await session.sendWithAdvice(batch, activationPermit: permit)
             let result = try await Self.drainSent(session, graph: graph, binding: binding)
-            guard result.failures.isEmpty else { throw GraphCloudActivationError.recoveryRequired }
-            return .init(empty: false, cleanupPending: previous.cleanupPending || result.cleanupPending, operationError: outcome.transportError)
+            return .init(empty: false, cleanupPending: previous.cleanupPending || result.cleanupPending,
+                         operationError: Self.seedUploadError(result) ?? outcome.transportError)
         }
     }
 
-    private static func seedManifest(_ inventory: [GraphCloudIncoming], session: GraphCloudSession,
+    private static func seedUploadError(_ report: GraphCloudSendReport) -> (any Error)? {
+        if report.failures.contains(where: { $0.code == CKError.Code.limitExceeded.rawValue }) {
+            return CKError(.limitExceeded)
+        }
+        return report.failures.isEmpty ? nil : GraphCloudActivationError.recoveryRequired
+    }
+
+    private static func importActivationInventory(_ inventory: GraphCloudActivationInventory, manifest: GraphCloudSeedManifest,
+        previous: Set<GraphNodeID>, session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding,
+        activationID: UUID, configuration: GraphCloudConfiguration) async throws {
+        let limit = min(configuration.maximumEvents, GraphCloudBatchSizing.engineMaximumOperations)
+        let byteLimit = min(configuration.maximumBytes / 2, GraphCloudBatchSizing.requestBudget)
+        var events: [GraphCloudIncoming] = []
+        var bytes = 0
+        var assetBytes = 0
+        func flush(_ events: [GraphCloudIncoming]) async throws {
+            guard !events.isEmpty else { return }
+            try await session.stageActivationSnapshot(events, for: binding.route, activationID: activationID)
+            _ = try await drainIncoming(session, graph: graph, binding: binding, maximumEvents: limit)
+        }
+        func rank(_ entry: GraphCloudSeedEntry) -> Int {
+            if entry.type == GraphAttachmentPayload.graphType { return 2 }
+            return entry.kind == "entity" ? 0 : 1
+        }
+
+        // Import endpoints before edges and owners before attachments, even across transaction boundaries.
+        for group in 0...2 {
+            for entry in manifest.entries where rank(entry) == group {
+                try Task.checkCancellation()
+                let name = "node." + entry.nodeID.uuidString.lowercased()
+                let record = try inventory.record(name)
+                let size = (record.recordArchive?.count ?? 0) + 1_024
+                if !events.isEmpty && (events.count == limit || size > byteLimit - bytes ||
+                                       entry.assetBytes > 16 * 1024 * 1024 - assetBytes) {
+                    try await flush(events)
+                    events.removeAll(keepingCapacity: true)
+                    bytes = 0
+                    assetBytes = 0
+                }
+                events.append(record)
+                bytes += size
+                assetBytes += entry.assetBytes
+            }
+            try await flush(events)
+            events.removeAll(keepingCapacity: true)
+            bytes = 0
+            assetBytes = 0
+        }
+
+        // Update surviving references before removing rows from a previously interrupted import.
+        let present = Set(manifest.entries.map(\.nodeID))
+        for node in previous.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) where !present.contains(node.rawValue) {
+            let name = try GraphCloudNodeCodec.recordID(for: node, binding: binding.route).recordName
+            events.append(.init(kind: .recordDeleted, zone: binding.route.zone, recordName: name,
+                                recordType: GraphCloudNodeCodec.recordType))
+            bytes += 1_024
+            if events.count == limit || bytes >= byteLimit {
+                try await flush(events)
+                events.removeAll(keepingCapacity: true)
+                bytes = 0
+            }
+        }
+        try await flush(events)
+    }
+
+    private static func seedManifest(_ inventory: GraphCloudActivationInventory, session: GraphCloudSession,
                                      binding: GraphCloudBinding, authority: GraphCloudAuthority,
                                      limits: GraphCloudActivationLimits) async throws -> GraphCloudSeedManifest {
         var entries: [GraphCloudSeedEntry] = []
         var remaining = limits.maximumPayloadBytes
         var controls = 0
-        for event in inventory {
+        for name in inventory.names {
+            try Task.checkCancellation()
+            let event = try inventory.record(name)
             guard event.kind == .recordChanged, event.zone == binding.zone, let bytes = event.recordArchive else {
                 throw GraphCloudActivationError.invalidState
             }
@@ -290,11 +351,8 @@ extension GraphContextManager {
                 }
                 controls += 1
             } else {
-                _ = try GraphCloudNodeCodec.decode(record, binding: binding)
-                guard let payload = record["payload"] as? Data, payload.count <= remaining else {
-                    throw GraphCloudActivationError.limitExceeded
-                }
-                remaining -= payload.count
+                guard let payload = record["payload"] as? Data else { throw GraphCloudActivationError.invalidState }
+                try GraphCloudActivationLimits.charge(payload.count, to: &remaining)
                 entries.append(try GraphCloudSeedManifest.entry(record, binding: binding))
             }
         }

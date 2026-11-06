@@ -108,10 +108,8 @@ enum GraphCloudActivationNative {
             try session.validate(value)
             let record = try GraphCloudNodeCodec.encode(value, binding: binding.route,
                                                         modifiedAt: GraphMutationMetadata.modifiedAt(node))
-            guard let payload = record["payload"] as? Data, payload.count <= remaining else {
-                throw GraphCloudActivationError.limitExceeded
-            }
-            remaining -= payload.count
+            guard let payload = record["payload"] as? Data else { throw GraphCloudActivationError.invalidState }
+            try GraphCloudActivationLimits.charge(payload.count, to: &remaining)
             entries.append(try GraphCloudSeedManifest.entry(record, binding: binding.route))
         }
         let manifest = try GraphCloudSeedManifest.make(entries: entries, binding: binding.route, limits: limits)

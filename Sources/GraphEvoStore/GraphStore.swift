@@ -202,7 +202,7 @@ public actor GraphStore {
         }
     }
 
-    package func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int = 100, limits: GraphSyncLimits = .init(), onlyIDs: Set<GraphNodeID>? = nil) async throws -> GraphCloudOutgoingBatch {
+    package func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int = GraphCloudBatchSizing.engineMaximumOperations, limits: GraphSyncLimits = .init(), onlyIDs: Set<GraphNodeID>? = nil) async throws -> GraphCloudOutgoingBatch {
         try await syncSession().prepareTransport(binding, maximum: maximum, limits: limits, onlyIDs: onlyIDs)
     }
     package func commitTransport(_ binding: GraphCloudTransportBinding, receipt: GraphCloudSentReceipt, limits: GraphSyncLimits = .init()) async throws {

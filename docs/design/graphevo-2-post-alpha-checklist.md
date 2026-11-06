@@ -176,7 +176,7 @@ uses S04 and its selected transport.
 | PA03/PA04: cloud lifecycle | Public H02 invitations/sharing, default account isolation, foreground CloudKit claim release/resume, bounded device evidence | Final-pin H02 rejoin, protected data and independent-reader acceptance, structural conflict scope, broader interruption/restore and spool device validation |
 | PA05/PA06: supported costs | S04/P01–P03, #142 inventory reuse, #143 descriptor queries, #144 spool | Publish supported limits; broader device/capacity acceptance and beta performance measurements |
 | PA07: observation/processing | A8 async state, Combine and live rescan hints | O04 live processing versus durable replay, recovery contract and current-backend acceptance |
-| PA08/PA09: migration/recovery | MF01–MF11, public staged v1 bootstrap and private recovery, coordinated native conversion, workspace publication and backup catalog | Representative v1 end-to-end proof, historical/production source matrix, host old-client cutover, interruption and restoration acceptance |
+| PA08/PA09: migration/recovery | MF01–MF11, public staged v1 bootstrap and private recovery, coordinated native conversion, workspace publication and backup catalog | [One representative v1 end-to-end run](results/representative-v1-cloud-migration-2026-11-06.md) passed. Historical/production source matrix, host old-client cutover, interruption and restoration acceptance remain open. |
 | PA10: stable release | Independent consumers and reviewed CI checkpoints | Real application adoption, full production acceptance, distribution and release evidence (R) |
 
 The broader B/R gates stay open. Background scheduling and interactive widget
@@ -567,6 +567,8 @@ close O04 or mark the wider beta/stable items above complete.
 - [ ] **B** Freeze the supported source-version/codec matrix and demonstrate
   end-to-end feasibility on representative populated v1 copies: all node kinds,
   topology, optional forms, values, binary content and old-to-new identity mapping.
+  The [2026-11-06 MyHomeBills run](results/representative-v1-cloud-migration-2026-11-06.md)
+  supplies representative evidence for one source and one independent store.
 - [ ] **B** Establish the coordinated cloud cutover mechanism (O01): v1 writers
   stopped, pending source writes reconciled, incomplete local sources detected,
   returning offline old clients handled, duplicate conversion prevented. KVS or

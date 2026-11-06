@@ -33,14 +33,23 @@ public struct GraphCloudCutoverDeclaration: Codable, Equatable, Sendable {
 
 package struct GraphCloudActivationLimits: Codable, Equatable, Sendable {
     package let maximumRecords: Int
-    package let maximumPayloadBytes: Int
-    package init(maximumRecords: Int = 10_000, maximumPayloadBytes: Int = 32 * 1024 * 1024) {
+    package let maximumPayloadBytes: Int?
+    package init(maximumRecords: Int = 10_000, maximumPayloadBytes: Int? = nil) {
         self.maximumRecords = maximumRecords; self.maximumPayloadBytes = maximumPayloadBytes
     }
     package func validate() throws {
-        guard (1...10_000).contains(maximumRecords), (1...32 * 1024 * 1024).contains(maximumPayloadBytes) else {
+        guard (1...10_000).contains(maximumRecords), maximumPayloadBytes.map({ $0 > 0 }) ?? true else {
             throw GraphCloudActivationError.limitExceeded
         }
+    }
+    func acceptsPersisted(_ persisted: Self) -> Bool {
+        self == persisted || (self == Self() && persisted == Self(maximumPayloadBytes: 32 * 1024 * 1024))
+    }
+
+    package static func charge(_ bytes: Int, to remaining: inout Int?) throws {
+        guard let available = remaining else { return }
+        guard bytes <= available else { throw GraphCloudActivationError.limitExceeded }
+        remaining = available - bytes
     }
 }
 
@@ -87,8 +96,7 @@ package struct GraphCloudSeedManifest: Codable, Equatable, Sendable {
         for record in records {
             try Task.checkCancellation()
             guard let payload = record["payload"] as? Data else { throw GraphCloudActivationError.invalidState }
-            guard payload.count <= remaining else { throw GraphCloudActivationError.limitExceeded }
-            remaining -= payload.count
+            try GraphCloudActivationLimits.charge(payload.count, to: &remaining)
             entries.append(try entry(record, binding: binding))
         }
         return try make(entries: entries, binding: binding, limits: limits)

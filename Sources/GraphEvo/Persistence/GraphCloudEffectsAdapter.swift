@@ -14,6 +14,7 @@ extension GraphSyncCheckpointAdapter {
         let epoch: UUID
         var metadata: [String: Data] = [:]
         var attempt: GraphCloudOutgoingBatch?
+        var sizeRejected: Set<String>?
         var receipts: [String: String] = [:]
         var zoneDeleted = false
     }
@@ -40,8 +41,12 @@ extension GraphSyncCheckpointAdapter {
               state.metadata.keys.allSatisfy({ UUID(uuidString: $0)?.uuidString == $0 }),
               state.receipts.allSatisfy({ UUID(uuidString: $0.key)?.uuidString == $0.key && $0.value.utf8.count == 64 &&
                   $0.value.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) }) else { throw GraphCloudError.invalidState }
+        if let rejected = state.sizeRejected {
+            guard let attempt = state.attempt, !rejected.isEmpty,
+                  rejected.isSubset(of: Set(attempt.items.map(\.recordName))) else { throw GraphCloudError.invalidState }
+        }
         if let attempt = state.attempt {
-            guard attempt.graphID == binding.route.graphID, attempt.zone == binding.route.zone, attempt.items.count <= 100,
+            guard attempt.graphID == binding.route.graphID, attempt.zone == binding.route.zone, attempt.items.count <= GraphCloudBatchSizing.engineMaximumOperations,
                   Set(attempt.items.map { $0.change.id }).count == attempt.items.count else { throw GraphCloudError.invalidState }
         }
         if let attempt = state.attempt {
@@ -173,7 +178,7 @@ extension GraphSyncCheckpointAdapter {
         }
         value.state.pending.removeAll { cleared.contains($0.id) }
         result.pendingIDs = Set(value.state.pending.map(\.id))
-        if result.resolved > 0 { state.attempt = nil }
+        if result.resolved > 0 { state.attempt = nil; state.sizeRejected = nil }
         try GraphMutationMetadata.setDeletedIDs(deleted, root: value.root)
         _ = try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: id)
         return result
@@ -181,7 +186,7 @@ extension GraphSyncCheckpointAdapter {
 
     static let cloudAdapter = GraphCloudStoreAdapter(prepare: { context, id, binding, maximum, limits, onlyIDs in
         try GraphValueDecodingDiagnostics.checking {
-            guard maximum > 0, maximum <= 100 else { throw GraphCloudError.invalidConfiguration }
+            guard maximum > 0, maximum <= GraphCloudBatchSizing.engineMaximumOperations else { throw GraphCloudError.invalidConfiguration }
             var value = try load(context, id: id, limits: limits)
             try reconcile(context, value: &value, limits: limits)
             var state = try loadTransport(value, binding: binding)
@@ -189,8 +194,29 @@ extension GraphSyncCheckpointAdapter {
             if !value.state.pending.isEmpty || state.attempt != nil {
                 try GraphCloudAccessMetadata.requireConsumerWrite(context, id: id)
             }
-            if let attempt = state.attempt { return GraphCloudPreparedOutgoing(batch: attempt, storeID: state.storeID, epoch: state.epoch) }
-            var items: [GraphSyncItem] = [], dates: [GraphNodeID: Date] = [:]
+            var previousAssets: [GraphCloudAssetReference] = []
+            if let attempt = state.attempt, let rejected = state.sizeRejected {
+                let pending = Dictionary(uniqueKeysWithValues: value.state.pending.map { ($0.id, $0.generation) })
+                let remaining = attempt.items.filter {
+                    !rejected.contains($0.recordName) || (pending[$0.change.id] ?? 0) <= $0.change.generation
+                }
+                if remaining.count != attempt.items.count {
+                    // The old attempt still owns its files until the replacement transaction commits.
+                    previousAssets = attempt.items.compactMap(\.assetReference)
+                    let stillRejected = rejected.intersection(remaining.map(\.recordName))
+                    state.sizeRejected = stillRejected.isEmpty ? nil : stillRejected
+                    state.attempt = remaining.isEmpty ? nil : GraphCloudOutgoingBatch(id: attempt.id, graphID: id,
+                                                                                       zone: attempt.zone, items: remaining)
+                    try persist(context, value)
+                    try persistTransport(context, root: value.root, state: state)
+                }
+            }
+            if let attempt = state.attempt {
+                return GraphCloudPreparedOutgoing(batch: attempt, storeID: state.storeID, epoch: state.epoch,
+                                                  previousAssets: previousAssets)
+            }
+            var items: [GraphCloudOutgoingNode] = []
+            var sizing = GraphCloudBatchSizing()
             var remainingAssetBytes = 32 * 1024 * 1024
             let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
             for change in value.state.pending.sorted(by: ordered).filter({ onlyIDs?.contains($0.id) ?? true }).prefix(maximum) {
@@ -201,15 +227,17 @@ extension GraphSyncCheckpointAdapter {
                     if count > remainingAssetBytes { break }
                     remainingAssetBytes -= count
                 }
-                if let node = try session.node(change.id), let date = try GraphMutationMetadata.modifiedAt(node) { dates[change.id] = date }
-                items.append(GraphSyncItem(change: change, record: record))
+                let date = try session.node(change.id).flatMap { try GraphMutationMetadata.modifiedAt($0) }
+                let item = try GraphCloudNodeCodec.encode(GraphSyncItem(change: change, record: record),
+                    binding: binding.route, systemFields: state.metadata[change.id.rawValue.uuidString], modifiedAt: date)
+                guard try sizing.append(GraphCloudBatchSizing.estimate(item, zone: binding.route.zone)) else { break }
+                items.append(item)
             }
-            let batch = GraphSyncBatch(id: UUID(), graphID: id, items: items, epoch: value.state.epoch)
-            let metadata = Dictionary(uniqueKeysWithValues: state.metadata.map { (GraphNodeID(graphID: id, rawValue: UUID(uuidString: $0.key)!), $0.value) })
-            let encoded = try GraphCloudNodeCodec.encode(batch, binding: binding.route, systemFields: metadata, modifiedDates: dates)
+            let encoded = GraphCloudOutgoingBatch(id: UUID(), graphID: id, zone: binding.route.zone, items: items)
             // The provisional archive is detached; only the reference-only result is persisted in finishPrepared.
             try persist(context, value)
-            return GraphCloudPreparedOutgoing(batch: encoded, storeID: state.storeID, epoch: state.epoch)
+            return GraphCloudPreparedOutgoing(batch: encoded, storeID: state.storeID, epoch: state.epoch,
+                                              previousAssets: previousAssets)
         }
     }, finishPrepared: { context, id, binding, batch, limits in
         let value = try load(context, id: id, limits: limits)
@@ -290,6 +318,10 @@ extension GraphSyncCheckpointAdapter {
             state.attempt = remaining.isEmpty ? nil : GraphCloudOutgoingBatch(id: attempt.id, graphID: id, zone: attempt.zone, items: remaining)
             var result = try resolve(context, value: &value, state: &state, events: events)
             result.failures = failures
+            let rejected = (state.sizeRejected ?? []).union(failures.filter {
+                $0.code == CKError.Code.limitExceeded.rawValue
+            }.map(\.recordName)).intersection(state.attempt?.items.map(\.recordName) ?? [])
+            state.sizeRejected = rejected.isEmpty ? nil : rejected
             for (receipt, digest) in fresh { state.receipts[receipt.id.uuidString] = digest }
             try persist(context, value); try persistTransport(context, root: value.root, state: state)
             if !events.isEmpty { context.transactionAuthor = importAuthor }

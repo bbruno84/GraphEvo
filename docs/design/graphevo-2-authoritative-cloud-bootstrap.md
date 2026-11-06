@@ -75,18 +75,21 @@ server system fields and change tags are excluded. Counts
 alone cannot validate the seed. Bound the manifest and total preflight work with
 explicit limits and refuse atomically. No new unbounded inventory is permitted.
 
-Current limits are 10,000 primitives, 32 MiB consulted/logical payload, 4 MiB
-encoded manifest and 5 MiB complete native activation metadata. Source native
-inventory stays bounded at 100,000 rows. Verification consults at most 100,000
-zone events and allows 4 MiB secure-archive overhead above the logical payload
-allowance. Snapshot imports also obey the existing session event/byte budgets;
-a destination exceeding them is refused without exposure or hidden limit changes.
+Current limits are 10,000 primitives, a 4 MiB encoded manifest and 5 MiB of
+native activation metadata. Source native inventory and consulted zone changes
+each have a count budget of 100,000. The default permits any aggregate payload
+that fits local resources. An explicit preflight payload budget is still
+available. Cloud verification stores record envelopes in a temporary disk
+inventory and validates the complete cut. A later inventory pass sweeps abandoned
+snapshots under the session directory lease and private scope gate. Replica recovery applies the verified
+cut in windows that respect the session inbox budgets, importing endpoints
+before edges and owners before attachments. The write gate stays closed until
+the complete replica passes validation.
 
-Ordinary Data stays an ordinary property. A value exceeding the existing 512-KiB
-default encoded primitive payload allowance blocks activation; MF10 never raises
-the limit, truncates data or implicitly turns it into an attachment. Explicit
-consumer transformation, if needed, precedes preparation and semantic acceptance.
-Existing attachments retain their identities, ownership and CKAsset path.
+Ordinary Data stays an ordinary property. A record estimated above the CloudKit
+record limit is warned and attempted individually. A server size refusal keeps
+the authority unpublished. Existing attachments retain their identities,
+ownership and CKAsset path.
 
 Verify that PH can discover the complete selected seed using the existing local
 author and retained history. Missing/pruned history is a refusal, not permission

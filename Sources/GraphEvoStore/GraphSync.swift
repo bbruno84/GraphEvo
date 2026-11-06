@@ -146,40 +146,49 @@ actor GraphSyncSession {
         guard case .sqlite(let storeURL) = snapshot.location else { throw GraphCloudError.invalidConfiguration }
         if snapshot.usesSQLiteCoordination, !snapshot.usesAppGroupCoordination {
             // Keep the durable reference inventory, sweep, asset writes and save in one grant.
-            let batch = try await handle.controlTransaction { context in
+            let (batch, previousAssets) = try await handle.controlTransaction { context in
                 let prepared = try cloud.prepare(context, id, binding, maximum, limits, onlyIDs)
                 let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(
                     storeURL: storeURL, storeID: prepared.storeID))
                 let batch = try spool.freezeBlocking(prepared, identity: binding.identity,
                     check: StoreNativeContext.cancellationCheck(in: context))
                 try cloud.finishPrepared(context, id, binding, batch, limits)
-                return batch
+                return (batch, prepared.previousAssets)
             }
+            await removeSupersededAssets(previousAssets, from: batch)
             guard !retired else { throw GraphStoreError.closed }
             return batch
         }
         let stagingNamespace = snapshot.usesAppGroupCoordination ? UUID() : nil
-        let result = try await handle.preparedControlTransaction(
+        let (batch, previousAssets) = try await handle.preparedControlTransaction(
             prepare: { try cloud.prepare($0, id, binding, maximum, limits, onlyIDs) },
             materialize: { prepared, check in
                 let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: storeURL,
                                                                                               storeID: prepared.storeID))
-                return try await spool.freeze(prepared, identity: binding.identity,
-                                              stagingNamespace: stagingNamespace, check: check)
+                let batch = try await spool.freeze(prepared, identity: binding.identity,
+                                                   stagingNamespace: stagingNamespace, check: check)
+                return (batch, prepared.previousAssets)
             },
-            discard: { batch in
+            discard: { batch, _ in
                 guard let stagingNamespace, let root = batch.assetRoot,
                       let spool = try? GraphCloudAssetSpool(root: root) else { return }
                 let owned = batch.items.compactMap(\.assetReference).filter { $0.namespace == stagingNamespace }
                 await spool.remove(owned, retaining: [])
             },
-            finish: { context, batch in
-                try cloud.finishPrepared(context, id, binding, batch, limits)
-                return batch
+            finish: { context, result in
+                try cloud.finishPrepared(context, id, binding, result.0, limits)
+                return result
             })
+        await removeSupersededAssets(previousAssets, from: batch)
         guard !retired else { throw GraphStoreError.closed }
-        return result
+        return batch
     }
+
+    private func removeSupersededAssets(_ references: [GraphCloudAssetReference], from batch: GraphCloudOutgoingBatch) async {
+        guard !references.isEmpty, let root = batch.assetRoot, let spool = try? GraphCloudAssetSpool(root: root) else { return }
+        await spool.remove(references, retaining: batch.items.compactMap(\.assetReference))
+    }
+
     func commitTransport(_ binding: GraphCloudTransportBinding, receipts: [GraphCloudSentReceipt],
                          remoteAssets: [String: Data], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
         try begin(); defer { busy = false }

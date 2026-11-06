@@ -81,8 +81,11 @@ package struct GraphCloudPreparedOutgoing: Sendable {
     package let batch: GraphCloudOutgoingBatch
     package let storeID: String
     package let epoch: UUID
-    package init(batch: GraphCloudOutgoingBatch, storeID: String, epoch: UUID) {
+    let previousAssets: [GraphCloudAssetReference]
+    package init(batch: GraphCloudOutgoingBatch, storeID: String, epoch: UUID,
+                 previousAssets: [GraphCloudAssetReference] = []) {
         self.batch = batch; self.storeID = storeID; self.epoch = epoch
+        self.previousAssets = previousAssets
     }
 }
 
@@ -176,6 +179,8 @@ actor GraphCloudNativeOutbox {
                     guard let root = batch.assetRoot else { throw GraphCloudError.invalidState }
                     let spool = try GraphCloudAssetSpool(root: root)
                     try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: route)
+                    guard let byteCount = UInt64(exactly: reference.byteCount) else { throw GraphCloudError.invalidState }
+                    try GraphCloudAsset.validateNativeByteCount(byteCount)
                     let data = try await spool.read(reference, role: .outgoing, identity: reference.identity,
                                                     binding: route, recordName: item.recordName,
                                                     storeID: reference.storeID, epoch: reference.epoch)

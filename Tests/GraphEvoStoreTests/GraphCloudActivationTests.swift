@@ -15,6 +15,8 @@ actor ActivationServer {
     var ambiguousClaim = false
     var ambiguousPublication = false
     var failRecordOnce = false
+    private var sizeRejectedRecord: String?
+    func rejectSize(of record: GraphNodeID) { sizeRejectedRecord = "node." + record.rawValue.uuidString.lowercased() }
     func configure(offline: Bool = false, claim: Bool = false, publication: Bool = false, record: Bool = false) {
         self.offline = offline; ambiguousClaim = claim; ambiguousPublication = publication; failRecordOnce = record
     }
@@ -44,6 +46,10 @@ actor ActivationServer {
         try check(); sends += 1
         var saved: [GraphCloudIncoming] = [], deleted: [String] = [], failed: [GraphCloudRecordFailure] = []
         for item in batch.items {
+            if item.recordName == sizeRejectedRecord {
+                failed.append(.init(recordName: item.recordName, code: CKError.Code.limitExceeded.rawValue))
+                continue
+            }
             if failRecordOnce { failRecordOnce = false; failed.append(.init(recordName: item.recordName, code: CKError.networkFailure.rawValue)); continue }
             if let archive = item.recordArchive {
                 let record = try GraphCloudRecordCodec.restore(archive)
@@ -73,7 +79,11 @@ actor ActivationServer {
     nonisolated var service: GraphCloudActivationService {
         .init(ensureZone: { _, _ in try await self.check() }, fetch: { _, route in try await self.fetch(route) },
               save: { _, route, value, base in try await self.save(value, route: route, base: base) },
-              inventory: { _, _, route, _ in try await self.inventory(route) })
+              inventory: { configuration, _, route, _ in
+                  var inventory = try GraphCloudActivationInventory(sessionDirectory: configuration.directory)
+                  for record in try await self.inventory(route) { try inventory.store(record) }
+                  return inventory
+              })
     }
     nonisolated var adapter: GraphCloudAdapter {
         .init(activation: service, account: { _ in "synthetic-activation-account" }, make: { _, _, _, callback in
@@ -151,6 +161,36 @@ actor ActivationServer {
         _ = try await graph.transaction { try $0.patch(.init(id: id, properties: ["name": .set(.string("Later"))])) }
     }
 
+    @Test func inventoryRestartRemovesAnAbandonedSnapshotOnlyFromItsSession() throws {
+        let session = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: session) }
+        let root = session.appendingPathComponent("GraphEvoActivationInventory")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
+        let orphan = root.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: false,
+                                                 attributes: [.posixPermissions: 0o700])
+        try Data([1]).write(to: orphan.appendingPathComponent(UUID().uuidString))
+        let sibling = session.appendingPathComponent("session.json")
+        try Data([2]).write(to: sibling)
+        let inventory = try GraphCloudActivationInventory(sessionDirectory: session)
+        #expect(inventory.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: orphan.path))
+        #expect(try Data(contentsOf: sibling) == Data([2]))
+    }
+
+    @Test func seedRecordSizeRejectionIsReportedWithoutPublishing() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        await server.rejectSize(of: f.invoice)
+        _ = try await prepare(f)
+        let result = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+        #expect((result.operationError as? CKError)?.code == .limitExceeded)
+        #expect(result.status.phase != .published)
+        #expect(try await server.fetch(f.route)?.value.published == false)
+        try await close(f)
+    }
+
     @Test func preparesImmutableSeedBlocksAliasesAndPublishesBeforeUnlocking() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
@@ -178,10 +218,13 @@ actor ActivationServer {
         try await alias.close(); try await close(f)
     }
 
-    @Test func oversizedDataIsRefusedLocallyAndDoesNotClaimOrLockGraph() async throws {
+    @Test func explicitPayloadBudgetRefusesBeforeClaimingOrLockingGraph() async throws {
         let server = ActivationServer(), f = try await fixture(server, oversized: true)
         defer { try? FileManager.default.removeItem(at: f.root) }
-        await #expect(throws: GraphCloudNodeError.limitExceeded) { _ = try await prepare(f) }
+        await #expect(throws: GraphCloudActivationError.limitExceeded) {
+            _ = try await f.manager.prepareCloudActivation(for: f.graph.id, activationID: f.operation, zone: f.zone,
+                configuration: f.config, declaration: declaration, limits: .init(maximumPayloadBytes: 1))
+        }
         #expect(try await f.manager.cloudActivationStatus(for: f.graph.id) == nil)
         #expect(try await server.fetch(f.route) == nil)
         try await patch(f.graph, id: f.invoice)
@@ -248,6 +291,43 @@ actor ActivationServer {
         #expect(try await f.manager.cloudActivationStatus(for: f.graph.id)?.phase == .published)
         #expect(await server.sends == 2)
         try await close(f)
+    }
+
+    @Test func publishesAndRecoversSeedAboveTheFormerAggregatePayloadLimit() async throws {
+        let server = ActivationServer(), f = try await fixture(server)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let ids = (0..<36).map { _ in f.graph.makeNodeID() }
+        let value = String(repeating: "x", count: 720_000)
+        try await f.graph.transaction { scope in
+            for id in ids {
+                try scope.insert(GraphRecord(id: id, type: "Seed.Large", properties: ["value": .string(value)]))
+            }
+        }
+        let prepared = try await prepare(f)
+        var phase = prepared.phase
+        for _ in 0..<ids.count + 4 where phase != .published {
+            let result = try await f.manager.advanceCloudActivation(for: f.graph.id, configuration: f.config)
+            if let error = result.operationError { throw error }
+            phase = result.status.phase
+        }
+        #expect(phase == .published)
+        let sends = await server.sends
+        try await close(f)
+
+        let peer = manager()
+        let config = GraphCloudConfiguration(containerIdentifier: f.config.containerIdentifier, environment: .development,
+            directory: f.root.appendingPathComponent("LargePeerCloud"))
+        _ = try await peer.startCloudSession(config, adapter: server.adapter)
+        let opened = try await peer.openCloudReplica(id: f.graph.id, at: f.root.appendingPathComponent("LargePeer.sqlite"),
+            zone: f.zone, configuration: config)
+        let replica = try opened.opening.get()
+        #expect(try await replica.read { scope in
+            try ids.allSatisfy { try scope.record(for: $0)?.properties["value"] == .string(value) }
+        })
+        #expect(try await replica.collectSyncChanges() == 0)
+        #expect(await server.sends == sends)
+        try await replica.close()
+        try await peer.stopCloudSession(config)
     }
 
     @Test func emptyPeerRecoversExactIDsAndValuesWithoutUploadFeedback() async throws {
