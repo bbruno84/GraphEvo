@@ -253,6 +253,37 @@ private actor AssetBus {
         try await close(peer); try await close(owner)
     }
     @available(iOS 17, macOS 14, *)
+    @Test func liveHintLetsConsumerRescanImportedAttachmentWithoutAnOwnerEdit() async throws {
+        let bus = AssetBus(), graphID = GraphID()
+        let f = try await fixture(bus, id: graphID)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        let original = try await seed(f)
+        _ = try await f.manager.sendCloudChanges(for: graphID, configuration: f.config)
+        let metadata = original.metadata
+        let owner = try await f.graph.read { try $0.record(for: metadata.ownerID) }
+
+        let changes = try await f.graph.changes()
+        defer { changes.cancel() }
+        var hints = changes.makeAsyncIterator()
+        #expect(await hints.next()?.reason == .initial)
+        #expect(try await f.graph.attachment(metadata.id) == original)
+
+        let payload = try GraphAttachmentPayload(id: metadata.id, ownerID: metadata.ownerID,
+            fileName: metadata.fileName, contentType: metadata.contentType, data: Data([8, 6, 7]))
+        let native = try GraphCloudNodeCodec.encode(payload.graphRecord(), binding: f.binding)
+        try await bus.inject(GraphCloudRecordCodec.archive(native, scope: .private, portableAsset: true))
+        try await f.manager.fetchCloudChanges(.private, configuration: f.config)
+        _ = try await f.manager.applyCloudInbox(for: graphID, configuration: f.config)
+
+        let change = try #require(await hints.next())
+        #expect(change.graphID == graphID && change.reason != .initial && change.requiresRescan)
+        #expect(try await f.graph.attachment(metadata.id) == payload.content)
+        #expect(try await f.graph.read { try $0.record(for: metadata.ownerID) } == owner)
+        #expect(try await f.graph.collectSyncChanges() == 0)
+        try await close(f)
+    }
+
+    @available(iOS 17, macOS 14, *)
     @Test(arguments: [false, true])
     func replacementAndOwnerCascadeStayAtomic(_ legacy: Bool) async throws {
         let bus = AssetBus(), container = UUID().uuidString, id = GraphID()

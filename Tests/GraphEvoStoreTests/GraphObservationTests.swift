@@ -159,7 +159,6 @@ private actor WeakObservedStore {
         for version in 1...50 {
             try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: id, properties: ["version": .set(.integer(Int64(version)))])) }
         }
-        observation.refresh()
         #expect(try await waitForObservation(observation) { $0.items.first?.record.properties["version"] == .integer(50) }.items.count == 1)
         observation.cancel()
         let fresh = try await graph.observe(query)

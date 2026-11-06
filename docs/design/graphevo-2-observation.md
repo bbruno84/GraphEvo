@@ -160,6 +160,11 @@ file-heavy graphs and native remote/background/account/access-change coverage.
 Beta acceptance exercises the same contract on independent library fixtures:
 local and imported inserts, edits and deletions, relationship and attachment
 dependencies, writes during downtime, slow consumers, cancellation and reopening.
+The O04 regression suite uses independent SQLite graphs and injected CloudKit
+transport. It verifies live query refresh after import, initial query state
+after reopening, reconciliation of a disappeared ID, relationship membership
+and an attachment rescan after imported content replacement. A slow reader
+reaches the final committed state without manually requesting refresh.
 Migrated fixtures complement these cases. Full account/cache policy,
 app integration and mandatory v1 local/cloud migration still gate beta/stable
 under the delivery plan. A8 implementation is not permission to declare beta.
