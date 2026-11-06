@@ -72,7 +72,7 @@ package struct GraphStoreAdapter: Sendable {
 /// Independently closeable local graph handle. Public operations never expose native contexts.
 public actor GraphStore {
     public nonisolated let id: GraphID
-    let handle: StoreHandle
+    package let handle: StoreHandle
     private var publicContextLifetime: (any Sendable)?
     package var usesCoordinatedStore: Bool { ownerLease != nil }
 

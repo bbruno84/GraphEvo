@@ -32,6 +32,7 @@ extension GraphContextManager {
 
     func snapshotBackup(for id: GraphID, in root: URL, reason: String?, artifacts: [GraphBackupArtifact],
                         backupID: UUID? = nil, retentionOwner: UUID? = nil) async throws -> GraphBackup {
+        guard schema.identifier != GraphFileDisk.schemaIdentifier else { throw GraphFileError.unavailable }
         guard let location = locations[id] else { throw GraphStoreError.missingGraph }
         let graph = try await openGraph(id: id, at: location.url)
         var cloudHold: StoreReservation?, localHold: StoreReservation?

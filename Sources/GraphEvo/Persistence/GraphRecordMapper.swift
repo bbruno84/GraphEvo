@@ -24,7 +24,7 @@ package enum GraphRecordMapper {
                 endpoints = .action(subjects: Set(try subjects.map(referenceID)),
                                     objects: Set(try action.objects.map(referenceID)))
             case _ as Entity:
-                endpoints = .entity
+                endpoints = node.node is ManagedGraphFile ? .file : .entity
             default:
                 throw GraphModelError.unexpectedKind
             }

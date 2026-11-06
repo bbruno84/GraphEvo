@@ -8,7 +8,7 @@ the [probe procedure](../../Experiments/A6NativeProbe/README.md) and the
 The replacement custom backend adds [T04 CKAsset transport](graphevo-2-cloud-assets.md).
 The native-mirroring evidence below retains its original scope.
 
-## Future file primitive
+## Local file primitive candidate
 
 An attachment is a bounded binary value with one owning node. The consumer
 loads it as `Data`, and Core Data manages its persistence. Use this for
@@ -34,11 +34,14 @@ revisions once the store has established that no active preparation, read,
 or pending send still needs them. A backup captures the store and its
 referenced file revisions together.
 
-The local proof of concept exercised inferred S04 migration to a separate
-store, file endpoints, and exact entity queries. The lifecycle design
-still needs controlled tests for interruption between rename and commit,
-replacement during reads and uploads, and reclamation after deletion and
-reopening.
+The first increment selects an opt-in, local SQLite schema. It uses
+Core Data's inferred S04 mapping to a separate store and publishes the
+destination as a directory. Source owners must stop before migration.
+File revisions are currently prepared under the existing store writer
+admission. Reads use Foundation coordination on the exact revision and
+reclamation runs under the store writer grant. The live copy API captures
+and verifies the referenced revisions with the SQLite snapshot. Cloud
+publication remains a separate increment.
 
 ## Representation and ownership
 

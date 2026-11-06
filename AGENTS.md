@@ -610,6 +610,12 @@ Use whole-directory backups from a quiescent closed source for external content;
 SQLite/WAL/SHM/ledger copying alone cannot certify a complete attachment backup.
 No internal external-storage paths or fake progress/streaming states are public.
 
+The opt-in local file schema is a separate graph primitive. Follow the
+[file lifecycle](docs/design/graphevo-2-attachments.md#local-file-primitive-candidate):
+publish immutable revisions before committing their references. Reclamation
+must respect scoped readers and use the existing SQLite writer coordination.
+File-aware copies include referenced revisions and verify their digests.
+
 ## V2 bounded queries
 
 The non-mirrored S04 continuation uses

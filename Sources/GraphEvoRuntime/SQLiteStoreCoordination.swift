@@ -43,6 +43,30 @@ package enum SQLiteStoreCoordination {
         return directory
     }
 
+    /// A schema copy requires a stopped ordinary SQLite source for the entire native migration.
+    package static func withStoppedSource<Value: Sendable>(_ url: URL,
+        _ body: @escaping @Sendable (URL, CoordinatedFiles.CancellationCheck) throws -> Value
+    ) async throws -> Value {
+        let configuration = StoreConfiguration(location: .sqlite(url))
+        let resolved = try ResolvedStore(configuration)
+        guard let source = resolved.url, let file = try resolved.fileIdentity() else {
+            throw StoreRuntimeError.missingStore(url)
+        }
+        let gateway = try StoreGatewayLease.acquire(configuration, owner: UUID())
+        defer { gateway.release() }
+        let anchor = try directory(resolved)
+        let expected = try identity(anchor)
+        do {
+            return try await CoordinatedFiles.run([.delete(anchor)]) { check in
+                guard try identity(anchor) == expected, try resolved.fileIdentity() == file else {
+                    throw StoreRuntimeError.storeReplaced(source)
+                }
+                try AppGroupOwnerClaims.requireNoClaims(for: resolved, allowMissing: true)
+                return try body(source, check)
+            }
+        } catch is CoordinatedFiles.Denied { throw StoreRuntimeError.resourceReserved }
+    }
+
     /// A detached private stage can move or disappear only after its exact
     /// anchor has granted deletion and every native owner has detached.
     package static func withDetachedWorkspace(_ configuration: StoreConfiguration, destination: URL? = nil,

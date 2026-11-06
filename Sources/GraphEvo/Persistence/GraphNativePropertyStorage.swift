@@ -40,7 +40,8 @@ enum GraphNativePropertyStorage {
         model.versionIdentifiers = [identifier]; return model
     }
     static func enabled(_ context: NSManagedObjectContext) -> Bool {
-        context.persistentStoreCoordinator?.managedObjectModel.versionIdentifiers == [AnyHashable(identifier)]
+        let versions = context.persistentStoreCoordinator?.managedObjectModel.versionIdentifiers
+        return versions == [AnyHashable(identifier)] || versions == [AnyHashable(GraphFileDisk.schemaIdentifier)]
     }
     static func physicalKey(_ key: String) -> String {
         key.utf8.contains(0) ? keyPrefix + Data(key.utf8).base64EncodedString() : key

@@ -464,6 +464,7 @@ package enum GraphTypedStoreAdapter {
         }
 
         func kind(_ node: Node) -> GraphNodeKind {
+            if node.node is ManagedGraphFile { return .file }
             if node is Entity { return .entity }
             return node is Relationship ? .relationship : .action
         }
@@ -548,7 +549,7 @@ package enum GraphTypedStoreAdapter {
                 return entity
             }
             switch endpoints {
-            case .entity: return ([], [])
+            case .entity, .file: return ([], [])
             case .relationship(let subject, let object):
                 return (try subject.map { [try entity($0)] } ?? [], try object.map { [try entity($0)] } ?? [])
             case .action(let subjects, let objects):
@@ -568,7 +569,7 @@ package enum GraphTypedStoreAdapter {
             }
         }
 
-        func insert(_ record: GraphRecord) throws {
+        func insert(_ record: GraphRecord, file: GraphFile? = nil) throws {
             try requireWriteAccess()
             guard !isShared else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             try validate(record)
@@ -582,6 +583,17 @@ package enum GraphTypedStoreAdapter {
             let node: Node
             switch record.endpoints.kind {
             case .entity: node = Entity(record.type, graph: graph)
+            case .file:
+                guard let file, file.id == record.id, record.type == GraphFile.nodeType,
+                      context.persistentStoreCoordinator?.managedObjectModel.entitiesByName[ManagedGraphFile.entityName] != nil else {
+                    throw GraphFileError.unavailable
+                }
+                let native = NSEntityDescription.insertNewObject(forEntityName: ManagedGraphFile.entityName, into: context) as! ManagedGraphFile
+                native.type = GraphFile.nodeType
+                native.nodeClass = NodeClass.entity.rawValue
+                native.createdDate = Date()
+                native.apply(file)
+                node = Entity(managedNode: native)
             case .relationship: node = Relationship(record.type, graph: graph)
             case .action: node = Action(record.type, graph: graph)
             }
@@ -603,6 +615,7 @@ package enum GraphTypedStoreAdapter {
             guard patch.properties.keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.reservedName }
             try requireWriteAccess(completing: operationID)
             guard let node = try node(patch.id) else { throw GraphStoreError.missingNode }
+            guard !(node.node is ManagedGraphFile) else { throw GraphFileError.fixedMetadata }
             let current = try snapshot(node, id: patch.id)
             let updated = try patch.applying(to: current)
             if isShared {

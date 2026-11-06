@@ -17,19 +17,21 @@ public struct GraphNodeID: Sendable, Hashable, Codable {
 }
 
 public enum GraphNodeKind: Sendable, Equatable {
-    case entity, relationship, action
+    case entity, relationship, action, file
 }
 
 /// Optional relationship endpoints and empty action sets retain valid v1 shapes.
 /// References do not imply that their targets have already been resolved/imported.
 public enum GraphEndpoints: Sendable, Equatable {
     case entity
+    case file
     case relationship(subject: GraphNodeID?, object: GraphNodeID?)
     case action(subjects: Set<GraphNodeID>, objects: Set<GraphNodeID>)
 
     public var kind: GraphNodeKind {
         switch self {
         case .entity: return .entity
+        case .file: return .file
         case .relationship: return .relationship
         case .action: return .action
         }
@@ -37,7 +39,7 @@ public enum GraphEndpoints: Sendable, Equatable {
 
     var references: Set<GraphNodeID> {
         switch self {
-        case .entity: return []
+        case .entity, .file: return []
         case .relationship(let subject, let object): return Set([subject, object].compactMap { $0 })
         case .action(let subjects, let objects): return subjects.union(objects)
         }
@@ -59,6 +61,9 @@ public struct GraphRecord: Sendable, Equatable {
                 groups: Set<String> = [], createdDate: Date? = nil) throws {
         guard !type.isEmpty, properties.keys.allSatisfy({ !$0.isEmpty }) else {
             throw GraphModelError.invalidRecord("Type and property keys must be nonempty.")
+        }
+        guard endpoints.kind != .file || properties.isEmpty else {
+            throw GraphModelError.invalidRecord("A file has fixed metadata and no dynamic properties.")
         }
         guard endpoints.references.allSatisfy({ $0.graphID == id.graphID }) else {
             throw GraphModelError.crossGraphReference

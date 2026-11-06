@@ -68,7 +68,7 @@ package struct GraphDataMigrationRecord: Codable, Sendable {
     let version: Int64?
 
     static func kindName(_ kind: GraphNodeKind) -> String {
-        switch kind { case .entity: "entity"; case .relationship: "relationship"; case .action: "action" }
+        switch kind { case .entity: "entity"; case .file: "file"; case .relationship: "relationship"; case .action: "action" }
     }
     init(_ row: GraphDataMigrationRow) throws {
         let record = row.record
@@ -76,6 +76,7 @@ package struct GraphDataMigrationRecord: Codable, Sendable {
         kind = Self.kindName(record.endpoints.kind)
         switch record.endpoints {
         case .entity: subjects = []; objects = []
+        case .file: throw GraphFileError.localOnly
         case .relationship(let a, let b): subjects = a.map { [$0.rawValue] } ?? []; objects = b.map { [$0.rawValue] } ?? []
         case .action(let a, let b):
             subjects = a.map(\.rawValue).sorted { $0.uuidString < $1.uuidString }

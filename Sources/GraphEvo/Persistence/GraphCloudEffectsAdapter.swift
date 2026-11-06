@@ -68,7 +68,7 @@ extension GraphSyncCheckpointAdapter {
                         guard record.type != GraphAttachmentPayload.graphType else { throw GraphCloudError.invalidState }
                         guard record.id == item.change.id else { throw GraphCloudError.invalidState }
                         let kind: String
-                        switch record.endpoints { case .entity: kind = "ManagedEntity"; case .relationship: kind = "ManagedRelationship"; case .action: kind = "ManagedAction" }
+                        switch record.endpoints { case .file: throw GraphFileError.localOnly; case .entity: kind = "ManagedEntity"; case .relationship: kind = "ManagedRelationship"; case .action: kind = "ManagedAction" }
                         guard kind == item.change.nativeKind else { throw GraphCloudError.invalidState }
                     }
                 } else { guard item.recordArchive == nil, item.assetReference == nil else { throw GraphCloudError.invalidState } }

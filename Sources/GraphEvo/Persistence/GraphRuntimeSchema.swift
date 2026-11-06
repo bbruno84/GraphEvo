@@ -1,3 +1,4 @@
+import GraphEvoStore
 import CoreData
 import GraphEvoRuntime
 
@@ -28,6 +29,15 @@ package enum GraphRuntimeSchema {
     ) {
         GraphValueTransformer.register()
         return makeNativeModel()
+    }
+
+    static let localFiles = StoreSchema(
+        identifier: GraphFileDisk.schemaIdentifier,
+        entityVersionHashes: ManagedGraphFile.makeModel().entityVersionHashesByName,
+        requiredModelVersionIdentifier: GraphFileDisk.schemaIdentifier
+    ) {
+        GraphValueTransformer.register()
+        return ManagedGraphFile.makeModel()
     }
 
     /// S04 is selected only by the custom-sync coordinator; historical public factories retain S03.

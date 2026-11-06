@@ -348,6 +348,7 @@ extension GraphContextManager {
 
     /// Protect the original and return a complete, explicitly non-syncing editable copy.
     package func prepareMigrationWorkspace(for id: GraphID, at destination: URL) async throws -> GraphMigrationWorkspace {
+        guard schema.identifier != GraphFileDisk.schemaIdentifier else { throw GraphFileError.unavailable }
         guard let prepare = adapter.prepareWorkspace, let validate = adapter.validateBackup,
               let location = locations[id] else { throw GraphMigrationWorkspaceError.unavailable }
         let destination = try WorkspaceFiles.destination(destination, source: location.url)

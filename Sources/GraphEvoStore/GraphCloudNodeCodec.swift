@@ -95,6 +95,7 @@ package enum GraphCloudNodeCodec {
         let endpoints: Endpoints
         switch record.endpoints {
         case .entity: endpoints = .entity
+        case .file: throw GraphFileError.localOnly
         case .relationship(let subject, let object): endpoints = .relationship(subject: subject?.rawValue, object: object?.rawValue)
         case .action(let subjects, let objects):
             guard subjects.count <= limits.maximumCollectionItems, objects.count <= limits.maximumCollectionItems else { throw GraphCloudNodeError.limitExceeded }
@@ -106,7 +107,7 @@ package enum GraphCloudNodeCodec {
     }
 
     private static func kind(_ endpoints: GraphEndpoints) -> String {
-        switch endpoints { case .entity: return "entity"; case .relationship: return "relationship"; case .action: return "action" }
+        switch endpoints { case .file: return "file"; case .entity: return "entity"; case .relationship: return "relationship"; case .action: return "action" }
     }
 
     private static func native(_ systemFields: Data, limits: GraphCloudNodeLimits) throws -> CKRecord {
@@ -354,6 +355,7 @@ extension GraphCloudNodeCodec {
             guard let record = item.record, record.id == item.change.id else { throw GraphCloudNodeError.invalidBatch }
             let expected: String
             switch record.endpoints {
+            case .file: throw GraphFileError.localOnly
             case .entity: expected = "ManagedEntity"
             case .relationship: expected = "ManagedRelationship"
             case .action: expected = "ManagedAction"
