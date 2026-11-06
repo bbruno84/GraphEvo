@@ -172,7 +172,7 @@ uses S04 and its selected transport.
 | Remaining gate group | Existing implementation | Evidence or decision still needed |
 |---|---|---|
 | PA01/PA02/PA10: public API and supported runtime | Typed scopes/models, public H01 context/open/bootstrap, two independent Swift 6 consumers | Complete Swift 6 and distribution audit, supported OS/process matrix, API/schema reconciliation |
-| PA02: App Group | Package-only S04 runtime with Foundation grants and 30 physical iPad app/widget cycles using injected transport | Public process roles, interactive writes, CloudKit ownership, first-launch/migration and interrupted-owner recovery. Validate the selected public path with independent processes on the supported devices. |
+| PA02: App Group | Package-only S04 runtime with Foundation grants and 30 physical iPad app/widget cycles using injected transport | Implement the selected primary/secondary contract, first-launch/migration behavior and interrupted-owner recovery. Validate the public path with independent processes on the supported devices. |
 | PA03/PA04: cloud lifecycle | Public H02 invitations/sharing, default account isolation, foreground CloudKit claim release/resume, bounded device evidence | Final-pin H02 rejoin, protected data and independent-reader acceptance, structural conflict scope, broader interruption/restore and spool device validation |
 | PA05/PA06: supported costs | S04/P01–P03, #142 inventory reuse, #143 descriptor queries, #144 spool | Publish supported limits; broader device/capacity acceptance and beta performance measurements |
 | PA07: observation/processing | A8 async state, Combine and live rescan hints | O04 live processing versus durable replay, recovery contract and current-backend acceptance |
@@ -289,10 +289,11 @@ Sources: [model contracts](graphevo-2-application-models.md),
   supported read/write roles and which process owns CloudKit synchronization,
   cross-process change visibility/refresh, writer/intent coordination, and
   migration/first-launch behavior when the widget starts before the app.
-  A local read-only widget is a candidate baseline, not an agreed restriction;
-  interactive widget writes still require an explicit scope decision. Validate
-  on iOS with independent processes; same-process leases and two-device cloud
-  tests do not establish this contract.
+  The [selected process contract](graphevo-2-controlled-store-access.md#public-app-group-process-contract)
+  gives the primary process CloudKit and maintenance ownership. A secondary
+  process opens existing graphs in read-only mode by default, with explicit
+  opt-in for local writes. Validate on iOS with independent processes over one
+  replica.
 - [ ] **B** Audit the complete distributed Swift 6 boundary, including legacy
   targets still in Swift 5 mode, Sendable/isolation, context escape, public
   imports and independent UI/non-UI consumers; document retained limitations.

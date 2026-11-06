@@ -248,3 +248,51 @@ purge pending. PID, age and file absence are not release authority.
 The package does not expose App Group role selection or a production orphan
 recovery operation. See [PA02](graphevo-2-post-alpha-checklist.md) for remaining
 physical-device, public-role and CloudKit validation.
+
+## Public App Group process contract
+
+Selected 2026-11-06 for implementation. The consumer supplies an entitled App
+Group identifier and declares one of two roles when configuring its context.
+GraphEvo uses that declaration for App Group admission. Bundle classification
+remains a separate platform safeguard for existing CloudKit entry points.
+
+| Role | Admitted operations |
+|---|---|
+| Primary | Create and open a graph, read and write, connect CloudKit, and own explicit migration, maintenance and recovery. CloudKit session ownership follows the existing foreground and directory claim contract. |
+| Secondary | Open an existing graph for local reads. The consumer can explicitly enable short local transactions. Each invocation closes its lease when its work finishes. |
+
+An optional readable process label may accompany either role for diagnostics.
+The label contributes only to diagnostic presentation. Store location derives
+from the entitled container and graph ID. Admission derives from the declared
+role, access policy and existing store/account checks. Processes in the App
+Group must cooperate through the coordinated entry point.
+
+The secondary can use an available replica while the primary is active or
+backgrounded. A committed local write enters the primary's normal synchronization
+flow when it runs. A live invocation that reaches its execution budget before
+commit can cancel and report the outcome. Once a write commits, its result
+follows the existing commit boundary. A fresh invocation takes a new read scope
+to observe peer commits. Live invalidations can prompt a refresh while the
+consumer runs.
+
+If the secondary starts before the primary has created a graph, opening reports
+a missing store. An incompatible store, maintenance reservation, removal or
+unavailable protected data produces an explicit refusal. The primary owns any
+subsequent create, migration or recovery. For a synchronized graph, the same
+account and access isolation policy applies to both roles. The secondary can
+access data only when it can establish the required authorization under that
+policy. Unresolved account or permission evidence leaves the replica unavailable
+to that invocation.
+
+Foundation grants continue to provide interprocess exclusion. Durable owner
+registrations record pending lifecycle work. Close removes the registration
+after native detach succeeds. If an interruption leaves detach unverified,
+destructive maintenance stays pending until the exact prior owner and store
+generation can be verified under a separate recovery protocol.
+
+The public acceptance checkpoint covers independent iOS processes on one
+replica: missing-store startup, concurrent reads and admitted writes, peer
+commit visibility, background and reopen, contention with maintenance, and
+interrupted close. A synchronized replica also needs verified account/access
+behavior and primary publication of a secondary commit. The existing iPad
+cycles establish the package-only alternating app/widget lifecycle scope.

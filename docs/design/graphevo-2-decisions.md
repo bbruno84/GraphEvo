@@ -82,7 +82,7 @@ envelope decision remains open after this first local screen.
 |---|---|---|---|
 | O01 | How is the agreed coordinated cloud cutover established and verified, including pending writes and returning old devices? | M09 removes concurrent v1/v2 writing as a requirement but does not provide a distributed fence | Product choice resolved with the maintainer; technical mechanism remains open |
 | O02 | Which minimum OS/toolchain runtime matrix should stable v2 certify? | A1 needs Swift tools 6.0 but retains current OS floors; declared availability is not complete runtime verification | Continue availability review; validate/confirm the supported matrix before beta |
-| O03 | Which app/widget read/write roles and synchronization owner are supported on the same App Group graph? | Maintainer requires concurrent app/widget access before beta (2026-10-29); process-local ownership is insufficient. Read-only widget access is a candidate, while interactive writes remain a scope decision | Design, implement and validate iOS multiprocess behavior before beta under PA02; no current cross-process safety claim |
+| O03 | Which process roles and synchronization owner are supported on the same App Group graph? | Independent processes share local data under Foundation coordination. | Selected 2026-11-06. The consumer declares primary or secondary. The primary owns CloudKit and maintenance. Secondary access defaults to read-only with explicit opt-in for local writes. Public implementation and iOS multiprocess acceptance remain under PA02. |
 | O04 | Does processing require durable replay in the first 2.0? | Determines history retention, consumer cursors, acknowledgements and gap recovery | A8 supplies live invalidation plus explicit rescan as its alpha candidate; select stable scope during consolidation and do not conflate it with durable processing |
 | O05 | How are empty actions, detached optional edges and incomplete imported structures exposed? | The v1 migration must preserve valid optional forms without legitimizing damaged graphs | Inventory v1 fixtures and define domain invariants during A3/A4 |
 | O06 | Resolved by M13: no migration between incompatible alpha stores | Alphas start from empty stores; do not use them with a data-retention promise | Remove alpha conversion tooling from adoption gates; preserve v1 migration and beta rules |
@@ -111,6 +111,11 @@ read-only readers are implemented as a candidate path, with separate-process
 macOS evidence. This does not settle iOS sandbox/suspension or interactive writes;
 see [extension access](graphevo-2-app-extension-access.md). The maintainer rejects
 forcing concurrent native cloud synchronizers or unsafe lifetime locks.
+
+2026-11-06 O03 public contract: use explicit primary and secondary roles for
+App Group admission, independent of the process's bundle classification. An
+optional readable label is diagnostic metadata. See
+[public App Group process contract](graphevo-2-controlled-store-access.md#public-app-group-process-contract).
 
 
 2026-10-30 native migration boundary: GraphEvo owns native Core Data schema
