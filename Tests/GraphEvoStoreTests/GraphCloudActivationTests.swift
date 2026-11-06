@@ -79,8 +79,8 @@ actor ActivationServer {
     nonisolated var service: GraphCloudActivationService {
         .init(ensureZone: { _, _ in try await self.check() }, fetch: { _, route in try await self.fetch(route) },
               save: { _, route, value, base in try await self.save(value, route: route, base: base) },
-              inventory: { _, _, route, _ in
-                  var inventory = try GraphCloudActivationInventory()
+              inventory: { configuration, _, route, _ in
+                  var inventory = try GraphCloudActivationInventory(sessionDirectory: configuration.directory)
                   for record in try await self.inventory(route) { try inventory.store(record) }
                   return inventory
               })
@@ -159,6 +159,24 @@ actor ActivationServer {
     }
     private func patch(_ graph: GraphStore, id: GraphNodeID) async throws {
         _ = try await graph.transaction { try $0.patch(.init(id: id, properties: ["name": .set(.string("Later"))])) }
+    }
+
+    @Test func inventoryRestartRemovesAnAbandonedSnapshotOnlyFromItsSession() throws {
+        let session = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: session) }
+        let root = session.appendingPathComponent("GraphEvoActivationInventory")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
+        let orphan = root.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: false,
+                                                 attributes: [.posixPermissions: 0o700])
+        try Data([1]).write(to: orphan.appendingPathComponent(UUID().uuidString))
+        let sibling = session.appendingPathComponent("session.json")
+        try Data([2]).write(to: sibling)
+        let inventory = try GraphCloudActivationInventory(sessionDirectory: session)
+        #expect(inventory.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: orphan.path))
+        #expect(try Data(contentsOf: sibling) == Data([2]))
     }
 
     @Test func seedRecordSizeRejectionIsReportedWithoutPublishing() async throws {

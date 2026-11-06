@@ -80,7 +80,8 @@ native activation metadata. Source native inventory and consulted zone changes
 each have a count budget of 100,000. The default permits any aggregate payload
 that fits local resources. An explicit preflight payload budget is still
 available. Cloud verification stores record envelopes in a temporary disk
-inventory and validates the complete cut. Replica recovery applies the verified
+inventory and validates the complete cut. A later inventory pass sweeps abandoned
+snapshots under the session directory lease and private scope gate. Replica recovery applies the verified
 cut in windows that respect the session inbox budgets, importing endpoints
 before edges and owners before attachments. The write gate stays closed until
 the complete replica passes validation.

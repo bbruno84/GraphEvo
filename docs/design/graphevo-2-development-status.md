@@ -35,9 +35,13 @@ GraphEvoDemo `develop` pins `e0f2a07c` through
 [Demo PR #5](https://github.com/bbruno84/GraphEvoDemo/pull/5). The pin passed
 12 public v2 model tests and an iOS Simulator build. The physical H02 checkpoint
 on this pin still needs to verify leave and reinvitation without restarting.
-The next library delivery decisions cover representative v1 migration and
-independent recovery, observation and processing, and supported query and
-attachment limits.
+[PR #185](https://github.com/bbruno84/GraphEvo/pull/185) integrates bounded
+CloudKit requests and windowed first-publication recovery. The
+[representative v1 result](results/representative-v1-cloud-migration-2026-11-06.md)
+records 1,577 converted and recovered MyHomeBills nodes using the private
+Development database on a physical iPad. Historical source coverage and
+production cutover remain open. The next library delivery decisions cover
+observation and processing, and supported query and attachment limits.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 

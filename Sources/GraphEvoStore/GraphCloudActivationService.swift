@@ -1,4 +1,5 @@
 import CloudKit
+import Darwin
 import Foundation
 import GraphEvoModel
 
@@ -6,11 +7,31 @@ import GraphEvoModel
 struct GraphCloudActivationInventory: Sendable {
     private final class Directory: Sendable {
         let url: URL
-        init() throws {
-            url = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvoActivation-" + UUID().uuidString)
+
+        // The session directory lease and private scope gate exclude another inventory worker.
+        init(sessionDirectory: URL) throws {
+            let root = sessionDirectory.appendingPathComponent("GraphEvoActivationInventory", isDirectory: true)
+            let created = Darwin.mkdir(root.path, 0o700)
+            guard created == 0 || errno == EEXIST else { throw GraphCloudError.persistence }
+            try Self.checkPrivateDirectory(root)
+            for orphan in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
+                guard UUID(uuidString: orphan.lastPathComponent)?.uuidString == orphan.lastPathComponent else {
+                    throw GraphCloudError.invalidState
+                }
+                try Self.checkPrivateDirectory(orphan)
+                try FileManager.default.removeItem(at: orphan)
+            }
+            url = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false,
                                                     attributes: [.posixPermissions: 0o700])
         }
+
+        private static func checkPrivateDirectory(_ url: URL) throws {
+            var value = stat()
+            guard lstat(url.path, &value) == 0, (value.st_mode & S_IFMT) == S_IFDIR,
+                  value.st_uid == getuid(), value.st_mode & 0o077 == 0 else { throw GraphCloudError.invalidState }
+        }
+
         deinit { try? FileManager.default.removeItem(at: url) }
     }
     private let directory: Directory
@@ -19,7 +40,7 @@ struct GraphCloudActivationInventory: Sendable {
     var isEmpty: Bool { files.isEmpty }
     var count: Int { files.count }
 
-    init() throws { directory = try Directory() }
+    init(sessionDirectory: URL) throws { directory = try Directory(sessionDirectory: sessionDirectory) }
 
     mutating func store(_ value: GraphCloudIncoming) throws {
         guard let name = value.recordName else { throw GraphCloudActivationError.invalidState }
@@ -67,7 +88,7 @@ struct GraphCloudActivationService: Sendable {
         let namespace = UUID()
         let zoneID = GraphCloudAuthorityCodec.id(binding).zoneID
         var token: CKServerChangeToken?
-        var current = try GraphCloudActivationInventory()
+        var current = try GraphCloudActivationInventory(sessionDirectory: config.directory)
         var consulted = 0
         repeat {
             try Task.checkCancellation()
