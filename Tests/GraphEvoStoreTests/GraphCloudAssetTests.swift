@@ -60,6 +60,22 @@ private actor AssetBus {
 }
 
 @Suite(.timeLimit(.minutes(3))) struct GraphCloudAssetTests {
+    @Test func nativeAssetCeilingIsCheckedBeforeReadingTheFile() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data().write(to: file, options: .withoutOverwriting)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let handle = try FileHandle(forWritingTo: file)
+        defer { try? handle.close() }
+
+        try GraphCloudAsset.validateNativeByteCount(50_000_000_000)
+        try handle.truncate(atOffset: 50_000_000_000)
+        let asset = CKAsset(fileURL: file)
+        #expect(throws: GraphCloudError.inboxLimit) { try GraphCloudAsset.bytes(asset) }
+
+        try handle.truncate(atOffset: 50_000_000_001)
+        #expect(throws: GraphCloudError.assetSizeLimitExceeded) { try GraphCloudAsset.bytes(asset) }
+    }
+
     private struct Fixture {
         let directory: URL
         let graph: GraphStore

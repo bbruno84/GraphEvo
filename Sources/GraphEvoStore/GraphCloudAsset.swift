@@ -4,8 +4,16 @@ import GraphEvoModel
 
 /// Portable archives retain bounded bytes, never an SDK staging URL. Native files exist only during a send.
 package enum GraphCloudAsset {
+    // Native CKAsset limit confirmed by Apple Developer Forums thread 827897.
+    static let maximumNativeByteCount: UInt64 = 50_000_000_000
+
+    static func validateNativeByteCount(_ count: UInt64) throws {
+        guard count <= maximumNativeByteCount else { throw GraphCloudError.assetSizeLimitExceeded }
+    }
+
     static func bytes(_ value: Any?) throws -> Data {
         if let data = value as? Data {
+            try validateNativeByteCount(UInt64(data.count))
             guard data.count <= GraphAttachmentPayload.maximumByteCount else { throw GraphCloudError.inboxLimit }
             return data
         }
@@ -13,6 +21,10 @@ package enum GraphCloudAsset {
               try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { throw GraphCloudError.invalidState }
         let file = try FileHandle(forReadingFrom: url)
         defer { try? file.close() }
+        let size = try file.seekToEnd()
+        try validateNativeByteCount(size)
+        guard size <= UInt64(GraphAttachmentPayload.maximumByteCount) else { throw GraphCloudError.inboxLimit }
+        try file.seek(toOffset: 0)
         var data = Data()
         while true {
             try Task.checkCancellation()

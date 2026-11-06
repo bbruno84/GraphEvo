@@ -121,10 +121,12 @@ IDs remain protected. Restoring mismatched session/native backups is not certifi
 ## Bounds and result meaning
 
 Creation selects at most 250 combined saves and deletes per frozen attempt, as
-documented for CKSyncEngine. A caller may choose fewer. The batcher uses CloudKit's
-2,000,000 byte guideline and counts encoded fields and estimated operation
-metadata. Asset bodies are excluded and retain their separate bounds.
-A record estimated above Apple's 1 MB limit is logged and sent separately.
+documented for CKSyncEngine. A caller may choose fewer. The batcher targets
+1,800,000 estimated bytes, leaving 10% headroom below Apple's 2,000,000 byte
+guideline. The estimate includes encoded fields and operation metadata.
+A record estimated above 900,000 bytes is logged and sent separately, allowing
+the same margin below Apple's 1 MB record limit. Asset bodies are excluded from
+this request budget and checked against the separate native asset ceiling.
 The codec has no default inline payload cutoff. Explicit caller budgets and
 durable storage limits still apply.
 CloudKit remains the authority on the size of a submitted record.

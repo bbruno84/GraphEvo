@@ -130,7 +130,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         let bus = TransportBus(), namespace = UUID().uuidString
         let sender = try await fixture(bus: bus, container: namespace)
         defer { try? FileManager.default.removeItem(at: sender.directory) }
-        let sizes = [400_000, 400_000, 400_000, 400_000, 760_000, 10]
+        let sizes = [460_000, 460_000, 460_000, 460_000, 720_000, 10]
         var expected: [GraphRecord] = []
         for size in sizes {
             let record = try GraphRecord(id: sender.graph.makeNodeID(), type: "Item",
@@ -139,12 +139,12 @@ private final class TransportFailureSwitch: @unchecked Sendable {
             expected.append(record)
         }
 
-        for count in [3, 1, 1, 1] {
+        for count in [2, 2, 1, 1] {
             let report = try await sender.manager.sendCloudChanges(for: sender.graph.id, configuration: sender.config)
             #expect(report.succeeded == count && report.failures.isEmpty && report.transportError == nil)
         }
         let names = try expected.map { try GraphCloudNodeCodec.recordID(for: $0.id, binding: sender.binding.route).recordName }
-        #expect(bus.offers == [Array(names.prefix(3)), [names[3]], [names[4]], [names[5]]])
+        #expect(bus.offers == [Array(names.prefix(2)), Array(names[2...3]), [names[4]], [names[5]]])
         try await sender.manager.stopCloudSession(sender.config)
 
         let peer = try await fixture(bus: bus, container: namespace, graphID: sender.graph.id)
