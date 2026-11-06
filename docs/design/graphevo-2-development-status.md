@@ -1,12 +1,30 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-05. This is the single entry point for **integrated work,
+Updated: 2026-11-06. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
-## Latest physical checkpoint — durable spool, 2026-11-04
+## Current position — 2026-11-06
+
+The v2 integration line is `b5c6f3b9` through
+[PR #177](https://github.com/bbruno84/GraphEvo/pull/177). It includes the
+Foundation store coordination work, foreground ownership of the CloudKit
+session, the Xcode 16.4 Core Data compatibility fix and serial hosted v2
+checkpoints. The [full checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/42174675689)
+passed on `c9f2aa32`, whose contents match the squash merge. macOS passed 1,050
+tests and both Swift 6 consumers. iOS 18.5 passed 1,048 tests with one skip.
+
+The [current delivery plan](graphevo-2-delivery-plan.md#current-delivery-position--audited-2026-11-06)
+puts the public App Group contract next. The integrated runtime has package-only
+entry and bounded physical iPad app/widget evidence. Public process roles,
+first-launch behavior, independent-process acceptance and production
+abandoned-owner recovery remain open. The Demo `develop` branch currently pins
+`6432e595`. Its next H02 physical checkpoint uses the reviewed library revision
+and checks rejoining after leave without restarting.
+
+## Earlier physical checkpoint — durable spool, 2026-11-04
 
 The [private device result](results/durable-asset-spool-device-2026-11-04.md)
 verifies 40 MiB plus empty/control assets, serialized complex values, durable
@@ -16,8 +34,7 @@ one overbroad probe assertion fails on unrelated zone lifecycle events and is
 retained alongside its read-only continuation. No shipping runtime change or
 failed-stage replay occurs. This advances only the bounded #144 private device
 checkpoint; broad beta, production, in-flight interruption and shared-account
-acceptance remain open. Public coordinated host integration remains next in the
-audited delivery recommendation. Protocol/evidence integrate through
+acceptance remain open. Protocol/evidence integrate through
 [PR #146](https://github.com/bbruno84/GraphEvo/pull/146), with reviewed
 [full checkpoint #41782215684](https://github.com/bbruno84/GraphEvo/actions/runs/41782215684)
 on `db80d8cd`: 993 macOS functions, 990 passed iOS functions with the known skip
@@ -28,10 +45,8 @@ shipping, bridge/helper, test, consumer and workflow inputs.
 
 The [audit](results/roadmap-audit-2026-11-03.md) reconciles integrated #144
 (`38f24f6`) with the delivery plan, checklist, code and retained reports. The
-[current delivery position](graphevo-2-delivery-plan.md#current-delivery-position--audited-2026-11-03)
-separates implemented alpha work, remaining public integration and beta/stable
-acceptance. It supersedes pending-work summaries in historical sections below;
-no new implementation, acceptance result or release is implied by this audit.
+[historical delivery audit](graphevo-2-delivery-plan.md#historical-delivery-audit--2026-11-03)
+retains that checkpoint's implementation and acceptance scope.
 
 ## Current focused work
 

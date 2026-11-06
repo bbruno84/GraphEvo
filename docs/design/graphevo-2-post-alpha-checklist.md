@@ -159,29 +159,28 @@ review and the migration feasibility review precede consolidation; they are not 
 calling this a post-alpha checklist. No release branch or tag follows from
 creating this document.
 
-## Current gate interpretation — audited 2026-11-03
+## Current gate interpretation — audited 2026-11-06
 
-The [audit and evidence map](results/roadmap-audit-2026-11-03.md) is pinned to
-integrated #144. Unchecked B/R items below are broad acceptance obligations;
-they must not be read as proof that their implementation is absent. Dated S01,
-S03, native-mirroring and early T01 text retains its historical tested scope.
-The selected custom-sync store uses S04; old-model device evidence is not
-transferred automatically to a newer transport or schema.
+The [current delivery plan](graphevo-2-delivery-plan.md#current-delivery-position--audited-2026-11-06)
+is pinned to `b5c6f3b9` through [#177](https://github.com/bbruno84/GraphEvo/pull/177).
+Unchecked B/R items track broad acceptance, including cases with integrated
+implementation. The [earlier evidence map](results/roadmap-audit-2026-11-03.md)
+retains its #144 baseline. Dated S01, S03, native-mirroring and early T01 results
+apply to their tested models and transports. Current custom-sync acceptance
+uses S04 and its selected transport.
 
 | Remaining gate group | Existing implementation | Evidence or decision still needed |
 |---|---|---|
-| PA01/PA02/PA10: public API and supported runtime | Typed scopes/models, package-only ContextManager, cooperating-process locks | Public coordinated opening/bootstrap, complete Swift 6 audit, OS/process matrix, API/schema reconciliation |
-| PA02: app/widget | Read-only/process safeguards and bounded earlier App Group evidence | Current custom-sync app/widget roles, interactive-write scope, first-launch/migration and physical multiprocess acceptance |
-| PA03/PA04: cloud lifecycle | T01–T08 transport, conflicts, pause, foreground scheduling, sharing and lifecycle | Account/cache policy, public invitation integration, structural conflict scope, broader interruption/restore and spool device acceptance beyond the bounded private checkpoint |
+| PA01/PA02/PA10: public API and supported runtime | Typed scopes/models, public H01 context/open/bootstrap, two independent Swift 6 consumers | Complete Swift 6 and distribution audit, supported OS/process matrix, API/schema reconciliation |
+| PA02: App Group | Package-only S04 runtime with Foundation grants and 30 physical iPad app/widget cycles using injected transport | Public process roles, interactive writes, CloudKit ownership, first-launch/migration and interrupted-owner recovery. Validate the selected public path with independent processes on the supported devices. |
+| PA03/PA04: cloud lifecycle | Public H02 invitations/sharing, default account isolation, foreground CloudKit claim release/resume, bounded device evidence | Final-pin H02 rejoin, protected data and independent-reader acceptance, structural conflict scope, broader interruption/restore and spool device validation |
 | PA05/PA06: supported costs | S04/P01–P03, #142 inventory reuse, #143 descriptor queries, #144 spool | Publish supported limits; broader device/capacity acceptance and beta performance measurements |
 | PA07: observation/processing | A8 async state, Combine and live rescan hints | O04 live processing versus durable replay, recovery contract and current-backend acceptance |
-| PA08/PA09: migration/recovery | MF01–MF11 bounded protected execution, backups, conversion and authoritative new-cloud bootstrap | Public flow, historical/production source matrix, host old-client cutover, interruption and restoration acceptance |
+| PA08/PA09: migration/recovery | MF01–MF11, public staged v1 bootstrap and private recovery, coordinated native conversion, workspace publication and backup catalog | Representative v1 end-to-end proof, historical/production source matrix, host old-client cutover, interruption and restoration acceptance |
 | PA10: stable release | Independent consumers and reviewed CI checkpoints | Real application adoption, full production acceptance, distribution and release evidence (R) |
 
-No broad B/R gate closes solely through this audit. Background scheduling and
-interactive widget writes require explicit scope decisions; this audit neither
-adds them as mandatory features nor excludes them. Real application adoption
-remains R; a pre-beta application pilot is a recommendation, not a moved gate.
+The broader B/R gates stay open. Background scheduling and interactive widget
+writes require explicit scope decisions. Real application adoption remains R.
 
 ## Consolidation evidence
 
