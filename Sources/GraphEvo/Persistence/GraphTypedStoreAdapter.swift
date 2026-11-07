@@ -504,7 +504,7 @@ package enum GraphTypedStoreAdapter {
                 // source inventories headers separately with dictionary projections.
                 let properties = propertyKeys?.isEmpty == true ? [:] : try GraphNativePropertyStorage.properties(node, keys: propertyKeys, charge: chargingBytes)
                 return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: properties,
-                                       tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+                                       tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file)
             }
             var properties = raw.properties.filter { !$0.key.hasPrefix(prefix) }
             for key in try encodedKeys(node) where propertyKeys == nil || propertyKeys!.contains(key) {
@@ -512,7 +512,7 @@ package enum GraphTypedStoreAdapter {
                 properties[key] = try GraphValueCodec.decode(data)
             }
             return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: properties,
-                                   tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+                                   tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file)
         }
 
         func record(_ id: GraphNodeID) throws -> GraphRecord? {

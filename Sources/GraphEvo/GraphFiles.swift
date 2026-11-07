@@ -168,7 +168,9 @@ extension GraphContext {
                     sourceContext.persistentStoreCoordinator = sourceCoordinator
                     try sourceContext.performAndWait {
                         let root = try GraphTypedStoreAdapter.controlRoot(sourceContext, id: GraphID(rawValue: rawID))
-                        guard root[dynamicMember: GraphCloudAccountNative.key] == nil else { throw GraphFileError.localOnly }
+                        guard root[dynamicMember: GraphCloudAccountNative.key] == nil,
+                              root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] == nil,
+                              root[dynamicMember: GraphCloudActivationNative.key] == nil else { throw GraphFileError.localOnly }
                     }
                     try sourceCoordinator.remove(sourceStore)
                     let mapping = try NSMappingModel.inferredMappingModel(forSourceModel: old, destinationModel: new)
@@ -177,9 +179,9 @@ extension GraphContext {
                     try check()
                     try migration.migrateStore(from: source, sourceType: NSSQLiteStoreType,
                         options: [NSReadOnlyPersistentStoreOption: true], with: mapping, toDestinationURL: staged,
-                        destinationType: NSSQLiteStoreType, destinationOptions: nil)
+                        destinationType: NSSQLiteStoreType, destinationOptions: [NSPersistentHistoryTrackingKey: true])
                     let coordinator = NSPersistentStoreCoordinator(managedObjectModel: new)
-                    let store = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: staged)
+                    let store = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: staged, options: [NSPersistentHistoryTrackingKey: true])
                     var migrated = coordinator.metadata(for: store)
                     migrated[StoreNativeContext.historySyncGraphKey] = text
                     coordinator.setMetadata(migrated, for: store)
@@ -189,6 +191,7 @@ extension GraphContext {
                         let graphID = GraphID(rawValue: rawID)
                         try GraphCoordinatorFactory.adapter.initialize(context, graphID, false)
                         _ = try GraphNativeIdentityDatabaseAdapter.validate(context, graphID: graphID)
+                        try GraphSyncCheckpointAdapter.seedLocalSchemaCopy(context, graphID: graphID)
                     }
                     try coordinator.remove(store)
                     try check()
@@ -210,6 +213,12 @@ extension GraphStore {
             let url = try await ManagedGraphFile.publishStore(into: destination) { staged in
                 try await self.handle.copyStore(to: staged, reservation: reservation) { context, target, check in
                     try ManagedGraphFile.copyFiles(context, graphID: graphID, to: target, check: check)
+                    guard let coordinator = context.persistentStoreCoordinator, let source = coordinator.persistentStores.first,
+                          let url = source.url, let storeID = coordinator.metadata(for: source)[NSStoreUUIDKey] as? String else {
+                        throw GraphFileError.unavailable
+                    }
+                    let spool = try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: url, storeID: storeID))
+                    try spool.copyOwnedRoot(to: GraphCloudAssetSpool.outgoingRoot(storeURL: target, storeID: storeID), check: check)
                 }
             }
             await reservation.release()

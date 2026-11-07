@@ -51,6 +51,7 @@ public struct GraphRecord: Sendable, Equatable {
     public let id: GraphNodeID
     public let type: String
     public let endpoints: GraphEndpoints
+    public let file: GraphFile?
     public let properties: [String: GraphValue]
     public let tags: Set<String>
     public let groups: Set<String>
@@ -58,16 +59,20 @@ public struct GraphRecord: Sendable, Equatable {
 
     public init(id: GraphNodeID, type: String, endpoints: GraphEndpoints = .entity,
                 properties: [String: GraphValue] = [:], tags: Set<String> = [],
-                groups: Set<String> = [], createdDate: Date? = nil) throws {
+                groups: Set<String> = [], createdDate: Date? = nil, file: GraphFile? = nil) throws {
         guard !type.isEmpty, properties.keys.allSatisfy({ !$0.isEmpty }) else {
             throw GraphModelError.invalidRecord("Type and property keys must be nonempty.")
         }
         guard endpoints.kind != .file || properties.isEmpty else {
             throw GraphModelError.invalidRecord("A file has fixed metadata and no dynamic properties.")
         }
+        guard file == nil || (endpoints == .file && file?.id == id && type == GraphFile.nodeType) else {
+            throw GraphModelError.invalidRecord("File metadata must match its node.")
+        }
         guard endpoints.references.allSatisfy({ $0.graphID == id.graphID }) else {
             throw GraphModelError.crossGraphReference
         }
+        self.file = file
         self.id = id
         self.type = type
         self.endpoints = endpoints

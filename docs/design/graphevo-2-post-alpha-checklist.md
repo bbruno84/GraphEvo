@@ -1232,3 +1232,15 @@ runner unavailability is recorded without blocking an authorized, locally
 verified alpha merge. Actual failures remain investigated and recorded. Required
 beta/release and published-tag remote gates remain open until actually passed.
 This scheduling policy closes no acceptance box or physical-device gate.
+
+## File synchronization continuation
+
+- [ ] Validate physical cross-account File sharing, permission changes and
+  interruption during native asset transfer.
+- [ ] Measure large File copy, hashing, writer occupancy and disk headroom on
+  representative devices. The 50 GB transport ceiling remains distinct from
+  the verified 25 MiB fixture.
+
+The [File transport candidate](graphevo-2-file-sync.md) covers durable
+outgoing/incoming copies, conflict handling and a private physical import
+and replacement checkpoint on iPad.

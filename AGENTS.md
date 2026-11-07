@@ -615,6 +615,10 @@ The opt-in local file schema is a separate graph primitive. Follow the
 publish immutable revisions before committing their references. Reclamation
 must respect scoped readers and use the existing SQLite writer coordination.
 File-aware copies include referenced revisions and verify their digests.
+[File synchronization](docs/design/graphevo-2-file-sync.md) adds format 4
+records over the existing CloudKit fields. Preserve streamed spool staging,
+fixed metadata, pending revision ownership and file-aware backups. SDK
+asset URLs are transient and must be frozen before durable publication.
 
 ## V2 bounded queries
 

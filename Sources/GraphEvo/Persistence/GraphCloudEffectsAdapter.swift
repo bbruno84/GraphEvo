@@ -54,7 +54,7 @@ extension GraphSyncCheckpointAdapter {
                 guard item.change.id.graphID == binding.route.graphID, item.change.generation > 0,
                       item.change.generation <= value.state.transaction,
                       item.recordName == (try GraphCloudNodeCodec.recordID(for: item.change.id, binding: binding.route)).recordName,
-                      ["ManagedEntity", "ManagedRelationship", "ManagedAction"].contains(item.change.nativeKind) else { throw GraphCloudError.invalidState }
+                      ["ManagedEntity", "ManagedRelationship", "ManagedAction", "ManagedGraphFile"].contains(item.change.nativeKind) else { throw GraphCloudError.invalidState }
                 if item.change.operation == .save {
                     if let reference = item.assetReference {
                         try reference.validate(role: .outgoing, identity: binding.identity, binding: binding.route,
@@ -62,13 +62,13 @@ extension GraphSyncCheckpointAdapter {
                         guard let archive = item.recordArchive else { throw GraphCloudError.invalidState }
                         let native = try GraphCloudRecordCodec.restore(archive)
                         try GraphCloudNodeCodec.validateReferenceArchive(native, reference: reference, binding: binding.route)
-                        guard item.change.nativeKind == "ManagedEntity" else { throw GraphCloudError.invalidState }
+                        guard item.change.nativeKind == (reference.isFile == true ? "ManagedGraphFile" : "ManagedEntity") else { throw GraphCloudError.invalidState }
                     } else {
                         let record = try original(item, route: binding.route)
                         guard record.type != GraphAttachmentPayload.graphType else { throw GraphCloudError.invalidState }
                         guard record.id == item.change.id else { throw GraphCloudError.invalidState }
                         let kind: String
-                        switch record.endpoints { case .file: throw GraphFileError.localOnly; case .entity: kind = "ManagedEntity"; case .relationship: kind = "ManagedRelationship"; case .action: kind = "ManagedAction" }
+                        switch record.endpoints { case .file: kind = "ManagedGraphFile"; case .entity: kind = "ManagedEntity"; case .relationship: kind = "ManagedRelationship"; case .action: kind = "ManagedAction" }
                         guard kind == item.change.nativeKind else { throw GraphCloudError.invalidState }
                     }
                 } else { guard item.recordArchive == nil, item.assetReference == nil else { throw GraphCloudError.invalidState } }
@@ -92,7 +92,7 @@ extension GraphSyncCheckpointAdapter {
     private static func affected(_ context: NSManagedObjectContext, id: GraphID) throws -> Set<GraphNodeID> {
         var result = Set<GraphNodeID>()
         for row in context.insertedObjects.union(context.updatedObjects).union(context.deletedObjects) {
-            if [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName].contains(row.entity.name ?? "") {
+            if [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName, ManagedGraphFile.entityName].contains(row.entity.name ?? "") {
                 if let value = try identity(row, graphID: id) { result.insert(value) }
             } else if row.entity.relationshipsByName["node"] != nil, let owner = row.value(forKey: "node") as? NSManagedObject,
                       let value = try identity(owner, graphID: id) { result.insert(value) }
@@ -102,11 +102,11 @@ extension GraphSyncCheckpointAdapter {
     private static func originalNode(_ item: GraphCloudOutgoingNode, route: GraphCloudBinding,
                                      resolvedAssets: [String: Data] = [:]) throws -> GraphCloudDecodedNode {
         guard let bytes = item.recordArchive, let native = try? GraphCloudRecordCodec.restore(bytes) else { throw GraphCloudError.invalidState }
-        if item.assetReference != nil {
+        if let reference = item.assetReference, reference.isFile != true {
             guard let data = resolvedAssets[item.recordName] else { throw GraphCloudError.invalidState }
             native["asset"] = data as CKRecordValue
         }
-        return try GraphCloudNodeCodec.decode(native, binding: route)
+        return try GraphCloudNodeCodec.decode(native, binding: route, allowMissingFileContent: true)
     }
 
     /// Decisions and effects are recomputed under the writer gate from current local state.
@@ -153,11 +153,13 @@ extension GraphSyncCheckpointAdapter {
         let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
         func rank(_ node: GraphCloudDecodedNode) -> Int {
             if node.record.type == GraphAttachmentPayload.graphType { return 2 }
-            return node.record.endpoints.kind == .entity ? 0 : 1
+            return [.entity, .file].contains(node.record.endpoints.kind) ? 0 : 1
         }
         for remote in saves.sorted(by: { rank($0) == rank($1) ? $0.record.id.rawValue.uuidString < $1.record.id.rawValue.uuidString : rank($0) < rank($1) }) {
             let record = remote.record
-            if let old = try session.record(record.id) {
+            if record.endpoints == .file {
+                try ManagedGraphFile.installRemote(remote, session: session)
+            } else if let old = try session.record(record.id) {
                 guard old.type == record.type, old.endpoints.kind == record.endpoints.kind else { throw GraphCloudNodeError.invalidRecord }
                 var changes = record.properties.mapValues { GraphPropertyChange.set($0) }
                 for key in old.properties.keys where record.properties[key] == nil { changes[key] = .remove }
@@ -173,7 +175,7 @@ extension GraphSyncCheckpointAdapter {
         context.processPendingChanges()
         let protected = Set(pending.keys).subtracting(cleared)
         guard protected.isDisjoint(with: try affected(context, id: id)) else { throw GraphSyncError.pendingImport }
-        for row in context.deletedObjects where [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName].contains(row.entity.name ?? "") {
+        for row in context.deletedObjects where [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName, ManagedGraphFile.entityName].contains(row.entity.name ?? "") {
             if let target = try identity(row, graphID: id) { deleted.insert(target.rawValue.uuidString) }
         }
         value.state.pending.removeAll { cleared.contains($0.id) }
@@ -218,10 +220,16 @@ extension GraphSyncCheckpointAdapter {
             var items: [GraphCloudOutgoingNode] = []
             var sizing = GraphCloudBatchSizing()
             var remainingAssetBytes = 32 * 1024 * 1024
+            var fileSources: [String: URL] = [:]
             let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
             for change in value.state.pending.sorted(by: ordered).filter({ onlyIDs?.contains($0.id) ?? true }).prefix(maximum) {
                 let record = change.operation == .save ? try session.record(change.id) : nil
                 guard change.operation == .delete || record != nil else { throw GraphSyncError.unresolvedChange }
+                if let file = record?.file {
+                    let count = Int(file.byteCount)
+                    if count > remainingAssetBytes && !items.isEmpty { break }
+                    remainingAssetBytes = max(0, remainingAssetBytes - count)
+                }
                 if let record, record.type == GraphAttachmentPayload.graphType {
                     let count = try GraphAttachmentPayload(graphRecord: record).content.data.count
                     if count > remainingAssetBytes { break }
@@ -232,12 +240,15 @@ extension GraphSyncCheckpointAdapter {
                     binding: binding.route, systemFields: state.metadata[change.id.rawValue.uuidString], modifiedAt: date)
                 guard try sizing.append(GraphCloudBatchSizing.estimate(item, zone: binding.route.zone)) else { break }
                 items.append(item)
+                if let file = record?.file {
+                    fileSources[item.recordName] = GraphFileDisk.url(for: file, in: try ManagedGraphFile.root(in: context))
+                }
             }
             let encoded = GraphCloudOutgoingBatch(id: UUID(), graphID: id, zone: binding.route.zone, items: items)
             // The provisional archive is detached; only the reference-only result is persisted in finishPrepared.
             try persist(context, value)
             return GraphCloudPreparedOutgoing(batch: encoded, storeID: state.storeID, epoch: state.epoch,
-                                              previousAssets: previousAssets)
+                                              previousAssets: previousAssets, fileSources: fileSources)
         }
     }, finishPrepared: { context, id, binding, batch, limits in
         let value = try load(context, id: id, limits: limits)
@@ -264,7 +275,7 @@ extension GraphSyncCheckpointAdapter {
         let value = try load(context, id: id, limits: limits)
         let state = try loadTransport(value, binding: binding)
         return state.attempt.map { GraphCloudPreparedOutgoing(batch: $0, storeID: state.storeID, epoch: state.epoch) }
-    }, sent: { context, id, binding, receipts, resolvedAssets, remoteAssets, limits in
+    }, sent: { context, id, binding, receipts, resolvedAssets, remoteAssets, remoteFiles, limits in
         try GraphValueDecodingDiagnostics.checking {
             var value = try load(context, id: id, limits: limits)
             try reconcile(context, value: &value, limits: limits)
@@ -291,7 +302,7 @@ extension GraphSyncCheckpointAdapter {
                 for incoming in receipt.saved {
                     guard incoming.zone == receipt.zone, let name = incoming.recordName, let item = sent[name], item.change.operation == .save,
                           case .save(let decoded) = try GraphCloudNodeCodec.decode(incoming, binding: binding.route,
-                                                                                   assetData: remoteAssets[name]), seen.insert(name).inserted else { throw GraphCloudError.invalidState }
+                                                                                   assetData: remoteAssets[name], assetURL: remoteFiles[name], allowMissingFileContent: true), seen.insert(name).inserted else { throw GraphCloudError.invalidState }
                     let original = try originalNode(item, route: binding.route, resolvedAssets: resolvedAssets)
                     guard decoded.record == original.record, decoded.modifiedAt == original.modifiedAt else { throw GraphCloudError.invalidState }
                     state.metadata[item.change.id.rawValue.uuidString] = decoded.systemFields; succeeded.insert(name)
@@ -304,7 +315,7 @@ extension GraphSyncCheckpointAdapter {
                     guard let item = sent[failure.recordName], seen.insert(failure.recordName).inserted else { throw GraphCloudError.invalidState }
                     if failure.code == CKError.Code.serverRecordChanged.rawValue, item.change.operation == .save, let server = failure.serverRecord {
                         guard server.recordName == item.recordName, case .save(let remote) = try GraphCloudNodeCodec.decode(server, binding: binding.route,
-                                                                                                                        assetData: remoteAssets[item.recordName]), remote.record.id == item.change.id else { throw GraphCloudError.invalidState }
+                                                                                                                        assetData: remoteAssets[item.recordName], assetURL: remoteFiles[item.recordName]), remote.record.id == item.change.id else { throw GraphCloudError.invalidState }
                         events[item.change.id] = .save(remote)
                     } else if failure.code == CKError.Code.unknownItem.rawValue, item.change.operation == .save,
                               try GraphCloudNodeCodec.changeTag(originalNode(item, route: binding.route, resolvedAssets: resolvedAssets).systemFields, for: item.change.id, binding: binding.route) != nil {

@@ -52,7 +52,11 @@ The next library increment defines supported query and attachment envelopes.
 [local File primitive](graphevo-2-attachments.md#local-file-primitive-candidate).
 The increment covers S04 migration to a separate store, typed endpoints and
 queries, immutable revisions, reclamation and file-aware backup and restore.
-The File transport and replica compatibility checks remain a separate increment.
+The [File transport candidate](graphevo-2-file-sync.md) adds format 4
+records, streamed spool copies, File-aware public cloud connections and
+a format 2 sharing descriptor. Its private physical test imports a 25 MiB
+File into an empty SQLite replica on iPad, then verifies a replacement after
+reopening both contexts. Shared-account physical delivery remains open.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 

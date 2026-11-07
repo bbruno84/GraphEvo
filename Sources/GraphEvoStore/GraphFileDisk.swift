@@ -3,39 +3,8 @@ import Foundation
 import GraphEvoModel
 import GraphEvoRuntime
 
-public enum GraphFileError: Error {
-    case unavailable
-    case localOnly
-    case invalidMetadata
-    case fixedMetadata
-    case missingContent
-    case corruptContent
-    case conflict
-}
-
-/// Fixed metadata for a first-class local file node.
-public struct GraphFile: Sendable, Equatable, Identifiable {
-    package static let nodeType = "GraphEvo.File.v1"
-    public let id: GraphNodeID
-    public let name: String
-    public let contentType: String
-    public let byteCount: Int64
-    public let sha256: String
-    public let revision: UUID
-
-    package init(id: GraphNodeID, name: String, contentType: String, byteCount: Int64, sha256: String, revision: UUID) throws {
-        guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\0"),
-              !contentType.isEmpty, !contentType.contains("\0"), byteCount >= 0,
-              sha256.utf8.count == 64, sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
-        else { throw GraphFileError.invalidMetadata }
-        self.id = id
-        self.name = name
-        self.contentType = contentType
-        self.byteCount = byteCount
-        self.sha256 = sha256
-        self.revision = revision
-    }
-}
+public typealias GraphFile = GraphEvoModel.GraphFile
+public typealias GraphFileError = GraphEvoModel.GraphFileError
 
 package enum GraphFileDisk {
     package static let schemaIdentifier = "GraphEvo.v2.schema.5.local-files"
@@ -70,7 +39,7 @@ package enum GraphFileDisk {
     }
 
     package static func prepare(from source: URL, in root: URL, id: GraphNodeID, name: String, contentType: String,
-                                check: () throws -> Void) throws -> (GraphFile, URL) {
+                                maximumBytes: Int64 = Int64.max, check: () throws -> Void) throws -> (GraphFile, URL) {
         guard source.isFileURL, source.query == nil, source.fragment == nil else { throw GraphFileError.invalidMetadata }
         try ensureRoot(root)
         let revision = UUID()
@@ -79,8 +48,9 @@ package enum GraphFileDisk {
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         do {
             let metadata = try coordinate(source, writing: false) { input in
-                let values = try input.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                let values = try input.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
                 guard values.isRegularFile == true, values.isSymbolicLink != true else { throw GraphFileError.invalidMetadata }
+                if let size = values.fileSize, Int64(size) > maximumBytes { throw GraphCloudError.assetSizeLimitExceeded }
                 try Data().write(to: stage, options: .withoutOverwriting)
                 let reader = try FileHandle(forReadingFrom: input)
                 defer { try? reader.close() }
@@ -92,6 +62,7 @@ package enum GraphFileDisk {
                     try check()
                     let count = try autoreleasepool {
                         guard let chunk = try reader.read(upToCount: 256 * 1024), !chunk.isEmpty else { return 0 }
+                        guard Int64(chunk.count) <= maximumBytes - size else { throw GraphCloudError.assetSizeLimitExceeded }
                         digest.update(data: chunk)
                         try writer.write(contentsOf: chunk)
                         return chunk.count

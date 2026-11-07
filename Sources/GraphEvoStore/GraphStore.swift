@@ -209,8 +209,8 @@ public actor GraphStore {
         _ = try await syncSession().commitTransport(binding, receipts: [receipt], remoteAssets: [:], limits: limits)
     }
     package func commitTransport(_ binding: GraphCloudTransportBinding, receipts: [GraphCloudSentReceipt],
-                                 remoteAssets: [String: Data] = [:], limits: GraphSyncLimits = .init()) async throws -> GraphCloudResolution {
-        try await syncSession().commitTransport(binding, receipts: receipts, remoteAssets: remoteAssets, limits: limits)
+                                 remoteAssets: [String: Data] = [:], remoteFiles: [String: URL] = [:], limits: GraphSyncLimits = .init()) async throws -> GraphCloudResolution {
+        try await syncSession().commitTransport(binding, receipts: receipts, remoteAssets: remoteAssets, remoteFiles: remoteFiles, limits: limits)
     }
     @discardableResult package func applyTransport(_ binding: GraphCloudTransportBinding, effects: [GraphCloudEffect], limits: GraphSyncLimits = .init()) async throws -> GraphCloudResolution {
         try await syncSession().applyTransport(binding, effects: effects, limits: limits)

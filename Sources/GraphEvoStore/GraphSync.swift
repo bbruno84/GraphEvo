@@ -190,7 +190,7 @@ actor GraphSyncSession {
     }
 
     func commitTransport(_ binding: GraphCloudTransportBinding, receipts: [GraphCloudSentReceipt],
-                         remoteAssets: [String: Data], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
+                         remoteAssets: [String: Data], remoteFiles: [String: URL] = [:], limits: GraphSyncLimits) async throws -> GraphCloudResolution {
         try begin(); defer { busy = false }
         guard let cloud = adapter.cloud else { throw GraphSyncError.unavailable }
         let id = graphID
@@ -202,13 +202,18 @@ actor GraphSyncSession {
                                                                                           storeID: attempt.storeID))
             for item in attempt.batch.items {
                 guard let reference = item.assetReference else { continue }
+                if reference.isFile == true {
+                    _ = try await spool.fileURL(reference, role: .outgoing, identity: binding.identity, binding: binding.route,
+                        recordName: item.recordName, storeID: attempt.storeID, epoch: attempt.epoch)
+                    continue
+                }
                 resolvedAssets[item.recordName] = try await spool.read(reference, role: .outgoing,
                     identity: binding.identity, binding: binding.route, recordName: item.recordName,
                     storeID: attempt.storeID, epoch: attempt.epoch)
             }
         }
         let captured = resolvedAssets
-        let result = try await handle.controlTransaction { try cloud.sent($0, id, binding, receipts, captured, remoteAssets, limits) }
+        let result = try await handle.controlTransaction { try cloud.sent($0, id, binding, receipts, captured, remoteAssets, remoteFiles, limits) }
         if let attempt, attempt.batch.items.contains(where: { $0.assetReference != nil }),
            let snapshot = try? await handle.snapshot(),
            case .sqlite(let storeURL) = snapshot.location,

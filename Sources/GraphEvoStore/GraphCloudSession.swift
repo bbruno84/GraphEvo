@@ -197,6 +197,9 @@ actor GraphCloudSession {
                 doc.states.removeAll(); doc.accountResetRequired = false
                 try disk.write(url, JSONEncoder().encode(doc))
             }
+            guard config.supportsFiles || !doc.assetReferences.contains(where: { $0.isFile == true }) else {
+                throw GraphCloudError.unsupportedAsset
+            }
             let spool = try GraphCloudAssetSpool(root: config.directory.appendingPathComponent("GraphEvoCloudAssets"))
             try await spool.reconcile(retaining: doc.assetReferences)
             for reference in doc.assetReferences {
@@ -301,7 +304,7 @@ actor GraphCloudSession {
     }
     func assetData(for change: GraphCloudIncoming, binding: GraphCloudBinding) async throws -> Data? {
         try check()
-        guard let reference = change.assetReference else { return nil }
+        guard let reference = change.assetReference, reference.isFile != true else { return nil }
         let identity = GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
         let spool = try GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets"))
         let data = try await spool.read(reference, role: .incoming, identity: identity,
@@ -309,6 +312,18 @@ actor GraphCloudSession {
         try check()
         return data
     }
+    func assetURL(for change: GraphCloudIncoming, binding: GraphCloudBinding) async throws -> URL? {
+        try check()
+        guard let reference = change.assetReference, reference.isFile == true else { return nil }
+        guard configuration.supportsFiles else { throw GraphCloudError.unsupportedAsset }
+        let identity = GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
+        let spool = try GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets"))
+        let url = try await spool.fileURL(reference, role: .incoming, identity: identity, binding: binding,
+                                           recordName: change.recordName ?? "")
+        try check()
+        return url
+    }
+
     var pendingActivationIDs: Set<GraphID> { Set(document.activations.filter { !$0.published }.map { $0.binding.graphID }) }
     func stageActivationSnapshot(_ events: [GraphCloudIncoming], for binding: GraphCloudBinding, activationID: UUID) throws {
         try check()
@@ -322,6 +337,8 @@ actor GraphCloudSession {
         let spool = try GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets"))
         let identity = GraphCloudSessionIdentity(container: document.container, environment: document.environment, account: document.account)
         for event in events {
+            if let archive = event.recordArchive, try GraphCloudRecordCodec.restore(archive)["kind"] as? String == "file",
+               !configuration.supportsFiles { throw GraphCloudError.unsupportedAsset }
             let frozen = try GraphCloudRecordCodec.freeze(event, identity: identity, binding: binding,
                                                            spool: spool, namespace: activationID)
             try GraphCloudRecordCodec.validateDurable(frozen)
@@ -410,6 +427,7 @@ actor GraphCloudSession {
                 let changes = try candidates.map { change -> GraphCloudIncoming in
                     guard change.kind == .recordChanged, let archive = change.recordArchive,
                           let record = try? GraphCloudRecordCodec.restore(archive), record["asset"] != nil else { return change }
+                    if record["kind"] as? String == "file", !configuration.supportsFiles { throw GraphCloudError.unsupportedAsset }
                     guard let binding = document.bindings.first(where: { $0.zone == change.zone }) else { throw GraphCloudError.invalidState }
                     return try GraphCloudRecordCodec.freeze(change, identity: identity, binding: binding,
                                                             spool: spool, namespace: namespace)

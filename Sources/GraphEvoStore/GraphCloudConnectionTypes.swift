@@ -10,7 +10,13 @@ public struct GraphCloudConnectionConfiguration: Sendable, Equatable {
     public let maximumBytes: Int
     /// Explicitly permits a validated, lossless session-document upgrade; never resets engine state.
     public let allowsSessionUpgradeFromV8: Bool
-    let native: GraphCloudConfiguration
+    var native: GraphCloudConfiguration
+
+    func withFileSupport(_ enabled: Bool) -> Self {
+        var result = self
+        result.native.supportsFiles = enabled
+        return result
+    }
 
     /// Creates a configuration without creating directories or starting account verification.
     public init(containerIdentifier: String, environment: GraphCloudEnvironment, directory: URL,

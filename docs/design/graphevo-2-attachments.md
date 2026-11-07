@@ -41,8 +41,8 @@ destination as a directory. Source owners must stop before migration.
 File revisions are currently prepared under the existing store writer
 admission. Reads use Foundation coordination on the exact revision and
 reclamation runs under the store writer grant. The live copy API captures
-and verifies the referenced revisions with the SQLite snapshot. Cloud
-publication remains a separate increment.
+and verifies the referenced revisions with the SQLite snapshot. The [File synchronization increment](graphevo-2-file-sync.md) extends this
+schema to the existing custom CloudKit transport.
 
 ## Representation and ownership
 

@@ -66,7 +66,7 @@ extension GraphCloudAdapter {
     }()
 }
 
-/// Only detached bytes/IDs cross into the session. No graph writes happen in this delegate.
+/// Detached envelopes and callback-scoped asset URLs enter the session for durable staging.
 @available(iOS 17, macOS 14, *)
 final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
     let outbox = GraphCloudNativeOutbox()
@@ -174,9 +174,16 @@ package enum GraphCloudRecordCodec {
               let archive = incoming.recordArchive, let name = incoming.recordName else { return incoming }
         let record = try restore(archive)
         guard record["asset"] != nil else { return incoming }
-        let data = try GraphCloudAsset.bytes(record["asset"])
-        let reference = try spool.stageBlocking(data, role: .incoming, namespace: namespace,
-            identity: identity, binding: binding, recordName: name)
+        let reference: GraphCloudAssetReference
+        if record["kind"] as? String == "file" {
+            guard let source = incoming.transientAssetURL else { throw GraphCloudError.invalidState }
+            reference = try spool.stageFileBlocking(from: source, role: .incoming, namespace: namespace,
+                identity: identity, binding: binding, recordName: name)
+        } else {
+            let data = try GraphCloudAsset.bytes(record["asset"])
+            reference = try spool.stageBlocking(data, role: .incoming, namespace: namespace,
+                identity: identity, binding: binding, recordName: name)
+        }
         record["asset"] = Data() as CKRecordValue
         try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding, matchMetadata: false)
         return GraphCloudIncoming(kind: .recordChanged, zone: incoming.zone, recordName: name,
@@ -186,6 +193,17 @@ package enum GraphCloudRecordCodec {
     }
 
     static func archive(_ record: CKRecord, scope: GraphCloudScope, portableAsset: Bool = false) throws -> GraphCloudIncoming {
+        if record.recordType == GraphCloudNodeCodec.recordType, record["kind"] as? String == "file",
+           let asset = record["asset"] as? CKAsset, let source = asset.fileURL {
+            guard let copy = record.copy() as? CKRecord else { throw GraphCloudError.invalidState }
+            copy["asset"] = Data() as CKRecordValue
+            _ = try GraphCloudAsset.portable(copy, allowBytes: true)
+            return GraphCloudIncoming(kind: .recordChanged,
+                zone: GraphCloudZone(scope: scope, owner: record.recordID.zoneID.ownerName, name: record.recordID.zoneID.zoneName),
+                recordName: record.recordID.recordName, recordType: record.recordType,
+                recordArchive: try NSKeyedArchiver.archivedData(withRootObject: copy, requiringSecureCoding: true),
+                transientAssetURL: source)
+        }
         let record = try GraphCloudAsset.portable(record, allowBytes: portableAsset)
         return GraphCloudIncoming(kind: .recordChanged,
             zone: GraphCloudZone(scope: scope, owner: record.recordID.zoneID.ownerName, name: record.recordID.zoneID.zoneName),
@@ -220,11 +238,12 @@ package enum GraphCloudRecordCodec {
     }
 
     static func validateDurable(_ incoming: GraphCloudIncoming) throws {
+        guard incoming.transientAssetURL == nil else { throw GraphCloudError.invalidState }
         try validate(incoming)
         guard incoming.kind == .recordChanged, let archive = incoming.recordArchive else { return }
         let record = try restore(archive)
         let attachment = record.recordType == GraphCloudNodeCodec.recordType &&
-            record["type"] as? String == GraphAttachmentPayload.graphType
+            (record["type"] as? String == GraphAttachmentPayload.graphType || record["kind"] as? String == "file")
         guard (incoming.assetReference != nil) == attachment else { throw GraphCloudError.invalidState }
     }
 }

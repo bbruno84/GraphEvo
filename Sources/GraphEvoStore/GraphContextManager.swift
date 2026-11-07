@@ -416,20 +416,26 @@ package actor GraphContextManager {
             let group = receipts.filter { $0.batchID == batch }, ids = Set(group.map(\.id))
             _ = try await session.identity()
             var remoteAssets: [String: Data] = [:]
+            var remoteFiles: [String: URL] = [:]
             for receipt in group {
                 for record in receipt.saved {
+                    if let name = record.recordName, let url = try await session.assetURL(for: record, binding: binding.route) {
+                        remoteFiles[name] = url
+                    }
                     if let data = try await session.assetData(for: record, binding: binding.route), let name = record.recordName {
                         remoteAssets[name] = data
                     }
                 }
                 for failure in receipt.failures {
+                    if let record = failure.serverRecord, let name = record.recordName,
+                       let url = try await session.assetURL(for: record, binding: binding.route) { remoteFiles[name] = url }
                     if let record = failure.serverRecord,
                        let data = try await session.assetData(for: record, binding: binding.route), let name = record.recordName {
                         remoteAssets[name] = data
                     }
                 }
             }
-            let result = try await graph.commitTransport(binding, receipts: group, remoteAssets: remoteAssets)
+            let result = try await graph.commitTransport(binding, receipts: group, remoteAssets: remoteAssets, remoteFiles: remoteFiles)
             try await session.consume(ids)
             do { try await graph.trimTransport(binding, receipts: ids) } catch { cleanup = true }
             succeeded += group.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count }
@@ -507,7 +513,7 @@ package actor GraphContextManager {
             if entries.isEmpty { return GraphCloudApplyReport(applied: controls.count, cleanupPending: false) }
         }
         let descriptors = entries.filter { GraphCloudGraphDescriptor.isControl($0.change) }
-        for entry in descriptors { try GraphCloudGraphDescriptor.validate(entry.change, binding: binding.route) }
+        for entry in descriptors { try GraphCloudGraphDescriptor.validate(entry.change, binding: binding.route, supportsFiles: session.configuration.supportsFiles) }
         if !descriptors.isEmpty {
             try await session.consume(Set(descriptors.map(\.id)))
             entries.removeAll { GraphCloudGraphDescriptor.isControl($0.change) }
@@ -515,7 +521,8 @@ package actor GraphContextManager {
         var effects: [GraphCloudEffect] = []
         for entry in entries {
             let data = try await session.assetData(for: entry.change, binding: binding.route)
-            effects.append(try GraphCloudEffect(entry, binding: binding.route, assetData: data))
+            let url = try await session.assetURL(for: entry.change, binding: binding.route)
+            effects.append(try GraphCloudEffect(entry, binding: binding.route, assetData: data, assetURL: url))
         }
         _ = try await session.identity()
         let result = try await graph.applyTransport(binding, effects: effects)
