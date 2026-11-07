@@ -119,7 +119,7 @@ final class GraphCloudNativeDelegate: CKSyncEngineDelegate {
                 guard event.deletedZoneIDs.isEmpty, event.failedZoneDeletes.isEmpty,
                       event.savedZones.allSatisfy({ $0.zoneID == expected }),
                       event.failedZoneSaves.allSatisfy({ $0.zone.zoneID == expected }) else { throw GraphCloudError.unexpectedUpload }
-                if let failure = event.failedZoneSaves.first { await outbox.zoneFailed(failure.error.code.rawValue) }
+                if let failure = event.failedZoneSaves.first { await outbox.zoneFailed(failure.error) }
             case .sentRecordZoneChanges(let event):
                 let batch = try await outbox.current()
                 let route = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)

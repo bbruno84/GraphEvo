@@ -189,6 +189,48 @@ private actor AutomaticBus {
         await scheduler.shutdown()
     }
 
+    @Test func nativeZoneRefusalsPreserveCloudKitClassificationAndRetryAdvice() async throws {
+        for code in [CKError.Code.serviceUnavailable, .requestRateLimited, .zoneBusy, .permissionFailure] {
+            let bus = AutomaticBus(1), clock = AutomaticTestClock(), graph = await bus.inventory[0]
+            let outbox = GraphCloudNativeOutbox()
+            let batch = GraphCloudOutgoingBatch(id: UUID(), graphID: graph.id,
+                zone: GraphCloudZone(scope: .private, owner: CKCurrentUserDefaultName, name: "retry-zone"), items: [])
+            try await outbox.begin(batch)
+            let original = CKError(code, userInfo: [CKErrorRetryAfterKey: 600.0])
+            await outbox.zoneFailed(original)
+            let captured: any Error
+            do {
+                try await outbox.finish()
+                Issue.record("A refused native zone must fail its send.")
+                return
+            } catch { captured = error }
+            let native = captured as NSError
+            #expect(native.domain == CKErrorDomain)
+            #expect(native.code == code.rawValue)
+            #expect(native.userInfo[CKErrorRetryAfterKey] as? Double == 600)
+            try await outbox.begin(batch)
+            try await outbox.finish()
+            await bus.fail(graph.id, reports: [.init(succeeded: 0, failures: [], cleanupPending: false, transportError: captured)])
+            let scheduler = GraphAutomaticSynchronizer(driver: bus.driver, clock: clock.value)
+            await scheduler.setActive(true); try await settle(scheduler)
+            if code == .permissionFailure {
+                #expect(try await scheduler.status(graph.id).phase == .blocked)
+                clock.advance(600); try await settle(scheduler)
+                #expect(await bus.turns.count == 1)
+            } else {
+                #expect(try await scheduler.status(graph.id).phase == .waitingRetry)
+                #expect(try await scheduler.status(graph.id).retryAfter == 600)
+                await scheduler.request(explicit: true)
+                clock.advance(599); try await settle(scheduler)
+                #expect(await bus.turns.count == 1)
+                clock.advance(1)
+                try await wait { await bus.turns.count >= 2 }; try await settle(scheduler)
+                #expect(try await scheduler.status(graph.id).phase == .idle)
+            }
+            await scheduler.shutdown()
+        }
+    }
+
     @Test func busyWaitsAndPermanentFailuresAreGraphScoped() async throws {
         let bus = AutomaticBus(), clock = AutomaticTestClock(), graphs = await bus.inventory
         await bus.fail(graphs[0].id, reports: [

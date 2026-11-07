@@ -48,6 +48,10 @@ constructed from its URL. An SDK source URL received in a native callback
 is transient and cannot be encoded in an incoming document. The session
 copies that file to its owned incoming spool before publishing the inbox
 or sent receipt. Frozen activation inventories use the same path.
+The ordinary engine fetch includes CKAsset content. Download is eager with
+synchronization, while `withFileURL` only accesses the resulting local file.
+Bounded buffers avoid whole-file materialization; they do not provide lazy
+network retrieval or a public download policy.
 
 Application verifies the incoming reference and copies its content to an
 immutable permanent revision before the native transaction saves its
@@ -103,6 +107,8 @@ adds physical cross-account import, replacements in both directions,
 persisted join recovery, read-only enforcement and deletion. A sender
 SIGKILL at the native provider boundary retained the exact 128 MiB attempt;
 after an unclassified first resume failure, a diagnostic continuation sent
-it successfully and the XR verified its content. Measured midstream
-interruption and repeated immediate-resume/retry classification remain
-separate acceptance gates.
+it successfully and the XR verified its content. A fresh repeat captured
+`serviceUnavailable` (6) and three seconds of native retry advice; the
+existing automatic scheduler subsequently settled the retained attempt,
+and an empty XR replica verified the 128 MiB content. Measured midstream
+interruption remains a separate acceptance gate.

@@ -1240,10 +1240,14 @@ This scheduling policy closes no acceptance box or physical-device gate.
   See [physical checkpoint](results/file-cloud-shared-devices-2026-11-07.md).
 - [x] Recover the exact frozen 128 MiB sender attempt after physical SIGKILL
   at the native provider boundary and verify eventual shared delivery on XR.
-- [ ] Validate measured midstream interruption and repeated immediate-resume
-  behavior, retaining native errors and retry advice from the first attempt.
-  The initial physical resume failed without a retained native code; the
-  same attempt succeeded in the subsequent diagnostic continuation.
+- [x] Repeat the physical fault with first-attempt native error capture:
+  `serviceUnavailable` (6), retry advice of three seconds, then automatic
+  settlement and independent 128 MiB XR import. Preserve native zone errors
+  for the existing retry classifier; transient and permanent cases pass
+  controlled scheduler coverage.
+- [ ] Validate measured midstream network interruption and broader repeated
+  fault/backoff acceptance. The provider-boundary SIGKILL does not measure
+  the network phase at termination.
 - [ ] Measure large File copy, hashing, writer occupancy and disk headroom on
   representative devices. The 50 GB transport ceiling remains distinct from
   the verified 25 MiB sharing and 128 MiB recovery fixtures.

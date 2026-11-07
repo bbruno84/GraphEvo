@@ -62,8 +62,11 @@ verifies cross-account import, replacements in both directions, persisted
 join recovery, read-only enforcement and deletion with 25 MiB files.
 It also verifies exact retained-attempt recovery and eventual shared
 delivery for a 128 MiB File after SIGKILL at the native provider boundary.
-The first resume failure was not classified; measured midstream faults
-and repeated immediate-resume/retry trials remain open.
+A fresh fault repeat captured transient CloudKit `serviceUnavailable` (6)
+with three-second retry advice; the existing automatic scheduler settled
+the retained attempt and an empty XR replica verified its 128 MiB content.
+The investigation also corrects native zone-refusal propagation to retain
+Apple's error code and retry advice. Measured midstream faults remain open.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 

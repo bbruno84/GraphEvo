@@ -898,6 +898,9 @@ the existing `CKAsset` field. The native asset ceiling is 50,000,000,000
 bytes. Validated device fixtures reach 128 MiB; this ceiling does not certify device
 capacity. File content is copied and hashed with bounded buffers, with
 durable references retained through send, retry and incoming application.
+Incoming File content is downloaded as part of ordinary synchronization;
+it is not fetched on demand. `withFileURL` accesses already-local content
+and does not initiate a CloudKit download.
 The File-capable sharing descriptor uses format 2, which preceding readers
 reject before discovery. See [File synchronization](../design/graphevo-2-file-sync.md).
 

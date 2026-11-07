@@ -140,7 +140,7 @@ actor GraphCloudNativeOutbox {
     nonisolated let accountFence = GraphCloudNativeAccountFence()
     private var batch: GraphCloudOutgoingBatch?
     private var offered = false
-    private var zoneError: Int?
+    private var zoneError: CKError?
     private var staging: URL?
     func begin(_ value: GraphCloudOutgoingBatch) throws {
         try accountFence.check()
@@ -218,13 +218,12 @@ actor GraphCloudNativeOutbox {
         try accountFence.check()
         return saves.isEmpty && deletes.isEmpty ? nil : .init(recordsToSave: saves, recordIDsToDelete: deletes)
     }
-    func zoneFailed(_ code: Int) { zoneError = code }
+    func zoneFailed(_ error: CKError) { zoneError = error }
     func finish() throws {
         defer {
             if let staging { try? FileManager.default.removeItem(at: staging) }
             staging = nil; batch = nil; offered = false; zoneError = nil
         }
-        if let zoneError { throw GraphCloudNativeSendError.zoneFailure(zoneError) }
+        if let zoneError { throw zoneError }
     }
 }
-package enum GraphCloudNativeSendError: Error { case zoneFailure(Int) }

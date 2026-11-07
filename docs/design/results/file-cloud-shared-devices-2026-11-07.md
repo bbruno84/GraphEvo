@@ -73,3 +73,45 @@ after a physical process termination at the native provider boundary.
 It does not establish deterministic success on the first immediate resume
 or a measured midstream network interruption. Further fault trials must
 retain native error codes and retry advice from their first attempt.
+
+## Follow-up: classified refusal and automatic continuation
+
+A new run repeated account verification, seeding, the 128 MiB frozen
+attempt and provider-boundary SIGKILL. Its first manual resume again
+verified the exact attempt and permanent content, then retained a native
+send failure: `CKErrorDomain`, code 6 (`serviceUnavailable`), failed-record
+code 6 and `retryAfter = 3`. No permanent/structural rejection was reported.
+This classifies the reproduced failure; the lost native code from the
+original historical run cannot be reconstructed retroactively.
+
+A distinct continuation reopened the same failed attempt with automatic
+scheduling initially disabled for the equality check, then enabled the
+existing production scheduler. It made no manual send calls or resets.
+The scheduler completed and reached idle with no pending work. An empty
+XR replica accepted the private invitation and independently verified the
+exact 128 MiB File, digest, metadata, relationship and classifications.
+The peer then exercised its existing replacement stage. Both owners
+acknowledged graceful closure after peer observation.
+
+The automatic trace sampled running and settled idle. It did not sample a
+waiting-retry phase in this continuation, so it is not evidence of a timed
+physical backoff interval. The captured preceding refusal and its native
+advice are retained separately. Controlled virtual-clock tests verify
+that the existing retry classifier respects that error family and advice.
+Apple documents delayed retry and native advice for these transient
+failures: [CloudKit retry advice](https://developer.apple.com/documentation/cloudkit/ckerror/retryafterseconds).
+
+The audit also exposed a separate native provider path that wrapped a
+zone-save failure in a custom error, losing its CKError code and advice.
+A new regression failed against the previous implementation. The fix
+retains the original CKError; the test verifies service-unavailable,
+rate-limit and zone-busy retry delays, no explicit-hint bypass, successful
+later settlement, and permanent permission refusal. This is not claimed
+as the proven cause of the original physical failure.
+
+The narrow provider fix passed 98 affected macOS tests and 26 iOS simulator
+tests. Physical fault runs used the preceding library source with external
+laboratory instrumentation. No new retry layer, queue/document format or
+public API was added. The original first-run failure remains historical
+evidence; the fresh repeat supplies the classified error and automatic
+recovery proof.
