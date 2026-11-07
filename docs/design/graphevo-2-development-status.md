@@ -56,7 +56,14 @@ The [File transport candidate](graphevo-2-file-sync.md) adds format 4
 records, streamed spool copies, File-aware public cloud connections and
 a format 2 sharing descriptor. Its private physical test imports a 25 MiB
 File into an empty SQLite replica on iPad, then verifies a replacement after
-reopening both contexts. Shared-account physical delivery remains open.
+reopening both contexts. The subsequent
+[iPad/XR checkpoint](results/file-cloud-shared-devices-2026-11-07.md)
+verifies cross-account import, replacements in both directions, persisted
+join recovery, read-only enforcement and deletion with 25 MiB files.
+It also verifies exact retained-attempt recovery and eventual shared
+delivery for a 128 MiB File after SIGKILL at the native provider boundary.
+The first resume failure was not classified; measured midstream faults
+and repeated immediate-resume/retry trials remain open.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 

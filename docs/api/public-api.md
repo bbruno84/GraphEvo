@@ -895,7 +895,7 @@ survive content replacement and support tag and group query predicates.
 
 The File transport uses `GraphEvoNode` format 4 with `kind = "file"` and
 the existing `CKAsset` field. The native asset ceiling is 50,000,000,000
-bytes. The validated fixture is 25 MiB; this ceiling does not certify device
+bytes. Validated device fixtures reach 128 MiB; this ceiling does not certify device
 capacity. File content is copied and hashed with bounded buffers, with
 durable references retained through send, retry and incoming application.
 The File-capable sharing descriptor uses format 2, which preceding readers

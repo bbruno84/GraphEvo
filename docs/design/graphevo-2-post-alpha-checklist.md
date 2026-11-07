@@ -1235,12 +1235,20 @@ This scheduling policy closes no acceptance box or physical-device gate.
 
 ## File synchronization continuation
 
-- [ ] Validate physical cross-account File sharing, permission changes and
-  interruption during native asset transfer.
+- [x] Validate physical cross-account File sharing, permission reduction,
+  persisted join recovery and deletion for the 25 MiB iPad/XR fixture.
+  See [physical checkpoint](results/file-cloud-shared-devices-2026-11-07.md).
+- [x] Recover the exact frozen 128 MiB sender attempt after physical SIGKILL
+  at the native provider boundary and verify eventual shared delivery on XR.
+- [ ] Validate measured midstream interruption and repeated immediate-resume
+  behavior, retaining native errors and retry advice from the first attempt.
+  The initial physical resume failed without a retained native code; the
+  same attempt succeeded in the subsequent diagnostic continuation.
 - [ ] Measure large File copy, hashing, writer occupancy and disk headroom on
   representative devices. The 50 GB transport ceiling remains distinct from
-  the verified 25 MiB fixture.
+  the verified 25 MiB sharing and 128 MiB recovery fixtures.
 
 The [File transport candidate](graphevo-2-file-sync.md) covers durable
 outgoing/incoming copies, conflict handling and a private physical import
-and replacement checkpoint on iPad.
+and replacement checkpoint on iPad, plus the bounded cross-account
+iPad/XR checkpoint.

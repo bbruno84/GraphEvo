@@ -97,6 +97,12 @@ also passed. Remote CI has not been requested for this candidate.
 The [private iPad checkpoint](results/file-cloud-ipad-2026-11-07.md)
 exercises actual CloudKit upload, an empty independent SQLite replica and
 replacement after closing and reopening both contexts. It uses one physical
-iPad and sequential sessions for the same account. Physical cross-account
-sharing and interruption during native transfer remain beta acceptance
-work.
+iPad and sequential sessions for the same account. The
+[iPad/XR sharing checkpoint](results/file-cloud-shared-devices-2026-11-07.md)
+adds physical cross-account import, replacements in both directions,
+persisted join recovery, read-only enforcement and deletion. A sender
+SIGKILL at the native provider boundary retained the exact 128 MiB attempt;
+after an unclassified first resume failure, a diagnostic continuation sent
+it successfully and the XR verified its content. Measured midstream
+interruption and repeated immediate-resume/retry classification remain
+separate acceptance gates.
