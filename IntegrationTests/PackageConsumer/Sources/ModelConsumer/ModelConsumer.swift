@@ -24,9 +24,9 @@ import GraphEvo
         try await store.insert(profile)
         let original = try await Task.detached { try await store.fetch(profile.id, as: Profile.self) }.value
         guard original?.displayName == "Ada" else { throw GraphStoreError.missingNode }
-        let future = try GraphEncodedValue(codec: "example.future", version: 7, data: Data([0, 255]))
+        let future: GraphValue = .object(["future": .array([.integer(0), .integer(255)])])
         try await store.transaction { scope in
-            _ = try scope.patch(GraphRecordPatch(id: profileNodeID, properties: ["unknown": .set(.encoded(future))]))
+            _ = try scope.patch(GraphRecordPatch(id: profileNodeID, properties: ["unknown": .set(future)]))
         }
         let patch = try GraphRecordPatch(id: profileNodeID, properties: ["display_name": .set("Grace".graphValue)])
         let updated = try await store.patch(patch, as: Profile.self)
@@ -50,7 +50,7 @@ import GraphEvo
         let reopened = try await GraphStore.open(at: url)
         let retained = try await reopened.read { try $0.record(for: profileNodeID) }
         guard reopened.id == graphID, retained?.id == profileNodeID,
-              retained?.properties["unknown"] == .encoded(future) else { throw GraphStoreError.corruptIdentity }
+              retained?.properties["unknown"] == future else { throw GraphStoreError.corruptIdentity }
         let sourceFile = directory.appendingPathComponent("input.bin")
         try Data([0, 128, 255]).write(to: sourceFile)
         let attachment = try await reopened.importAttachment(from: sourceFile, ownedBy: profileNodeID)

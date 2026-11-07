@@ -58,15 +58,15 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
     }
 
     @Test func everyValueCaseRemainsLosslessWithoutConsumerCodecRegistration() throws {
-        let opaque = try GraphEncodedValue(codec: "application.unknown", version: 91, data: Data([0, 255, 42]))
+        let opaque = try GraphLegacyEncodedValue(codec: "application.unknown", version: 91, data: Data([0, 255, 42]))
         let values: [String: GraphValue] = [
             "null": .null, "bool": .boolean(true), "signed": .integer(.min), "unsigned": .unsignedInteger(.max),
             "double": .floatingPoint(-1234.125), "negativeZero": .floatingPoint(-0.0),
             "basedURL": .url(URL(string: "../child", relativeTo: URL(string: "https://example.invalid/base/")!)!), "decimal": .decimal(Decimal(string: "12345678901234567890.123456789012345678")!),
-            "string": .string("caffè 🐈"), "data": .data(Data([0, 1, 255])), "date": .date(Date(timeIntervalSince1970: 12345.125)),
+            "string": .string("caffè 🐈"), "data": .string(Data([0, 1, 255]).base64EncodedString()), "date": .date(Date(timeIntervalSince1970: 12345.125)),
             "url": .url(URL(string: "https://example.com/a?b=c")!), "uuid": .uuid(uuid),
             "array": .array([.null, .integer(4), .object(["nested": .string("value")])]),
-            "object": .object(["data": .data(Data([2, 3])), "null": .null]), "encoded": .encoded(opaque)
+            "object": .object(["data": .string(Data([2, 3]).base64EncodedString()), "null": .null]), "encoded": .object(["codec": .string(opaque.codec), "bytes": .string(opaque.data.base64EncodedString())])
         ]
         let record = try node(properties: values)
         #expect(try decoded(record) == record)
@@ -90,7 +90,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         let native = try GraphCloudNodeCodec.encode(minimal, binding: binding)
         let payload = try #require(native["payload"] as? Data)
         #expect(String(data: payload, encoding: .utf8) == #"{"endpoints":{"entity":{}},"groups":[],"properties":{},"tags":[]}"#)
-        #expect(native["format"] as? NSNumber == NSNumber(value: 2))
+        #expect(native["format"] as? NSNumber == NSNumber(value: 5))
         #expect(native["type"] as? String == "Item")
     }
 
@@ -100,8 +100,8 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         let native = try GraphCloudNodeCodec.encode(record, binding: binding, modifiedAt: date)
         #expect(try GraphCloudNodeCodec.decode(native, binding: binding).modifiedAt == date)
         native["format"] = NSNumber(value: 1)
-        #expect(try GraphCloudNodeCodec.decode(native, binding: binding).modifiedAt == nil)
-        native["format"] = NSNumber(value: 2)
+        #expect(throws: GraphCloudNodeError.unsupportedVersion) { try GraphCloudNodeCodec.decode(native, binding: binding) }
+        native["format"] = NSNumber(value: 5)
         let raw = try #require(native["payload"] as? Data)
         var json = try #require(try JSONSerialization.jsonObject(with: raw) as? [String: Any])
         json["modifiedAt"] = "invalid"
@@ -197,7 +197,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
             let record = try GraphRecord(id: id, type: type)
             #expect(throws: GraphCloudNodeError.self) { try GraphCloudNodeCodec.encode(record, binding: binding) }
         }
-        #expect(throws: GraphCloudNodeError.invalidRecord) { try GraphCloudNodeCodec.encode(node(properties: ["__graphevo_v2.syncCheckpoint": .data(Data())]), binding: binding) }
+        #expect(throws: GraphCloudNodeError.invalidRecord) { try GraphCloudNodeCodec.encode(node(properties: ["__graphevo_v2.syncCheckpoint": .string(Data().base64EncodedString())]), binding: binding) }
         #expect(throws: GraphCloudNodeError.invalidRecord) { try GraphCloudNodeCodec.encode(node(properties: ["bad": .floatingPoint(.infinity)]), binding: binding) }
     }
 
@@ -241,7 +241,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
         defer { try? FileManager.default.removeItem(at: dir) }
         let gate = CloudFormatCommitGate()
         let registry = StoreRegistry(hooks: .init(afterCommit: { gate.afterCommit() }))
-        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: graphID, at: dir.appendingPathComponent("Graph.sqlite"))
         _ = try await graph.transaction { try $0.insert(node()) }
         let route = GraphCloudBinding(zone: binding.zone, graphID: graphID)
@@ -258,7 +258,7 @@ private final class CloudFormatCommitGate: @unchecked Sendable {
     @Test func realPHBatchEncodingFailureRetainsPendingAndReleasesAttempt() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("CloudFormat-\(UUID())")
         defer { try? FileManager.default.removeItem(at: dir) }
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: graphID, at: dir.appendingPathComponent("Graph.sqlite"))
         _ = try await graph.transaction { try $0.insert(node(properties: ["value": .integer(1)])) }
         let route = GraphCloudBinding(zone: binding.zone, graphID: graphID)

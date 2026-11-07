@@ -11,19 +11,19 @@ import GraphEvoStore
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true); return root
     }
     private func manager() -> GraphContextManager {
-        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
     }
     private func corpus() -> [String: GraphValue] {
         ["null": .null, "bool": .boolean(true), "int": .integer(.min), "uint": .unsignedInteger(.max),
          "double": .floatingPoint(.leastNonzeroMagnitude), "negativeZero": .floatingPoint(-0.0),
          "decimal": .decimal(Decimal(string: "12345678901234567890.123456789012345678")!),
          "string": .string("e\u{301}🙂"), "nul": .string("a\u{0}b"), "literal\u{0}key": .integer(7),
-         "bytes": .data(Data(repeating: 91, count: 2 * 1024 * 1024)), "date": .date(Date(timeIntervalSince1970: -123.25)),
+         "bytes": .string(Data(repeating: 91, count: 2 * 1024 * 1024).base64EncodedString()), "date": .date(Date(timeIntervalSince1970: -123.25)),
          "uuid": .uuid(UUID()), "url": .url(URL(string: "https://example.invalid/a%20b")!),
          "relativeURL": .url(URL(string: "../relative%20path")!),
          "basedURL": .url(URL(string: "child", relativeTo: URL(string: "https://example.invalid/base/")!)!),
          "array": .array([.integer(4), .null]), "object": .object(["key": .boolean(false)]),
-         "encoded": .encoded(try! GraphEncodedValue(codec: "test.opaque", version: 1, data: Data([0, 255])))]
+         "encoded": .object(["opaque": .string("AP8=")])]
     }
     @Test func allKindsReopenWithOneAuthoritativeSlotAndNativePH() async throws {
         let root = try directory(), m = manager(), id = GraphID(), url = root.appendingPathComponent("Store.sqlite")
@@ -42,7 +42,7 @@ import GraphEvoStore
         if case .floatingPoint(let zero) = result.properties["negativeZero"] { #expect(zero.sign == .minus) }
         else { Issue.record("Missing negative zero") }
         try await opened.close()
-        let handle = try await StoreRegistry().open(.init(location: .sqlite(url), access: .readOnly), schema: GraphRuntimeSchema.typedProperties)
+        let handle = try await StoreRegistry().open(.init(location: .sqlite(url), access: .readOnly), schema: GraphRuntimeSchema.attachmentProperties)
         try await handle.read { context in
             let request = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityPropertyName)
             request.predicate = NSPredicate(format: "ge2ValueKind != nil")
@@ -55,8 +55,21 @@ import GraphEvoStore
         }
         try await handle.close(); try FileManager.default.removeItem(at: root)
     }
+    @Test func longUnicodeAndEmbeddedNullStringsRetainTheirAuthoritativeRepresentation() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let path = root.appendingPathComponent("Strings.sqlite"), context = GraphContext()
+        let graph = try await context.createGraph(id: GraphID(), at: path), id = graph.makeNodeID()
+        let text = String(repeating: "e\u{301}🙂", count: 20_000)
+        let values: [String: GraphValue] = ["plain": .string(text), "nul": .string(text + "\0")]
+        try await graph.transaction { try $0.insert(GraphRecord(id: id, type: "Strings", properties: values)) }
+        try await graph.close()
+        let reopened = try await context.openGraph(id: graph.id, at: path)
+        #expect(try await reopened.read { try $0.record(for: id)?.properties } == values)
+        try await reopened.close()
+    }
+
     @Test func schemaRemainsDistinctAndInvalidWriteRollsBack() async throws {
-        #expect(GraphRuntimeSchema.typedProperties.identifier != GraphRuntimeSchema.nativeIdentity.identifier)
+        #expect(GraphRuntimeSchema.attachmentProperties.identifier != GraphRuntimeSchema.nativeIdentity.identifier)
         let root = try directory(), m = manager(), id = GraphID(), url = root.appendingPathComponent("Store.sqlite")
         let graph = try await m.createGraph(id: id, at: url), node = graph.makeNodeID()
         await #expect(throws: (any Error).self) {

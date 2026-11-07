@@ -30,6 +30,7 @@ actor StoreResources {
     private let container: NSPersistentContainer
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
+    private let coordinatesReads: Bool
     private let removeOwnedContent: (@Sendable (URL, String) throws -> Void)?
     private var appGroupPresenter: AppGroupStorePresenter?
     private let attachedIdentity: FileIdentity?
@@ -68,7 +69,8 @@ actor StoreResources {
     private var reservationWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private var drain: CheckedContinuation<Void, Never>?
 
-    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], appGroupPresenter: AppGroupStorePresenter? = nil, attachedIdentity: FileIdentity? = nil, removeOwnedContent: (@Sendable (URL, String) throws -> Void)? = nil) {
+    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], appGroupPresenter: AppGroupStorePresenter? = nil, attachedIdentity: FileIdentity? = nil, coordinatesReads: Bool = false, removeOwnedContent: (@Sendable (URL, String) throws -> Void)? = nil) {
+        self.coordinatesReads = coordinatesReads
         self.attachedIdentity = attachedIdentity
         self.appGroupPresenter = appGroupPresenter
         self.gateways = gateways
@@ -93,8 +95,8 @@ actor StoreResources {
         // GraphContextManager's coordinated path is the single writable v2 owner gateway.
         // Apple coordinates native metadata, attachment and mutation at the store location.
         if resolved.configuration.appGroup != nil {
-            guard schema.identifier == "GraphEvo.v2.schema.4", nativeMigration == nil, mode != .openOrCreate else {
-                throw StoreRuntimeError.invalidConfiguration("App Group stores require explicit S04 creation or opening.")
+            guard ["GraphEvo.v2.schema.4", "GraphEvo.v2.schema.6"].contains(schema.identifier), nativeMigration == nil, mode != .openOrCreate else {
+                throw StoreRuntimeError.invalidConfiguration("App Group stores require explicit S04 or S06 creation or opening.")
             }
             try await hooks.beforeLoad?()
             return try await openCoordinated(resolved, schema: schema, hooks: hooks, gateways: gateways,
@@ -126,7 +128,7 @@ actor StoreResources {
                 descriptions: descriptions, configuration: resolved.configuration)
         } else { container = NSPersistentContainer(name: schema.identifier, managedObjectModel: model) }
         container.persistentStoreDescriptions = descriptions
-        let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways)
+        let resources = StoreResources(container: container, resolved: resolved, hooks: hooks, gateways: gateways, coordinatesReads: schema.coordinatesReads)
         do {
             try await resources.load()
         }
@@ -220,7 +222,7 @@ actor StoreResources {
                     let identity = try resolved.fileIdentity()
                     guard identity != nil else { throw StoreRuntimeError.missingStore(url) }
                     return StoreResources(container: container, resolved: resolved, hooks: hooks,
-                        gateways: gateways, appGroupPresenter: presenter, attachedIdentity: identity,
+                        gateways: gateways, appGroupPresenter: presenter, attachedIdentity: identity, coordinatesReads: schema.coordinatesReads,
                         removeOwnedContent: schema.removeOwnedContent)
                 } catch let quarantine as StoreOpenQuarantine {
                     throw quarantine
@@ -395,24 +397,25 @@ actor StoreResources {
     }
 
     /// Trusted adapter boundary: bodies return values and must never save or escape contexts.
-    func read<Value: Sendable>(control: Bool = false, accountControl: Bool = false,
+    func read<Value: Sendable>(control: Bool = false, accountControl: Bool = false, externalContent: Bool = true,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
+        let coordinate = coordinatesReads && externalContent
+        if coordinate { try Self.checkProcessReentry(resolved) }
         guard control || dataAvailable else { throw StoreRuntimeError.dataUnavailable }
         let accountPermit = try accountControl ? nil : effectiveAccountAccess.permit()
         try admit(control: control)
         defer { finish() }
         let cancellation = OperationCancellation()
         let sqlite = resolved.url != nil
-        let memoryRequest = sqlite ? nil : UUID()
+        let localRequest = !sqlite || (coordinate && appGroupPresenter == nil) ? UUID() : nil
         let configuration = resolved.configuration, container = container
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
-            // In-memory stores cannot pin a query generation. Keep their whole
-            // multi-fetch read coherent with admitted local writers instead.
-            if let memoryRequest { try await acquireWriter(memoryRequest, cancellation: cancellation) }
-            defer { if memoryRequest != nil { releaseWriter() } }
-            return try await container.performBackgroundTask { @Sendable context in
+            // Memory stores and uncoordinated internal owners join the local writer gate.
+            if let localRequest { try await acquireWriter(localRequest, cancellation: cancellation) }
+            defer { if localRequest != nil { releaseWriter() } }
+            let native: @Sendable (NSManagedObjectContext) throws -> Value = { context in
                 Self.prepare(context, configuration: configuration, container: container)
                 let check: StoreNativeContext.CancellationCheck = { try cancellation.check(); try accountPermit?.check() }
                 context.userInfo[StoreNativeContext.cancellationKey] = check
@@ -424,9 +427,23 @@ actor StoreResources {
                 try check()
                 return value
             }
+            if coordinate, let presenter = appGroupPresenter {
+                let resolved = resolved, identity = attachedIdentity
+                let held = SQLiteStoreCoordination.held.union([resolved.key])
+                // An unassociated reader also excludes writes made by this same presenter.
+                let request = AppGroupStoreAccess(presenter: presenter, associatePresenter: false, reading: true, onSubmit: hooks.didSubmitSQLiteAccess)
+                return try await request.run {
+                    try Self.validateAttachedFile(resolved, identity)
+                    let context = container.newBackgroundContext()
+                    return try context.performAndWait {
+                        try SQLiteStoreCoordination.$held.withValue(held) { try native(context) }
+                    }
+                }
+            }
+            return try await container.performBackgroundTask(native)
         } onCancel: {
             cancellation.cancel()
-            if let memoryRequest { Task { await self.cancelWriter(memoryRequest) } }
+            if let localRequest { Task { await self.cancelWriter(localRequest) } }
         }
     }
 

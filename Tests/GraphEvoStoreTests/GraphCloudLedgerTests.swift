@@ -342,7 +342,7 @@ private actor LedgerServer {
 
     @Test func dataPauseDoesNotPauseLedgerOrAddPHWorkAndBackupEvidenceIsScoped() async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
-        let server = LedgerServer(), m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let server = LedgerServer(), m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let id = GraphID(), graph = try await m.createGraph(id: id, at: root.appendingPathComponent("Graph.sqlite"))
         let config = configuration(root.appendingPathComponent("Engine")); _ = try await m.startCloudSession(config, adapter: server.adapter)
         try await m.bindCloudZone(binding(id).zone, to: id, configuration: config)
@@ -365,7 +365,7 @@ private actor LedgerServer {
     @Test func automaticEditDuringSendPublishesNewRevisionWithoutPeriodicDelay() async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let server = LedgerServer(), clock = AutomaticTestClock(), gate = LedgerSaveGate()
-        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let id = GraphID(), graph = try await m.createGraph(id: id, at: root.appendingPathComponent("Graph.sqlite"))
         let config = configuration(root.appendingPathComponent("Engine")); _ = try await m.startCloudSession(config, adapter: server.adapter)
         try await m.bindCloudZone(binding(id).zone, to: id, configuration: config)
@@ -388,7 +388,7 @@ private actor LedgerServer {
     @Test func automaticControlContinuesDuringPauseAndRespectsInactivityAndBackoff() async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let server = LedgerServer(), clock = AutomaticTestClock()
-        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let id = GraphID(), graph = try await m.createGraph(id: id, at: root.appendingPathComponent("Graph.sqlite"))
         let config = configuration(root.appendingPathComponent("Engine")); _ = try await m.startCloudSession(config, adapter: server.adapter)
         try await m.bindCloudZone(binding(id).zone, to: id, configuration: config); try await m.pauseCloudSynchronization(for: id)

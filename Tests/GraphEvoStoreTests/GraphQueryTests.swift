@@ -37,8 +37,8 @@ private struct QueryAction: GraphModel {
         let fixture = try await fixture(), graph = fixture.graph, ids = fixture.ids
         let secondAction = graph.makeNodeID()
         try await graph.transaction { scope in
-            _ = try scope.patch(GraphRecordPatch(id: ids[4], properties: ["unused": .set(.data(Data(repeating: 1, count: 1024 * 1024)))]))
-            try scope.insert(GraphRecord(id: secondAction, type: QueryAction.graphType, endpoints: .action(subjects: [ids[0]], objects: [ids[2]]), properties: ["unused": .data(Data(repeating: 1, count: 1024 * 1024))]))
+            _ = try scope.patch(GraphRecordPatch(id: ids[4], properties: ["unused": .set(.string(Data(repeating: 1, count: 1024 * 1024).base64EncodedString()))]))
+            try scope.insert(GraphRecord(id: secondAction, type: QueryAction.graphType, endpoints: .action(subjects: [ids[0]], objects: [ids[2]]), properties: ["unused": .string(Data(repeating: 1, count: 1024 * 1024).base64EncodedString())]))
         }
         let allowance = try budget(bytes: 16 * 1024)
         let edge = try await graph.query(GraphQuery<QueryEdge>(budget: allowance).where(.id(ids[3])))
@@ -56,7 +56,7 @@ private struct QueryAction: GraphModel {
         let ids = (1...6).map { GraphNodeID(graphID: graph.id, rawValue: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", $0))!) }
         try await graph.transaction { scope in
             for index in 0..<3 {
-                var properties: [String: GraphValue] = ["name": .string(["Alice", "Bob", "Cara"][index]), "rank": .integer(index == 2 ? 2 : 1), "blob": .data(Data([0, 255]))]
+                var properties: [String: GraphValue] = ["name": .string(["Alice", "Bob", "Cara"][index]), "rank": .integer(index == 2 ? 2 : 1), "blob": .string(Data([0, 255]).base64EncodedString())]
                 if index != 1 { properties["nick"] = index == 0 ? .null : .string("C") }
                 try scope.insert(GraphRecord(id: ids[index], type: QueryPerson.graphType, properties: properties,
                     tags: index == 1 ? [] : ["active"], groups: index == 2 ? [] : ["team"]))
@@ -162,7 +162,7 @@ private struct QueryAction: GraphModel {
         for budget in [try budget(1), try budget(bytes: 0), try budget(steps: 1)] {
             await #expect(throws: GraphQueryError.self) { try await f.graph.query(GraphQuery<QueryPerson>(budget: budget)) }
         }
-        let unsupported = GraphQuery<QueryPerson>(budget: try budget(1)).where(.property("blob", .equal, .data(Data())))
+        let unsupported = GraphQuery<QueryPerson>(budget: try budget(1)).where(.property("blob", .equal, .array([])))
         await #expect { try await f.graph.query(unsupported) } throws: { error in
             if case GraphQueryError.unsupportedValue = error { return true }; return false
         }

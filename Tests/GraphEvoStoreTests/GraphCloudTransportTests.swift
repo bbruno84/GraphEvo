@@ -97,7 +97,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
                          cloud: GraphCloudAdapter? = nil, disk: GraphCloudDisk = .live) async throws -> Fixture {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Transport-\(UUID())")
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.transport." + container, environment: .development, directory: dir.appendingPathComponent("Cloud"))
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
         let graph = try await manager.createGraph(id: graphID, at: dir.appendingPathComponent("Graph.sqlite"))
         _ = try await manager.startCloudSession(config, adapter: cloud ?? bus.adapter, disk: disk)
         let zone = GraphCloudZone(scope: .private, owner: "owner", name: "graph")
@@ -482,7 +482,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         #expect(bus.sendCount == 1)
         #expect(try await f.graph.collectSyncChanges() == 1)
         try await finish(f)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await manager.startCloudSession(f.config, adapter: bus.adapter)
         let registration = try await manager.openGraph(id: f.graph.id, at: f.storeURL); try await registration.close()
         let report = try await manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
@@ -506,7 +506,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         #expect(try await f.graph.collectSyncChanges() == 0)
         #expect(bus.sendCount == 1)
         try await finish(f)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await manager.startCloudSession(f.config, adapter: bus.adapter)
         let registration = try await manager.openGraph(id: f.graph.id, at: f.storeURL); try await registration.close()
         let replay = try await manager.sendCloudChanges(for: f.graph.id, configuration: f.config)
@@ -531,7 +531,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         #expect(try await f.graph.read { try $0.record(for: id)?.properties["value"] } == .integer(1))
         try await f.graph.transaction { _ = try $0.patch(GraphRecordPatch(id: id, properties: ["value": .set(.integer(2))])) }
         try await finish(f)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await manager.startCloudSession(f.config, adapter: bus.adapter)
         let registration = try await manager.openGraph(id: f.graph.id, at: f.storeURL); try await registration.close()
         #expect(try await manager.applyCloudInbox(for: f.graph.id, configuration: f.config).applied == 1)
@@ -690,7 +690,7 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         try await finish(f)
         try FileManager.default.moveItem(at: f.directory, to: moved)
         let config = GraphCloudConfiguration(containerIdentifier: f.config.containerIdentifier, environment: .development, directory: moved.appendingPathComponent("Cloud"))
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await manager.startCloudSession(config, adapter: bus.adapter)
         do {
             _ = try await manager.sendCloudChanges(for: f.graph.id, configuration: config)
@@ -813,6 +813,25 @@ private final class TransportFailureSwitch: @unchecked Sendable {
         #expect(try await peer.graph.read { try $0.record(for: id)?.properties["value"] } == .integer(4))
         #expect(try await peer.graph.collectSyncChanges() == 0)
         try await w.discard(); try await finish(peer); try await finish(f)
+    }
+
+    @Test func attachmentBeforeOwnerRemainsDurableWithoutBlockingLaterOwner() async throws {
+        let bus = TransportBus(), f = try await fixture(bus: bus)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        let owner = f.graph.makeNodeID(), child = f.graph.makeNodeID()
+        var metadata = try GraphAttachmentPayload(id: child, ownerID: owner, fileName: "body", contentType: "public.data", data: Data([0, 255])).content.metadata
+        metadata.propertyKey = "body"; metadata.codec = "GraphEvo.raw"; metadata.codecVersion = 1
+        let attachment = try GraphAttachmentPayload(metadata: metadata, data: Data([0, 255])).graphRecord(in: f.graph.id)
+        let event = try GraphCloudRecordCodec.archive(GraphCloudNodeCodec.encode(attachment, binding: f.binding.route), scope: .private, portableAsset: true)
+        bus.inject(event)
+        try await f.manager.fetchCloudChanges(.private, configuration: f.config)
+        #expect(try await f.manager.applyCloudInbox(for: f.graph.id, configuration: f.config, maximumEvents: 1).applied == 0)
+        #expect(try await f.graph.attachment(child) == nil)
+        bus.inject(try incoming(GraphRecord(id: owner, type: "Item"), f.binding.route))
+        try await f.manager.fetchCloudChanges(.private, configuration: f.config)
+        for _ in 0..<4 { _ = try await f.manager.applyCloudInbox(for: f.graph.id, configuration: f.config, maximumEvents: 1) }
+        #expect(try await f.graph.read { try $0.record(for: owner)?.attachmentData(for: "body") } == Data([0, 255]))
+        try await finish(f)
     }
 
 }

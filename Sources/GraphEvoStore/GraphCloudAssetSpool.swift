@@ -25,7 +25,7 @@ package struct GraphCloudAssetReference: Codable, Equatable, Sendable {
                  binding: GraphCloudBinding, recordName: String, byteCount: Int, sha256: String,
                  storeID: String? = nil, epoch: UUID? = nil, isFile: Bool = false) {
         self.isFile = isFile ? true : nil
-        self.format = 1; self.role = role; self.namespace = namespace; self.file = file
+        self.format = 2; self.role = role; self.namespace = namespace; self.file = file
         self.identity = identity; self.binding = binding; self.recordName = recordName
         self.byteCount = byteCount; self.sha256 = sha256; self.storeID = storeID; self.epoch = epoch
     }
@@ -33,9 +33,9 @@ package struct GraphCloudAssetReference: Codable, Equatable, Sendable {
     package func validate(role expectedRole: Role, identity expectedIdentity: GraphCloudSessionIdentity,
                           binding expectedBinding: GraphCloudBinding, recordName expectedName: String,
                           storeID expectedStoreID: String? = nil, epoch expectedEpoch: UUID? = nil) throws {
-        guard format == 1, role == expectedRole, identity == expectedIdentity, binding == expectedBinding,
+        guard format == 2, role == expectedRole, identity == expectedIdentity, binding == expectedBinding,
               recordName == expectedName, !recordName.isEmpty,
-              byteCount >= 0, UInt64(byteCount) <= (isFile == true ? GraphCloudAsset.maximumNativeByteCount : UInt64(GraphAttachmentPayload.maximumByteCount)),
+              byteCount >= 0, UInt64(byteCount) <= (isFile == true ? GraphCloudAsset.maximumNativeByteCount : UInt64(Int(GraphCloudAsset.maximumNativeByteCount))),
               sha256.utf8.count == 64,
               sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
               (role == .outgoing) == (storeID != nil && epoch != nil),
@@ -78,7 +78,7 @@ package struct GraphCloudAssetSpool: Sendable {
                                identity: GraphCloudSessionIdentity, binding: GraphCloudBinding,
                                recordName: String, storeID: String? = nil, epoch: UUID? = nil,
                                check: () throws -> Void = { try Task.checkCancellation() }) throws -> GraphCloudAssetReference {
-        guard data.count <= GraphAttachmentPayload.maximumByteCount else { throw GraphCloudError.inboxLimit }
+        guard data.count <= Int(GraphCloudAsset.maximumNativeByteCount) else { throw GraphCloudError.inboxLimit }
         let file = UUID()
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let reference = GraphCloudAssetReference(role: role, namespace: namespace, file: file,
@@ -115,7 +115,7 @@ package struct GraphCloudAssetSpool: Sendable {
 
     package func stageFileBlocking(from source: URL, role: GraphCloudAssetReference.Role, namespace: UUID,
         identity: GraphCloudSessionIdentity, binding: GraphCloudBinding, recordName: String,
-        storeID: String? = nil, epoch: UUID? = nil, check: () throws -> Void = { try Task.checkCancellation() }
+        storeID: String? = nil, epoch: UUID? = nil, isFile: Bool = true, check: () throws -> Void = { try Task.checkCancellation() }
     ) throws -> GraphCloudAssetReference {
         try Self.ensureRoot(root)
         let directory = root.appendingPathComponent(namespace.uuidString, isDirectory: true)
@@ -126,7 +126,7 @@ package struct GraphCloudAssetSpool: Sendable {
         defer { try? FileManager.default.removeItem(at: temporary) }
         let reference = GraphCloudAssetReference(role: role, namespace: namespace, file: metadata.revision,
             identity: identity, binding: binding, recordName: recordName, byteCount: Int(metadata.byteCount),
-            sha256: metadata.sha256, storeID: storeID, epoch: epoch, isFile: true)
+            sha256: metadata.sha256, storeID: storeID, epoch: epoch, isFile: isFile)
         try reference.validate(role: role, identity: identity, binding: binding, recordName: recordName,
                                storeID: storeID, epoch: epoch)
         try check()
@@ -271,7 +271,7 @@ package struct GraphCloudAssetSpool: Sendable {
                         recordArchive: archive, assetReference: reference))
                 } else if record["asset"] != nil {
                     let data = try GraphCloudAsset.bytes(record["asset"])
-                    guard data.count <= 32 * 1024 * 1024 - preparedBytes else { throw GraphCloudError.inboxLimit }
+                    guard preparedBytes == 0 || data.count <= 32 * 1024 * 1024 - preparedBytes else { throw GraphCloudError.inboxLimit }
                     preparedBytes += data.count
                     let reference = try stageBlocking(data, role: .outgoing, namespace: stagingNamespace ?? batch.id, identity: identity,
                                                     binding: binding, recordName: item.recordName,

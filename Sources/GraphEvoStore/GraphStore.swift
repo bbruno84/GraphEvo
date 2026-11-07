@@ -40,6 +40,7 @@ public struct GraphV1AdoptionReport: Sendable {
 
 /// Privileged callbacks implemented by the current Graph facade adapter.
 package struct GraphStoreAdapter: Sendable {
+    package var attachmentOwnerExists: (@Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Bool)?
     package var validateIntegrity: (@Sendable (NSManagedObjectContext, GraphID) throws -> Int)?
     package var removeAll: (@Sendable (NSManagedObjectContext, GraphID, Int) throws -> Int)?
     package var participantAccess: (@Sendable (NSManagedObjectContext, GraphID, GraphCloudParticipantAccess?) throws -> GraphCloudParticipantAccess?)?
@@ -51,7 +52,7 @@ package struct GraphStoreAdapter: Sendable {
     package let insert: @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void
     package let patch: @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord
     package let delete: @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void
-    package let attachmentMetadata: (@Sendable (NSManagedObjectContext, GraphID) throws -> [GraphAttachmentMetadata])?
+    package let attachmentMetadata: (@Sendable (NSManagedObjectContext, GraphID, GraphNodeID?) throws -> [GraphAttachmentMetadata])?
     package let query: (@Sendable (NSManagedObjectContext, GraphID, GraphQueryRequest) throws -> GraphQueryOutput)?
 
     package init(
@@ -61,7 +62,7 @@ package struct GraphStoreAdapter: Sendable {
         insert: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecord) throws -> Void,
         patch: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphRecordPatch) throws -> GraphRecord,
         delete: @escaping @Sendable (NSManagedObjectContext, GraphID, GraphNodeID) throws -> Void,
-        attachmentMetadata: (@Sendable (NSManagedObjectContext, GraphID) throws -> [GraphAttachmentMetadata])? = nil,
+        attachmentMetadata: (@Sendable (NSManagedObjectContext, GraphID, GraphNodeID?) throws -> [GraphAttachmentMetadata])? = nil,
         query: (@Sendable (NSManagedObjectContext, GraphID, GraphQueryRequest) throws -> GraphQueryOutput)? = nil
     ) {
         self.initialize = initialize; self.fetch = fetch; self.fetchAll = fetchAll
@@ -202,6 +203,16 @@ public actor GraphStore {
         }
     }
 
+    /// Privileged dependency lookup while a replica is still behind its activation gate.
+    package func transportContains(_ nodeID: GraphNodeID) async throws -> Bool {
+        guard nodeID.graphID == id else { throw GraphStoreError.foreignGraph }
+        let adapter = adapter, graphID = id
+        return try await handle.controlRead { context in
+            if let contains = adapter.attachmentOwnerExists { return try contains(context, graphID, nodeID) }
+            return try adapter.fetch(context, graphID, nodeID).map { $0.type != GraphAttachmentPayload.graphType } ?? false
+        }
+    }
+
     package func prepareTransport(_ binding: GraphCloudTransportBinding, maximum: Int = GraphCloudBatchSizing.engineMaximumOperations, limits: GraphSyncLimits = .init(), onlyIDs: Set<GraphNodeID>? = nil) async throws -> GraphCloudOutgoingBatch {
         try await syncSession().prepareTransport(binding, maximum: maximum, limits: limits, onlyIDs: onlyIDs)
     }
@@ -244,6 +255,20 @@ public actor GraphStore {
         guard let validate = adapter.validateIntegrity else { throw GraphStoreError.unsupportedLayout }
         do { return try await handle.read { try validate($0, id) } }
         catch { throw Self.translate(error) }
+    }
+
+    /// File content has its own immutable-revision intent; this scope only reads native metadata.
+    package func readFileMetadata<Value: Sendable>(
+        _ body: @escaping @Sendable (GraphReadScope) throws -> Value
+    ) async throws -> Value {
+        let adapter = adapter, id = id
+        do {
+            return try await handle.read(externalContent: false) { context in
+                let scope = GraphReadScope(context: context, graphID: id, adapter: adapter)
+                defer { scope.invalidate() }
+                return try body(scope)
+            }
+        } catch { throw Self.translate(error) }
     }
 
     public func read<Value: Sendable>(

@@ -224,11 +224,11 @@ package actor StoreHandle {
     }
 
     /// Package implementation boundary, not a public raw-context escape hatch.
-    package func read<Value: Sendable>(
+    package func read<Value: Sendable>(externalContent: Bool = true,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         guard closeTask == nil else { throw StoreRuntimeError.closedHandle }
-        return try await registry.read(key, generation: generation, token: token, body)
+        return try await registry.read(key, generation: generation, token: token, externalContent: externalContent, body)
     }
 }
 
@@ -499,12 +499,12 @@ package actor StoreRegistry {
     }
 
     fileprivate func read<Value: Sendable>(
-        _ key: StoreKey, generation: UUID, token: UUID, control: Bool = false, accountControl: Bool = false,
+        _ key: StoreKey, generation: UUID, token: UUID, control: Bool = false, accountControl: Bool = false, externalContent: Bool = true,
         _ body: @escaping @Sendable (NSManagedObjectContext) throws -> Value
     ) async throws -> Value {
         let entry = try entry(for: key, generation: generation, token: token)
         let resources = try await entry.opening.value
-        return try await resources.read(control: control, accountControl: accountControl, body)
+        return try await resources.read(control: control, accountControl: accountControl, externalContent: externalContent, body)
     }
 
     fileprivate func transaction<Value: Sendable>(

@@ -10,7 +10,7 @@ import Testing
     @Test func pendingOwnersCascadesCaughtRefusalsAndFollowingTransactionsUseTheCurrentView() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
                                           adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: GraphID(), at: root.appendingPathComponent("Graph.sqlite"))
         let owner = GraphNodeID(graphID: graph.id), other = GraphNodeID(graphID: graph.id)

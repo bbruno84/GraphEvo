@@ -118,7 +118,7 @@ package struct GraphCloudStatus: Sendable {
 }
 
 struct GraphCloudDocument: Codable, Sendable {
-    var format = 9
+    var format = 10
     var accountResetRequired: Bool? = nil
     var clientID = UUID()
     let container: String

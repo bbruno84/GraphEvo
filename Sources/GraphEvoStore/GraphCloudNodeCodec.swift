@@ -89,7 +89,10 @@ package enum GraphCloudNodeCodec {
             try GraphCloudAsset.validateNativeByteCount(UInt64(file.byteCount))
         } else if record.file != nil { throw GraphCloudNodeError.invalidRecord }
         if record.type == GraphAttachmentPayload.graphType {
-            do { _ = try GraphAttachmentPayload(graphRecord: record) }
+            do {
+                let payload = try GraphAttachmentPayload(graphRecord: record)
+                guard payload.content.metadata.propertyKey.map({ !$0.hasPrefix(reservedPrefix) }) ?? true else { throw GraphCloudNodeError.invalidRecord }
+            }
             catch { throw GraphCloudNodeError.invalidRecord }
         }
         guard !record.type.hasPrefix(reservedPrefix), record.properties.keys.allSatisfy({ !$0.hasPrefix(reservedPrefix) }) else {
@@ -172,7 +175,7 @@ package enum GraphCloudNodeCodec {
         }
         guard native.recordType == recordType, Set(native.allKeys()) == keys.union(["asset"]),
               native.encryptedValues.allKeys().isEmpty,
-              native["format"] as? NSNumber == NSNumber(value: 3),
+              native["format"] as? NSNumber == NSNumber(value: 6),
               native["graphID"] as? String == binding.graphID.rawValue.uuidString.lowercased(),
               native["nodeID"] as? String == id.rawValue.uuidString.lowercased(),
               native["kind"] as? String == "entity",
@@ -218,7 +221,7 @@ package enum GraphCloudNodeCodec {
         let native = try systemFields.map { try self.native($0, limits: limits) } ?? CKRecord(recordType: recordType, recordID: id)
         guard native.recordType == recordType, native.recordID == id else { throw GraphCloudNodeError.invalidSystemFields }
         let attachment = record.type == GraphAttachmentPayload.graphType
-        native["format"] = NSNumber(value: record.endpoints == .file ? 4 : (attachment ? 3 : 2))
+        native["format"] = NSNumber(value: record.endpoints == .file ? 4 : (attachment ? 6 : 5))
         if record.endpoints == .file { native["asset"] = Data() as CKRecordValue }
         if attachment { native["asset"] = try GraphAttachmentPayload(graphRecord: record).content.data as CKRecordValue }
         native["graphID"] = binding.graphID.rawValue.uuidString.lowercased() as CKRecordValue
@@ -227,6 +230,24 @@ package enum GraphCloudNodeCodec {
         native["type"] = record.type as CKRecordValue
         native["payload"] = data as CKRecordValue
         return native
+    }
+
+    package static func attachmentOwner(_ incoming: GraphCloudIncoming, binding: GraphCloudBinding) throws -> GraphNodeID? {
+        guard incoming.kind == .recordChanged, incoming.recordType == recordType,
+              let archive = incoming.recordArchive else { return nil }
+        let record = try GraphCloudRecordCodec.restore(archive)
+        guard record["type"] as? String == GraphAttachmentPayload.graphType else { return nil }
+        let id = try logicalID(record.recordID, binding: binding)
+        guard Set(record.allKeys()) == keys.union(["asset"]), record.encryptedValues.allKeys().isEmpty,
+              record["graphID"] as? String == binding.graphID.rawValue.uuidString.lowercased(),
+              record["nodeID"] as? String == id.rawValue.uuidString.lowercased(),
+              record["kind"] as? String == "entity", record["format"] as? NSNumber == NSNumber(value: 6),
+              let bytes = record["payload"] as? Data,
+              let attachment = try JSONDecoder().decode(Body.self, from: bytes).attachment,
+              attachment.metadata.id == id, attachment.metadata.ownerID.graphID == binding.graphID,
+              attachment.metadata.ownerID != id else { throw GraphCloudNodeError.invalidRecord }
+        try GraphAttachmentPayload.validateMetadata(attachment.metadata)
+        return attachment.metadata.ownerID
     }
 
     package static func decode(_ native: CKRecord, binding: GraphCloudBinding,
@@ -239,7 +260,7 @@ package enum GraphCloudNodeCodec {
         }
         let id = try logicalID(native.recordID, binding: binding)
         guard let format = native["format"] as? NSNumber, CFGetTypeID(format) != CFBooleanGetTypeID(),
-              (1...4).contains(format.intValue), format.doubleValue == Double(format.intValue) else { throw GraphCloudNodeError.unsupportedVersion }
+              [4, 5, 6].contains(format.intValue), format.doubleValue == Double(format.intValue) else { throw GraphCloudNodeError.unsupportedVersion }
         guard native["graphID"] as? String == binding.graphID.rawValue.uuidString.lowercased() else { throw GraphCloudNodeError.foreignGraph }
         guard native["nodeID"] as? String == id.rawValue.uuidString.lowercased(),
               let type = native["type"] as? String, let expectedKind = native["kind"] as? String,
@@ -265,7 +286,8 @@ package enum GraphCloudNodeCodec {
             endpoints = .action(subjects: Set(subjects.map(reference)), objects: Set(objects.map(reference)))
         }
         guard kind(endpoints) == expectedKind else { throw GraphCloudNodeError.invalidRecord }
-        var properties = try body.properties.mapValues { try GraphValueCodec.decode($0) }
+        let properties = try body.properties.mapValues { try GraphValueCodec.decode($0) }
+        var storedAttachment: GraphAttachmentContent?
         var fileSource: URL?
         if isFile {
             guard format == NSNumber(value: 4), endpoints == .file, type == GraphFile.nodeType,
@@ -281,21 +303,22 @@ package enum GraphCloudNodeCodec {
             }
         } else if body.file != nil { throw GraphCloudNodeError.invalidRecord }
         if isAttachment {
-            guard format == NSNumber(value: 3), let attachment = body.attachment,
+            guard format == NSNumber(value: 6), let attachment = body.attachment,
                   attachment.metadata.id == id, endpoints == .entity,
                   properties[GraphAttachmentPayload.contentKey] == nil, properties[GraphAttachmentPayload.metadataKey] == nil else { throw GraphCloudNodeError.invalidRecord }
             let bytes = try GraphCloudAsset.bytes(native["asset"])
             let payload = try GraphAttachmentPayload(metadata: attachment.metadata, data: bytes)
-            for (key, value) in try payload.graphRecord(legacy: attachment.legacy).properties { properties[key] = value }
+            storedAttachment = payload.content
         } else {
-            guard body.attachment == nil, format != NSNumber(value: 3), isFile || format != NSNumber(value: 4) else { throw GraphCloudNodeError.invalidRecord }
+            guard body.attachment == nil, format != NSNumber(value: 6), isFile || format != NSNumber(value: 4) else { throw GraphCloudNodeError.invalidRecord }
         }
-        let record: GraphRecord
+        var record: GraphRecord
         do {
             record = try GraphRecord(id: id, type: type, endpoints: endpoints,
                                      properties: properties,
                                      tags: Set(body.tags), groups: Set(body.groups), createdDate: body.createdDate, file: body.file)
         } catch { throw GraphCloudNodeError.invalidRecord }
+        record.storedAttachment = storedAttachment
         try validate(record, limits: limits)
         let encoder = NSKeyedArchiver(requiringSecureCoding: true)
         native.encodeSystemFields(with: encoder); encoder.finishEncoding()

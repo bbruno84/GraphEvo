@@ -6,7 +6,7 @@ import Testing
     @Test func durableInsertionPlanRoundTripsAllNodeKindsAndExplicitValues() throws {
         let graph = GraphID(), entityID = GraphNodeID(graphID: graph)
         let records = try [
-            GraphRecord(id: entityID, type: "person", properties: ["null": .null, "uuid": .uuid(UUID()), "data": .data(Data([0,255]))], tags: ["tag"], groups: ["group"]),
+            GraphRecord(id: entityID, type: "person", properties: ["null": .null, "uuid": .uuid(UUID()), "data": .string(Data([0,255]).base64EncodedString())], tags: ["tag"], groups: ["group"]),
             GraphRecord(id: GraphNodeID(graphID: graph), type: "edge", endpoints: .relationship(subject: entityID, object: nil)),
             GraphRecord(id: GraphNodeID(graphID: graph), type: "action", endpoints: .action(subjects: [], objects: [entityID]))
         ]

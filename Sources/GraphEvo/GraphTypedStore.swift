@@ -135,14 +135,14 @@ public typealias GraphAppGroupOperationResult<Value: Sendable> = GraphEvoStore.G
 extension GraphContext {
     /// Creates an independent context using the production native adapters.
     public init() {
-        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
+        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()))
     }
 
     /// Opens and creates SQLite graphs with first-class files and optional CloudKit synchronization.
     public static func localFiles() -> GraphContext {
-        GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.localFiles,
-            adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()))
+        GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.attachmentFiles,
+            adapter: GraphCoordinatorFactory.makeAdapter(files: true), contextOwnerID: UUID()))
     }
 
     /// Creates a context restricted to the dedicated store paths in this App Group.
@@ -150,14 +150,14 @@ extension GraphContext {
         let group: AppGroupStoreLocation
         do { group = try AppGroupStoreLocation(identifier: configuration.identifier) }
         catch { throw GraphStore.translate(error) }
-        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
+        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: configuration))
     }
 
     /// Creates a context for internal probes of the App Group runtime.
     package init(appGroupIdentifier: String) throws {
         let group = try AppGroupStoreLocation(identifier: appGroupIdentifier)
-        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
+        self.init(manager: GraphContextManager(schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group))
     }
 }

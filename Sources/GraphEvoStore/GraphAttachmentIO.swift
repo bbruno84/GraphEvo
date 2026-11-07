@@ -128,22 +128,26 @@ public enum GraphStoreBackup {
 }
 
 extension GraphReadScope {
+    private func attachmentOwnerExists(_ ownerID: GraphNodeID) throws -> Bool {
+        guard ownerID.graphID == graphID else { throw GraphStoreError.foreignGraph }
+        return try withContext { context, adapter in
+            if let contains = adapter.attachmentOwnerExists { return try contains(context, graphID, ownerID) }
+            return try adapter.fetch(context, graphID, ownerID).map { $0.type != GraphAttachmentPayload.graphType } ?? false
+        }
+    }
+
     public func attachment(_ id: GraphNodeID) throws -> GraphAttachmentContent? {
         guard let record = try record(for: id) else { return nil }
         let payload = try GraphAttachmentPayload(graphRecord: record)
-        guard let owner = try self.record(for: payload.ownerID), owner.type != GraphAttachmentPayload.graphType else {
-            throw GraphAttachmentError.missingOwner
-        }
+        guard try attachmentOwnerExists(payload.ownerID) else { throw GraphAttachmentError.missingOwner }
         return payload.content
     }
 
     public func attachments(ownedBy ownerID: GraphNodeID) throws -> [GraphAttachmentMetadata] {
-        guard let owner = try record(for: ownerID), owner.type != GraphAttachmentPayload.graphType else {
-            throw GraphAttachmentError.missingOwner
-        }
+        guard try attachmentOwnerExists(ownerID) else { throw GraphAttachmentError.missingOwner }
         return try withContext { context, adapter in
             let metadata: [GraphAttachmentMetadata]
-            if let project = adapter.attachmentMetadata { metadata = try project(context, graphID) }
+            if let project = adapter.attachmentMetadata { metadata = try project(context, graphID, ownerID) }
             else { metadata = try adapter.fetchAll(context, graphID, GraphAttachmentPayload.graphType, .entity).map { try GraphAttachmentPayload.metadata(from: $0) } }
             return metadata.filter { $0.ownerID == ownerID }
         }

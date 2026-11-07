@@ -7,9 +7,11 @@ public typealias GraphNodeKind = GraphEvoModel.GraphNodeKind
 public typealias GraphEndpoints = GraphEvoModel.GraphEndpoints
 public typealias GraphRecord = GraphEvoModel.GraphRecord
 public typealias GraphValue = GraphEvoModel.GraphValue
-public typealias GraphEncodedValue = GraphEvoModel.GraphEncodedValue
 public typealias GraphPropertyValue = GraphEvoModel.GraphPropertyValue
 public typealias GraphPropertyChange = GraphEvoModel.GraphPropertyChange
 public typealias GraphRecordPatch = GraphEvoModel.GraphRecordPatch
 public typealias GraphModel = GraphEvoModel.GraphModel
 public typealias GraphModelError = GraphEvoModel.GraphModelError
+
+public typealias GraphAttachmentValue = GraphEvoModel.GraphAttachmentValue
+public typealias GraphAttachmentChange = GraphEvoModel.GraphAttachmentChange

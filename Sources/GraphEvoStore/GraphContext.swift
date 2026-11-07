@@ -136,7 +136,7 @@ public actor GraphContext {
 
     /// Reserves transport and returns before account/network startup completes.
     public func connectCloud(using configuration: GraphCloudConnectionConfiguration) async throws -> GraphCloudConnection {
-        let configuration = configuration.withFileSupport(manager.schema.identifier == GraphFileDisk.schemaIdentifier)
+        let configuration = configuration.withFileSupport([GraphFileDisk.schemaIdentifier, "GraphEvo.v2.schema.7.local-files"].contains(manager.schema.identifier))
         if let group = manager.publicAppGroup {
             guard group.role == .primary else { throw GraphStoreError.permissionDenied }
             guard group.allowsCloudSynchronization else { throw GraphStoreError.unsupportedLayout }

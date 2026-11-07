@@ -106,7 +106,7 @@ enum GraphCloudActivationNative {
         var remaining = limits.maximumPayloadBytes
         for (nodeID, node) in session.nodes {
             try StoreNativeContext.cancellationCheck(in: context)()
-            let value = try session.snapshot(node, id: nodeID)
+            let value = try session.snapshot(node, id: nodeID, includingAttachments: false)
             try session.validate(value)
             let record = try GraphCloudNodeCodec.encode(value, binding: binding.route,
                                                         modifiedAt: GraphMutationMetadata.modifiedAt(node))

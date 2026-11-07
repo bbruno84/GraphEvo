@@ -10,6 +10,11 @@ public struct GraphAttachmentMetadata: Sendable, Equatable, Codable {
     public let byteCount: Int
     public let sha256: String
     public let revision: UUID
+    public package(set) var propertyKey: String? = nil
+    public package(set) var codec: String? = nil
+    public package(set) var codecVersion: UInt? = nil
+    public package(set) var origin: String? = nil
+    public package(set) var sourcePropertyVersion: Int? = nil
 }
 
 /// Complete locally readable content, verified against its metadata. No native file URL escapes.
@@ -31,7 +36,7 @@ public enum GraphAttachmentError: Error {
     case destinationExists
 }
 
-/// Alpha representation over the existing native Entity/property model, not a frozen schema.
+/// Internal attachment envelope shared by native persistence and transport.
 package struct GraphAttachmentPayload: GraphModel {
     package static let graphType = "GraphEvo.Attachment.v1"
     package static let graphKind: GraphNodeKind = .entity
@@ -41,7 +46,7 @@ package struct GraphAttachmentPayload: GraphModel {
         let version: Int
         let metadata: GraphAttachmentMetadata
     }
-    package static let maximumByteCount = 10 * 1024 * 1024
+    package static let maximumByteCount = GraphAttachmentValue.maximumByteCount
     private struct Envelope: Codable {
         let version: Int
         let metadata: GraphAttachmentMetadata
@@ -64,71 +69,67 @@ package struct GraphAttachmentPayload: GraphModel {
     }
 
     package init(graphRecord: GraphRecord) throws {
-        guard graphRecord.type == Self.graphType, graphRecord.endpoints == .entity else { throw GraphAttachmentError.notAnAttachment }
-        if graphRecord.properties[Self.metadataKey] == nil {
-            let envelope = try Self.legacyEnvelope(graphRecord)
-            try Self.validate(envelope.metadata, data: envelope.data)
-            content = GraphAttachmentContent(metadata: envelope.metadata, data: envelope.data)
-            return
+        guard graphRecord.type == Self.graphType, graphRecord.endpoints == .entity,
+              let stored = graphRecord.storedAttachment, stored.metadata.id == graphRecord.id else {
+            throw GraphAttachmentError.notAnAttachment
         }
-        let metadata = try Self.metadata(from: graphRecord)
-        let data: Data = try graphRecord.value(for: Self.contentKey)
-        try Self.validate(metadata, data: data)
-        content = GraphAttachmentContent(metadata: metadata, data: data)
+        try Self.validate(stored.metadata, data: stored.data)
+        content = stored
     }
 
-    /// Metadata is descriptive; only a complete content read verifies body availability and checksum.
     package static func metadata(from record: GraphRecord) throws -> GraphAttachmentMetadata {
-        guard record.type == graphType, record.endpoints == .entity else { throw GraphAttachmentError.notAnAttachment }
-        guard record.properties[metadataKey] != nil else { return try GraphAttachmentPayload(legacy: record).content.metadata }
-        let bytes: Data = try record.value(for: metadataKey)
-        let envelope: MetadataEnvelope
-        do { envelope = try PropertyListDecoder().decode(MetadataEnvelope.self, from: bytes) }
-        catch { throw GraphAttachmentError.incompleteOrInvalidContent }
-        guard envelope.version == 2 else { throw GraphAttachmentError.unsupportedVersion }
-        guard envelope.metadata.id == record.id else { throw GraphAttachmentError.incompleteOrInvalidContent }
-        try validateMetadata(envelope.metadata)
-        return envelope.metadata
+        guard record.type == graphType, record.endpoints == .entity, let content = record.storedAttachment, content.metadata.id == record.id else { throw GraphAttachmentError.notAnAttachment }
+        try validateMetadata(content.metadata)
+        return content.metadata
     }
 
-    private static func legacyEnvelope(_ record: GraphRecord) throws -> Envelope {
-        let bytes: Data = try record.value(for: contentKey)
-        let envelope: Envelope
-        do { envelope = try PropertyListDecoder().decode(Envelope.self, from: bytes) }
-        catch { throw GraphAttachmentError.incompleteOrInvalidContent }
-        guard envelope.version == 1 else { throw GraphAttachmentError.unsupportedVersion }
-        guard envelope.metadata.id == record.id else { throw GraphAttachmentError.incompleteOrInvalidContent }
-        return envelope
-    }
-
-    private init(legacy record: GraphRecord) throws {
-        let envelope = try Self.legacyEnvelope(record)
-        try Self.validate(envelope.metadata, data: envelope.data)
-        content = GraphAttachmentContent(metadata: envelope.metadata, data: envelope.data)
-    }
-
-    /// Existing envelopes remain readable and replaceable without adding shared native rows.
     package func graphRecord(in graphID: GraphID) throws -> GraphRecord {
         guard graphID == id.graphID else { throw GraphModelError.crossGraphReference }
         return try graphRecord(legacy: false)
     }
 
     package func graphRecord(legacy: Bool) throws -> GraphRecord {
-        let encoder = PropertyListEncoder(); encoder.outputFormat = .binary
-        if legacy {
-            let bytes = try encoder.encode(Envelope(version: 1, metadata: content.metadata, data: content.data))
-            return try GraphRecord(id: id, type: Self.graphType, properties: [Self.contentKey: .data(bytes)])
-        }
-        let metadata = try encoder.encode(MetadataEnvelope(version: 2, metadata: content.metadata))
-        return try GraphRecord(id: id, type: Self.graphType, properties: [Self.metadataKey: .data(metadata), Self.contentKey: .data(content.data)])
+        var record = try GraphRecord(id: id, type: Self.graphType)
+        record.storedAttachment = content
+        record.legacyAttachment = legacy
+        return record
     }
 
-    private static func validateMetadata(_ metadata: GraphAttachmentMetadata) throws {
+    package static func metadataBytes(_ metadata: GraphAttachmentMetadata, version: Int = 3) throws -> Data {
+        let encoder = PropertyListEncoder(); encoder.outputFormat = .binary
+        return try encoder.encode(MetadataEnvelope(version: version, metadata: metadata))
+    }
+
+    package static func decodeMetadata(_ bytes: Data) throws -> GraphAttachmentMetadata {
+        let envelope = try PropertyListDecoder().decode(MetadataEnvelope.self, from: bytes)
+        guard [2, 3].contains(envelope.version) else { throw GraphAttachmentError.unsupportedVersion }
+        try validateMetadata(envelope.metadata)
+        return envelope.metadata
+    }
+
+    package static func legacyEnvelopeBytes(_ content: GraphAttachmentContent) throws -> Data {
+        let encoder = PropertyListEncoder(); encoder.outputFormat = .binary
+        return try encoder.encode(Envelope(version: 1, metadata: content.metadata, data: content.data))
+    }
+
+    package static func decodeLegacyEnvelope(_ bytes: Data) throws -> GraphAttachmentContent {
+        let envelope = try PropertyListDecoder().decode(Envelope.self, from: bytes)
+        guard envelope.version == 1 else { throw GraphAttachmentError.unsupportedVersion }
+        return try Self(metadata: envelope.metadata, data: envelope.data).content
+    }
+
+    package static func validateMetadata(_ metadata: GraphAttachmentMetadata) throws {
         guard metadata.id.graphID == metadata.ownerID.graphID, metadata.id != metadata.ownerID,
               !metadata.fileName.isEmpty, ![".", ".."].contains(metadata.fileName),
               !metadata.fileName.contains(where: { $0 == "/" || $0 == "\\" || $0 == "\0" }),
               !metadata.contentType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              (0...maximumByteCount).contains(metadata.byteCount), metadata.sha256.utf8.count == 64,
+              metadata.byteCount >= 0, metadata.propertyKey.map({ !$0.isEmpty }) ?? true,
+              metadata.codec.map({ !$0.isEmpty }) ?? true,
+              metadata.codecVersion.map({ $0 > 0 }) ?? true,
+              (metadata.codec == nil) == (metadata.codecVersion == nil),
+              metadata.origin == nil || metadata.origin == "v1",
+              metadata.sourcePropertyVersion == nil || metadata.origin == "v1",
+              metadata.sha256.utf8.count == 64,
               metadata.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
             throw GraphAttachmentError.invalidMetadata
         }
@@ -136,7 +137,6 @@ package struct GraphAttachmentPayload: GraphModel {
 
     private static func validate(_ metadata: GraphAttachmentMetadata, data: Data) throws {
         try validateMetadata(metadata)
-        guard data.count <= maximumByteCount else { throw GraphAttachmentError.limitExceeded(maxBytes: maximumByteCount) }
         guard metadata.byteCount == data.count, metadata.sha256 == digest(data) else {
             throw GraphAttachmentError.incompleteOrInvalidContent
         }

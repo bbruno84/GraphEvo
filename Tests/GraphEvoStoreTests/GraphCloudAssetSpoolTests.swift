@@ -42,16 +42,15 @@ import Testing
         let ref = try await spool.stage(Data(), role: .incoming, namespace: UUID(), identity: identity,
                                         binding: binding, recordName: "node.fixture")
         var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(ref)) as? [String: Any])
-        object["format"] = 2
+        object["format"] = 999
         let future = try JSONDecoder().decode(GraphCloudAssetReference.self, from: JSONSerialization.data(withJSONObject: object))
         #expect(throws: GraphCloudError.invalidState) {
             try future.validate(role: .incoming, identity: identity, binding: binding, recordName: "node.fixture")
         }
-        await #expect(throws: GraphCloudError.inboxLimit) {
-            try await spool.stage(Data(repeating: 1, count: GraphAttachmentPayload.maximumByteCount + 1),
+        let migrated = try await spool.stage(Data(repeating: 1, count: GraphAttachmentPayload.maximumByteCount + 1),
                                   role: .incoming, namespace: UUID(), identity: identity, binding: binding,
                                   recordName: "node.fixture")
-        }
+        #expect(migrated.byteCount == GraphAttachmentPayload.maximumByteCount + 1)
     }
 
     @Test func terminalPurgeCanResumeAfterRemovingItsLastMarker() throws {

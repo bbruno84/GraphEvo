@@ -15,7 +15,7 @@ import Testing
             let graph = Graph(transactionContext: context, configuration: GraphStoreConfiguration())
             let node = Entity("person.v1", graph: graph)
             node[dynamicMember: "name"] = "Ada"
-            node[dynamicMember: "future"] = Data([0, 255, 12])
+            node[dynamicMember: "future"] = ["retained", "collection"]
             node[dynamicMember: "deleted"] = "remove me"
             node.add(tags: "active")
             return try GraphRecordMapper.snapshot(node, id: id) { _ in
@@ -37,7 +37,7 @@ import Testing
             return try GraphRecordMapper.snapshot(node, id: id) { _ in throw GraphModelError.invalidValue }
         }
         #expect(try saved == patch.applying(to: original))
-        #expect(saved.properties["future"] == .data(Data([0, 255, 12])))
+        #expect(saved.properties["future"] == .array([.string("retained"), .string("collection")]))
         try await reopened.close()
     }
 
@@ -71,8 +71,7 @@ import Testing
     @Test func unsupportedPatchFailsBeforeAnyEditEvenWhenCallerCatchesIt() async throws {
         let handle = try await StoreRegistry().open(.init(location: .inMemory(UUID())), schema: GraphRuntimeSchema.current)
         let id = GraphNodeID(graphID: GraphID())
-        let opaque = try GraphEncodedValue(codec: "future", version: 2, data: Data([1, 2]))
-        let patch = try GraphRecordPatch(id: id, properties: ["name": .set(.string("wrong")), "opaque": .set(.encoded(opaque))],
+        let patch = try GraphRecordPatch(id: id, properties: ["name": .set(.string("wrong")), "opaque": .set(.uuid(UUID()))],
                                          addingTags: ["wrong"])
         let record = try await handle.transaction { context in
             let graph = Graph(transactionContext: context, configuration: GraphStoreConfiguration())

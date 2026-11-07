@@ -99,16 +99,16 @@ private struct Event: GraphModel {
 
     @Test func partialEditsPreserveUnknownValuesAndMetadata() throws {
         let id = GraphNodeID(graphID: GraphID())
-        let unknown = try GraphEncodedValue(codec: "app.future", version: 9, data: Data([0, 255, 34]))
+        let unknown: GraphValue = .object(["future": .array([.integer(0), .integer(255), .integer(34)])])
         let original = try GraphRecord(id: id, type: "unknown.type", properties: [
-            "name": .string("Ada"), "obsolete": .integer(1), "unrecognized": .encoded(unknown)
+            "name": .string("Ada"), "obsolete": .integer(1), "unrecognized": unknown
         ], tags: ["old", "keep"], groups: ["one"], createdDate: Date(timeIntervalSince1970: 100))
         let patch = try GraphRecordPatch(id: id, properties: ["name": .set(.string("Grace")), "obsolete": .remove],
                                          addingTags: ["new"], removingTags: ["old"], addingGroups: ["two"])
         let updated = try patch.applying(to: original)
         #expect(updated.properties["name"] == .string("Grace"))
         #expect(updated.properties["obsolete"] == nil)
-        #expect(updated.properties["unrecognized"] == .encoded(unknown))
+        #expect(updated.properties["unrecognized"] == unknown)
         #expect(updated.tags == ["keep", "new"])
         #expect(updated.groups == ["one", "two"])
         #expect(updated.type == original.type)
@@ -136,7 +136,7 @@ private struct Event: GraphModel {
     @Test func scalarAndContainerConversionsAreStrict() throws {
         let values: [GraphValue] = [.integer(.min), .integer(.max), .unsignedInteger(.max), .boolean(true),
                                     .floatingPoint(1.5), .decimal(Decimal(string: "1.23456789")!),
-                                    .data(Data([0, 255])), .date(Date(timeIntervalSince1970: 100)),
+                                    .date(Date(timeIntervalSince1970: 100)),
                                     .url(URL(string: "https://example.com")!), .uuid(UUID())]
         #expect(try Int64(graphValue: values[0]) == .min)
         #expect(try UInt64(graphValue: values[2]) == .max)

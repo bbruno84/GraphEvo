@@ -1,5 +1,10 @@
 # GraphEvo 2 — durable temporary CKAsset spool
 
+The current S06/S07 property and attachment contract advances the descriptor,
+node, session, transport and asset-reference formats described below. See
+[properties and attachments](graphevo-2-property-attachments.md); earlier format
+numbers in this document retain their historical increment scope.
+
 Status: integrated through [PR #144](https://github.com/bbruno84/GraphEvo/pull/144),
 with reviewed [full checkpoint #41715897139](https://github.com/bbruno84/GraphEvo/actions/runs/41715897139)
 on `ae0d50ef688bb0ca5d7088abb12ebfcc0e21f50a`.

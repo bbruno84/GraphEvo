@@ -79,14 +79,14 @@ private actor FileBus {
 
     @available(iOS 17, macOS 14, *)
     private func fixture(_ root: URL, bus: FileBus, id: GraphID, container: String,
-                         scope: GraphCloudScope = .private, schema: StoreSchema = GraphRuntimeSchema.localFiles,
+                         scope: GraphCloudScope = .private, schema: StoreSchema = GraphRuntimeSchema.attachmentFiles,
                          existing: Bool = false) async throws -> Fixture {
         let manager = GraphContextManager(registry: StoreRegistry(), schema: schema, adapter: GraphCoordinatorFactory.adapter)
         let store = root.appendingPathComponent("Graph.sqlite")
         let graph = try await existing ? manager.openGraph(id: id, at: store) : manager.createGraph(id: id, at: store)
         var config = GraphCloudConfiguration(containerIdentifier: container, environment: .development,
                                               directory: root.appendingPathComponent("Cloud"))
-        config.supportsFiles = schema.identifier == GraphFileDisk.schemaIdentifier
+        config.supportsFiles = [GraphFileDisk.schemaIdentifier, "GraphEvo.v2.schema.7.local-files"].contains(schema.identifier)
         _ = try await manager.startCloudSession(config, adapter: bus.adapter)
         let route = GraphCloudBinding(zone: .init(scope: scope, owner: "owner", name: "file-zone"), graphID: id)
         try await manager.bindCloudZone(route.zone, to: id, configuration: config)
@@ -277,7 +277,7 @@ private actor FileBus {
         let base = try root()
         defer { try? FileManager.default.removeItem(at: base) }
         let bus = FileBus(root: base)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.localFiles,
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentFiles,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID())
         let context = GraphContext(manager: manager, adapter: bus.adapter)
         let graph = try await context.createGraph(id: GraphID(), at: base.appendingPathComponent("Graph.sqlite"))
@@ -372,7 +372,7 @@ private actor FileBus {
         let base = try root()
         defer { try? FileManager.default.removeItem(at: base) }
         let bus = FileBus(root: base), id = GraphID()
-        let originalContext = GraphContext()
+        let originalContext = GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter))
         let source = base.appendingPathComponent("S04.sqlite")
         let original = try await originalContext.createGraph(id: id, at: source)
         let node = original.makeNodeID()
@@ -381,7 +381,7 @@ private actor FileBus {
         try await original.close()
         let target = base.appendingPathComponent("Migrated")
         _ = try await GraphContext.migrateClosedS04Store(from: source, into: target)
-        let migrated = try await fixture(target, bus: bus, id: id, container: "iCloud.file." + UUID().uuidString, existing: true)
+        let migrated = try await fixture(target, bus: bus, id: id, container: "iCloud.file." + UUID().uuidString, schema: GraphRuntimeSchema.localFiles, existing: true)
         let batch = try await migrated.graph.prepareTransport(migrated.binding)
         #expect(batch.items.map(\.change.id) == [node])
         try await migrated.close()

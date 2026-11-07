@@ -41,7 +41,7 @@ enum GraphNativePropertyStorage {
     }
     static func enabled(_ context: NSManagedObjectContext) -> Bool {
         let versions = context.persistentStoreCoordinator?.managedObjectModel.versionIdentifiers
-        return versions == [AnyHashable(identifier)] || versions == [AnyHashable(GraphFileDisk.schemaIdentifier)]
+        return GraphNativeAttachmentStorage.enabled(context) || versions == [AnyHashable(identifier)] || versions == [AnyHashable(GraphFileDisk.schemaIdentifier)]
     }
     static func physicalKey(_ key: String) -> String {
         key.utf8.contains(0) ? keyPrefix + Data(key.utf8).base64EncodedString() : key
@@ -73,7 +73,6 @@ enum GraphNativePropertyStorage {
             return v == 0 && v.sign == .minus ? try envelope(.floating) : native(.floating, "ge2Double", v)
         case .decimal(let v): guard !v.isNaN else { throw GraphModelError.invalidValue }; return try envelope(.decimal)
         case .string(let v): return v.utf8.contains(0) ? try envelope(.string) : native(.string, "ge2String", v)
-        case .data(let v): return native(.data, "ge2Bytes", v)
         case .date(let v):
             let interval = v.timeIntervalSinceReferenceDate
             guard interval.isFinite else { throw GraphModelError.invalidValue }
@@ -82,12 +81,11 @@ enum GraphNativePropertyStorage {
         case .url(let v): return v.baseURL != nil ? try envelope(.url) : native(.url, "ge2URI", v)
         case .array: return try envelope(.array)
         case .object: return try envelope(.object)
-        case .encoded: return try envelope(.encoded)
         }
     }
     static func requiresEnvelope(_ value: GraphValue) -> Bool {
         switch value {
-        case .decimal, .array, .object, .encoded: return true
+        case .decimal, .array, .object: return true
         case .string(let string): return string.utf8.contains(0)
         case .floatingPoint(let number): return number == 0 && number.sign == .minus
         case .date(let date): return date.timeIntervalSinceReferenceDate == 0 && date.timeIntervalSinceReferenceDate.sign == .minus
@@ -99,8 +97,8 @@ enum GraphNativePropertyStorage {
         switch value {
         case .null: return .null; case .boolean: return .boolean; case .integer: return .integer
         case .unsignedInteger: return .unsigned; case .floatingPoint: return .floating; case .decimal: return .decimal
-        case .string: return .string; case .data: return .data; case .date: return .date; case .url: return .url
-        case .uuid: return .uuid; case .array: return .array; case .object: return .object; case .encoded: return .encoded
+        case .string: return .string; case .date: return .date; case .url: return .url
+        case .uuid: return .uuid; case .array: return .array; case .object: return .object
         }
     }
     static func read(_ row: NSManagedObject, charge: ((Int) throws -> Void)? = nil) throws -> GraphValue {
@@ -141,7 +139,7 @@ enum GraphNativePropertyStorage {
                   String(repeating: "0", count: 20 - String(value).count) + String(value) == string else { throw GraphStoreError.corruptIdentity }
             result = .unsignedInteger(value)
         case .string: guard let v = row.value(forKey: field!) as? String, !v.utf8.contains(0) else { throw GraphStoreError.corruptIdentity }; result = .string(v)
-        case .data: guard let v = row.value(forKey: field!) as? Data else { throw GraphStoreError.corruptIdentity }; result = .data(v)
+        case .data: throw GraphStoreError.corruptIdentity
         case .date: guard let v = row.value(forKey: field!) as? Date, v.timeIntervalSinceReferenceDate.isFinite else { throw GraphStoreError.corruptIdentity }; result = .date(v)
         case .uuid: guard let v = row.value(forKey: field!) as? UUID else { throw GraphStoreError.corruptIdentity }; result = .uuid(v)
         case .url: guard let v = row.value(forKey: field!) as? URL, v.baseURL == nil else { throw GraphStoreError.corruptIdentity }; result = .url(v)

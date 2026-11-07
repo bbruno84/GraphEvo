@@ -77,15 +77,15 @@ enum GraphV1NativeInventory {
                     if let edge = node as? Relationship { endpoints = .relationship(subject: try edge.subject.map(reference), object: try edge.object.map(reference)) }
                     else if let action = node as? Action { endpoints = .action(subjects: Set(try action.subjects.map(reference)), objects: Set(try action.objects.map(reference))) }
                     else { endpoints = .entity }
-                    var properties = [String: GraphValue]()
+                    var properties = [String: GraphLegacyValue]()
                     for (key, value) in node.properties {
                         guard !key.hasPrefix(GraphTypedStoreAdapter.prefix) else { throw GraphV1ConversionError.unsupportedSource }
                         properties[key] = try GraphV1NativeConversion.valueFromLegacy(value, key: key, canonical: true)
                     }
-                    let record = try GraphRecord(id: mapping[legacy]!, type: type, endpoints: endpoints, properties: properties,
+                    let record = try GraphRecord(id: mapping[legacy]!, type: type, endpoints: endpoints, properties: [:],
                         tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent)
                     try append(record, legacy: legacy, reverse: reverse,
-                               versions: node.runtimePropertyVersions, digest: &digest)
+                               versions: node.runtimePropertyVersions, properties: properties, digest: &digest)
                 }
                 context.reset()
             }
@@ -94,7 +94,7 @@ enum GraphV1NativeInventory {
         }
     }
 
-    static func append(_ record: GraphRecord, legacy: String, reverse: [GraphNodeID: String], versions: [String: Int], digest: inout SHA256) throws {
+    static func append(_ record: GraphRecord, legacy: String, reverse: [GraphNodeID: String], versions: [String: Int], properties: [String: GraphLegacyValue]? = nil, digest: inout SHA256) throws {
         let kind: String, subjects: [GraphNodeID], objects: [GraphNodeID]
         switch record.endpoints {
         case .entity: kind = "entity"; subjects = []; objects = []
@@ -107,9 +107,10 @@ enum GraphV1NativeInventory {
         }
         let canonical = GraphV1NativeConversion.Canonical(legacyID: legacy, type: record.type, kind: kind,
             subjects: try subjects.map(key).sorted(), objects: try objects.map(key).sorted(),
-            properties: try record.properties.mapValues { try GraphValueCodec.encode($0) }, propertyVersions: versions,
+            properties: try (try properties ?? GraphV1NativeConversion.canonicalProperties(record)).mapValues { try GraphLegacyValueCodec.encode($0) }, propertyVersions: versions,
             tags: record.tags.sorted(), groups: record.groups.sorted(), createdDate: record.createdDate)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        digest.update(data: try encoder.encode(canonical))
+        let canonicalBytes = try encoder.encode(canonical)
+        digest.update(data: canonicalBytes)
     }
 }

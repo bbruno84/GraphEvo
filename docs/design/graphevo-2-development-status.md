@@ -1,10 +1,27 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-07. This is the single entry point for **integrated work,
+Updated: 2026-11-08. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
+
+## In progress — property and attachment contract
+
+`codex/v2-property-attachment-contract` implements the agreed separation of
+scalar/collection properties from raw Data and generic Codable attachments,
+with 2 MiB ordinary admission and a mandatory v1 migration exception. See the
+[S06/S07 contract](graphevo-2-property-attachments.md). This is pending work;
+it does not change the integrated checkpoint below. The
+[acceptance report](results/property-attachment-contract-2026-11-08.md) records
+real iPad/XR cross-account recovery, replacements in both directions and reopen,
+including the oversized migrated value. It also records the native invitation
+flag correction and the external-binary read-grant finding. Final local
+validation passes 769 v2 tests, 331 legacy tests, both Swift 6 consumers and
+three rejected-property compile fixtures. Affected iOS groups pass without
+skips; their overlapping scopes are detailed in the report. The Debug capacity
+case takes about 215 seconds with the selected read protection, so representative
+Release/device cost acceptance remains open.
 
 ## Current position — 2026-11-07
 

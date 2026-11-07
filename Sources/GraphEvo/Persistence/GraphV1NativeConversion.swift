@@ -22,9 +22,12 @@ enum GraphV1NativeConversion {
         let groups: [String]
         let createdDate: Date?
     }
-    static let adapter = GraphV1ConversionAdapter(sourceSchema: GraphRuntimeSchema.current,
-        targetSchemaIdentifier: GraphRuntimeSchema.typedProperties.identifier,
-        snapshot: { try snapshot($0, id: $1, limits: $2) }, receipt: { try receipt($0, id: $1) }, apply: { try apply($0, intent: $1, snapshot: $2) })
+    static let adapter = makeAdapter(targetSchemaIdentifier: GraphNativeAttachmentStorage.identifier)
+    static func makeAdapter(targetSchemaIdentifier: String) -> GraphV1ConversionAdapter {
+        GraphV1ConversionAdapter(sourceSchema: GraphRuntimeSchema.current,
+            targetSchemaIdentifier: targetSchemaIdentifier,
+            snapshot: { try snapshot($0, id: $1, limits: $2) }, receipt: { try receipt($0, id: $1) }, apply: { try apply($0, intent: $1, snapshot: $2) })
+    }
 
     private static func snapshot(_ context: NSManagedObjectContext, id: GraphID, limits: GraphV1ConversionLimits) throws -> GraphV1Snapshot {
         try GraphValueDecodingDiagnostics.checking {
@@ -79,18 +82,20 @@ enum GraphV1NativeConversion {
                 if let edge = node as? Relationship { endpoints = .relationship(subject: try edge.subject.map(reference), object: try edge.object.map(reference)) }
                 else if let action = node as? Action { endpoints = .action(subjects: Set(try action.subjects.map(reference)), objects: Set(try action.objects.map(reference))) }
                 else { endpoints = .entity }
-                var values = [String: GraphValue](), canonicalValues = [String: GraphValue]()
+                var values = [String: GraphValue](), canonicalValues = [String: GraphLegacyValue](), attachments = [String: GraphAttachmentValue]()
                 for (key, value) in node.properties {
                     guard !key.hasPrefix(GraphTypedStoreAdapter.prefix) else { throw GraphV1ConversionError.unsupportedSource }
-                    values[key] = try valueFromLegacy(value, key: key)
+                    let converted = try convertedProperty(value, key: key)
+                    values[key] = converted.property; attachments[key] = converted.attachment
                     canonicalValues[key] = try valueFromLegacy(value, key: key, canonical: true)
                 }
                 versions[mapped] = node.runtimePropertyVersions
                 let record = try GraphRecord(id: mapped, type: node.type, endpoints: endpoints, properties: values,
-                    tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent)
+                    tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent, attachments: attachments)
                 do {
                     try GraphQueryStoredCost.charge(64 + old.utf8.count + record.type.utf8.count, remaining: &remaining)
                     try GraphQueryStoredCost.charge(.object(values), remaining: &remaining)
+                    for attachment in attachments.values { try GraphQueryStoredCost.charge(attachment.data.count, remaining: &remaining) }
                     for tag in record.tags { try GraphQueryStoredCost.charge(tag.utf8.count, remaining: &remaining) }
                     for group in record.groups { try GraphQueryStoredCost.charge(group.utf8.count, remaining: &remaining) }
                 } catch { throw GraphV1ConversionError.limitExceeded }
@@ -105,7 +110,7 @@ enum GraphV1NativeConversion {
                 let canonical = Canonical(legacyID: old, type: record.type, kind: kind,
                     subjects: try subjects.map { guard let old = reverse[$0] else { throw GraphV1ConversionError.unsupportedSource }; return old }.sorted(),
                     objects: try objects.map { guard let old = reverse[$0] else { throw GraphV1ConversionError.unsupportedSource }; return old }.sorted(),
-                    properties: try canonicalValues.mapValues { try GraphValueCodec.encode($0) }, propertyVersions: node.runtimePropertyVersions, tags: record.tags.sorted(), groups: record.groups.sorted(), createdDate: record.createdDate)
+                    properties: try canonicalValues.mapValues { try GraphLegacyValueCodec.encode($0) }, propertyVersions: node.runtimePropertyVersions, tags: record.tags.sorted(), groups: record.groups.sorted(), createdDate: record.createdDate)
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
                 digest.update(data: try encoder.encode(canonical)); records.append(record)
             }
@@ -164,10 +169,18 @@ enum GraphV1NativeConversion {
             let legacyByID = Dictionary(uniqueKeysWithValues: snapshot.nodeIDs.map { ($0.value, $0.key) })
             for record in snapshot.records.sorted(by: { ($0.endpoints.kind == .entity ? 0 : 1) < ($1.endpoints.kind == .entity ? 0 : 1) }) {
                 try StoreNativeContext.cancellationCheck(in: context)()
-                try session.insert(record)
+                try session.insert(record, migrated: true)
                 guard let node = try session.node(record.id) else { throw GraphStoreError.missingNode }
                 node.setImportedCreatedDate(record.createdDate)
-                try node.runtimeSetPropertyVersions(snapshot.propertyVersions[record.id] ?? [:])
+                try node.runtimeSetPropertyVersions((snapshot.propertyVersions[record.id] ?? [:]).filter { record.properties[$0.key] != nil })
+                for (childID, child) in session.nodes where child.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
+                    var metadata = try GraphNativeAttachmentStorage.metadata(child, id: childID)
+                    if metadata.ownerID == record.id, let key = metadata.propertyKey {
+                        metadata.sourcePropertyVersion = snapshot.propertyVersions[record.id]?[key]
+                        let content = try GraphNativeAttachmentStorage.read(child, id: childID)
+                        try GraphNativeAttachmentStorage.write(try GraphAttachmentPayload(metadata: metadata, data: content.data).content, to: child)
+                    }
+                }
                 guard let legacy = legacyByID[record.id] else { throw GraphV1ConversionError.invalidReceipt }
                 node[dynamicMember: GraphTypedStoreAdapter.legacyKey] = legacy
             }
@@ -191,7 +204,27 @@ enum GraphV1NativeConversion {
             return value
         }
     }
-    static func valueFromLegacy(_ value: Any, key: String, depth: Int = 0, canonical: Bool = false) throws -> GraphValue {
+    static func convertedProperty(_ value: Any, key: String) throws -> (property: GraphValue?, attachment: GraphAttachmentValue?) {
+        let legacy = try valueFromLegacy(value, key: key)
+        if let property = try? legacy.property() { return (property, nil) }
+        if case .data(let bytes) = legacy { return (nil, .init(data: bytes)) }
+        let bytes = try GraphArchiver.archive(value)
+        return (nil, try .init(data: bytes, codec: legacyArchiveCodec, version: 1))
+    }
+
+    static func canonicalProperties(_ record: GraphRecord) throws -> [String: GraphLegacyValue] {
+        var values = record.properties.mapValues(GraphLegacyValue.init)
+        for (key, attachment) in record.attachments {
+            guard values[key] == nil else { throw GraphV1ConversionError.invalidReceipt }
+            if attachment.codec == "GraphEvo.raw" { values[key] = .data(attachment.data) }
+            else if attachment.codec == legacyArchiveCodec {
+                values[key] = try valueFromLegacy(GraphArchiver.unarchive(attachment.data), key: key, canonical: true)
+            } else { throw GraphV1ConversionError.invalidReceipt }
+        }
+        return values
+    }
+
+    static func valueFromLegacy(_ value: Any, key: String, depth: Int = 0, canonical: Bool = false) throws -> GraphLegacyValue {
         guard depth <= 64 else { throw GraphModelError.unsupportedLegacyValue(key) }
         // The historical unarchiver can return Optional<Any> boxed as Any. Missing data is not a null.
         let mirror = Mirror(reflecting: value)
@@ -199,7 +232,7 @@ enum GraphV1NativeConversion {
             guard let child = mirror.children.first else { throw GraphModelError.unsupportedLegacyValue(key) }
             return try valueFromLegacy(child.value, key: key, depth: depth + 1, canonical: canonical)
         }
-        let wrapper: String?, wrapped: GraphValue?
+        let wrapper: String?, wrapped: GraphLegacyValue?
         switch value {
         case let value as AnyCodableObject:
             wrapper = "AnyCodableObject"; wrapped = try valueFromLegacy(value.value, key: key, depth: depth + 1, canonical: true)
@@ -209,10 +242,12 @@ enum GraphV1NativeConversion {
             wrapper = "DictionaryOfAnyCodableObject"; wrapped = .object(try value.items.mapValues { try valueFromLegacy($0, key: key, depth: depth + 1, canonical: true) })
         default: wrapper = nil; wrapped = nil
         }
-        if let wrapper, let wrapped {
+        if wrapper != nil, let wrapped {
             // Fingerprint semantic wrapper contents, not keyed-archive object ordering.
-            let bytes = canonical ? try GraphValueCodec.encode(wrapped) : try GraphArchiver.archive(value)
-            return .encoded(try GraphEncodedValue(codec: canonical ? "GraphEvo.v1.canonical." + wrapper : legacyArchiveCodec, version: 1, data: bytes))
+            if canonical { return wrapped }
+            if (try? wrapped.property()) != nil { return wrapped }
+            let bytes = try GraphArchiver.archive(value)
+            return .encoded(try GraphLegacyEncodedValue(codec: legacyArchiveCodec, version: 1, data: bytes))
         }
         switch value {
         case is NSNull: return .null

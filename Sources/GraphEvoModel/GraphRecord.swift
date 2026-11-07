@@ -52,6 +52,9 @@ public struct GraphRecord: Sendable, Equatable {
     public let type: String
     public let endpoints: GraphEndpoints
     public let file: GraphFile?
+    public let attachments: [String: GraphAttachmentValue]
+    package var storedAttachment: GraphAttachmentContent?
+    package var legacyAttachment = false
     public let properties: [String: GraphValue]
     public let tags: Set<String>
     public let groups: Set<String>
@@ -59,8 +62,11 @@ public struct GraphRecord: Sendable, Equatable {
 
     public init(id: GraphNodeID, type: String, endpoints: GraphEndpoints = .entity,
                 properties: [String: GraphValue] = [:], tags: Set<String> = [],
-                groups: Set<String> = [], createdDate: Date? = nil, file: GraphFile? = nil) throws {
-        guard !type.isEmpty, properties.keys.allSatisfy({ !$0.isEmpty }) else {
+                groups: Set<String> = [], createdDate: Date? = nil, file: GraphFile? = nil,
+                attachments: [String: GraphAttachmentValue] = [:]) throws {
+        guard !type.isEmpty, properties.keys.allSatisfy({ !$0.isEmpty }),
+              attachments.keys.allSatisfy({ !$0.isEmpty }),
+              Set(properties.keys).isDisjoint(with: attachments.keys) else {
             throw GraphModelError.invalidRecord("Type and property keys must be nonempty.")
         }
         guard endpoints.kind != .file || properties.isEmpty else {
@@ -76,6 +82,7 @@ public struct GraphRecord: Sendable, Equatable {
         self.id = id
         self.type = type
         self.endpoints = endpoints
+        self.attachments = attachments
         self.properties = properties
         self.tags = tags
         self.groups = groups
@@ -85,6 +92,17 @@ public struct GraphRecord: Sendable, Equatable {
     public func value<Value: GraphPropertyValue>(for key: String, as type: Value.Type = Value.self) throws -> Value {
         guard let value = properties[key] else { throw GraphModelError.missingProperty(key) }
         do { return try Value(graphValue: value) }
+        catch { throw GraphModelError.propertyDecodingFailed(key, underlying: error) }
+    }
+
+    public func attachmentData(for key: String) throws -> Data {
+        guard let value = attachments[key] else { throw GraphModelError.missingProperty(key) }
+        return value.data
+    }
+
+    public func attachmentValue<Value: Decodable & Sendable>(for key: String, as type: Value.Type = Value.self) throws -> Value {
+        guard let value = attachments[key] else { throw GraphModelError.missingProperty(key) }
+        do { return try value.decoded(as: type) }
         catch { throw GraphModelError.propertyDecodingFailed(key, underlying: error) }
     }
 

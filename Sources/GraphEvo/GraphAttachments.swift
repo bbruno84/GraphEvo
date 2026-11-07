@@ -62,14 +62,17 @@ extension GraphStore {
         let bytes = try await GraphAttachmentIO.read(source)
         let replacement = try GraphAttachmentPayload(id: id, ownerID: old.metadata.ownerID,
             fileName: fileName ?? old.metadata.fileName, contentType: contentType ?? old.metadata.contentType, data: bytes)
-        let record = try replacement.graphRecord(legacy: legacy)
-        let patch = try GraphRecordPatch(id: id, properties: record.properties.mapValues { .set($0) })
+        _ = legacy
+        var patch = try GraphRecordPatch(id: id)
+        var metadata = replacement.content.metadata
+        metadata.propertyKey = old.metadata.propertyKey; metadata.codec = "GraphEvo.raw"; metadata.codecVersion = 1
+        patch.storedAttachment = try GraphAttachmentPayload(metadata: metadata, data: bytes).content
         return try await transaction { scope in
             try accountCheck()
             guard let current = try scope.attachment(id) else { throw GraphStoreError.missingNode }
             guard current.metadata.revision == old.metadata.revision else { throw GraphAttachmentError.conflict }
             _ = try scope.patch(patch)
-            return replacement.content.metadata
+            return metadata
         }
     }
 

@@ -31,7 +31,7 @@ private actor CoordinatorGate {
         return url
     }
     private func manager(_ registry: StoreRegistry = StoreRegistry()) -> GraphContextManager {
-        GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
     }
     private func admitted(_ count: Int, by manager: GraphContextManager) async throws {
         for _ in 0..<5_000 {
@@ -199,9 +199,9 @@ private actor CoordinatorGate {
         }
         #expect(await manager.registeredGraphCount == 0)
         await #expect(throws: GraphStoreError.self) {
-            try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
+            try await GraphDatabase.open(configuration: .init(location: .sqlite(url)), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         }
-        let next = try await GraphDatabase.open(configuration: .init(location: .sqlite(url), access: .readOnly), schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
+        let next = try await GraphDatabase.open(configuration: .init(location: .sqlite(url), access: .readOnly), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         try await next.close()
     }
 
@@ -300,7 +300,7 @@ extension GraphCoordinatorTests {
 
         let sidecars = ["-wal", "-shm"].map { url.path + $0 }
         if scenario != .occupiedCreation {
-            let model = GraphRuntimeSchema.typedProperties.makeModel()
+            let model = GraphRuntimeSchema.attachmentProperties.makeModel()
             let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
             try coordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
             for path in [url.path] + sidecars where FileManager.default.fileExists(atPath: path) {

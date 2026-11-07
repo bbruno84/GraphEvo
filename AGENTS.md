@@ -5,7 +5,7 @@
 Read [controlled access](docs/design/graphevo-2-controlled-store-access.md) before
 changing graph entry points, writer admission or mutation inventory reuse.
 GraphContextManager remains the coordinated writable gateway. Plain local
-SQLite and dedicated package-only App Group S04 owners use finite Apple
+SQLite and dedicated App Group owners (current S06) use finite Apple
 coordination for interprocess exclusion. Durable generations record interrupted
 lifecycle work. Keep native destruction and artifact cleanup inside one grant.
 Workspaces retain exclusive admission through final detach. Treat unresolved
@@ -27,6 +27,21 @@ directly to `codex/graphevo-2`. Complete review/checks/integration before the
 next increment; do not rebuild the former experiment-parent stack. Preserve
 historical reports/branches and their actual scope. Update the status page on
 integration changes and the post-alpha checklist on gate changes.
+
+## Current property and attachment contract
+
+Read [S06/S07](docs/design/graphevo-2-property-attachments.md) before value,
+attachment, migration or transport changes. Current coordinated stores keep
+scalars and supported collections in properties; Data and generic Codable use
+keyed attachments. Ordinary writes reject encoded attachment content above
+2 MiB. Migration preserves oversized v1 content without limiting reads or
+forcing conversion to File. Historical S04/S05 factories remain historical;
+current profiles refuse their stores unchanged. Never use descriptive origin
+metadata as a public bypass of write admission. S06/S07 reads retain a finite
+Apple read intent through external-content detachment and context reset. Do not
+wait for a writer inside a synchronous read body. File URL scopes retain native
+admission with their existing per-revision intent, without the binary-store read
+grant; keep those scopes free of attachment body reads.
 
 ## Selected v2 synchronization transition
 
@@ -54,9 +69,9 @@ For temporary CKAsset transport, read the
 Keep permanent attachment bodies in Core Data, preserve serialized ordinary
 payloads, and retain the process writer through preparation, file staging and
 the single native save. Frozen/inbox/sent queues store verified owned-file
-references, never SDK URLs or asset bytes. Session format 9 and graph transport
-format 3 refuse incompatible alpha operational state unchanged; H02 permits
-explicit validated session-8 conversion as described below. Do not use the 32 MiB
+references, never SDK URLs or asset bytes. Current session format 10 and graph
+transport format 4 refuse incompatible alpha operational state unchanged. The
+historical H02 session-8 conversion does not upgrade into the current profile. Do not use the 32 MiB
 inline payload allowance as a total asset/database byte cap.
 
 ## Selected v2 native schema
@@ -64,7 +79,9 @@ inline payload allowance as a total asset/database byte cap.
 Read [S03](docs/design/graphevo-2-history-schema.md) before native model work.
 M18 retains S02's twelve entities, optional ge2GraphID/ge2NodeID and compound
 indexes; it enables deletion-history preservation on these six node attributes.
-Explicit `.nativeIdentity` and coordinated openings use `GraphEvo.v2.schema.3`.
+Explicit historical `.nativeIdentity` openings use `GraphEvo.v2.schema.3`.
+Current coordinated openings select S06, or opt-in File S07; see the property
+and attachment contract above.
 No-schema/current/v1 defaults stay unchanged. S02/S01/lab files are refused before
 loading, never relabelled/migrated/erased; fresh alpha stores follow M13. Preserve
 historical factories and their actual flags/models. Application meaning and

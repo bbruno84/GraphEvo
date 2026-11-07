@@ -20,13 +20,14 @@ enum GraphMigrationNativePublication {
             let record: GraphRecord?, modified: Date?
             if change.operation == .save {
                 guard let node = try session.node(change.id) else { throw GraphStoreError.missingNode }
-                record = try session.snapshot(node, id: change.id); modified = try GraphMutationMetadata.modifiedAt(node)
+                record = try session.snapshot(node, id: change.id, includingAttachments: false); modified = try GraphMutationMetadata.modifiedAt(node)
             } else { record = nil; modified = nil }
             do {
                 try GraphQueryStoredCost.charge(64, remaining: &remaining)
                 if let record {
                     try GraphQueryStoredCost.charge(record.type.utf8.count, remaining: &remaining)
                     try GraphQueryStoredCost.charge(.object(record.properties), remaining: &remaining)
+                    if let content = record.storedAttachment { try GraphQueryStoredCost.charge(content.data.count, remaining: &remaining) }
                     for text in record.tags { try GraphQueryStoredCost.charge(text.utf8.count, remaining: &remaining) }
                     for text in record.groups { try GraphQueryStoredCost.charge(text.utf8.count, remaining: &remaining) }
                     switch record.endpoints {
@@ -71,11 +72,13 @@ enum GraphMigrationNativePublication {
                     guard current.type == record.type, current.endpoints.kind == record.endpoints.kind else { throw GraphMigrationPublicationError.unsupportedStructure }
                     var properties = record.properties.mapValues { GraphPropertyChange.set($0) }
                     for key in current.properties.keys where record.properties[key] == nil { properties[key] = .remove }
-                    _ = try session.patch(GraphRecordPatch(id: record.id, properties: properties,
+                    var patch = try GraphRecordPatch(id: record.id, properties: properties,
                         addingTags: record.tags.subtracting(current.tags), removingTags: current.tags.subtracting(record.tags),
                         addingGroups: record.groups.subtracting(current.groups), removingGroups: current.groups.subtracting(record.groups),
-                        endpoints: record.endpoints))
-                } else { try session.insert(record) }
+                        endpoints: record.endpoints)
+                    patch.storedAttachment = record.storedAttachment
+                    _ = try session.patch(patch, imported: true)
+                } else { try session.insert(record, migrated: true) }
                 guard let node = try session.node(record.id) else { throw GraphStoreError.missingNode }
                 node.setImportedCreatedDate(record.createdDate)
             }
@@ -89,7 +92,7 @@ enum GraphMigrationNativePublication {
             for item in saves {
                 guard let node = try session.node(item.change.id) else { throw GraphMigrationPublicationError.unsupportedStructure }
                 node[dynamicMember: GraphMutationMetadata.modifiedKey] = item.modifiedAt
-                guard try session.snapshot(node, id: item.change.id) == item.record else { throw GraphMigrationPublicationError.unsupportedStructure }
+                guard try session.snapshot(node, id: item.change.id, includingAttachments: false) == item.record else { throw GraphMigrationPublicationError.unsupportedStructure }
             }
             context.processPendingChanges()
             let allowed = Set(items.map { $0.change.id })

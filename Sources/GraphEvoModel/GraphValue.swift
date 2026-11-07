@@ -1,20 +1,6 @@
 import Foundation
 
-/// An application-owned encoded payload; unknown codecs retain their bytes.
-public struct GraphEncodedValue: Sendable, Equatable {
-    public let codec: String
-    public let version: UInt
-    public let data: Data
-
-    public init(codec: String, version: UInt, data: Data) throws {
-        guard !codec.isEmpty, version > 0 else { throw GraphModelError.invalidRecord("Invalid codec identity.") }
-        self.codec = codec
-        self.version = version
-        self.data = data
-    }
-}
-
-/// Detached property values. Containers and encoded payloads are not implicitly queryable.
+/// Detached property values. Collections are serialized internally and are not implicitly queryable.
 public indirect enum GraphValue: Sendable, Equatable {
     case null
     case boolean(Bool)
@@ -23,13 +9,11 @@ public indirect enum GraphValue: Sendable, Equatable {
     case floatingPoint(Double)
     case decimal(Decimal)
     case string(String)
-    case data(Data)
     case date(Date)
     case url(URL)
     case uuid(UUID)
     case array([GraphValue])
     case object([String: GraphValue])
-    case encoded(GraphEncodedValue)
 }
 
 /// Explicit conversion of a model property to a detached graph value.
@@ -88,13 +72,6 @@ extension Decimal: GraphPropertyValue {
         self = value
     }
 }
-extension Data: GraphPropertyValue {
-    public var graphValue: GraphValue { .data(self) }
-    public init(graphValue: GraphValue) throws {
-        guard case .data(let value) = graphValue else { throw GraphModelError.invalidValue }
-        self = value
-    }
-}
 extension Date: GraphPropertyValue {
     public var graphValue: GraphValue { .date(self) }
     public init(graphValue: GraphValue) throws {
@@ -141,12 +118,4 @@ extension Dictionary: GraphPropertyValue where Key == String, Value: GraphProper
 extension GraphValue: GraphPropertyValue {
     public var graphValue: GraphValue { self }
     public init(graphValue: GraphValue) { self = graphValue }
-}
-
-extension GraphEncodedValue: GraphPropertyValue {
-    public var graphValue: GraphValue { .encoded(self) }
-    public init(graphValue: GraphValue) throws {
-        guard case .encoded(let value) = graphValue else { throw GraphModelError.invalidValue }
-        self = value
-    }
 }

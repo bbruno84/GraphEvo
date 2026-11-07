@@ -64,7 +64,7 @@ struct GraphNativeIdentityAccess: Sendable {
         let session = try GraphTypedStoreAdapter.Session(context, graphID, database: true, allowUnprojectedRows: true)
         var plan: [(Node, GraphNodeID)] = []
         for (id, node) in session.nodes {
-            try session.validate(session.snapshot(node, id: id))
+            try session.validate(session.snapshot(node, id: id, includingAttachments: false))
             let oldGraph = node.node.value(forKey: graphAttribute), oldNode = node.node.value(forKey: nodeAttribute)
             guard (oldGraph == nil && oldNode == nil) ||
                     (oldGraph as? String == id.graphID.rawValue.uuidString && oldNode as? String == id.rawValue.uuidString) else {
@@ -183,6 +183,10 @@ struct GraphNativeIdentityAccess: Sendable {
 
     private func validateNode(_ node: Node, id: GraphNodeID, root: Entity, membership: Action,
                                      metadata: GraphRuntimeMetadata? = nil) throws {
+        if node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
+            guard node is Entity, !(node.node is ManagedGraphFile) else { throw GraphAttachmentError.notAnAttachment }
+        }
+
         func value(_ key: String) -> Any? {
             // Pending inverse/property edits use the facade's complete local view.
             if let metadata, !node.node.hasChanges { return metadata.value(for: node, key: key) }
@@ -283,6 +287,23 @@ struct GraphNativeIdentityAccess: Sendable {
         return result
     }
 
+    func fileMetadata(_ context: NSManagedObjectContext, id: GraphNodeID) throws -> GraphFile? {
+        let (root, membership) = try anchors(context, graphID: id.graphID)
+        guard let node = try checkedNode(context, id: id, root: root, membership: membership) else {
+            _ = try validateIdentityInventory(context, graphID: id.graphID)
+            return nil
+        }
+        guard let file = node.node as? ManagedGraphFile else { return nil }
+        return try file.metadata(id: id)
+    }
+
+    func attachmentOwnerExists(_ context: NSManagedObjectContext, id: GraphNodeID) throws -> Bool {
+        let (root, membership) = try anchors(context, graphID: id.graphID)
+        if let node = try checkedNode(context, id: id, root: root, membership: membership) { return node.runtimeTypeIfPresent != GraphAttachmentPayload.graphType }
+        _ = try validateIdentityInventory(context, graphID: id.graphID)
+        return false
+    }
+
     /// Hits validate targets/references. Misses additionally audit the complete local identity inventory.
     /// Application body integrity remains an explicit validateAll responsibility.
     func record(_ context: NSManagedObjectContext, id: GraphNodeID) throws -> GraphRecord? {
@@ -293,8 +314,14 @@ struct GraphNativeIdentityAccess: Sendable {
                 _ = try validateIdentityInventory(context, graphID: id.graphID)
                 return nil
             }
+            if node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
+                var record = try GraphRecord(id: id, type: GraphAttachmentPayload.graphType, tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent)
+                record.storedAttachment = try GraphNativeAttachmentStorage.read(node, id: id)
+                record.legacyAttachment = GraphNativeAttachmentStorage.isLegacy(node)
+                return record
+            }
             let endpoints = try references(context, node: node, id: id, root: root, membership: membership)
-            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: root, propertyKeys: GraphNativePropertyStorage.enabled(context) ? [] : nil) { entity in
+            let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: root, propertyKeys: GraphNativePropertyStorage.enabled(context) ? [] : Set(node.properties.keys).subtracting(node[dynamicMember: GraphTypedStoreAdapter.formatsKey] as? [String] ?? [])) { entity in
                 guard let graph = entity.node.value(forKey: graphAttribute) as? String,
                       graph == id.graphID.rawValue.uuidString,
                       let text = entity.node.value(forKey: nodeAttribute) as? String, let uuid = UUID(uuidString: text) else {
@@ -310,11 +337,12 @@ struct GraphNativeIdentityAccess: Sendable {
             if GraphNativePropertyStorage.enabled(context) {
                 guard keys.isEmpty else { throw GraphStoreError.corruptIdentity }
                 return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints,
-                    properties: GraphNativePropertyStorage.properties(node, keys: nil), tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file)
+                    properties: GraphNativePropertyStorage.properties(node, keys: nil), tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file,
+                    attachments: GraphNativeAttachmentStorage.values(context, ownerID: id))
             }
             var values = raw.properties.filter { !$0.key.hasPrefix(GraphTypedStoreAdapter.prefix) }
             for key in keys {
-                guard case .data(let bytes) = values[key] else { throw GraphStoreError.corruptIdentity }
+                guard let bytes = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
                 values[key] = try GraphValueCodec.decode(bytes)
             }
             return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: values,
@@ -367,7 +395,7 @@ struct GraphNativeIdentityAccess: Sendable {
             let checkCancellation = StoreNativeContext.cancellationCheck(in: context)
             for (id, node) in session.nodes {
                 try checkCancellation()
-                try session.validate(session.snapshot(node, id: id))
+                try session.validate(session.snapshot(node, id: id, includingAttachments: false))
             }
             return session.nodes.count
         }
@@ -386,16 +414,18 @@ struct GraphNativeIdentityAccess: Sendable {
         let node = try fetch(context, graphID: patch.id.graphID, nodeID: patch.id.rawValue).first!
         let updated = try patch.applying(to: current)
         var encoded = Set(node[dynamicMember: GraphTypedStoreAdapter.formatsKey] as! [String])
-        var changes: [String: GraphPropertyChange] = [:]
+        let values = try patch.properties.compactMapValues { change -> Data? in
+            if case .set(let value) = change { return try GraphValueCodec.encode(value) }
+            return nil
+        }
         for (key, change) in patch.properties {
             switch change {
-            case .set(let value): changes[key] = .set(.data(try GraphValueCodec.encode(value))); encoded.insert(key)
-            case .remove: changes[key] = .remove; encoded.remove(key)
+            case .set: node[dynamicMember: key] = values[key]; encoded.insert(key)
+            case .remove: node[dynamicMember: key] = nil; encoded.remove(key)
             }
         }
-        let native = try GraphRecordPatch(id: patch.id, properties: changes, addingTags: patch.addingTags,
-            removingTags: patch.removingTags, addingGroups: patch.addingGroups, removingGroups: patch.removingGroups)
-        try GraphRecordMapper.apply(native, to: node, id: patch.id)
+        node.add(tags: Array(patch.addingTags)); node.remove(tags: Array(patch.removingTags))
+        node.add(to: Array(patch.addingGroups)); node.remove(from: Array(patch.removingGroups))
         node[dynamicMember: GraphTypedStoreAdapter.formatsKey] = encoded.sorted()
         return updated
     }

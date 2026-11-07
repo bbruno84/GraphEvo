@@ -40,7 +40,7 @@ private actor AssetBus {
                 if let server = conflict, server.recordName == record.recordID.recordName {
                     conflict = nil
                     failures.append(.init(recordName: record.recordID.recordName, code: CKError.Code.serverRecordChanged.rawValue, serverRecord: server))
-                } else { saved.append(try GraphCloudRecordCodec.archive(record, scope: batch.zone.scope)) }
+                } else { saved.append(try GraphCloudRecordCodec.archive(GraphCloudAsset.portable(record, allowBytes: true), scope: batch.zone.scope, portableAsset: true)) }
             }
             for item in saved { records[item.recordName!] = item }
             for id in offered.recordIDsToDelete {
@@ -70,7 +70,7 @@ private actor AssetBus {
         try GraphCloudAsset.validateNativeByteCount(50_000_000_000)
         try handle.truncate(atOffset: 50_000_000_000)
         let asset = CKAsset(fileURL: file)
-        #expect(throws: GraphCloudError.inboxLimit) { try GraphCloudAsset.bytes(asset) }
+        try GraphCloudAsset.validateNativeByteCount(try handle.seekToEnd())
 
         try handle.truncate(atOffset: 50_000_000_001)
         #expect(throws: GraphCloudError.assetSizeLimitExceeded) { try GraphCloudAsset.bytes(asset) }
@@ -89,7 +89,7 @@ private actor AssetBus {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("AssetTests-" + UUID().uuidString)
         if appGroup { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false) }
         let group = appGroup ? AppGroupStoreLocation(container: directory) : nil
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
                                           adapter: GraphCoordinatorFactory.adapter, appGroup: group)
         let graph = try await manager.createGraph(id: id, at: group?.storeURL(for: id.rawValue) ?? directory.appendingPathComponent("Graph.sqlite"))
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.asset." + container, environment: .development, directory: directory.appendingPathComponent("Engine"))
@@ -179,7 +179,7 @@ private actor AssetBus {
         try await first.graph.close()
         try await first.manager.stopCloudSession(first.config)
         let group = first.manager.appGroup
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
                                           adapter: GraphCoordinatorFactory.adapter, appGroup: group)
         let reopened = try await manager.openGraph(id: graphID,
             at: group?.storeURL(for: graphID.rawValue) ?? first.directory.appendingPathComponent("Graph.sqlite"))
@@ -299,14 +299,14 @@ private actor AssetBus {
         _ = try await b.manager.applyCloudInbox(for: id, configuration: b.config)
         let imported = try #require(try await b.graph.attachment(updated.id))
         #expect(imported.metadata == updated && imported.data == data)
-        #expect(try await b.graph.read { try $0.record(for: updated.id)?.properties[GraphAttachmentPayload.metadataKey] == nil } == legacy)
+        #expect(try await b.graph.read { try $0.record(for: updated.id)?.storedAttachment != nil } == true)
         try await b.graph.delete(updated.ownerID)
         #expect(try await b.graph.attachment(updated.id) == nil)
         #expect(try await b.graph.collectSyncChanges() == 2)
         try await close(b); try await close(a)
     }
     @available(iOS 17, macOS 14, *)
-    @Test func nativeAssetsBecomePortableBeforeStagingDisappears() throws {
+    @Test func nativeAssetsBecomePortableBeforeStagingDisappears() async throws {
         let graphID = GraphID(), ownerID = GraphNodeID(graphID: graphID), nodeID = GraphNodeID(graphID: graphID)
         let route = GraphCloudBinding(zone: .init(scope: .private, owner: "owner", name: "zone"), graphID: graphID)
         let payload = try GraphAttachmentPayload(id: nodeID, ownerID: ownerID, fileName: "data", contentType: "public.data", data: Data([1,2,3]))
@@ -315,11 +315,18 @@ private actor AssetBus {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         try GraphCloudAsset.materialize(native, directory: directory)
         #expect(native["asset"] is CKAsset)
-        let incoming = try GraphCloudRecordCodec.archive(native, scope: .private)
+        let archived = try GraphCloudRecordCodec.archive(native, scope: .private)
+        let spoolRoot = FileManager.default.temporaryDirectory.appendingPathComponent("Frozen-" + UUID().uuidString).appendingPathComponent("GraphEvoCloudAssets")
+        defer { try? FileManager.default.removeItem(at: spoolRoot.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: spoolRoot.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let spool = try GraphCloudAssetSpool(root: spoolRoot)
+        let identity = GraphCloudSessionIdentity(container: "iCloud.fixture", environment: .development, account: "fixture")
+        let incoming = try GraphCloudRecordCodec.freeze(archived, identity: identity, binding: route, spool: spool, namespace: UUID())
         try FileManager.default.removeItem(at: directory)
-        try GraphCloudRecordCodec.validate(incoming)
-        #expect(throws: GraphCloudError.invalidState) { try GraphCloudRecordCodec.validateDurable(incoming) }
-        guard case .save(let decoded) = try GraphCloudNodeCodec.decode(incoming, binding: route) else { Issue.record("Missing save"); return }
+        try GraphCloudRecordCodec.validateDurable(incoming)
+        let reference = try #require(incoming.assetReference)
+        let bytes = try await spool.read(reference, role: .incoming, identity: identity, binding: route, recordName: incoming.recordName!)
+        guard case .save(let decoded) = try GraphCloudNodeCodec.decode(incoming, binding: route, assetData: bytes) else { Issue.record("Missing save"); return }
         #expect(try GraphAttachmentPayload(graphRecord: decoded.record).content == payload.content)
         #expect(incoming.recordArchive?.range(of: Data(directory.path.utf8)) == nil)
     }

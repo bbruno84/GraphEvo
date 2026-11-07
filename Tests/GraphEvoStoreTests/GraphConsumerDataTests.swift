@@ -41,7 +41,7 @@ private struct CurrentDocument: GraphModel {
             try scope.insert(GraphRecord(id: current, type: ConsumerDocument.graphType,
                 properties: ["appDataVersion": .integer(2), "name": .string("current")]))
             try scope.insert(GraphRecord(id: future, type: ConsumerDocument.graphType,
-                properties: ["appDataVersion": .integer(99), "unknown": .data(Data([0, 255]))]))
+                properties: ["appDataVersion": .integer(99), "unknown": .string(Data([0, 255]).base64EncodedString())]))
         }
         let query = GraphQuery<ConsumerDocument>(budget: try GraphQueryBudget(maximumCandidates: 32))
         #expect(try await graph.count(query).value == 3)
@@ -50,7 +50,7 @@ private struct CurrentDocument: GraphModel {
         #expect(try await control.fetchAll(ConsumerDocument.self).isEmpty)
         await #expect(throws: ConsumerDataError.self) { try await graph.fetch(future, as: CurrentDocument.self) }
         #expect(try await graph.fetch(current, as: CurrentDocument.self)?.id == current)
-        #expect(try await graph.read { try $0.record(for: future)?.properties["unknown"] } == .data(Data([0, 255])))
+        #expect(try await graph.read { try $0.record(for: future)?.properties["unknown"] } == .string(Data([0, 255]).base64EncodedString()))
         let observation = try await graph.observe(query)
         var iterator = observation.makeAsyncIterator()
         if case .value(let result) = await iterator.next() { #expect(result.items.count == 3) }

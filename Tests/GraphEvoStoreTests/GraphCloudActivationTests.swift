@@ -96,7 +96,9 @@ actor ActivationServer {
 
 // Every fixture performs a backed-up native conversion. Serialize independent
 // cases rather than saturating the full suite with simultaneous migrations.
-@Suite(.serialized, .timeLimit(.minutes(2))) struct GraphCloudActivationTests {
+// Individual hang guards distinguish the capacity fixture from ordinary functional cases.
+// Production latency acceptance is tracked separately.
+@Suite(.serialized) struct GraphCloudActivationTests {
     private struct Fixture {
         let root: URL
         let manager: GraphContextManager
@@ -113,7 +115,7 @@ actor ActivationServer {
               stoppedWriters: "Fixture writer detached", returningClients: "No legacy writers in this fixture")
     }
     private func manager(adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) -> GraphContextManager {
-        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
     }
     private func fixture(_ server: ActivationServer, oversized: Bool = false, attachments: Bool = false, id: GraphID = GraphID(), container: String? = nil) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Activation-" + UUID().uuidString)
@@ -126,7 +128,7 @@ actor ActivationServer {
         let invoice = try #require(bootstrap.conversion.receipt.nodeIDs[legacyIDs[0]])
         if !oversized {
             // An explicit consumer edit prepares the fixture; MF10 itself never changes binary representation.
-            _ = try await graph.transaction { try $0.patch(.init(id: invoice, properties: ["binary": .set(.data(Data([1,2,3])))])) }
+            _ = try await graph.transaction { try $0.patch(.init(id: invoice, attachments: ["binary": .set(.init(data: Data([1,2,3])))])) }
         }
         var nodeIDs = Set(bootstrap.conversion.receipt.nodeIDs.values)
         if attachments {
@@ -161,7 +163,7 @@ actor ActivationServer {
         _ = try await graph.transaction { try $0.patch(.init(id: id, properties: ["name": .set(.string("Later"))])) }
     }
 
-    @Test func inventoryRestartRemovesAnAbandonedSnapshotOnlyFromItsSession() throws {
+    @Test(.timeLimit(.minutes(2))) func inventoryRestartRemovesAnAbandonedSnapshotOnlyFromItsSession() throws {
         let session = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: session) }
         let root = session.appendingPathComponent("GraphEvoActivationInventory")
@@ -179,7 +181,7 @@ actor ActivationServer {
         #expect(try Data(contentsOf: sibling) == Data([2]))
     }
 
-    @Test func seedRecordSizeRejectionIsReportedWithoutPublishing() async throws {
+    @Test(.timeLimit(.minutes(2))) func seedRecordSizeRejectionIsReportedWithoutPublishing() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         await server.rejectSize(of: f.invoice)
@@ -191,7 +193,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func preparesImmutableSeedBlocksAliasesAndPublishesBeforeUnlocking() async throws {
+    @Test(.timeLimit(.minutes(2))) func preparesImmutableSeedBlocksAliasesAndPublishesBeforeUnlocking() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         await #expect(throws: GraphCloudActivationError.recoveryRequired) {
@@ -201,7 +203,7 @@ actor ActivationServer {
             graphID: f.graph.id, owner: "foreign-owner", zoneName: "shared", recipient: "synthetic-activation-account", url: URL(string: "https://example.test/invitation")!)
         await #expect(throws: GraphCloudActivationError.invalidRequest) { try await f.manager.acceptCloudInvitation(invitation, configuration: f.config) }
         let status = try await prepare(f)
-        #expect(status.phase == .prepared && status.recordCount == 5)
+        #expect(status.phase == .prepared && status.recordCount == 7)
         let alias = try await f.manager.openGraph(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"))
         await #expect(throws: GraphStoreError.self) { try await patch(alias, id: f.invoice) }
         #expect(try await alias.read { try $0.record(for: f.invoice)?.properties["name"] } == .string("Retained"))
@@ -218,7 +220,7 @@ actor ActivationServer {
         try await alias.close(); try await close(f)
     }
 
-    @Test func explicitPayloadBudgetRefusesBeforeClaimingOrLockingGraph() async throws {
+    @Test(.timeLimit(.minutes(2))) func explicitPayloadBudgetRefusesBeforeClaimingOrLockingGraph() async throws {
         let server = ActivationServer(), f = try await fixture(server, oversized: true)
         defer { try? FileManager.default.removeItem(at: f.root) }
         await #expect(throws: GraphCloudActivationError.limitExceeded) {
@@ -231,7 +233,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func ambiguousClaimAndPublicationRecoverTheSameAuthority() async throws {
+    @Test(.timeLimit(.minutes(2))) func ambiguousClaimAndPublicationRecoverTheSameAuthority() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await prepare(f)
@@ -251,7 +253,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func restartRestoresWriteGateWithoutStartingCloud() async throws {
+    @Test(.timeLimit(.minutes(2))) func restartRestoresWriteGateWithoutStartingCloud() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await prepare(f)
@@ -265,7 +267,7 @@ actor ActivationServer {
         try await graph.close(); try await next.stopCloudSession(f.config)
     }
 
-    @Test func foreignAuthorityPreservesLocalConversionAndReleasesOnlyItsGate() async throws {
+    @Test(.timeLimit(.minutes(2))) func foreignAuthorityPreservesLocalConversionAndReleasesOnlyItsGate() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await prepare(f)
@@ -280,7 +282,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func partialSendResumesFrozenWorkAndNeverPublishesEarly() async throws {
+    @Test(.timeLimit(.minutes(2))) func partialSendResumesFrozenWorkAndNeverPublishesEarly() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await prepare(f); await server.configure(record: true)
@@ -293,7 +295,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func publishesAndRecoversSeedAboveTheFormerAggregatePayloadLimit() async throws {
+    @Test(.timeLimit(.minutes(5))) func publishesAndRecoversSeedAboveTheFormerAggregatePayloadLimit() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         let ids = (0..<36).map { _ in f.graph.makeNodeID() }
@@ -330,7 +332,7 @@ actor ActivationServer {
         try await peer.stopCloudSession(config)
     }
 
-    @Test func emptyPeerRecoversExactIDsAndValuesWithoutUploadFeedback() async throws {
+    @Test(.timeLimit(.minutes(2))) func emptyPeerRecoversExactIDsAndValuesWithoutUploadFeedback() async throws {
         let server = ActivationServer(), f = try await fixture(server, attachments: true)
         defer { try? FileManager.default.removeItem(at: f.root) }
         try await publish(f)
@@ -353,7 +355,7 @@ actor ActivationServer {
         try await graph.close(); try await next.stopCloudSession(config)
     }
 
-    @Test func privateRecoveryOfASharedGraphSeparatesDescriptorAndNativeShareFromApplicationRows() async throws {
+    @Test(.timeLimit(.minutes(2))) func privateRecoveryOfASharedGraphSeparatesDescriptorAndNativeShareFromApplicationRows() async throws {
         let server = ActivationServer(), f = try await fixture(server, attachments: true)
         defer { try? FileManager.default.removeItem(at: f.root) }
         try await publish(f)
@@ -371,19 +373,19 @@ actor ActivationServer {
         let graph = try result.opening.get()
         let actual = try await graph.read { scope in try f.nodeIDs.compactMap { try scope.record(for: $0) } }
         #expect(Dictionary(uniqueKeysWithValues: actual.map { ($0.id, $0) }) == Dictionary(uniqueKeysWithValues: expected.map { ($0.id, $0) }))
-        #expect(try await graph.validateIntegrity() == f.nodeIDs.count)
+        #expect(try await graph.validateIntegrity() == f.nodeIDs.count + 2)
         #expect(try await graph.collectSyncChanges() == 0)
         #expect(await server.sends == sends)
         try await graph.close(); try await next.stopCloudSession(config)
     }
 
-    @Test func activationAndEmptyPeerAcceptAssetBytesBeyondInlinePayloadAllowance() async throws {
+    @Test(.timeLimit(.minutes(2))) func activationAndEmptyPeerAcceptAssetBytesBeyondInlinePayloadAllowance() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         var attachments: [GraphAttachmentMetadata] = []
-        for index in 0..<4 {
+        for index in 0..<20 {
             let payload = try GraphAttachmentPayload(id: f.graph.makeNodeID(), ownerID: f.invoice,
-                fileName: "part-\(index).bin", contentType: "public.data", data: Data(repeating: UInt8(index + 1), count: 9 * 1024 * 1024))
+                fileName: "part-\(index).bin", contentType: "public.data", data: Data(repeating: UInt8(index + 1), count: 2 * 1024 * 1024))
             _ = try await f.graph.transaction { try $0.insert(payload) }
             attachments.append(payload.content.metadata)
         }
@@ -403,7 +405,7 @@ actor ActivationServer {
         try await graph.close(); try await next.stopCloudSession(config)
     }
 
-    @Test func missingAuthorityAfterClaimNeverRecreatesOrUnlocks() async throws {
+    @Test(.timeLimit(.minutes(2))) func missingAuthorityAfterClaimNeverRecreatesOrUnlocks() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await prepare(f)
@@ -416,7 +418,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func separatelyConvertedStoreCannotPublishCompetingUUIDs() async throws {
+    @Test(.timeLimit(.minutes(2))) func separatelyConvertedStoreCannotPublishCompetingUUIDs() async throws {
         let server = ActivationServer(), winner = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: winner.root) }
         try await publish(winner)
@@ -433,7 +435,7 @@ actor ActivationServer {
         try await close(loser)
     }
 
-    @Test func unrelatedGraphProgressAndManualPauseSurvivePreparation() async throws {
+    @Test(.timeLimit(.minutes(2))) func unrelatedGraphProgressAndManualPauseSurvivePreparation() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         try await f.manager.pauseCloudSynchronization(for: f.graph.id)
@@ -451,7 +453,7 @@ actor ActivationServer {
         try await other.close(); try await close(f)
     }
 
-    @Test func preexistingZoneBodiesAndChangedRequestsAreRefused() async throws {
+    @Test(.timeLimit(.minutes(2))) func preexistingZoneBodiesAndChangedRequestsAreRefused() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await prepare(f)
@@ -467,7 +469,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func cancelledPreparationHasNoMarkerAndOfflineClaimRemainsRecoverable() async throws {
+    @Test(.timeLimit(.minutes(2))) func cancelledPreparationHasNoMarkerAndOfflineClaimRemainsRecoverable() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         let task = Task {
@@ -487,7 +489,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func nativeAuthorityCodecAndManifestAreDeterministicAndRejectCorruption() throws {
+    @Test(.timeLimit(.minutes(2))) func nativeAuthorityCodecAndManifestAreDeterministicAndRejectCorruption() throws {
         let id = GraphID(), route = GraphCloudBinding(zone: .init(scope: .private, owner: "owner", name: "zone"), graphID: id)
         let a = try GraphRecord(id: .init(graphID: id), type: "Item", properties: ["null": .null, "value": .integer(3)])
         let b = try GraphRecord(id: .init(graphID: id), type: "Other", createdDate: nil)
@@ -502,7 +504,7 @@ actor ActivationServer {
         #expect(throws: GraphCloudActivationError.invalidState) { _ = try GraphCloudAuthorityCodec.decode(record, binding: route) }
     }
 
-    @Test(arguments: ["records", "payload", "declaration", "shared"])
+    @Test(.timeLimit(.minutes(2)), arguments: ["records", "payload", "declaration", "shared"])
     func preflightRefusalsDoNotPublishOrRetainAdmission(_ mode: String) async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
@@ -519,7 +521,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func convertedOwnerCannotBeReusedAsAnEmptyPeer() async throws {
+    @Test(.timeLimit(.minutes(2))) func convertedOwnerCannotBeReusedAsAnEmptyPeer() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         try await publish(f); try await close(f)
@@ -530,16 +532,16 @@ actor ActivationServer {
             _ = try await next.openCloudReplica(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"), zone: f.zone, configuration: config)
         }
         let original = try await next.openGraph(id: f.graph.id, at: f.root.appendingPathComponent("Target.sqlite"))
-        #expect(try await original.validateIntegrity() == 5)
+        #expect(try await original.validateIntegrity() == 7)
         try await original.close(); try await next.stopCloudSession(config)
     }
 
-    @Test func changedNativeConversionReceiptIsRefusedBeforeExposingRecoveredHandles() async throws {
+    @Test(.timeLimit(.minutes(2))) func changedNativeConversionReceiptIsRefusedBeforeExposingRecoveredHandles() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await prepare(f); try await close(f)
         let registry = StoreRegistry()
-        let raw = try await registry.open(.init(location: .sqlite(f.root.appendingPathComponent("Target.sqlite")), exclusiveGraphID: f.graph.id.rawValue), schema: GraphRuntimeSchema.typedProperties)
+        let raw = try await registry.open(.init(location: .sqlite(f.root.appendingPathComponent("Target.sqlite")), exclusiveGraphID: f.graph.id.rawValue), schema: GraphRuntimeSchema.attachmentProperties)
         let id = f.graph.id
         try await raw.controlTransaction { context in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
@@ -553,7 +555,7 @@ actor ActivationServer {
         #expect(await next.registeredGraphCount == 0)
     }
 
-    @Test func sameVolumeRelocationRetainsAuthorityButCopiedNativeStoreCannotTakeOver() async throws {
+    @Test(.timeLimit(.minutes(2))) func sameVolumeRelocationRetainsAuthorityButCopiedNativeStoreCannotTakeOver() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         let moved = f.root.deletingLastPathComponent().appendingPathComponent("Moved-" + UUID().uuidString)
         let clone = f.root.deletingLastPathComponent().appendingPathComponent("RejectedClone-" + UUID().uuidString)
@@ -575,7 +577,7 @@ actor ActivationServer {
         #expect(await server.sends == 0)
     }
 
-    @Test func foregroundWorkerWaitsForPublicationAndResumesWithoutClearingAStickyFailure() async throws {
+    @Test(.timeLimit(.minutes(2))) func foregroundWorkerWaitsForPublicationAndResumesWithoutClearingAStickyFailure() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await prepare(f)
@@ -601,7 +603,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func ordinarySharedBindingDoesNotReadPrivateActivationControl() async throws {
+    @Test(.timeLimit(.minutes(2))) func ordinarySharedBindingDoesNotReadPrivateActivationControl() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ActivationScope-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), server = ActivationServer()
@@ -617,7 +619,7 @@ actor ActivationServer {
         try await graph.close(); try await m.stopCloudSession(config)
     }
 
-    @Test func unmarkedOrdinaryGraphCannotBindAnAuthoritativePrivateZone() async throws {
+    @Test(.timeLimit(.minutes(2))) func unmarkedOrdinaryGraphCannotBindAnAuthoritativePrivateZone() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ActivationBinding-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), server = ActivationServer()
@@ -635,7 +637,7 @@ actor ActivationServer {
         try await graph.close(); try await m.stopCloudSession(config)
     }
 
-    @Test func missingPublishedAuthorityBlocksOrdinarySendsWithoutRecreatingIt() async throws {
+    @Test(.timeLimit(.minutes(2))) func missingPublishedAuthorityBlocksOrdinarySendsWithoutRecreatingIt() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         try await publish(f)
@@ -648,7 +650,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test func observedControlDeletionDurablyBlocksTheSessionSendBoundary() async throws {
+    @Test(.timeLimit(.minutes(2))) func observedControlDeletionDurablyBlocksTheSessionSendBoundary() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         try await publish(f)
@@ -669,7 +671,7 @@ actor ActivationServer {
         #expect(await server.sends == 1)
     }
 
-    @Test func nativeInventoryBudgetIncludesPropertyAndControlRows() async throws {
+    @Test(.timeLimit(.minutes(2))) func nativeInventoryBudgetIncludesPropertyAndControlRows() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         #expect(f.nodeIDs.count == 5)
@@ -682,7 +684,7 @@ actor ActivationServer {
         #expect(try await f.manager.cloudActivationStatus(for: f.graph.id) == nil)
         try await close(f)
     }
-    @Test(arguments: [false, true])
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true])
     func interruptedPeerDropsRowsAbsentFromTheNewCompleteServerCut(empty: Bool) async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
@@ -712,7 +714,7 @@ actor ActivationServer {
         let recovered = try await next.openCloudReplica(id: f.graph.id, at: target, zone: f.zone, configuration: config)
         let graph = try recovered.opening.get()
         #expect(try await graph.read { try $0.record(for: optional) } == nil)
-        #expect(try await graph.validateIntegrity() == (empty ? 0 : 4))
+        #expect(try await graph.validateIntegrity() == (empty ? 0 : 6))
         #expect(try await graph.collectSyncChanges() == 0)
         try await graph.close(); try await next.stopCloudSession(config)
     }

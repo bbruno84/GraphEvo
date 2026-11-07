@@ -8,6 +8,15 @@ the [probe procedure](../../Experiments/A6NativeProbe/README.md) and the
 The replacement custom backend adds [T04 CKAsset transport](graphevo-2-cloud-assets.md).
 The native-mirroring evidence below retains its original scope.
 
+## Current value contract
+
+The [S06/S07 property and attachment contract](graphevo-2-property-attachments.md)
+supersedes the historical representations and 10 MiB admission below. Ordinary
+writes now admit at most **2 MiB (2,097,152 bytes)** per attachment, measured after
+Codable encoding. Migrated v1 attachments retain larger content without a read,
+export or synchronization downgrade. Files retain their URL-based lifecycle.
+The A6/C03a sections below record earlier implementation and device evidence.
+
 ## Local file primitive candidate
 
 An attachment is a bounded binary value with one owning node. The consumer

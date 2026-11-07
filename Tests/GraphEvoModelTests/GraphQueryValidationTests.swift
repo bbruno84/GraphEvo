@@ -14,7 +14,7 @@ private struct QueryShape: GraphModel {
 @Suite struct GraphQueryValidationTests {
     @Test func unsupportedTypesReservedNamesAndExcessiveExpressionDepthFailStatically() throws {
         let query = GraphQuery<QueryShape>(budget: try GraphQueryBudget(maximumCandidates: 10))
-        for value in [GraphValue.data(Data()), .array([]), .object([:]), .floatingPoint(.infinity)] {
+        for value in [GraphValue.array([]), .object([:]), .floatingPoint(.infinity)] {
             #expect(throws: GraphQueryError.self) { try query.where(.property("x", .equal, value)).explain() }
         }
         #expect(throws: GraphQueryError.self) { try query.where(.exists("__graphevo_v2.nodeID")).explain() }

@@ -21,7 +21,8 @@ enum GraphCloudGraphDescriptor {
     }
     static func encode(_ binding: GraphCloudBinding, supportsFiles: Bool = false) -> CKRecord {
         let record = CKRecord(recordType: recordType, recordID: id(in: binding.zone))
-        record["format"] = NSNumber(value: supportsFiles ? 2 : 1)
+        record["format"] = NSNumber(value: 3)
+        record["files"] = NSNumber(value: supportsFiles ? 1 : 0)
         record["graphID"] = binding.graphID.rawValue.uuidString.lowercased() as CKRecordValue
         return record
     }
@@ -30,7 +31,8 @@ enum GraphCloudGraphDescriptor {
               record.encryptedValues.allKeys().isEmpty,
               let format = record["format"] as? NSNumber,
               CFGetTypeID(format) != CFBooleanGetTypeID() else { throw GraphCloudDiscoveryError.invalidDescriptor }
-        guard format == NSNumber(value: 1) || (supportsFiles && format == NSNumber(value: 2)) else { throw GraphCloudDiscoveryError.unsupportedDescriptor }
+        guard format == NSNumber(value: 3), let files = record["files"] as? NSNumber,
+              (files.doubleValue == 0 || files.doubleValue == 1), supportsFiles || !files.boolValue else { throw GraphCloudDiscoveryError.unsupportedDescriptor }
         guard let raw = record["graphID"] as? String, let uuid = UUID(uuidString: raw),
               raw == uuid.uuidString.lowercased() else { throw GraphCloudDiscoveryError.invalidDescriptor }
         // Bound the entire field archive, including optional future keys, without loading assets.

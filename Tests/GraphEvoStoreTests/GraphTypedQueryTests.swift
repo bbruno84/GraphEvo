@@ -20,7 +20,7 @@ private struct TypedQueryItem: GraphModel {
         let manager: GraphContextManager
         func close() async throws { try await graph.close(); try FileManager.default.removeItem(at: root) }
     }
-    private func fixture(schema: StoreSchema = GraphRuntimeSchema.typedProperties, id: GraphID = GraphID()) async throws -> Fixture {
+    private func fixture(schema: StoreSchema = GraphRuntimeSchema.attachmentProperties, id: GraphID = GraphID()) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("TypedQuery-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let manager = GraphContextManager(registry: StoreRegistry(), schema: schema, adapter: GraphCoordinatorFactory.adapter)
@@ -97,7 +97,7 @@ private struct TypedQueryItem: GraphModel {
         let f = try await fixture()
         let records = try (0..<300).map { index in
             try GraphRecord(id: GraphNodeID(graphID: f.graph.id), type: TypedQueryItem.graphType,
-                properties: ["rank": .integer(Int64(index % 7)), "payload": .data(Data(repeating: 9, count: 4_096))])
+                properties: ["rank": .integer(Int64(index % 7)), "payload": .string(Data(repeating: 9, count: 4_096).base64EncodedString())])
         }
         try await f.graph.transaction { scope in for record in records { try scope.insert(record) } }
         let expected = records.sorted {
@@ -125,7 +125,7 @@ private struct TypedQueryItem: GraphModel {
                 "title": .string("Item \(index)"), "active": .boolean(index % 2 == 0),
                 "unsigned": .unsignedInteger(UInt64.max - UInt64(index)),
                 "date": .date(Date(timeIntervalSince1970: Double(index))),
-                "payload": .data(Data(repeating: 42, count: 4_096)), "decimal": .decimal(Decimal(index)),
+                "payload": .string(Data(repeating: 42, count: 4_096).base64EncodedString()), "decimal": .decimal(Decimal(index)),
                 "object": .object(["n": .integer(Int64(index))]),
                 "url": .url(URL(string: "child", relativeTo: URL(string: "https://example.invalid/base/")!)!),
                 "uuid": .uuid(UUID())]
@@ -164,7 +164,7 @@ private struct TypedQueryItem: GraphModel {
     @Test func discardedBodiesAreNotMaterializedButReturnedCorruptionIsVisible() async throws {
         let f = try await fixture(), first = f.graph.makeNodeID(), second = f.graph.makeNodeID()
         try await f.graph.transaction {
-            try $0.insert(GraphRecord(id: first, type: TypedQueryItem.graphType, properties: ["i": .integer(1), "body": .data(Data([1]))]))
+            try $0.insert(GraphRecord(id: first, type: TypedQueryItem.graphType, properties: ["i": .integer(1), "body": .string(Data([1]).base64EncodedString())]))
             try $0.insert(GraphRecord(id: second, type: TypedQueryItem.graphType, properties: ["i": .integer(2), "body": .array([.integer(1)])]))
         }
         try await f.graph.nativeOperation { container in
@@ -183,7 +183,7 @@ private struct TypedQueryItem: GraphModel {
     }
     @Test func inMemoryAndRelatedTraversalUseScopedLazyReaders() async throws {
         let db = try await GraphDatabase.open(configuration: .init(location: .inMemory(UUID())),
-            schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
+            schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         let graph = try await db.createGraph(), a = graph.makeNodeID(), b = graph.makeNodeID(), edge = graph.makeNodeID()
         try await graph.transaction {
             try $0.insert(GraphRecord(id: a, type: TypedQueryItem.graphType, properties: ["i": .integer(1)]))
@@ -213,7 +213,7 @@ private struct TypedQueryItem: GraphModel {
         let f = try await fixture()
         let records = try (0..<3).map { _ in
             try GraphRecord(id: f.graph.makeNodeID(), type: TypedQueryItem.graphType,
-                properties: ["i": .integer(1), "body": .data(Data(repeating: 91, count: 1024 * 1024))])
+                properties: ["i": .integer(1), "body": .string(Data(repeating: 91, count: 1024 * 1024).base64EncodedString())])
         }
         try await f.graph.transaction { scope in for record in records { try scope.insert(record) } }
         try await f.graph.read { scope in

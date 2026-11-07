@@ -28,7 +28,7 @@ private struct WrongUUIDModel: GraphModel {
     @Test func foundationIdentityPersistsAndIsScopedByStoreWithoutChangingTheDomainModel() async throws {
         let root=FileManager.default.temporaryDirectory.appendingPathComponent("FoundationMapping-"+UUID().uuidString)
         try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
-        let manager=GraphContextManager(registry:StoreRegistry(),schema:GraphRuntimeSchema.typedProperties,adapter:GraphCoordinatorFactory.adapter)
+        let manager=GraphContextManager(registry:StoreRegistry(),schema:GraphRuntimeSchema.attachmentProperties,adapter:GraphCoordinatorFactory.adapter)
         let a=GraphID(),b=GraphID(),firstURL=root.appendingPathComponent("A.sqlite"),secondURL=root.appendingPathComponent("B.sqlite")
         let first=try await manager.createGraph(id:a,at:firstURL),second=try await manager.createGraph(id:b,at:secondURL)
         let uuid=UUID(),person=FoundationPerson(id:uuid,name:"Ada"),other=FoundationPerson(id:uuid,name:"Independent")

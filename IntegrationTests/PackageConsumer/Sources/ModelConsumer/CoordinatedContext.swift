@@ -35,7 +35,7 @@ func checkPublicCoordinatedContext(at root: URL) async throws {
     let context = GraphContext(), other = GraphContext(), id = GraphID(), url = root.appendingPathComponent("Coordinated.sqlite")
     let graph = try await context.createGraph(id: id, at: url)
     let node = graph.makeNodeID()
-    try await graph.transaction { try $0.insert(GraphRecord(id: node, type: "Public", properties: ["body": .data(Data([4, 5]))])) }
+    try await graph.transaction { try $0.insert(GraphRecord(id: node, type: "Public", attachments: ["body": .init(data: Data([4, 5]))])) }
     let observer = try await graph.changes()
     var changes = observer.makeAsyncIterator()
     guard await changes.next() != nil else { throw GraphModelError.invalidValue }
@@ -49,7 +49,7 @@ func checkPublicCoordinatedContext(at root: URL) async throws {
     } catch GraphStoreError.ownershipConflict { }
     try await graph.close()
     let reopened = try await other.openGraph(id: id, at: url)
-    guard try await reopened.read({ try $0.record(for: node)?.properties["body"] }) == .data(Data([4, 5])) else { throw GraphModelError.invalidValue }
+    guard try await reopened.read({ try $0.record(for: node)?.attachments["body"]?.data }) == Data([4, 5]) else { throw GraphModelError.invalidValue }
     try await reopened.close()
 
     let source = root.appendingPathComponent("PublicV1.sqlite")
@@ -63,7 +63,7 @@ func checkPublicCoordinatedContext(at root: URL) async throws {
     let result = try await context.openGraph(convertingLocalV1: request), converted = try result.opening.get()
     guard let convertedID = result.conversion.receipt.nodeIDs.values.first,
           result.conversion.receipt.nodeIDs.count == 1,
-          try await converted.read({ try $0.record(for: convertedID)?.properties["binary"] }) == .data(Data([0, 128, 255])) else { throw GraphModelError.invalidValue }
+          try await converted.read({ try $0.record(for: convertedID)?.attachments["binary"]?.data }) == Data([0, 128, 255]) else { throw GraphModelError.invalidValue }
     try await converted.close()
     let recovered = try await context.openGraph(convertingLocalV1: request)
     guard recovered.conversion.receipt == result.conversion.receipt else { throw GraphModelError.invalidValue }

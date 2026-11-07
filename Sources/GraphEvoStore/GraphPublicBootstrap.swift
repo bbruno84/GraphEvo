@@ -57,7 +57,7 @@ public struct GraphV1BootstrapResult: Sendable {
 @available(iOS 17, macOS 14, *)
 extension GraphContext {
     /// Converts a stopped supported source through native staged Core Data migration.
-    /// Data remains a value; attachment optimization belongs to the consumer.
+    /// Recoverable binary properties become attachments; semantic conversion remains consumer-owned.
     public func openGraph(convertingLocalV1 request: GraphV1BootstrapRequest) async throws -> GraphV1BootstrapResult {
         try await openGraph(convertingLocalV1: request, recoveringOfflineGeneration: nil)
     }

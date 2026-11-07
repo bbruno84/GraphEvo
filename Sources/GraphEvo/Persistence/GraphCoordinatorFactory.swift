@@ -6,11 +6,11 @@ import GraphEvoModel
 
 /// Internal production entry point; public opening remains a later increment.
 enum GraphCoordinatorFactory {
-    static let shared = GraphContextManager(schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+    static let shared = GraphContextManager(schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
 
     static var adapter: GraphCoordinatorAdapter { makeAdapter() }
 
-    static func makeAdapter(clock: @escaping @Sendable () -> Date = { Date() }) -> GraphCoordinatorAdapter {
+    static func makeAdapter(clock: @escaping @Sendable () -> Date = { Date() }, files: Bool = false) -> GraphCoordinatorAdapter {
         let native = GraphNativeIdentityDatabaseAdapter.database
         var graph = native.graph
         graph.beginMutation = { context, id in
@@ -33,7 +33,7 @@ enum GraphCoordinatorFactory {
         let migrationSource = GraphStoreMigrationSource(schema: GraphRuntimeSchema.current, legacyReadOnly: true) { context, id in
             try GraphV1NativeInventory.inspect(context, id: id).storeID
         }
-        var coordinator = GraphCoordinatorAdapter(graph: graph, sync: sync, v1Conversion: GraphV1NativeConversion.adapter, migrationSource: migrationSource, initializePolicy: { context, id, policy in
+        var coordinator = GraphCoordinatorAdapter(graph: graph, sync: sync, v1Conversion: GraphV1NativeConversion.makeAdapter(targetSchemaIdentifier: files ? GraphNativeAttachmentStorage.fileIdentifier : GraphNativeAttachmentStorage.identifier), migrationSource: migrationSource, initializePolicy: { context, id, policy in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
             root[dynamicMember: GraphMutationMetadata.policyKey] = policy.rawValue
         }, publication: GraphMigrationNativePublication.adapter, workspace: GraphMigrationNativeWorkspace.adapter, prepareWorkspace: { context, id in

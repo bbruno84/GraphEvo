@@ -32,10 +32,10 @@ private final class NativeAuditBodyProbe: NSSecureUnarchiveFromDataTransformer, 
         let source = root.appendingPathComponent("Source/Graph.sqlite")
         let database = try await GraphDatabase.open(at: source), a = try await database.createGraph(), b = try await database.createGraph()
         let first = a.makeNodeID(), second = a.makeNodeID(), edge = a.makeNodeID(), action = a.makeNodeID(), foreign = GraphNodeID(graphID: b.id, rawValue: first.rawValue)
-        let opaque = try GraphEncodedValue(codec: "future", version: 9, data: Data([0, 255]))
+        let opaque = try GraphLegacyEncodedValue(codec: "future", version: 9, data: Data([0, 255]))
         try await a.transaction { scope in
             try scope.insert(GraphRecord(id: first, type: "item", properties: ["name": .string("original"), "nil": .null,
-                "opaque": .encoded(opaque), "bytes": .data(Data([0, 255])), "uuid": .uuid(UUID())], tags: ["tag"], groups: ["group"], createdDate: Date(timeIntervalSince1970: 1_700_000_000)))
+                "opaque": .object(["codec": .string(opaque.codec), "bytes": .string(opaque.data.base64EncodedString())]), "bytes": .string(Data([0, 255]).base64EncodedString()), "uuid": .uuid(UUID())], tags: ["tag"], groups: ["group"], createdDate: Date(timeIntervalSince1970: 1_700_000_000)))
             try scope.insert(GraphRecord(id: second, type: "item"))
             try scope.insert(GraphRecord(id: edge, type: "edge", endpoints: .relationship(subject: first, object: second)))
             try scope.insert(GraphRecord(id: action, type: "action", endpoints: .action(subjects: [first], objects: [second])))
@@ -96,7 +96,13 @@ private final class NativeAuditBodyProbe: NSSecureUnarchiveFromDataTransformer, 
             try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.a)
             try GraphNativeIdentityPrototype.backfill(context, graphID: fixture.b)
             try context.save(); context.reset()
-            for expected in fixture.records { #expect(try GraphNativeIdentityPrototype.record(context, id: expected.id) == expected) }
+            for expected in fixture.records {
+                let actual = try #require(try GraphNativeIdentityPrototype.record(context, id: expected.id))
+                #expect(actual.properties == expected.properties)
+                #expect(actual.id == expected.id && actual.type == expected.type && actual.endpoints == expected.endpoints)
+                #expect(actual.createdDate == expected.createdDate && actual.tags == expected.tags && actual.groups == expected.groups)
+                #expect(actual.attachments == expected.attachments && actual.storedAttachment == expected.storedAttachment)
+            }
             #expect(try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.a) == 5)
             #expect(try GraphNativeIdentityPrototype.validateAll(context, graphID: fixture.b) == 1)
             #expect(try GraphNativeIdentityPrototype.record(context, id: GraphNodeID(graphID: fixture.b, rawValue: fixture.records[0].id.rawValue))?.type == "foreign")

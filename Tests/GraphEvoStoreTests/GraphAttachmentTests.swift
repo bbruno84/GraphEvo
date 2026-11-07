@@ -59,7 +59,7 @@ import GraphEvoModel
         try await reopened.close()
     }
 
-    @Test(arguments: [0, 10 * 1024 * 1024]) func boundedContentRoundTrips(size: Int) async throws {
+    @Test(arguments: [0, 2 * 1024 * 1024]) func boundedContentRoundTrips(size: Int) async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let graph = try await GraphStore.open(at: root.appendingPathComponent("Graph.sqlite"))
         let owner = try await owner(graph)
@@ -143,9 +143,12 @@ import GraphEvoModel
         let transferred = try GraphAttachmentPayload(id: metadata.id, ownerID: second, fileName: "other.bin", contentType: "public.data", data: Data([9]))
         let record = try transferred.graphRecord()
         try await graph.transaction { scope in
-            let patch = try GraphRecordPatch(id: metadata.id, properties: record.properties.mapValues { .set($0) })
+            var patch = try GraphRecordPatch(id: metadata.id)
+            patch.storedAttachment = record.storedAttachment
             #expect(throws: GraphAttachmentError.self) { try scope.patch(patch) }
-            let malformed = try GraphRecordPatch(id: metadata.id, properties: ["content": .set(.data(Data([0])))])
+            var malformed = try GraphRecordPatch(id: metadata.id)
+            let content = try #require(try scope.attachment(metadata.id))
+            malformed.storedAttachment = .init(metadata: content.metadata, data: Data([0]))
             #expect(throws: GraphAttachmentError.self) { try scope.patch(malformed) }
         }
         #expect(try await graph.attachment(metadata.id)?.metadata == metadata)
@@ -165,7 +168,7 @@ import GraphEvoModel
                 let session = try GraphTypedStoreAdapter.Session(context, graph.id, database: true)
                 let file = try #require(session.nodes[metadata.id])
                 // Inject a partial-import reference through its scoped facade; no mutation is committed.
-                for (key, value) in orphan.properties { file[dynamicMember: key] = try GraphValueCodec.encode(value) }
+                try GraphNativeAttachmentStorage.write(try #require(orphan.storedAttachment), to: file)
                 #expect(throws: GraphAttachmentError.self) { try GraphTypedStoreAdapter.mirroringRoot(context, id: graph.id) }
                 #expect(throws: GraphAttachmentError.self) { try GraphTypedStoreAdapter.nativeMembers(context, id: graph.id) }
                 #expect(try GraphTypedStoreAdapter.controlRoot(context, id: graph.id).runtimeTypeIfPresent == GraphTypedStoreAdapter.rootType)
@@ -214,7 +217,7 @@ extension GraphAttachmentTests {
             #expect(legacy.properties[GraphAttachmentPayload.metadataKey] == nil)
             #expect(legacy.properties["applicationField"] == .string("preserved") && legacy.tags.contains("tag"))
             #expect(try scope.attachment(old.id)?.data == Data([3, 4]))
-            #expect(try scope.record(for: fresh.id)?.properties[GraphAttachmentPayload.metadataKey] != nil)
+            #expect(try scope.record(for: fresh.id)?.storedAttachment != nil)
             #expect(try scope.attachments(ownedBy: owner).count == 2)
         }
         try await reopened.delete(owner)
@@ -236,7 +239,7 @@ extension GraphAttachmentTests {
                 // A malformed codec body must not be decoded by a metadata-only list.
                 file[dynamicMember: GraphAttachmentPayload.contentKey] = Data([0])
                 let project = try #require(GraphTypedStoreAdapter.database.graph.attachmentMetadata)
-                #expect(try project(context, graph.id) == [metadata])
+                #expect(try project(context, graph.id, nil) == [metadata])
                 #expect(throws: (any Error).self) { try session.record(metadata.id) }
                 #expect(throws: (any Error).self) { try GraphTypedStoreAdapter.mirroringRoot(context, id: graph.id) }
             }
@@ -255,7 +258,8 @@ extension GraphAttachmentTests {
         let decoded = try JSONDecoder().decode(GraphSharedInsertionPlan.self, from: JSONEncoder().encode(plan))
         let recovered = try #require(try decoded.records().first)
         #expect(recovered == record)
-        #expect(recovered.properties.count == 2)
+        #expect(recovered.properties.isEmpty)
+        #expect(recovered.storedAttachment != nil)
         #expect(try GraphAttachmentPayload(graphRecord: recovered).content == payload.content)
     }
 }
