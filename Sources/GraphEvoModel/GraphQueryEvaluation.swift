@@ -156,18 +156,56 @@ package final class GraphQueryEvaluation {
         if let property { return try property(record.id, key) }
         return record.properties[key]
     }
-    private func neighbors(_ source: GraphNodeID, relation: GraphQueryRelation) throws -> [GraphRecord] {
-        var ids = Set<GraphNodeID>()
+    private enum Direction: Hashable {
+        case outgoing, incoming, actionObjects, actionSubjects
+
+        init(_ relation: GraphQueryRelation) {
+            switch relation {
+            case .outgoing: self = .outgoing
+            case .incoming: self = .incoming
+            case .actionObjects: self = .actionObjects
+            case .actionSubjects: self = .actionSubjects
+            }
+        }
+    }
+
+    private var topology: [Direction: [GraphNodeID: [GraphRecord]]] = [:]
+
+    private func edges(from source: GraphNodeID, direction: Direction) throws -> [GraphRecord] {
+        if let indexed = topology[direction] { return indexed[source] ?? [] }
+        // Index only directions actually visited by the predicate or traversal.
+        var indexed: [GraphNodeID: [GraphRecord]] = [:]
         for edge in records {
             try step()
+            switch (direction, edge.endpoints) {
+            case (.outgoing, .relationship(let subject?, _)):
+                indexed[subject, default: []].append(edge)
+            case (.incoming, .relationship(_, let object?)):
+                indexed[object, default: []].append(edge)
+            case (.actionObjects, .action(let subjects, _)):
+                for subject in subjects { try step(); indexed[subject, default: []].append(edge) }
+            case (.actionSubjects, .action(_, let objects)):
+                for object in objects { try step(); indexed[object, default: []].append(edge) }
+            default: break
+            }
+        }
+        topology[direction] = indexed
+        return indexed[source] ?? []
+    }
+
+    private func neighbors(_ source: GraphNodeID, relation: GraphQueryRelation) throws -> [GraphRecord] {
+        var ids = Set<GraphNodeID>()
+        let edges = try edges(from: source, direction: Direction(relation))
+        for edge in edges {
+            try step()
             switch (relation, edge.endpoints) {
-            case (.outgoing(let type), .relationship(let first, let second)) where first == source && (type == nil || type == edge.type):
+            case (.outgoing(let type), .relationship(_, let second)) where type == nil || type == edge.type:
                 if let second { ids.insert(second) }
-            case (.incoming(let type), .relationship(let first, let second)) where second == source && (type == nil || type == edge.type):
+            case (.incoming(let type), .relationship(let first, _)) where type == nil || type == edge.type:
                 if let first { ids.insert(first) }
-            case (.actionObjects(let type), .action(let subjects, let objects)) where subjects.contains(source) && (type == nil || type == edge.type):
+            case (.actionObjects(let type), .action(_, let objects)) where type == nil || type == edge.type:
                 for id in objects { try step(); ids.insert(id) }
-            case (.actionSubjects(let type), .action(let subjects, let objects)) where objects.contains(source) && (type == nil || type == edge.type):
+            case (.actionSubjects(let type), .action(let subjects, _)) where type == nil || type == edge.type:
                 for id in subjects { try step(); ids.insert(id) }
             default: break
             }

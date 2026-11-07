@@ -122,6 +122,46 @@ private struct CanonicalDescriptorItem: GraphModel {
         try await f.close()
     }
 
+    @Test func sparseTopologyFitsDefaultBudgetAndTracksPendingLinks() async throws {
+        let f = try await fixture()
+        let ids = (0..<600).map { _ in f.graph.makeNodeID() }
+        let first = ids[0], second = ids[1], third = ids[2]
+        let edge = f.graph.makeNodeID(), reverse = f.graph.makeNodeID(), action = f.graph.makeNodeID()
+        let graphID = f.graph.id
+        try await f.graph.transaction { scope in
+            try scope.withContext { context, _ in
+                let session = try GraphTypedStoreAdapter.Session(context, graphID, database: true)
+                for id in ids {
+                    try session.insert(GraphRecord(id: id, type: DescriptorItem.graphType, tags: id == second ? ["ready"] : []))
+                }
+                try session.insert(GraphRecord(id: edge, type: "link", endpoints: .relationship(subject: first, object: second)))
+                try session.insert(GraphRecord(id: reverse, type: "link", endpoints: .relationship(subject: second, object: first)))
+                try session.insert(GraphRecord(id: action, type: "batch", endpoints: .action(subjects: [first, third], objects: [second])))
+            }
+        }
+        let descriptor = try query()
+        let outgoing = descriptor.where(.related(.outgoing("link"), matching: .tag("ready")))
+        let result = try await f.graph.query(outgoing)
+        #expect(result.items.map(\.id) == [first])
+        #expect(result.diagnostics.evaluationSteps < 100_000)
+        #expect(try await f.graph.query(descriptor.where(.related(.incoming("link"), matching: .tag("ready")))).items.map(\.id) == [first])
+        let subjects = try await f.graph.query(descriptor.where(.related(.actionObjects("batch"), matching: .tag("ready"))))
+        #expect(Set(subjects.items.map(\.id)) == [first, third])
+        #expect(try await f.graph.query(descriptor.where(.related(.actionSubjects("batch"), matching: .id(third)))).items.map(\.id) == [second])
+        let traversal = try GraphTraversal(from: [first], via: .outgoing("link"), maximumDepth: 4,
+            budget: descriptor.budget)
+        #expect(try await f.graph.traverse(traversal).visits.map(\.id) == [second])
+        let limited = try query(1_000, steps: 100).where(.related(.outgoing("link"), matching: .tag("ready")))
+        await #expect(throws: GraphQueryError.budgetExceeded(.steps)) { try await f.graph.query(limited) }
+
+        try await f.graph.transaction { scope in
+            _ = try scope.patch(GraphRecordPatch(id: edge, endpoints: .relationship(subject: third, object: second)))
+            #expect(try scope.query(outgoing).items.map(\.id) == [third])
+        }
+        #expect(try await f.graph.query(outgoing).items.map(\.id) == [third])
+        try await f.close()
+    }
+
     @Test func topologyUsesOnlyDescriptorEdgeKindsAndTypes() async throws {
         let f = try await fixture(), a = f.graph.makeNodeID(), b = f.graph.makeNodeID()
         try await f.graph.transaction { scope in

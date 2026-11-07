@@ -87,7 +87,10 @@ that value; complete file reads and sharing integrity keep full validation.
 Budgets remain unchanged. See the [matrix](graphevo-2-experiment-matrix.md).
 
 Steps bound predicate visits, relationship/action inspections, endpoint visits,
-ordering and aggregation work. They are logical work units, not CPU instructions
+ordering and aggregation work. The evaluator builds a temporary lookup for each
+direction first used by a relationship predicate or traversal. It charges
+inventory inspection, action membership and visits to matching endpoints to
+the same work budget. They are logical work units, not CPU instructions
 or a deadline. Metadata, opening/catalog work, existing context caches, property
 extraction and caller model code are not a hard resident-memory bound. Exceeding
 an allowance throws budgetExceeded with its dimension; no partial result escapes.
