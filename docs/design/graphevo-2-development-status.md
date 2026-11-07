@@ -8,7 +8,8 @@ integration into the main v2 branch or beta readiness.
 
 ## In progress — property and attachment contract
 
-`codex/v2-property-attachment-contract` implements the agreed separation of
+[PR #191](https://github.com/bbruno84/GraphEvo/pull/191),
+`codex/v2-property-attachment-contract`, implements the agreed separation of
 scalar/collection properties from raw Data and generic Codable attachments,
 with 2 MiB ordinary admission and a mandatory v1 migration exception. See the
 [S06/S07 contract](graphevo-2-property-attachments.md). This is pending work;

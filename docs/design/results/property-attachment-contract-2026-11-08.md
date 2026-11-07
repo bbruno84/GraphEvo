@@ -2,7 +2,8 @@
 
 Scope: `codex/v2-property-attachment-contract`, based on integrated File sync
 `4751b4b3` (#190). This is implementation and bounded acceptance evidence;
-integration remains a separate reviewed PR step.
+integration remains a separate reviewed step through
+[PR #191](https://github.com/bbruno84/GraphEvo/pull/191).
 
 ## Result
 
