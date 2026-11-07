@@ -889,7 +889,9 @@ survive content replacement and support tag and group query predicates.
   and fails on a stale revision. `deleteFile(_:)` removes the node and applies
   the normal entity endpoint deletion rules.
 - `GraphStore.reclaimFiles()` removes abandoned preparations and retired
-  revisions. `copyLocalFileGraph(into:)` captures an independent SQLite store
+  revisions, including on a read-only CloudKit participant's writable local
+  replica. This coordinated maintenance does not modify graph records or
+  change write permissions. `copyLocalFileGraph(into:)` captures an independent SQLite store
   and its referenced files. Restore by opening the returned SQLite URL with
   a local-files context. Frozen outgoing CloudKit assets are included.
 
@@ -901,6 +903,9 @@ durable references retained through send, retry and incoming application.
 Incoming File content is downloaded as part of ordinary synchronization;
 it is not fetched on demand. `withFileURL` accesses already-local content
 and does not initiate a CloudKit download.
+Leaving a shared graph or purging a revoked replica also removes that
+native store's private File revisions and frozen outgoing assets under
+coordinated destruction. Consumer-owned exports remain outside this cleanup.
 The File-capable sharing descriptor uses format 2, which preceding readers
 reject before discovery. See [File synchronization](../design/graphevo-2-file-sync.md).
 

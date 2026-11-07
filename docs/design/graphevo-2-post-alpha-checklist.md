@@ -1235,6 +1235,12 @@ This scheduling policy closes no acceptance box or physical-device gate.
 
 ## File synchronization continuation
 
+- [x] Preserve coordinated local reclamation for read-only participants,
+  retaining current content, permissions and an empty outgoing queue.
+- [x] Remove File revisions, abandoned preparations and frozen outgoing
+  assets during coordinated participant purge, preserving exports and
+  foreign store generations. Verify pre-destruction refusal and resumption
+  after partial owned-content cleanup.
 - [x] Validate physical cross-account File sharing, permission reduction,
   persisted join recovery and deletion for the 25 MiB iPad/XR fixture.
   See [physical checkpoint](results/file-cloud-shared-devices-2026-11-07.md).
@@ -1256,3 +1262,8 @@ The [File transport candidate](graphevo-2-file-sync.md) covers durable
 outgoing/incoming copies, conflict handling and a private physical import
 and replacement checkpoint on iPad, plus the bounded cross-account
 iPad/XR checkpoint.
+
+Alpha retains eager File download during synchronization. On-demand
+download/progress is an optional future design, not an outstanding beta
+entry requirement. PR #190 remains pending integration; these checks record
+candidate evidence rather than a merged or released feature.

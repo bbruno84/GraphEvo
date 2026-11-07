@@ -893,6 +893,7 @@ extension GraphCloudSession {
     }
     func completePurge(_ id: GraphID, generation: UUID) async throws {
         guard var member = try membership(id), member.generation == generation, member.role == .participant, member.terminal else { throw GraphCloudError.invalidState }
+        let previousAssets = document.assetReferences
         if let forget = drivers[member.binding.zone.scope]?.forget {
             let zone = member.binding.zone
             try await control(zone.scope, allowingDataLimit: true) { _, _ in try await forget(zone) }
@@ -905,6 +906,10 @@ extension GraphCloudSession {
         next.bindings.removeAll { $0.graphID == id }
         next.memberships.removeAll { $0.binding.graphID == id }; next.memberships.append(member)
         try publish(next)
+        if !previousAssets.isEmpty,
+           let spool = try? GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets")) {
+            await spool.remove(previousAssets, retaining: next.assetReferences)
+        }
     }
     func observeSharing(_ id: GraphID) throws -> AsyncStream<GraphCloudSharingStatus> {
         guard let value = try membership(id) else { throw GraphStoreError.missingGraph }

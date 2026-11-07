@@ -1,15 +1,15 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-06. This is the single entry point for **integrated work,
+Updated: 2026-11-07. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
-## Current position — 2026-11-06
+## Current position — 2026-11-07
 
-The v2 integration baseline is `e0f2a07c` through
-[PR #183](https://github.com/bbruno84/GraphEvo/pull/183). Foundation coordinates
+The v2 integration baseline is `65818685` through
+[PR #189](https://github.com/bbruno84/GraphEvo/pull/189). Foundation coordinates
 dedicated App Group stores, ordinary SQLite, open-store migrations and backup
 catalogs. The CloudKit session claim follows aggregate app activity. The last
 full hosted checkpoint [#42174675689](https://github.com/bbruno84/GraphEvo/actions/runs/42174675689)
@@ -46,13 +46,15 @@ production cutover remain open.
 alpha increment. The live observation and rescan contract passed local regressions
 and [explicit CloudKit import on a physical iPad](graphevo-2-observation.md#acceptance-and-remaining-work).
 PA07 retains automatic delivery, wider lifecycle and observer cost acceptance.
-The next library increment defines supported query and attachment envelopes.
+The current alpha candidate adds synchronized File nodes; the broader
+query/attachment capacity and performance gates remain in the post-alpha checklist.
 
 [PR #189](https://github.com/bbruno84/GraphEvo/pull/189) adds the opt-in
 [local File primitive](graphevo-2-attachments.md#local-file-primitive-candidate).
 The increment covers S04 migration to a separate store, typed endpoints and
 queries, immutable revisions, reclamation and file-aware backup and restore.
-The [File transport candidate](graphevo-2-file-sync.md) adds format 4
+The [File transport candidate](graphevo-2-file-sync.md) in
+[PR #190](https://github.com/bbruno84/GraphEvo/pull/190), pending integration, adds format 4
 records, streamed spool copies, File-aware public cloud connections and
 a format 2 sharing descriptor. Its private physical test imports a 25 MiB
 File into an empty SQLite replica on iPad, then verifies a replacement after
@@ -67,6 +69,18 @@ with three-second retry advice; the existing automatic scheduler settled
 the retained attempt and an empty XR replica verified its 128 MiB content.
 The investigation also corrects native zone-refusal propagation to retain
 Apple's error code and retry advice. Measured midstream faults remain open.
+Review also corrects local reclamation for read-only participants: retired
+file revisions can be removed under existing store coordination without
+enabling graph writes or generating outgoing work. Terminal purge
+removes permanent revisions and frozen outgoing assets under the
+existing Apple deletion grant, with retryable cleanup and exact store ownership.
+The selected alpha
+behavior downloads File content with synchronization and reads it locally;
+on-demand download/progress is a possible later evolution, not a beta gate.
+The [pre-merge review](results/file-sync-review-2026-11-07.md) closes both
+local reclamation and terminal-purge findings. The final candidate passes
+752 macOS v2-profile tests and 61 affected iOS simulator tests; integration
+and broader beta acceptance remain distinct.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 

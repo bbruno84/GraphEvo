@@ -1,6 +1,7 @@
 # GraphEvo 2 — File synchronization
 
-Status: implementation candidate following the local File increment in
+Status: [PR #190](https://github.com/bbruno84/GraphEvo/pull/190), pending integration,
+following the local File increment in
 [PR #189](https://github.com/bbruno84/GraphEvo/pull/189). Read with
 [File lifecycle](graphevo-2-attachments.md#local-file-primitive-candidate),
 [durable assets](graphevo-2-durable-asset-spool.md) and
@@ -61,6 +62,18 @@ committed file. A published file whose transaction fails can be recovered
 or reclaimed as an orphan. Referenced incoming files are deleted after
 durable consumption. Frozen outgoing files are released after the
 corresponding graph receipt commits.
+`reclaimFiles()` is local maintenance under the existing store writer grant.
+Read-only CloudKit participants may remove unreferenced local revisions;
+this neither modifies graph records nor grants permission to replace content.
+Terminal leave/access-loss purge removes permanent revisions, abandoned
+preparations and the store-scoped outgoing spool after exact native identity
+validation and exclusive Apple deletion admission. Content removal precedes
+SQLite destruction so interruption cannot leave unowned bodies after losing
+the database identity. Cleanup is idempotent; failure retains the terminal
+purging state and store registration for retry. Consumer exports and other
+native store generations are excluded.
+After durable session purge, staged incoming assets no longer referenced by
+any remaining graph are removed through the ordinary spool cleanup path.
 
 The permanent revisions and frozen outgoing spool are included in
 `copyLocalFileGraph(into:)`. Restore uses a File-aware context. Existing
@@ -97,6 +110,10 @@ File sync, local files, assets and native v1 migration. A subsequent native
 outbox adjustment passed the 51-test macOS transport/File/asset subset and
 the 23-test iOS File/asset subset. Manifest validation and `git diff --check`
 also passed. Remote CI has not been requested for this candidate.
+The [pre-merge review](results/file-sync-review-2026-11-07.md) adds read-only
+reclamation and terminal-purge regressions, including retained incoming assets
+and interrupted cleanup. Its final checkpoint passes 752 macOS v2-profile
+tests and 61 affected iOS simulator tests.
 
 The [private iPad checkpoint](results/file-cloud-ipad-2026-11-07.md)
 exercises actual CloudKit upload, an empty independent SQLite replica and

@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 import GraphEvoModel
 import GraphEvoRuntime
@@ -36,6 +37,27 @@ package enum GraphFileDisk {
     package static func validateRoot(_ root: URL) throws {
         let values = try root.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard values.isDirectory == true, values.isSymbolicLink != true else { throw GraphFileError.corruptContent }
+    }
+
+    /// The caller holds terminal store destruction admission for this exact store identity.
+    package static func removeOwnedRoot(_ root: URL) throws {
+        var value = stat()
+        guard lstat(root.path, &value) == 0 else {
+            if errno == ENOENT { return }
+            throw GraphFileError.corruptContent
+        }
+        guard (value.st_mode & S_IFMT) == S_IFDIR, value.st_uid == getuid(), value.st_mode & 0o077 == 0 else {
+            throw GraphFileError.corruptContent
+        }
+        let files = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        for file in files {
+            let name = file.pathExtension == "partial" ? file.deletingPathExtension().lastPathComponent : file.lastPathComponent
+            guard let id = UUID(uuidString: name), id.uuidString == name,
+                  lstat(file.path, &value) == 0, (value.st_mode & S_IFMT) == S_IFREG,
+                  value.st_uid == getuid(), value.st_nlink == 1 else { throw GraphFileError.corruptContent }
+        }
+        for file in files { try FileManager.default.removeItem(at: file) }
+        guard rmdir(root.path) == 0 else { throw GraphFileError.conflict }
     }
 
     package static func prepare(from source: URL, in root: URL, id: GraphNodeID, name: String, contentType: String,

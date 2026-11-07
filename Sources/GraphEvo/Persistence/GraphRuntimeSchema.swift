@@ -34,7 +34,12 @@ package enum GraphRuntimeSchema {
     static let localFiles = StoreSchema(
         identifier: GraphFileDisk.schemaIdentifier,
         entityVersionHashes: ManagedGraphFile.makeModel().entityVersionHashesByName,
-        requiredModelVersionIdentifier: GraphFileDisk.schemaIdentifier
+        requiredModelVersionIdentifier: GraphFileDisk.schemaIdentifier,
+        removeOwnedContent: { url, storeID in
+            guard let uuid = UUID(uuidString: storeID) else { throw GraphFileError.invalidMetadata }
+            try GraphFileDisk.removeOwnedRoot(GraphFileDisk.root(for: url, storeID: uuid))
+            try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: url, storeID: storeID)).removeOwnedRoot()
+        }
     ) {
         GraphValueTransformer.register()
         return ManagedGraphFile.makeModel()

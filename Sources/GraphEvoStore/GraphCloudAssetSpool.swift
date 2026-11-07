@@ -404,6 +404,36 @@ package struct GraphCloudAssetSpool: Sendable {
         }
     }
 
+    /// Terminal purge holds the exact native store's exclusive deletion grant.
+    package func removeOwnedRoot() throws {
+        var value = stat()
+        guard lstat(root.path, &value) == 0 else {
+            if errno == ENOENT { return }
+            throw GraphCloudError.invalidState
+        }
+        try Self.checkPrivateDirectory(root)
+        // A prior purge may have removed the marker immediately before interruption.
+        if try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty {
+            guard rmdir(root.path) == 0 else { throw GraphCloudError.persistence }
+            return
+        }
+        try Self.checkMarker(root)
+        for name in try FileManager.default.contentsOfDirectory(atPath: root.path) where name != "format-1" {
+            guard let id = UUID(uuidString: name), id.uuidString == name else { throw GraphCloudError.invalidState }
+            let directory = root.appendingPathComponent(name, isDirectory: true)
+            try Self.checkPrivateDirectory(directory)
+            for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
+                let revision = name.hasSuffix(".partial") ? String(name.dropLast(8)) : name
+                guard let id = UUID(uuidString: revision), id.uuidString == revision else { throw GraphCloudError.invalidState }
+                try Self.removeFile(directory.appendingPathComponent(name))
+            }
+            guard rmdir(directory.path) == 0 else { throw GraphCloudError.persistence }
+        }
+        try Self.checkMarker(root)
+        try Self.removeFile(root.appendingPathComponent("format-1"))
+        guard rmdir(root.path) == 0 else { throw GraphCloudError.persistence }
+    }
+
     /// Copy a frozen outgoing attempt alongside a native snapshot under the caller's maintenance reservation.
     package func copyOwnedRoot(to destination: URL) async throws {
         try await GraphAttachmentIO.perform {

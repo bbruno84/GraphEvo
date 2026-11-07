@@ -619,6 +619,10 @@ File-aware copies include referenced revisions and verify their digests.
 records over the existing CloudKit fields. Preserve streamed spool staging,
 fixed metadata, pending revision ownership and file-aware backups. SDK
 asset URLs are transient and must be frozen before durable publication.
+Read-only participants may reclaim retired local File revisions without
+graph writes. Terminal purge removes schema-owned File bodies and outgoing
+spool contents under exact store identity and the Apple deletion grant,
+before destroying SQLite; interrupted cleanup must remain retryable.
 
 ## V2 bounded queries
 

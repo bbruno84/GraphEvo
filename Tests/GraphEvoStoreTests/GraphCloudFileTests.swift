@@ -325,6 +325,49 @@ private actor FileBus {
     }
 
     @available(iOS 17, macOS 14, *)
+    @Test func readOnlyReplicaReclaimsRetiredFilesWithoutChangingGraphOrUploadWork() async throws {
+        let base = try root()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let bus = FileBus(root: base), id = GraphID(), container = "iCloud.file." + UUID().uuidString
+        let senderRoot = base.appendingPathComponent("Sender"), peerRoot = base.appendingPathComponent("Peer")
+        let source = base.appendingPathComponent("source")
+        try Data("first revision".utf8).write(to: source)
+        let sender = try await fixture(senderRoot, bus: bus, id: id, container: container, scope: .shared)
+        let original = try await sender.graph.importFile(from: source)
+        _ = try await sender.manager.sendCloudChanges(for: id, configuration: sender.config)
+        try await sender.close()
+        let peer = try await fixture(peerRoot, bus: bus, id: id, container: container, scope: .shared)
+        _ = try await peer.graph.participantAccess(.init(binding: peer.binding.route, account: "file-account",
+            permission: .readOnly, accepted: true, identity: peer.binding.identity, generation: UUID()))
+        try await peer.manager.fetchCloudChanges(.shared, configuration: peer.config)
+        _ = try await peer.manager.applyCloudInbox(for: id, configuration: peer.config)
+        #expect(try await peer.graph.file(original.id) == original)
+        let bytes = Data("second revision".utf8)
+        try bytes.write(to: source)
+        let replacement = try GraphFile(id: original.id, name: original.name, contentType: original.contentType,
+            byteCount: Int64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(), revision: UUID())
+        let record = try #require(try await peer.graph.read { try $0.record(for: original.id) })
+        let remote = try GraphCloudNodeCodec.encode(GraphRecord(id: record.id, type: record.type, endpoints: .file,
+            tags: record.tags, groups: record.groups, createdDate: record.createdDate, file: replacement),
+            binding: peer.binding.route, modifiedAt: Date())
+        remote["asset"] = CKAsset(fileURL: source)
+        await bus.inject(try GraphCloudRecordCodec.archive(remote, scope: .shared))
+        try await peer.manager.fetchCloudChanges(.shared, configuration: peer.config)
+        _ = try await peer.manager.applyCloudInbox(for: id, configuration: peer.config)
+        #expect(try await peer.graph.participantAccess()?.permission == .readOnly)
+        #expect(try await peer.graph.reclaimFiles() == 1)
+        #expect(try await peer.graph.reclaimFiles() == 0)
+        #expect(try await peer.graph.file(original.id) == replacement)
+        #expect(try await peer.graph.withFileURL(original.id) { try Data(contentsOf: $0) } == bytes)
+        #expect(try await peer.graph.collectSyncChanges() == 0)
+        do {
+            _ = try await peer.graph.replaceFile(replacement, from: source)
+            Issue.record("Reclamation enabled a read-only participant write.")
+        } catch GraphStoreError.permissionDenied { }
+        try await peer.close()
+    }
+
+    @available(iOS 17, macOS 14, *)
     @Test func migratedLocalS04GraphCanPublishItsExistingRecords() async throws {
         let base = try root()
         defer { try? FileManager.default.removeItem(at: base) }

@@ -121,12 +121,13 @@ extension GraphStore {
     /// Removes retired revisions and interrupted preparations under the store writer grant.
     @discardableResult
     public func reclaimFiles() async throws -> Int {
-        try await transaction { scope in
-            try scope.withContext { context, _ in
+        let graphID = id
+        do {
+            return try await handle.controlTransaction { context in
                 let root = try ManagedGraphFile.root(in: context)
                 guard FileManager.default.fileExists(atPath: root.path) else { return 0 }
                 try GraphFileDisk.ensureRoot(root)
-                let retained = Set(try ManagedGraphFile.list(context, graphID: scope.graphID).map(\.revision))
+                let retained = Set(try ManagedGraphFile.list(context, graphID: graphID).map(\.revision))
                 let check = StoreNativeContext.cancellationCheck(in: context)
                 var removed = 0
                 for url in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
@@ -142,7 +143,7 @@ extension GraphStore {
                 }
                 return removed
             }
-        }
+        } catch { throw GraphStore.translate(error) }
     }
 }
 

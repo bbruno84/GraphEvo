@@ -30,6 +30,7 @@ actor StoreResources {
     private let container: NSPersistentContainer
     private let resolved: ResolvedStore
     private let hooks: StoreLifecycleHooks
+    private let removeOwnedContent: (@Sendable (URL, String) throws -> Void)?
     private var appGroupPresenter: AppGroupStorePresenter?
     private let attachedIdentity: FileIdentity?
     private var legacyMirroring: LegacyStoreMirroring?
@@ -67,13 +68,14 @@ actor StoreResources {
     private var reservationWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private var drain: CheckedContinuation<Void, Never>?
 
-    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], appGroupPresenter: AppGroupStorePresenter? = nil, attachedIdentity: FileIdentity? = nil) {
+    private init(container: NSPersistentContainer, resolved: ResolvedStore, hooks: StoreLifecycleHooks, gateways: [StoreGatewayLease], appGroupPresenter: AppGroupStorePresenter? = nil, attachedIdentity: FileIdentity? = nil, removeOwnedContent: (@Sendable (URL, String) throws -> Void)? = nil) {
         self.attachedIdentity = attachedIdentity
         self.appGroupPresenter = appGroupPresenter
         self.gateways = gateways
         self.container = container
         self.resolved = resolved
         self.hooks = hooks
+        self.removeOwnedContent = removeOwnedContent
     }
 
     static func open(
@@ -218,7 +220,8 @@ actor StoreResources {
                     let identity = try resolved.fileIdentity()
                     guard identity != nil else { throw StoreRuntimeError.missingStore(url) }
                     return StoreResources(container: container, resolved: resolved, hooks: hooks,
-                        gateways: gateways, appGroupPresenter: presenter, attachedIdentity: identity)
+                        gateways: gateways, appGroupPresenter: presenter, attachedIdentity: identity,
+                        removeOwnedContent: schema.removeOwnedContent)
                 } catch let quarantine as StoreOpenQuarantine {
                     throw quarantine
                 } catch {
@@ -1022,7 +1025,7 @@ actor StoreResources {
         }
         let progress = OSAllocatedUnfairLock(initialState: Progress(
             started: appGroupDestructionStarted, issued: destructionIssued, artifacts: destructionArtifacts))
-        let container = container, resolved = resolved, hooks = hooks
+        let container = container, resolved = resolved, hooks = hooks, removeOwnedContent = removeOwnedContent
         let request = AppGroupStoreAccess(presenter: presenter, cancellable: false,
                                           options: .forDeleting, reportDenial: true)
         do {
@@ -1040,6 +1043,9 @@ actor StoreResources {
                         progress.withLock { $0.started = true }
                     }
                     try hooks.beforeDestroy?()
+                    // Remove schema-owned bodies first: a crash after native destruction
+                    // must not leave bytes whose ownership can no longer be verified.
+                    try removeOwnedContent?(url, storeID)
                     try autoreleasepool {
                         try coordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
                     }
