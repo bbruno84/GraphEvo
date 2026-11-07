@@ -123,9 +123,12 @@ surviving actions/endpoints. Transaction failure rolls back all these removals.
 
 Read results are detached `GraphAttachmentContent` values with complete bytes.
 `attachments(ownedBy:)` lists detached metadata in stable node-ID order.
-Complete reading verifies the content. Listing is a metadata-only projection for
-split files, with full-envelope fallback for legacy files. Synchronous read scopes expose the
-same read/list operations. File I/O is not allowed inside a mutation scope.
+Complete reading verifies the content. On a local SQLite store using native
+typed properties, listing fetches the graph's attachment rows and verifies the
+owner and attachment identities in the current read view. Split files use a
+metadata-only projection. Legacy files use the full envelope. Call
+`validateIntegrity()` for a whole-graph audit. Synchronous read scopes expose
+the same read/list operations. File I/O is not allowed inside a mutation scope.
 
 Export snapshots and verifies content first, then coordinates a write at a new
 caller-selected file URL. It prepares a temporary sibling before publishing;

@@ -1366,7 +1366,10 @@ rather than an import replay. A locally committed result is distinct from export
 or independent replica recovery.
 
 The alpha buffers complete content and accepts empty files through 10 MiB.
-Listing split metadata does not decode/verify the body; old envelopes retain full validation. Streaming, per-file
+On local SQLite with native typed properties, listing scopes identity checks to
+the owner and attachment rows. Split files use a metadata projection; old
+envelopes retain full validation. Use `validateIntegrity()` for a whole-graph
+audit. Streaming, per-file
 progress, eviction, selective download, a persistent offline-retention guarantee
 and distributed replacement conflict resolution are unsupported.
 

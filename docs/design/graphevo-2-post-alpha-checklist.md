@@ -474,9 +474,14 @@ are not resolved by that result.
   [experiment](graphevo-2-attachment-metadata-experiment.md) as historical evidence;
   do not transfer its acceptance to the new spool. Metadata listing does not
   certify body availability.
-- [ ] **B** Decide whether query/list costs require metadata separation or schema
-  changes. Document actual availability and unsupported streaming/progress/
-  eviction/selective-download behavior rather than promising these capabilities.
+- [ ] **B** Accept query/list costs with representative content and graph sizes.
+  Local SQLite listing selects attachment rows and checks their identities.
+  Split metadata remains separate from the body. The
+  [XR and iPad result](results/scoped-attachment-listing-2026-11-06.md) records
+  scoped list timing and a four-file recovery at the 10 MiB per-file ceiling.
+  Assess legacy, mirrored and large attachment sets before changing the
+  representation. Document actual streaming/progress/eviction/selective-download
+  availability.
 - [ ] **R** Cover security-scoped document providers, source changes/removal,
   cancellation/temp cleanup, atomic export to existing/dangling destinations,
   permission loss, and file I/O outside managed context scopes.
