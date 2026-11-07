@@ -8,8 +8,10 @@ integration into the main v2 branch or beta readiness.
 
 ## Current position — 2026-11-07
 
-The v2 integration baseline is `65818685` through
-[PR #189](https://github.com/bbruno84/GraphEvo/pull/189). Foundation coordinates
+The v2 integration line includes File synchronization through
+[PR #190](https://github.com/bbruno84/GraphEvo/pull/190), following the local
+File increment in #189. Its reviewed implementation checkpoint is `d803f4b9`;
+subsequent integration notes are documentation-only. Foundation coordinates
 dedicated App Group stores, ordinary SQLite, open-store migrations and backup
 catalogs. The CloudKit session claim follows aggregate app activity. The last
 full hosted checkpoint [#42174675689](https://github.com/bbruno84/GraphEvo/actions/runs/42174675689)
@@ -46,15 +48,15 @@ production cutover remain open.
 alpha increment. The live observation and rescan contract passed local regressions
 and [explicit CloudKit import on a physical iPad](graphevo-2-observation.md#acceptance-and-remaining-work).
 PA07 retains automatic delivery, wider lifecycle and observer cost acceptance.
-The current alpha candidate adds synchronized File nodes; the broader
+The current alpha increment adds synchronized File nodes; the broader
 query/attachment capacity and performance gates remain in the post-alpha checklist.
 
 [PR #189](https://github.com/bbruno84/GraphEvo/pull/189) adds the opt-in
 [local File primitive](graphevo-2-attachments.md#local-file-primitive-candidate).
 The increment covers S04 migration to a separate store, typed endpoints and
 queries, immutable revisions, reclamation and file-aware backup and restore.
-The [File transport candidate](graphevo-2-file-sync.md) in
-[PR #190](https://github.com/bbruno84/GraphEvo/pull/190), pending integration, adds format 4
+The [File transport](graphevo-2-file-sync.md), integrated through
+[PR #190](https://github.com/bbruno84/GraphEvo/pull/190), adds format 4
 records, streamed spool copies, File-aware public cloud connections and
 a format 2 sharing descriptor. Its private physical test imports a 25 MiB
 File into an empty SQLite replica on iPad, then verifies a replacement after
@@ -78,9 +80,9 @@ The selected alpha
 behavior downloads File content with synchronization and reads it locally;
 on-demand download/progress is a possible later evolution, not a beta gate.
 The [pre-merge review](results/file-sync-review-2026-11-07.md) closes both
-local reclamation and terminal-purge findings. The final candidate passes
-752 macOS v2-profile tests and 61 affected iOS simulator tests; integration
-and broader beta acceptance remain distinct.
+local reclamation and terminal-purge findings. The integrated implementation
+passed 752 macOS v2-profile tests and 61 affected iOS simulator tests. Broader
+beta acceptance remains open; no remote checkpoint was requested for #190.
 
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 

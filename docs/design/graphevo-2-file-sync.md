@@ -1,6 +1,6 @@
 # GraphEvo 2 — File synchronization
 
-Status: [PR #190](https://github.com/bbruno84/GraphEvo/pull/190), pending integration,
+Status: integrated through [PR #190](https://github.com/bbruno84/GraphEvo/pull/190),
 following the local File increment in
 [PR #189](https://github.com/bbruno84/GraphEvo/pull/189). Read with
 [File lifecycle](graphevo-2-attachments.md#local-file-primitive-candidate),
@@ -109,7 +109,7 @@ tests on macOS. The focused iOS simulator checkpoint passed 36 tests across
 File sync, local files, assets and native v1 migration. A subsequent native
 outbox adjustment passed the 51-test macOS transport/File/asset subset and
 the 23-test iOS File/asset subset. Manifest validation and `git diff --check`
-also passed. Remote CI has not been requested for this candidate.
+also passed. Remote CI was not requested for this alpha increment.
 The [pre-merge review](results/file-sync-review-2026-11-07.md) adds read-only
 reclamation and terminal-purge regressions, including retained incoming assets
 and interrupted cleanup. Its final checkpoint passes 752 macOS v2-profile

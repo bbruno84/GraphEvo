@@ -1258,12 +1258,12 @@ This scheduling policy closes no acceptance box or physical-device gate.
   representative devices. The 50 GB transport ceiling remains distinct from
   the verified 25 MiB sharing and 128 MiB recovery fixtures.
 
-The [File transport candidate](graphevo-2-file-sync.md) covers durable
+The [integrated File transport](graphevo-2-file-sync.md) covers durable
 outgoing/incoming copies, conflict handling and a private physical import
 and replacement checkpoint on iPad, plus the bounded cross-account
 iPad/XR checkpoint.
 
 Alpha retains eager File download during synchronization. On-demand
 download/progress is an optional future design, not an outstanding beta
-entry requirement. PR #190 remains pending integration; these checks record
-candidate evidence rather than a merged or released feature.
+entry requirement. PR #190 integrates the reviewed alpha implementation;
+the bounded checks above do not establish beta or release acceptance.
