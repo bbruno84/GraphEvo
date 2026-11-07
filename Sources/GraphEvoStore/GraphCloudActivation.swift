@@ -78,10 +78,14 @@ package struct GraphCloudSeedManifest: Codable, Equatable, Sendable {
     package init(format: Int, graphID: GraphID, entries: [GraphCloudSeedEntry]) { self.format = format; self.graphID = graphID; self.entries = entries }
 
     package static func entry(_ record: CKRecord, binding: GraphCloudBinding) throws -> GraphCloudSeedEntry {
-        let decoded = try GraphCloudNodeCodec.decode(record, binding: binding)
+        let decoded = try GraphCloudNodeCodec.decode(record, binding: binding, allowMissingFileContent: true)
         let payload = try GraphCloudNodeCodec.encode(decoded.record, binding: binding, modifiedAt: decoded.modifiedAt)
         guard let bytes = payload["payload"] as? Data, let kind = payload["kind"] as? String else {
             throw GraphCloudActivationError.invalidState
+        }
+        if let file = decoded.record.file {
+            return .init(nodeID: file.id.rawValue, kind: kind, type: decoded.record.type,
+                digest: SHA256.hash(data: bytes).hex, assetDigest: file.sha256, assetBytes: Int(file.byteCount))
         }
         let data = try payload["asset"].map { try GraphCloudAsset.bytes($0) }
         return .init(nodeID: decoded.record.id.rawValue, kind: kind, type: decoded.record.type,

@@ -19,18 +19,18 @@ enum GraphCloudGraphDescriptor {
     static func isControl(_ event: GraphCloudIncoming) -> Bool {
         event.recordName == recordName || event.recordType == recordType
     }
-    static func encode(_ binding: GraphCloudBinding) -> CKRecord {
+    static func encode(_ binding: GraphCloudBinding, supportsFiles: Bool = false) -> CKRecord {
         let record = CKRecord(recordType: recordType, recordID: id(in: binding.zone))
-        record["format"] = NSNumber(value: 1)
+        record["format"] = NSNumber(value: supportsFiles ? 2 : 1)
         record["graphID"] = binding.graphID.rawValue.uuidString.lowercased() as CKRecordValue
         return record
     }
-    static func decode(_ record: CKRecord, zone: GraphCloudZone) throws -> GraphID {
+    static func decode(_ record: CKRecord, zone: GraphCloudZone, supportsFiles: Bool = false) throws -> GraphID {
         guard record.recordType == recordType, record.recordID == id(in: zone),
               record.encryptedValues.allKeys().isEmpty,
               let format = record["format"] as? NSNumber,
               CFGetTypeID(format) != CFBooleanGetTypeID() else { throw GraphCloudDiscoveryError.invalidDescriptor }
-        guard format == NSNumber(value: 1) else { throw GraphCloudDiscoveryError.unsupportedDescriptor }
+        guard format == NSNumber(value: 1) || (supportsFiles && format == NSNumber(value: 2)) else { throw GraphCloudDiscoveryError.unsupportedDescriptor }
         guard let raw = record["graphID"] as? String, let uuid = UUID(uuidString: raw),
               raw == uuid.uuidString.lowercased() else { throw GraphCloudDiscoveryError.invalidDescriptor }
         // Bound the entire field archive, including optional future keys, without loading assets.
@@ -39,10 +39,10 @@ enum GraphCloudGraphDescriptor {
               bytes.count <= maximumBytes else { throw GraphCloudDiscoveryError.invalidDescriptor }
         return GraphID(rawValue: uuid)
     }
-    static func validate(_ event: GraphCloudIncoming, binding: GraphCloudBinding) throws {
+    static func validate(_ event: GraphCloudIncoming, binding: GraphCloudBinding, supportsFiles: Bool = false) throws {
         guard event.kind == .recordChanged, event.zone == binding.zone, event.assetReference == nil,
               let bytes = event.recordArchive, bytes.count <= maximumBytes,
-              try decode(GraphCloudRecordCodec.restore(bytes), zone: binding.zone) == binding.graphID else {
+              try decode(GraphCloudRecordCodec.restore(bytes), zone: binding.zone, supportsFiles: supportsFiles) == binding.graphID else {
             throw GraphCloudDiscoveryError.invalidDescriptor
         }
     }
@@ -93,17 +93,17 @@ extension GraphCloudNativeSharingService {
         _ = try await database.save(CKRecordZone(zoneID: zoneID))
         do {
             let record = try await database.record(for: GraphCloudGraphDescriptor.id(in: binding.zone))
-            guard try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) == binding.graphID else {
+            guard try GraphCloudGraphDescriptor.decode(record, zone: binding.zone, supportsFiles: config.supportsFiles) == binding.graphID else {
                 throw GraphCloudDiscoveryError.invalidDescriptor
             }
         } catch let error as CKError where error.code == .unknownItem {
-            let record = GraphCloudGraphDescriptor.encode(binding)
+            let record = GraphCloudGraphDescriptor.encode(binding, supportsFiles: config.supportsFiles)
             do {
                 let result = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
                 guard let saved = result.saveResults[record.recordID] else { throw GraphCloudDiscoveryError.metadataPending }
-                guard try GraphCloudGraphDescriptor.decode(saved.get(), zone: binding.zone) == binding.graphID else { throw GraphCloudDiscoveryError.invalidDescriptor }
+                guard try GraphCloudGraphDescriptor.decode(saved.get(), zone: binding.zone, supportsFiles: config.supportsFiles) == binding.graphID else { throw GraphCloudDiscoveryError.invalidDescriptor }
             } catch let error as CKError where error.code == .serverRecordChanged {
-                guard try GraphCloudGraphDescriptor.decode(await database.record(for: record.recordID), zone: binding.zone) == binding.graphID else {
+                guard try GraphCloudGraphDescriptor.decode(await database.record(for: record.recordID), zone: binding.zone, supportsFiles: config.supportsFiles) == binding.graphID else {
                     throw GraphCloudDiscoveryError.invalidDescriptor
                 }
             }
@@ -142,7 +142,7 @@ extension GraphCloudNativeSharingService {
         if value.participantStatus == .pending { _ = try await CKContainer(identifier: config.containerIdentifier).accept(value) }
     }, discover: { config, zone in
         let record = try await CKContainer(identifier: config.containerIdentifier).sharedCloudDatabase.record(for: GraphCloudGraphDescriptor.id(in: zone))
-        return try GraphCloudGraphDescriptor.decode(record, zone: zone)
+        return try GraphCloudGraphDescriptor.decode(record, zone: zone, supportsFiles: config.supportsFiles)
     }, discard: { config, expected, account in
         let value = try await metadata(config, url: expected.url, account: account)
         guard value.share.url == expected.url, value.share.recordID.zoneID == GraphCloudGraphDescriptor.id(in: expected.zone).zoneID else { throw GraphCloudDiscoveryError.invalidInvitation }

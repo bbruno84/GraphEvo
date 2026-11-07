@@ -139,7 +139,7 @@ extension GraphContext {
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()))
     }
 
-    /// Opens and creates local SQLite graphs with first-class files.
+    /// Opens and creates SQLite graphs with first-class files and optional CloudKit synchronization.
     public static func localFiles() -> GraphContext {
         GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.localFiles,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()))

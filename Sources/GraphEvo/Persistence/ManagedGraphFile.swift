@@ -1,3 +1,4 @@
+import CloudKit
 import CoreData
 import Foundation
 import GraphEvoStore
@@ -115,5 +116,40 @@ extension ManagedGraphFile {
         try await prepare(staged)
         try await CoordinatedFiles.run([.write(target)]) { try GraphAttachmentIO.publishExclusive(stage, at: target) }
         return target.appendingPathComponent("Graph.sqlite")
+    }
+}
+
+extension ManagedGraphFile {
+    static func installRemote(_ remote: GraphCloudDecodedNode, session: GraphTypedStoreAdapter.Session) throws {
+        let record = remote.record
+        guard let metadata = record.file, metadata.id == record.id else { throw GraphCloudNodeError.invalidRecord }
+        let root = try root(in: session.context)
+        try GraphFileDisk.ensureRoot(root)
+        let target = GraphFileDisk.url(for: metadata, in: root)
+        let check = StoreNativeContext.cancellationCheck(in: session.context)
+        if FileManager.default.fileExists(atPath: target.path) {
+            try GraphFileDisk.verify(target, file: metadata, check: check)
+        } else {
+            guard let source = remote.fileSource else { throw GraphFileError.missingContent }
+            let (copied, stage) = try GraphFileDisk.prepare(from: source, in: root, id: record.id,
+                name: metadata.name, contentType: metadata.contentType, check: check)
+            defer { try? FileManager.default.removeItem(at: stage) }
+            guard copied.byteCount == metadata.byteCount, copied.sha256 == metadata.sha256 else {
+                throw GraphFileError.corruptContent
+            }
+            try check()
+            try GraphAttachmentIO.publishExclusive(stage, at: target)
+        }
+        if let existing = try session.node(record.id) {
+            guard let file = existing.node as? ManagedGraphFile, existing.type == record.type else {
+                throw GraphCloudNodeError.invalidRecord
+            }
+            file.apply(metadata)
+            _ = try session.patch(GraphRecordPatch(id: record.id,
+                addingTags: record.tags.subtracting(existing.tags), removingTags: Set(existing.tags).subtracting(record.tags),
+                addingGroups: record.groups.subtracting(existing.groups), removingGroups: Set(existing.groups).subtracting(record.groups)))
+        } else {
+            try session.insert(record, file: metadata)
+        }
     }
 }

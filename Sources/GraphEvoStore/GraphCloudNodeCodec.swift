@@ -29,6 +29,7 @@ package struct GraphCloudDecodedNode: Sendable {
     package let record: GraphRecord
     package let systemFields: Data
     package let modifiedAt: Date?
+    package var fileSource: URL? = nil
 }
 
 package enum GraphCloudDecodedEvent: Sendable {
@@ -43,6 +44,7 @@ package enum GraphCloudNodeCodec {
     private static let reservedPrefix = "__graphevo_v2."
     private static let keys: Set<String> = ["format", "graphID", "nodeID", "kind", "type", "payload"]
     private enum Endpoints: Codable {
+        case file
         case entity
         case relationship(subject: UUID?, object: UUID?)
         case action(subjects: [UUID], objects: [UUID])
@@ -59,6 +61,7 @@ package enum GraphCloudNodeCodec {
         let createdDate: Date?
         var modifiedAt: Date?
         var attachment: Attachment?
+        var file: GraphFile?
     }
 
     package static func recordID(for id: GraphNodeID, binding: GraphCloudBinding) throws -> CKRecord.ID {
@@ -80,6 +83,11 @@ package enum GraphCloudNodeCodec {
     }
 
     private static func validate(_ record: GraphRecord, limits: GraphCloudNodeLimits) throws {
+        if record.endpoints == .file {
+            guard let file = record.file, file.id == record.id, record.type == GraphFile.nodeType,
+                  record.properties.isEmpty else { throw GraphCloudNodeError.invalidRecord }
+            try GraphCloudAsset.validateNativeByteCount(UInt64(file.byteCount))
+        } else if record.file != nil { throw GraphCloudNodeError.invalidRecord }
         if record.type == GraphAttachmentPayload.graphType {
             do { _ = try GraphAttachmentPayload(graphRecord: record) }
             catch { throw GraphCloudNodeError.invalidRecord }
@@ -95,7 +103,7 @@ package enum GraphCloudNodeCodec {
         let endpoints: Endpoints
         switch record.endpoints {
         case .entity: endpoints = .entity
-        case .file: throw GraphFileError.localOnly
+        case .file: endpoints = .file
         case .relationship(let subject, let object): endpoints = .relationship(subject: subject?.rawValue, object: object?.rawValue)
         case .action(let subjects, let objects):
             guard subjects.count <= limits.maximumCollectionItems, objects.count <= limits.maximumCollectionItems else { throw GraphCloudNodeError.limitExceeded }
@@ -132,6 +140,12 @@ package enum GraphCloudNodeCodec {
                                             originalData: Data? = nil) -> Bool {
         guard let bytes = item.recordArchive,
               let original = try? GraphCloudRecordCodec.restore(bytes) else { return false }
+        if let reference = item.assetReference, reference.isFile == true {
+            guard (try? validateReferenceArchive(original, reference: reference, binding: binding)) != nil,
+                  let wanted = try? decode(original, binding: binding, allowMissingFileContent: true),
+                  let actual = try? decode(server, binding: binding) else { return false }
+            return wanted.record == actual.record && wanted.modifiedAt == actual.modifiedAt
+        }
         if item.assetReference != nil {
             guard let originalData else { return false }
             original["asset"] = originalData as CKRecordValue
@@ -148,6 +162,14 @@ package enum GraphCloudNodeCodec {
     package static func validateReferenceArchive(_ native: CKRecord, reference: GraphCloudAssetReference,
                                                   binding: GraphCloudBinding, matchMetadata: Bool = true) throws {
         let id = try logicalID(native.recordID, binding: binding)
+        if reference.isFile == true {
+            let decoded = try decode(native, binding: binding, allowMissingFileContent: true)
+            guard let metadata = decoded.record.file, native["asset"] as? Data == Data(),
+                  reference.binding == binding, reference.recordName == native.recordID.recordName,
+                  !matchMetadata || (metadata.byteCount == Int64(reference.byteCount) && metadata.sha256 == reference.sha256)
+            else { throw GraphCloudError.invalidState }
+            return
+        }
         guard native.recordType == recordType, Set(native.allKeys()) == keys.union(["asset"]),
               native.encryptedValues.allKeys().isEmpty,
               native["format"] as? NSNumber == NSNumber(value: 3),
@@ -188,6 +210,7 @@ package enum GraphCloudNodeCodec {
             var value = try body(projection, limits: limits)
             value.modifiedAt = modifiedAt
             value.attachment = attachment
+            value.file = record.file
             data = try encoder.encode(value)
         } catch let error as GraphCloudNodeError { throw error }
         catch { throw GraphCloudNodeError.invalidRecord }
@@ -195,7 +218,8 @@ package enum GraphCloudNodeCodec {
         let native = try systemFields.map { try self.native($0, limits: limits) } ?? CKRecord(recordType: recordType, recordID: id)
         guard native.recordType == recordType, native.recordID == id else { throw GraphCloudNodeError.invalidSystemFields }
         let attachment = record.type == GraphAttachmentPayload.graphType
-        native["format"] = NSNumber(value: attachment ? 3 : 2)
+        native["format"] = NSNumber(value: record.endpoints == .file ? 4 : (attachment ? 3 : 2))
+        if record.endpoints == .file { native["asset"] = Data() as CKRecordValue }
         if attachment { native["asset"] = try GraphAttachmentPayload(graphRecord: record).content.data as CKRecordValue }
         native["graphID"] = binding.graphID.rawValue.uuidString.lowercased() as CKRecordValue
         native["nodeID"] = record.id.rawValue.uuidString.lowercased() as CKRecordValue
@@ -206,15 +230,16 @@ package enum GraphCloudNodeCodec {
     }
 
     package static func decode(_ native: CKRecord, binding: GraphCloudBinding,
-                               limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudDecodedNode {
+                               allowMissingFileContent: Bool = false, limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudDecodedNode {
         try limits.validate()
         let isAttachment = native["type"] as? String == GraphAttachmentPayload.graphType
-        guard native.recordType == recordType, Set(native.allKeys()) == (isAttachment ? keys.union(["asset"]) : keys), native.encryptedValues.allKeys().isEmpty else {
+        let isFile = native["kind"] as? String == "file"
+        guard native.recordType == recordType, Set(native.allKeys()) == ((isAttachment || isFile) ? keys.union(["asset"]) : keys), native.encryptedValues.allKeys().isEmpty else {
             throw GraphCloudNodeError.invalidRecord
         }
         let id = try logicalID(native.recordID, binding: binding)
         guard let format = native["format"] as? NSNumber, CFGetTypeID(format) != CFBooleanGetTypeID(),
-              (format == NSNumber(value: 1) || format == NSNumber(value: 2) || format == NSNumber(value: 3)) else { throw GraphCloudNodeError.unsupportedVersion }
+              (1...4).contains(format.intValue), format.doubleValue == Double(format.intValue) else { throw GraphCloudNodeError.unsupportedVersion }
         guard native["graphID"] as? String == binding.graphID.rawValue.uuidString.lowercased() else { throw GraphCloudNodeError.foreignGraph }
         guard native["nodeID"] as? String == id.rawValue.uuidString.lowercased(),
               let type = native["type"] as? String, let expectedKind = native["kind"] as? String,
@@ -231,6 +256,7 @@ package enum GraphCloudNodeCodec {
         func reference(_ uuid: UUID) -> GraphNodeID { GraphNodeID(graphID: binding.graphID, rawValue: uuid) }
         let endpoints: GraphEndpoints
         switch body.endpoints {
+        case .file: endpoints = .file
         case .entity: endpoints = .entity
         case .relationship(let subject, let object): endpoints = .relationship(subject: subject.map(reference), object: object.map(reference))
         case .action(let subjects, let objects):
@@ -240,6 +266,20 @@ package enum GraphCloudNodeCodec {
         }
         guard kind(endpoints) == expectedKind else { throw GraphCloudNodeError.invalidRecord }
         var properties = try body.properties.mapValues { try GraphValueCodec.decode($0) }
+        var fileSource: URL?
+        if isFile {
+            guard format == NSNumber(value: 4), endpoints == .file, type == GraphFile.nodeType,
+                  let metadata = body.file, metadata.id == id, body.attachment == nil, properties.isEmpty else {
+                throw GraphCloudNodeError.invalidRecord
+            }
+            try GraphCloudAsset.validateNativeByteCount(UInt64(metadata.byteCount))
+            if let asset = native["asset"] as? CKAsset, let url = asset.fileURL {
+                try GraphFileDisk.verify(url, file: metadata, check: { try Task.checkCancellation() })
+                fileSource = url
+            } else {
+                guard allowMissingFileContent, native["asset"] as? Data == Data() else { throw GraphCloudNodeError.invalidRecord }
+            }
+        } else if body.file != nil { throw GraphCloudNodeError.invalidRecord }
         if isAttachment {
             guard format == NSNumber(value: 3), let attachment = body.attachment,
                   attachment.metadata.id == id, endpoints == .entity,
@@ -248,24 +288,25 @@ package enum GraphCloudNodeCodec {
             let payload = try GraphAttachmentPayload(metadata: attachment.metadata, data: bytes)
             for (key, value) in try payload.graphRecord(legacy: attachment.legacy).properties { properties[key] = value }
         } else {
-            guard body.attachment == nil, format != NSNumber(value: 3) else { throw GraphCloudNodeError.invalidRecord }
+            guard body.attachment == nil, format != NSNumber(value: 3), isFile || format != NSNumber(value: 4) else { throw GraphCloudNodeError.invalidRecord }
         }
         let record: GraphRecord
         do {
             record = try GraphRecord(id: id, type: type, endpoints: endpoints,
                                      properties: properties,
-                                     tags: Set(body.tags), groups: Set(body.groups), createdDate: body.createdDate)
+                                     tags: Set(body.tags), groups: Set(body.groups), createdDate: body.createdDate, file: body.file)
         } catch { throw GraphCloudNodeError.invalidRecord }
         try validate(record, limits: limits)
         let encoder = NSKeyedArchiver(requiringSecureCoding: true)
         native.encodeSystemFields(with: encoder); encoder.finishEncoding()
         guard encoder.encodedData.count <= limits.maximumSystemFieldsBytes else { throw GraphCloudNodeError.limitExceeded }
-        return GraphCloudDecodedNode(record: record, systemFields: encoder.encodedData, modifiedAt: modifiedAt)
+        return GraphCloudDecodedNode(record: record, systemFields: encoder.encodedData, modifiedAt: modifiedAt, fileSource: fileSource)
     }
 
     /// Scope comes from the durable route, never from untrusted record fields.
     package static func decode(_ incoming: GraphCloudIncoming, binding: GraphCloudBinding,
-                               assetData: Data? = nil, limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudDecodedEvent {
+                               assetData: Data? = nil, assetURL: URL? = nil, allowMissingFileContent: Bool = false,
+                               limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudDecodedEvent {
         try limits.validate()
         guard incoming.valid, incoming.zone == binding.zone else { throw GraphCloudNodeError.foreignZone }
         switch incoming.kind {
@@ -279,10 +320,17 @@ package enum GraphCloudNodeCodec {
             guard let data = incoming.recordArchive,
                   let record = try? GraphCloudRecordCodec.restore(data) else { throw GraphCloudNodeError.invalidRecord }
             if let reference = incoming.assetReference {
-                guard reference.binding == binding, let assetData else { throw GraphCloudNodeError.invalidRecord }
-                record["asset"] = assetData as CKRecordValue
+                guard reference.binding == binding else { throw GraphCloudNodeError.invalidRecord }
+                if reference.isFile == true {
+                    try validateReferenceArchive(record, reference: reference, binding: binding)
+                    if let assetURL { record["asset"] = CKAsset(fileURL: assetURL) }
+                    else if !allowMissingFileContent { throw GraphCloudNodeError.invalidRecord }
+                } else {
+                    guard let assetData else { throw GraphCloudNodeError.invalidRecord }
+                    record["asset"] = assetData as CKRecordValue
+                }
             }
-            return .save(try decode(record, binding: binding, limits: limits))
+            return .save(try decode(record, binding: binding, allowMissingFileContent: allowMissingFileContent, limits: limits))
         }
     }
 }
@@ -345,7 +393,7 @@ extension GraphCloudNodeCodec {
     package static func encode(_ item: GraphSyncItem, binding: GraphCloudBinding, systemFields: Data?,
                                modifiedAt: Date?, limits: GraphCloudNodeLimits = .init()) throws -> GraphCloudOutgoingNode {
         guard item.change.id.graphID == binding.graphID, item.change.generation > 0,
-              ["ManagedEntity", "ManagedRelationship", "ManagedAction"].contains(item.change.nativeKind) else {
+              ["ManagedEntity", "ManagedRelationship", "ManagedAction", "ManagedGraphFile"].contains(item.change.nativeKind) else {
             throw GraphCloudNodeError.invalidBatch
         }
         let id = try recordID(for: item.change.id, binding: binding)
@@ -355,7 +403,7 @@ extension GraphCloudNodeCodec {
             guard let record = item.record, record.id == item.change.id else { throw GraphCloudNodeError.invalidBatch }
             let expected: String
             switch record.endpoints {
-            case .file: throw GraphFileError.localOnly
+            case .file: expected = "ManagedGraphFile"
             case .entity: expected = "ManagedEntity"
             case .relationship: expected = "ManagedRelationship"
             case .action: expected = "ManagedAction"

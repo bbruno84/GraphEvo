@@ -45,6 +45,9 @@ package enum GraphCloudAsset {
         for key in record.allKeys() {
             guard let value = record[key] else { continue }
             if key == "asset", record.recordType == GraphCloudNodeCodec.recordType,
+               record["kind"] as? String == "file" {
+                guard allowBytes, value as? Data == Data() else { throw GraphCloudError.unsupportedAsset }
+            } else if key == "asset", record.recordType == GraphCloudNodeCodec.recordType,
                record["type"] as? String == GraphAttachmentPayload.graphType {
                 guard value is CKAsset || (allowBytes && value is Data) else { throw GraphCloudError.invalidState }
                 copy[key] = try bytes(value) as CKRecordValue

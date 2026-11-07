@@ -56,7 +56,8 @@ final class GraphTypedQuerySource {
             for (id, node) in nodes where node is Entity {
                 let endpoints: GraphEndpoints = node.node is ManagedGraphFile ? .file : .entity
                 records.append(try GraphRecord(id: id, type: node.type, endpoints: endpoints, tags: Set(node.tags),
-                    groups: Set(node.groups), createdDate: node.createdDateIfPresent))
+                    groups: Set(node.groups), createdDate: node.createdDateIfPresent,
+                    file: try (node.node as? ManagedGraphFile)?.metadata(id: id)))
             }
             return
         }

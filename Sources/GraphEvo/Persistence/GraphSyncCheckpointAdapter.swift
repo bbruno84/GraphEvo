@@ -10,7 +10,7 @@ enum GraphSyncCheckpointAdapter {
     static let localAuthor = "GraphEvo.v2.local"
     static let importAuthor = "GraphEvo.v2.import"
     static let metadataAuthor = "GraphEvo.v2.syncMetadata"
-    private static let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName]
+    private static let kinds = [ModelIdentifier.entityName, ModelIdentifier.relationshipName, ModelIdentifier.actionName, ManagedGraphFile.entityName]
 
     struct Checkpoint: Codable, Equatable {
         var format = 1
@@ -46,8 +46,30 @@ enum GraphSyncCheckpointAdapter {
         guard let coordinator = context.persistentStoreCoordinator, let store = coordinator.persistentStores.first,
               coordinator.metadata(for: store)[StoreNativeContext.workspaceKey] is String,
               coordinator.metadata(for: store)[StoreNativeMigration.documentKey] is Data else { throw GraphSyncError.invalidState }
+        try seedSnapshot(context, graphID: graphID, ids: ids)
+    }
+
+    /// A detached, unbound schema copy starts a new history cut for all retained nodes.
+    static func seedLocalSchemaCopy(_ context: NSManagedObjectContext, graphID: GraphID) throws {
+        let root = try GraphTypedStoreAdapter.controlRoot(context, id: graphID)
+        guard root[dynamicMember: GraphCloudAccountNative.key] == nil,
+              root[dynamicMember: transportKey] == nil,
+              root[dynamicMember: GraphCloudActivationNative.key] == nil else { throw GraphCloudError.invalidState }
+        root[dynamicMember: stateKey] = nil
+        let value = try load(context, id: graphID, limits: .init())
+        try persist(context, value)
+        context.transactionAuthor = metadataAuthor
+        try context.save()
+        let ids = Set(try GraphTypedStoreAdapter.Session(context, graphID, database: true).nodes.keys)
+        try seedSnapshot(context, graphID: graphID, ids: ids, replacingBaseline: true)
+        try context.save()
+    }
+
+    private static func seedSnapshot(_ context: NSManagedObjectContext, graphID: GraphID, ids: Set<GraphNodeID>,
+                                     replacingBaseline: Bool = false) throws {
+        guard let store = context.persistentStoreCoordinator?.persistentStores.first else { throw GraphSyncError.invalidState }
         var value = try load(context, id: graphID, limits: .init())
-        if value.original != nil { return }
+        if value.original != nil && !replacingBaseline { return }
         let request = NSPersistentHistoryChangeRequest.fetchHistory(after: nil as NSPersistentHistoryToken?)
         request.resultType = .transactionsOnly; request.affectedStores = [store]
         guard let fetch = NSPersistentHistoryTransaction.fetchRequest else { throw GraphSyncError.historyUnavailable }
@@ -154,7 +176,9 @@ enum GraphSyncCheckpointAdapter {
               ((coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphRuntimeSchema.nativeModelIdentifier)] &&
                 coordinator.managedObjectModel.entityVersionHashesByName == GraphRuntimeSchema.nativeIdentity.entityVersionHashes) ||
                (coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphNativePropertyStorage.identifier)] &&
-                coordinator.managedObjectModel.entityVersionHashesByName == GraphRuntimeSchema.typedProperties.entityVersionHashes)),
+                coordinator.managedObjectModel.entityVersionHashesByName == GraphRuntimeSchema.typedProperties.entityVersionHashes) ||
+               (coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphFileDisk.schemaIdentifier)] &&
+                coordinator.managedObjectModel.entityVersionHashesByName == GraphRuntimeSchema.localFiles.entityVersionHashes)),
               let store = coordinator.persistentStores.first,
               let storeID = coordinator.metadata(for: store)[NSStoreUUIDKey] as? String,
               try GraphNativeIdentityDatabaseAdapter.database.catalog(context) == [id] else { throw GraphSyncError.invalidState }
@@ -294,6 +318,7 @@ enum GraphSyncCheckpointAdapter {
             }
         }
         var ownerGroups: [OwnerGroup: Set<GraphNodeID>] = [:]
+        var nativeKinds: [GraphNodeID: String] = [:]
         for (index, transaction) in transactions.enumerated() {
             for owner in transaction.changes ?? [] {
                 guard let kind = owner.changedObjectID.entity.name, kinds.contains(kind) else { continue }
@@ -302,9 +327,13 @@ enum GraphSyncCheckpointAdapter {
                         (owner.updatedProperties ?? []).contains { $0.name == relation }
                 }
                 for relation in relations {
-                    let key = OwnerGroup(transaction: index, kind: kind, relation: relation)
+                    let detailKind = kind == ManagedGraphFile.entityName ? ModelIdentifier.entityName : kind
+                    let key = OwnerGroup(transaction: index, kind: detailKind, relation: relation)
                     if ownerGroups[key] == nil { ownerGroups[key] = [] }
-                    if let id = ids[owner.changedObjectID] { ownerGroups[key]?.insert(id) }
+                    if let id = ids[owner.changedObjectID] {
+                        ownerGroups[key]?.insert(id)
+                        nativeKinds[id] = kind
+                    }
                     else if !controls.contains(owner.changedObjectID) { throw GraphSyncError.unresolvedChange }
                 }
             }
@@ -331,11 +360,14 @@ enum GraphSyncCheckpointAdapter {
                     let descriptor = try detail(name)
                     if change.changeType != .delete, let row = try? context.existingObject(with: change.changedObjectID),
                        let owner = row.value(forKey: "node") as? NSManagedObject {
-                        if let id = try identity(owner, graphID: value.state.graphID) { saves[id] = descriptor.kind }
+                        if let id = try identity(owner, graphID: value.state.graphID) {
+                            guard let kind = owner.entity.name, kinds.contains(kind) else { throw GraphSyncError.unresolvedChange }
+                            saves[id] = kind
+                        }
                     } else {
                         let key = try groupOfDeletedDetail(change)
                         if appliedGroups.insert(key).inserted {
-                            for id in ownerGroups[key] ?? [] { saves[id] = descriptor.kind }
+                            for id in ownerGroups[key] ?? [] { saves[id] = nativeKinds[id] ?? descriptor.kind }
                         }
                     }
                 }

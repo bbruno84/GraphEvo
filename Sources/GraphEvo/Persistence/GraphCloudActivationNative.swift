@@ -35,7 +35,9 @@ enum GraphCloudActivationNative {
         for entity in entities {
             try StoreNativeContext.cancellationCheck(in: context)()
             guard let name = entity.name else { throw GraphCloudActivationError.invalidState }
-            let count = try context.count(for: NSFetchRequest<NSFetchRequestResult>(entityName: name))
+            let request = NSFetchRequest<NSFetchRequestResult>(entityName: name)
+            request.includesSubentities = false
+            let count = try context.count(for: request)
             guard count >= 0, count <= remaining else { throw GraphCloudActivationError.limitExceeded }
             remaining -= count
         }

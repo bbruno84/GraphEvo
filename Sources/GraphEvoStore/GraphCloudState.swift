@@ -17,6 +17,7 @@ package struct GraphCloudConfiguration: Equatable, Sendable {
     package let directory: URL
     package let maximumEvents: Int
     package let maximumBytes: Int
+    package var supportsFiles = false
     package let allowsSessionUpgradeFromV8: Bool
     package init(containerIdentifier: String, environment: GraphCloudEnvironment, directory: URL,
                  maximumEvents: Int = 4096, maximumBytes: Int = 32 * 1024 * 1024, allowsSessionUpgradeFromV8: Bool = false) {
@@ -61,6 +62,11 @@ package struct GraphCloudBinding: Codable, Equatable, Sendable {
 /// Secure CKRecord archives are retained before explicit CF01 conversion and graph application.
 package struct GraphCloudIncoming: Codable, Equatable, Sendable {
     package enum Kind: String, Codable, Sendable { case zoneChanged, zoneDeleted, recordChanged, recordDeleted }
+    /// SDK staging is consumed by freeze before any durable document is encoded.
+    package var transientAssetURL: URL? = nil
+    private enum CodingKeys: String, CodingKey {
+        case kind, zone, recordName, recordType, recordArchive, assetReference, deletionReason
+    }
     package let kind: Kind
     package let zone: GraphCloudZone
     package let recordName: String?
@@ -70,10 +76,23 @@ package struct GraphCloudIncoming: Codable, Equatable, Sendable {
     package let deletionReason: String?
     package init(kind: Kind, zone: GraphCloudZone, recordName: String? = nil, recordType: String? = nil,
                  recordArchive: Data? = nil, assetReference: GraphCloudAssetReference? = nil,
-                 deletionReason: String? = nil) {
+                 deletionReason: String? = nil, transientAssetURL: URL? = nil) {
+        self.transientAssetURL = transientAssetURL
         self.kind = kind; self.zone = zone; self.recordName = recordName; self.recordType = recordType
         self.recordArchive = recordArchive; self.assetReference = assetReference; self.deletionReason = deletionReason
     }
+    package func encode(to encoder: Encoder) throws {
+        guard transientAssetURL == nil else { throw GraphCloudError.invalidState }
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(kind, forKey: .kind)
+        try values.encode(zone, forKey: .zone)
+        try values.encodeIfPresent(recordName, forKey: .recordName)
+        try values.encodeIfPresent(recordType, forKey: .recordType)
+        try values.encodeIfPresent(recordArchive, forKey: .recordArchive)
+        try values.encodeIfPresent(assetReference, forKey: .assetReference)
+        try values.encodeIfPresent(deletionReason, forKey: .deletionReason)
+    }
+
     var valid: Bool {
         guard !zone.owner.isEmpty, !zone.name.isEmpty else { return false }
         switch kind {

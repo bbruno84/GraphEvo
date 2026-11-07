@@ -866,13 +866,16 @@ public actor GraphContext {
 nodes. Use its ordinary `createGraph(id:at:)` and `openGraph(id:at:)` APIs.
 `GraphContext.migrateClosedS04Store(from:into:)` migrates a stopped local S04
 source into a new directory and returns the new SQLite URL. The source must
-remain closed through the copy. Cloud connections are unavailable in this
-context.
+remain closed through the copy. This context also enables File-aware CloudKit
+connections through the ordinary `connectCloud(using:)` API. The schema
+identifier selected in the local increment is retained.
 
 `GraphNodeKind.file` and `GraphEndpoints.file` identify a file node. A
 `Relationship` or `Action` endpoint can name its `GraphNodeID`. Entity
 queries exclude the file subtype. File nodes have fixed metadata and their
-content has a separate lifetime from the source URL. Use `GraphRecordPatch`
+content has a separate lifetime from the source URL. `GraphRecord.file`
+exposes the fixed `GraphFile` metadata on a materialized File record.
+Use `GraphRecordPatch`
 to add or remove tags and groups on the file node. These classifications
 survive content replacement and support tag and group query predicates.
 
@@ -886,9 +889,25 @@ survive content replacement and support tag and group query predicates.
   and fails on a stale revision. `deleteFile(_:)` removes the node and applies
   the normal entity endpoint deletion rules.
 - `GraphStore.reclaimFiles()` removes abandoned preparations and retired
-  revisions. `copyLocalFileGraph(into:)` captures an independent SQLite store
+  revisions, including on a read-only CloudKit participant's writable local
+  replica. This coordinated maintenance does not modify graph records or
+  change write permissions. `copyLocalFileGraph(into:)` captures an independent SQLite store
   and its referenced files. Restore by opening the returned SQLite URL with
-  a local-files context.
+  a local-files context. Frozen outgoing CloudKit assets are included.
+
+The File transport uses `GraphEvoNode` format 4 with `kind = "file"` and
+the existing `CKAsset` field. The native asset ceiling is 50,000,000,000
+bytes. Validated device fixtures reach 128 MiB; this ceiling does not certify device
+capacity. File content is copied and hashed with bounded buffers, with
+durable references retained through send, retry and incoming application.
+Incoming File content is downloaded as part of ordinary synchronization;
+it is not fetched on demand. `withFileURL` accesses already-local content
+and does not initiate a CloudKit download.
+Leaving a shared graph or purging a revoked replica also removes that
+native store's private File revisions and frozen outgoing assets under
+coordinated destruction. Consumer-owned exports remain outside this cleanup.
+The File-capable sharing descriptor uses format 2, which preceding readers
+reject before discovery. See [File synchronization](../design/graphevo-2-file-sync.md).
 
 After an interrupted native v1 conversion, stop every process using the
 destination. The recovery overload takes the UUID of the abandoned
@@ -983,9 +1002,9 @@ available for v1 stores. See the
   only finite exactly representable values, without rounding/underflow/overflow.
   GraphValue cases and wire formats remain unchanged. See
   [numeric property mapping](../design/graphevo-2-numeric-properties.md).
-- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:) throws`:
+- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:file:) throws`:
   read-only fields; endpoints defaults to `.entity`, properties/tags/groups to
-  empty and creation date to nil. Type/property keys must be nonempty and
+  empty and creation date/file metadata to nil. Type/property keys must be nonempty and
   references must have the same graph ID.
 - `GraphRecord.value<Value: GraphPropertyValue>(for:as:) throws -> Value`:
   defaults `as` to Value.self; missing keys and failed typed decoding differ.

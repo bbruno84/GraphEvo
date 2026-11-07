@@ -310,7 +310,7 @@ struct GraphNativeIdentityAccess: Sendable {
             if GraphNativePropertyStorage.enabled(context) {
                 guard keys.isEmpty else { throw GraphStoreError.corruptIdentity }
                 return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints,
-                    properties: GraphNativePropertyStorage.properties(node, keys: nil), tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+                    properties: GraphNativePropertyStorage.properties(node, keys: nil), tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file)
             }
             var values = raw.properties.filter { !$0.key.hasPrefix(GraphTypedStoreAdapter.prefix) }
             for key in keys {
@@ -318,7 +318,7 @@ struct GraphNativeIdentityAccess: Sendable {
                 values[key] = try GraphValueCodec.decode(bytes)
             }
             return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: values,
-                tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+                tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file)
         }
     }
 

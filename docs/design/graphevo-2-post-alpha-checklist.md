@@ -1232,3 +1232,38 @@ runner unavailability is recorded without blocking an authorized, locally
 verified alpha merge. Actual failures remain investigated and recorded. Required
 beta/release and published-tag remote gates remain open until actually passed.
 This scheduling policy closes no acceptance box or physical-device gate.
+
+## File synchronization continuation
+
+- [x] Preserve coordinated local reclamation for read-only participants,
+  retaining current content, permissions and an empty outgoing queue.
+- [x] Remove File revisions, abandoned preparations and frozen outgoing
+  assets during coordinated participant purge, preserving exports and
+  foreign store generations. Verify pre-destruction refusal and resumption
+  after partial owned-content cleanup.
+- [x] Validate physical cross-account File sharing, permission reduction,
+  persisted join recovery and deletion for the 25 MiB iPad/XR fixture.
+  See [physical checkpoint](results/file-cloud-shared-devices-2026-11-07.md).
+- [x] Recover the exact frozen 128 MiB sender attempt after physical SIGKILL
+  at the native provider boundary and verify eventual shared delivery on XR.
+- [x] Repeat the physical fault with first-attempt native error capture:
+  `serviceUnavailable` (6), retry advice of three seconds, then automatic
+  settlement and independent 128 MiB XR import. Preserve native zone errors
+  for the existing retry classifier; transient and permanent cases pass
+  controlled scheduler coverage.
+- [ ] Validate measured midstream network interruption and broader repeated
+  fault/backoff acceptance. The provider-boundary SIGKILL does not measure
+  the network phase at termination.
+- [ ] Measure large File copy, hashing, writer occupancy and disk headroom on
+  representative devices. The 50 GB transport ceiling remains distinct from
+  the verified 25 MiB sharing and 128 MiB recovery fixtures.
+
+The [integrated File transport](graphevo-2-file-sync.md) covers durable
+outgoing/incoming copies, conflict handling and a private physical import
+and replacement checkpoint on iPad, plus the bounded cross-account
+iPad/XR checkpoint.
+
+Alpha retains eager File download during synchronization. On-demand
+download/progress is an optional future design, not an outstanding beta
+entry requirement. PR #190 integrates the reviewed alpha implementation;
+the bounded checks above do not establish beta or release acceptance.

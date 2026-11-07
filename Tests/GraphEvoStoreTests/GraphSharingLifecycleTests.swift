@@ -93,13 +93,14 @@ private actor RemovalGate {
         let invitation: GraphCloudInvitation
     }
     private func fixture(registry: StoreRegistry = StoreRegistry(), disk: GraphCloudDisk = .live,
-                         maximumBytes: Int = 32 * 1024 * 1024, appGroup: Bool = false) async throws -> Fixture {
+                         maximumBytes: Int = 32 * 1024 * 1024, appGroup: Bool = false, files: Bool = false) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Lifecycle-\(UUID())")
         if appGroup { try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false) }
         let group = appGroup ? AppGroupStoreLocation(container: root) : nil
-        let config = GraphCloudConfiguration(containerIdentifier: "iCloud.lifecycle.\(UUID())", environment: .development,
+        var config = GraphCloudConfiguration(containerIdentifier: "iCloud.lifecycle.\(UUID())", environment: .development,
             directory: root.appendingPathComponent("Engine"), maximumBytes: maximumBytes)
-        let manager = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
+        config.supportsFiles = files
+        let manager = GraphContextManager(registry: registry, schema: files ? GraphRuntimeSchema.localFiles : GraphRuntimeSchema.typedProperties,
                                           adapter: GraphCoordinatorFactory.adapter, appGroup: group)
         let cloud = LifecycleCloud(), id = GraphID()
         let url = group?.storeURL(for: id.rawValue) ?? root.appendingPathComponent("Graph.sqlite")
@@ -114,6 +115,89 @@ private actor RemovalGate {
         try await f.manager.registerCloudGraphLocation(f.graph.id, at: f.url, configuration: f.config)
         #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .removed)
     }
+    @Test(arguments: ["none", "native", "ownedContent"]) func fileReplicaPurgeRemovesOnlyOwnedContentAfterNativeAdmission(failure: String) async throws {
+        let failFirst = failure == "native"
+        let refuse = OSAllocatedUnfairLock(initialState: failFirst)
+        let registry = StoreRegistry(hooks: StoreLifecycleHooks(beforeDestroy: {
+            if refuse.withLock({ value in let first = value; value = false; return first }) {
+                throw GraphCloudError.persistence
+            }
+        }))
+        let f = try await fixture(registry: registry, files: true)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let source = f.root.appendingPathComponent("consumer-export.bin")
+        try Data("first content".utf8).write(to: source)
+        let original = try await f.graph.importFile(from: source)
+        try Data("second content".utf8).write(to: source)
+        let replacement = try await f.graph.replaceFile(original, from: source)
+        let storeID = try await f.graph.nativeOperation { container in
+            let coordinator = container.persistentStoreCoordinator
+            let store = try #require(coordinator.persistentStores.first)
+            return try #require(coordinator.metadata(for: store)[NSStoreUUIDKey] as? String)
+        }
+        let fileRoot = GraphFileDisk.root(for: f.url, storeID: try #require(UUID(uuidString: storeID)))
+        let foreignRoot = GraphFileDisk.root(for: f.url, storeID: UUID())
+        try FileManager.default.createDirectory(at: foreignRoot, withIntermediateDirectories: false)
+        let foreignFile = foreignRoot.appendingPathComponent(UUID().uuidString)
+        try Data("other store".utf8).write(to: foreignFile)
+        let route = GraphCloudBinding(zone: f.invitation.zone, graphID: f.graph.id)
+        let binding = GraphCloudTransportBinding(identity: .init(container: f.config.containerIdentifier,
+            environment: f.config.environment, account: "participant"), route: route)
+        let incoming = try GraphCloudNodeCodec.encode(GraphRecord(id: replacement.id, type: GraphFile.nodeType,
+            endpoints: .file, file: replacement), binding: route)
+        incoming["asset"] = CKAsset(fileURL: source)
+        await f.cloud.queue([try GraphCloudRecordCodec.archive(incoming, scope: .shared)])
+        try await f.manager.fetchCloudChanges(.shared, configuration: f.config)
+        let stagedIncoming = try await f.manager.cloud(f.config).incoming(for: route.zone, limit: 100)
+        let incomingReference = try #require(stagedIncoming.compactMap { $0.change.assetReference }.first)
+        let incomingURL = f.config.directory.appendingPathComponent("GraphEvoCloudAssets")
+            .appendingPathComponent(incomingReference.namespace.uuidString).appendingPathComponent(incomingReference.file.uuidString)
+        #expect(FileManager.default.fileExists(atPath: incomingURL.path))
+        let frozen = try await f.graph.prepareTransport(binding)
+        let reference = try #require(frozen.items.first?.assetReference)
+        let spoolRoot = GraphCloudAssetSpool.outgoingRoot(storeURL: f.url, storeID: storeID)
+        let frozenURL = spoolRoot.appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
+        #expect(FileManager.default.fileExists(atPath: frozenURL.path))
+        let abandoned = fileRoot.appendingPathComponent(UUID().uuidString + ".partial")
+        try Data("abandoned preparation".utf8).write(to: abandoned)
+        let staged = frozenURL.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + ".partial")
+        try Data("abandoned asset".utf8).write(to: staged)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staged.path)
+        if failure == "ownedContent" {
+            let foreign = frozenURL.deletingLastPathComponent().appendingPathComponent("unrecognized")
+            try Data("unexpected file".utf8).write(to: foreign)
+            await #expect(throws: (any Error).self) {
+                _ = try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
+            }
+            #expect(FileManager.default.fileExists(atPath: f.url.path))
+            #expect(!FileManager.default.fileExists(atPath: fileRoot.path))
+            #expect(try Data(contentsOf: foreign) == Data("unexpected file".utf8))
+            #expect(try await f.manager.cloudSharingStatus(for: f.graph.id, configuration: f.config).phase == .purging)
+            try FileManager.default.removeItem(at: foreign)
+            try await waitRemoved(f)
+        } else if failFirst {
+            await #expect(throws: (any Error).self) {
+                _ = try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
+            }
+            #expect(FileManager.default.fileExists(atPath: f.url.path))
+            #expect(FileManager.default.fileExists(atPath: GraphFileDisk.url(for: original, in: fileRoot).path))
+            #expect(FileManager.default.fileExists(atPath: GraphFileDisk.url(for: replacement, in: fileRoot).path))
+            #expect(FileManager.default.fileExists(atPath: frozenURL.path))
+            try await waitRemoved(f)
+        } else {
+            let status = try await f.manager.leaveCloudShare(for: f.graph.id, configuration: f.config)
+            #expect(status.phase == .removed)
+        }
+        #expect(!FileManager.default.fileExists(atPath: f.url.path))
+        #expect(!FileManager.default.fileExists(atPath: fileRoot.path))
+        #expect(!FileManager.default.fileExists(atPath: spoolRoot.path))
+        #expect(!FileManager.default.fileExists(atPath: incomingURL.path))
+        #expect(try Data(contentsOf: source) == Data("second content".utf8))
+        #expect(try Data(contentsOf: foreignFile) == Data("other store".utf8))
+        try await f.graph.close()
+        try await f.manager.stopCloudSession(f.config)
+    }
+
     @Test func leaveRemovesPendingDataFilesAndAllAliasesButNotConsumerExports() async throws {
         let f = try await fixture()
         defer { try? FileManager.default.removeItem(at: f.root) }

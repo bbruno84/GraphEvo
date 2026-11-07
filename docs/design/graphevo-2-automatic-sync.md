@@ -93,6 +93,11 @@ that operation's advice before the manager reads it. The throwing manual-send
 contract retains the original error. New hints and timer ticks do not
 shorten backoff. Success resets it. Remaining T03 collisions and receipt cleanup
 also wait before another cycle. Clock and jitter are injectable in tests.
+Native zone-save refusals retain the original `CKError`, including its code
+and retry advice, when the provider settles a send. They must not become a
+custom local error that the scheduler classifies as permanent. Regression
+coverage passes these native refusals into the scheduler for service,
+rate-limit, zone-busy and permission failures.
 
 Graph-attributed permanent/structural/permission/quota/limit failures block only
 that graph. Mixed partial failure with any permanent item blocks instead of

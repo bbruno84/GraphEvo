@@ -183,8 +183,12 @@ final class GraphTypedQueryExecution {
         }
         var properties: [String: GraphValue] = [:]
         for key in keys.sorted() { if let value = try value(raw.id, key) { properties[key] = value } }
+        let file: GraphFile?
+        if raw.endpoints == .file {
+            file = try ManagedGraphFile.fetch(context, id: raw.id).metadata(id: raw.id)
+        } else { file = nil }
         return try GraphRecord(id: raw.id, type: raw.type, endpoints: raw.endpoints, properties: properties,
-            tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate)
+            tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: file)
     }
     private func note(_ reason: GraphQueryDiagnostics.FallbackReason) { if !reasons.contains(reason) { reasons.append(reason) } }
     private func atoms(_ predicate: GraphQueryPredicate) -> [GraphQueryPredicate] {

@@ -282,7 +282,7 @@ extension GraphContextManager {
         }
         func rank(_ entry: GraphCloudSeedEntry) -> Int {
             if entry.type == GraphAttachmentPayload.graphType { return 2 }
-            return entry.kind == "entity" ? 0 : 1
+            return entry.kind == "entity" || entry.kind == "file" ? 0 : 1
         }
 
         // Import endpoints before edges and owners before attachments, even across transaction boundaries.
@@ -338,11 +338,12 @@ extension GraphContextManager {
                 throw GraphCloudActivationError.invalidState
             }
             let record = try GraphCloudRecordCodec.restore(bytes)
+            if let url = try await session.assetURL(for: event, binding: binding) { record["asset"] = CKAsset(fileURL: url) }
             if let data = try await session.assetData(for: event, binding: binding) {
                 record["asset"] = data as CKRecordValue
             }
             if GraphCloudGraphDescriptor.isControl(event) {
-                try GraphCloudGraphDescriptor.validate(event, binding: binding)
+                try GraphCloudGraphDescriptor.validate(event, binding: binding, supportsFiles: session.configuration.supportsFiles)
             } else if GraphCloudShareControl.isControl(event) {
                 try GraphCloudShareControl.validateOwnerInventory(event, binding: binding)
             } else if GraphCloudAuthorityCodec.isControl(event) {

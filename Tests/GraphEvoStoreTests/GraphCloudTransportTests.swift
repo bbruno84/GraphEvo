@@ -470,8 +470,8 @@ private final class TransportFailureSwitch: @unchecked Sendable {
 
     @Test func serverSuccessBeforeLocalCommitIsRecoveredWithoutAnotherSend() async throws {
         let bus = TransportBus(), fault = TransportFailureSwitch()
-        let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, finishPrepared: base.finishPrepared, currentAttempt: base.currentAttempt, sent: { context, id, binding, receipt, resolvedAssets, remoteAssets, limits in
-            let result = try base.sent(context, id, binding, receipt, resolvedAssets, remoteAssets, limits); try fault.failOnce(); return result
+        let adapter = try injected { base in GraphCloudStoreAdapter(prepare: base.prepare, finishPrepared: base.finishPrepared, currentAttempt: base.currentAttempt, sent: { context, id, binding, receipt, resolvedAssets, remoteAssets, remoteFiles, limits in
+            let result = try base.sent(context, id, binding, receipt, resolvedAssets, remoteAssets, remoteFiles, limits); try fault.failOnce(); return result
         }, apply: base.apply, trim: base.trim) }
         let f = try await fixture(bus: bus, adapter: adapter)
         defer { try? FileManager.default.removeItem(at: f.directory) }

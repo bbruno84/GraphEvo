@@ -54,6 +54,18 @@ import Testing
         }
     }
 
+    @Test func terminalPurgeCanResumeAfterRemovingItsLastMarker() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvoSpoolPurge-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let root = GraphCloudAssetSpool.outgoingRoot(storeURL: base.appendingPathComponent("Graph.sqlite"), storeID: UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let spool = try GraphCloudAssetSpool(root: root)
+        try spool.removeOwnedRoot()
+        #expect(!FileManager.default.fileExists(atPath: root.path))
+        try spool.removeOwnedRoot()
+    }
+
     @Test func reconciliationPrunesOnlyUnreferencedOwnedFiles() async throws {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("GraphEvoSpoolTest-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: false)

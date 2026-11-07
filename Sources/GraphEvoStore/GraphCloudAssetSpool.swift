@@ -8,6 +8,7 @@ import GraphEvoModel
 package struct GraphCloudAssetReference: Codable, Equatable, Sendable {
     package enum Role: String, Codable, Sendable { case outgoing, incoming }
 
+    package let isFile: Bool?
     package let format: Int
     package let role: Role
     package let namespace: UUID
@@ -22,7 +23,8 @@ package struct GraphCloudAssetReference: Codable, Equatable, Sendable {
 
     package init(role: Role, namespace: UUID, file: UUID, identity: GraphCloudSessionIdentity,
                  binding: GraphCloudBinding, recordName: String, byteCount: Int, sha256: String,
-                 storeID: String? = nil, epoch: UUID? = nil) {
+                 storeID: String? = nil, epoch: UUID? = nil, isFile: Bool = false) {
+        self.isFile = isFile ? true : nil
         self.format = 1; self.role = role; self.namespace = namespace; self.file = file
         self.identity = identity; self.binding = binding; self.recordName = recordName
         self.byteCount = byteCount; self.sha256 = sha256; self.storeID = storeID; self.epoch = epoch
@@ -33,7 +35,7 @@ package struct GraphCloudAssetReference: Codable, Equatable, Sendable {
                           storeID expectedStoreID: String? = nil, epoch expectedEpoch: UUID? = nil) throws {
         guard format == 1, role == expectedRole, identity == expectedIdentity, binding == expectedBinding,
               recordName == expectedName, !recordName.isEmpty,
-              (0...GraphAttachmentPayload.maximumByteCount).contains(byteCount),
+              byteCount >= 0, UInt64(byteCount) <= (isFile == true ? GraphCloudAsset.maximumNativeByteCount : UInt64(GraphAttachmentPayload.maximumByteCount)),
               sha256.utf8.count == 64,
               sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
               (role == .outgoing) == (storeID != nil && epoch != nil),
@@ -111,11 +113,56 @@ package struct GraphCloudAssetSpool: Sendable {
         return reference
     }
 
+    package func stageFileBlocking(from source: URL, role: GraphCloudAssetReference.Role, namespace: UUID,
+        identity: GraphCloudSessionIdentity, binding: GraphCloudBinding, recordName: String,
+        storeID: String? = nil, epoch: UUID? = nil, check: () throws -> Void = { try Task.checkCancellation() }
+    ) throws -> GraphCloudAssetReference {
+        try Self.ensureRoot(root)
+        let directory = root.appendingPathComponent(namespace.uuidString, isDirectory: true)
+        try Self.ensurePrivateDirectory(directory)
+        let id = GraphNodeID(graphID: binding.graphID)
+        let (metadata, temporary) = try GraphFileDisk.prepare(from: source, in: directory, id: id,
+            name: "asset", contentType: "public.data", maximumBytes: Int64(GraphCloudAsset.maximumNativeByteCount), check: check)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let reference = GraphCloudAssetReference(role: role, namespace: namespace, file: metadata.revision,
+            identity: identity, binding: binding, recordName: recordName, byteCount: Int(metadata.byteCount),
+            sha256: metadata.sha256, storeID: storeID, epoch: epoch, isFile: true)
+        try reference.validate(role: role, identity: identity, binding: binding, recordName: recordName,
+                               storeID: storeID, epoch: epoch)
+        try check()
+        try GraphAttachmentIO.publishExclusive(temporary, at: directory.appendingPathComponent(reference.file.uuidString))
+        return reference
+    }
+
+    package func fileURL(_ reference: GraphCloudAssetReference, role: GraphCloudAssetReference.Role,
+        identity: GraphCloudSessionIdentity, binding: GraphCloudBinding, recordName: String,
+        storeID: String? = nil, epoch: UUID? = nil
+    ) async throws -> URL {
+        try await GraphAttachmentIO.perform {
+            try self.fileURLBlocking(reference, role: role, identity: identity, binding: binding,
+                recordName: recordName, storeID: storeID, epoch: epoch)
+        }
+    }
+
+    package func fileURLBlocking(_ reference: GraphCloudAssetReference, role: GraphCloudAssetReference.Role,
+        identity: GraphCloudSessionIdentity, binding: GraphCloudBinding, recordName: String,
+        storeID: String? = nil, epoch: UUID? = nil
+    ) throws -> URL {
+        try presenceBlocking(reference, role: role, identity: identity, binding: binding, recordName: recordName,
+                             storeID: storeID, epoch: epoch)
+        let url = root.appendingPathComponent(reference.namespace.uuidString).appendingPathComponent(reference.file.uuidString)
+        let metadata = try GraphFile(id: GraphNodeID(graphID: binding.graphID), name: "asset",
+            contentType: "public.data", byteCount: Int64(reference.byteCount), sha256: reference.sha256, revision: reference.file)
+        try GraphFileDisk.verify(url, file: metadata, check: { try Task.checkCancellation() })
+        return url
+    }
+
     package func read(_ reference: GraphCloudAssetReference, role: GraphCloudAssetReference.Role,
                       identity: GraphCloudSessionIdentity, binding: GraphCloudBinding,
                       recordName: String, storeID: String? = nil, epoch: UUID? = nil) async throws -> Data {
         try reference.validate(role: role, identity: identity, binding: binding, recordName: recordName,
                                storeID: storeID, epoch: epoch)
+        guard reference.isFile != true else { throw GraphCloudError.unsupportedAsset }
         return try await GraphAttachmentIO.perform {
             if self.root.lastPathComponent != "GraphEvoCloudAssets" {
                 try Self.checkPrivateDirectory(self.root.deletingLastPathComponent())
@@ -214,6 +261,14 @@ package struct GraphCloudAssetSpool: Sendable {
                     try presenceBlocking(reference, role: .outgoing, identity: identity, binding: binding,
                                        recordName: item.recordName, storeID: prepared.storeID, epoch: prepared.epoch)
                     items.append(item)
+                } else if let source = prepared.fileSources[item.recordName] {
+                    let reference = try stageFileBlocking(from: source, role: .outgoing, namespace: stagingNamespace ?? batch.id,
+                        identity: identity, binding: binding, recordName: item.recordName,
+                        storeID: prepared.storeID, epoch: prepared.epoch, check: check)
+                    staged.append(reference)
+                    try GraphCloudNodeCodec.validateReferenceArchive(record, reference: reference, binding: binding)
+                    items.append(GraphCloudOutgoingNode(change: item.change, recordName: item.recordName,
+                        recordArchive: archive, assetReference: reference))
                 } else if record["asset"] != nil {
                     let data = try GraphCloudAsset.bytes(record["asset"])
                     guard data.count <= 32 * 1024 * 1024 - preparedBytes else { throw GraphCloudError.inboxLimit }
@@ -349,6 +404,36 @@ package struct GraphCloudAssetSpool: Sendable {
         }
     }
 
+    /// Terminal purge holds the exact native store's exclusive deletion grant.
+    package func removeOwnedRoot() throws {
+        var value = stat()
+        guard lstat(root.path, &value) == 0 else {
+            if errno == ENOENT { return }
+            throw GraphCloudError.invalidState
+        }
+        try Self.checkPrivateDirectory(root)
+        // A prior purge may have removed the marker immediately before interruption.
+        if try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty {
+            guard rmdir(root.path) == 0 else { throw GraphCloudError.persistence }
+            return
+        }
+        try Self.checkMarker(root)
+        for name in try FileManager.default.contentsOfDirectory(atPath: root.path) where name != "format-1" {
+            guard let id = UUID(uuidString: name), id.uuidString == name else { throw GraphCloudError.invalidState }
+            let directory = root.appendingPathComponent(name, isDirectory: true)
+            try Self.checkPrivateDirectory(directory)
+            for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
+                let revision = name.hasSuffix(".partial") ? String(name.dropLast(8)) : name
+                guard let id = UUID(uuidString: revision), id.uuidString == revision else { throw GraphCloudError.invalidState }
+                try Self.removeFile(directory.appendingPathComponent(name))
+            }
+            guard rmdir(directory.path) == 0 else { throw GraphCloudError.persistence }
+        }
+        try Self.checkMarker(root)
+        try Self.removeFile(root.appendingPathComponent("format-1"))
+        guard rmdir(root.path) == 0 else { throw GraphCloudError.persistence }
+    }
+
     /// Copy a frozen outgoing attempt alongside a native snapshot under the caller's maintenance reservation.
     package func copyOwnedRoot(to destination: URL) async throws {
         try await GraphAttachmentIO.perform {
@@ -356,7 +441,7 @@ package struct GraphCloudAssetSpool: Sendable {
         }
     }
 
-    func copyOwnedRoot(to destination: URL, check: () throws -> Void) throws {
+    package func copyOwnedRoot(to destination: URL, check: () throws -> Void) throws {
         try check()
         var value = stat()
         if lstat(self.root.path, &value) != 0 {
