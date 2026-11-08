@@ -33,7 +33,8 @@ this result does not close PA05/PA06/PA08 or establish a supported latency targe
 
 ## Physical S06/S07 envelope follow-up — 2026-11-08
 
-Candidate evidence on `codex/v2-device-capacity`, shipping baseline `30c01ab6`:
+Candidate evidence in [PR #192](https://github.com/bbruno84/GraphEvo/pull/192),
+`codex/v2-device-capacity`, shipping baseline `30c01ab6`:
 see the [physical report](results/device-capacity-s06-s07-2026-11-08.md).
 
 - [x] Exercise selected local Release cases on physical iPad/XR: 2 MiB attachment

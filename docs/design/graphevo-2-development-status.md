@@ -38,7 +38,8 @@ last full hosted checkpoint below remains historical evidence on its stated head
 
 ## In progress — physical S06/S07 capacity evidence
 
-`codex/v2-device-capacity` records the [physical cost follow-up](results/device-capacity-s06-s07-2026-11-08.md)
+[PR #192](https://github.com/bbruno84/GraphEvo/pull/192),
+`codex/v2-device-capacity`, records the [physical cost follow-up](results/device-capacity-s06-s07-2026-11-08.md)
 on integrated `30c01ab6`, without changing runtime code. Twelve accepted Release
 trials on iPad/XR pass 108 measured phases: repeated 25.92 MB synthetic
 publication/recovery, 64 MiB of bounded attachments, 25/128 MiB File operations,
