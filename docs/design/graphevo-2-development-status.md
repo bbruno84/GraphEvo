@@ -28,12 +28,16 @@ remain subsequent work; no completion of those items is implied. The
 [acceptance report](results/private-graph-discovery-2026-11-08.md) records
 local, Simulator and real CloudKit checks; no hosted CI was requested.
 
-The next increment, `codex/v2-graph-deletion`, adds
+[PR #195](https://github.com/bbruno84/GraphEvo/pull/195), reviewed implementation
+`05c3f773`, integrates
 [definitive graph deletion](graphevo-2-graph-deletion.md), exact interrupted-native
 recovery and prevention of automatic zone recreation. Companion Notes model/UI
 adoption remains active work in its own repository. See the
 [deletion acceptance report](results/graph-deletion-2026-11-08.md) for actual scope;
-these prerequisites alone do not complete the Notes application.
+these prerequisites alone do not complete the Notes application. The final macOS
+checkpoint passes 790 functions, the iOS checkpoint passes 787 with its stated
+source boundary, both Swift 6 consumers pass, and separate-process faults plus
+real CloudKit deletion/reopen checks pass. No hosted CI was requested.
 
 ## Latest increment — property and attachment contract
 

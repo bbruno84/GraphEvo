@@ -2,7 +2,8 @@
 
 ## Scope
 
-`codex/v2-graph-deletion` starts from integrated private discovery #194
+[PR #195](https://github.com/bbruno84/GraphEvo/pull/195), reviewed implementation
+`05c3f773` on `codex/v2-graph-deletion`, starts from integrated private discovery #194
 (`9894f3a8`). It adds ordinary-context local/owner-private deletion, bounded
 progress lookup/resume, exact native destruction recovery and prevention of
 automatic missing-zone recreation. The [contract](../graphevo-2-graph-deletion.md)
