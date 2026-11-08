@@ -37,6 +37,14 @@ extension GraphStore {
                            contentType: contentType, expectedRevision: nil)
     }
 
+    /// Imports a File and applies related graph edits in the same native transaction.
+    /// The synchronous scope cannot escape, save independently, or reenter this store.
+    public func importFile(from source: URL, name: String? = nil, contentType: String = "public.data",
+                           configuring body: @escaping @Sendable (GraphMutation, GraphFile) throws -> Void) async throws -> GraphFile {
+        try await saveFile(makeNodeID(), from: source, name: name ?? source.lastPathComponent,
+                           contentType: contentType, expectedRevision: nil, configuring: body)
+    }
+
     /// Changes the current revision while preserving the node identity and its graph edges.
     public func replaceFile(_ file: GraphFile, from source: URL, name: String? = nil,
                             contentType: String? = nil) async throws -> GraphFile {
@@ -45,7 +53,8 @@ extension GraphStore {
     }
 
     package func saveFile(_ fileID: GraphNodeID, from source: URL, name: String, contentType: String,
-                          expectedRevision: UUID?, afterPublishing: @escaping @Sendable () throws -> Void = {}) async throws -> GraphFile {
+                          expectedRevision: UUID?, afterPublishing: @escaping @Sendable () throws -> Void = {},
+                          configuring body: @escaping @Sendable (GraphMutation, GraphFile) throws -> Void = { _, _ in }) async throws -> GraphFile {
         guard fileID.graphID == id else { throw GraphStoreError.foreignGraph }
         return try await transaction { scope in
             try scope.withContext { context, _ in
@@ -72,6 +81,8 @@ extension GraphStore {
                 } else {
                     try session.insert(GraphRecord(id: fileID, type: GraphFile.nodeType, endpoints: .file), file: file)
                 }
+                try body(scope, file)
+                guard try scope.file(file.id) == file else { throw GraphFileError.invalidMetadata }
                 return file
             }
         }

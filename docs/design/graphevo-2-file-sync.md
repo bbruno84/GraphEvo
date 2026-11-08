@@ -41,6 +41,14 @@ changes fail before their route is acknowledged as applied.
 
 ## Durable files and transaction boundaries
 
+The public `importFile(from:name:contentType:configuring:)` overload lets consumers
+create links or other graph edits with the new File in the same transaction.
+Its callback is synchronous, context-confined and invoked once. The imported
+File must remain present with its returned fixed metadata. Failure rolls back
+all graph edits; the existing reclamation path handles unreferenced prepared
+content. It does not add a file-owner rule or change transport/schema formats.
+
+
 Outgoing preparation snapshots the file metadata and copies the exact
 immutable revision into the existing store-scoped spool under writer
 admission. The durable reference binds the account, container, environment,

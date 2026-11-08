@@ -6,6 +6,16 @@ delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
+## In progress — Notes demo prerequisites
+
+The accepted Notes app plan needs generic transactional File configuration,
+private graph discovery/recovery and definitive graph deletion before the
+companion UI adopts the complete flow. The first focused branch,
+`codex/v2-file-import-transaction`, adds the public synchronous File-configuration
+callback and rollback/reclamation tests. This is not integration of discovery,
+deletion or the Notes application. No native schema or transport format changes
+are included in this first increment.
+
 ## Latest increment — property and attachment contract
 
 [PR #191](https://github.com/bbruno84/GraphEvo/pull/191),
