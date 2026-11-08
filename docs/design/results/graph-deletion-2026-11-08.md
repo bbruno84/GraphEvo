@@ -96,6 +96,7 @@ account and remains for shared Notes acceptance in the companion app increment.
 
 ## Follow-up: ordinary process death before deletion
 
+[PR #196](https://github.com/bbruno84/GraphEvo/pull/196) fixes the gap.
 The Notes force-quit smoke exposed a case outside the original three destruction
 crash points: SIGKILL during ordinary opening left a nonretiring registration and
 blocked a later, newly requested deletion. The terminal protocol now recovers
@@ -113,4 +114,5 @@ Focused deletion tests pass all 14 functions, including parameterized foreign an
 retiring claims. The complete macOS v2 profile before the additional missing-intent regression passes 792 functions (665 store,
 94 runtime, 33 model). The corresponding iOS 18.5 Simulator profile passes
 790 functions with zero failures or skips before that additional regression.
-This follow-up does not add new real-CloudKit evidence.
+The final missing-intent regression also passes separately on iOS (1 test,
+zero failures/skips). This follow-up does not add new real-CloudKit evidence.

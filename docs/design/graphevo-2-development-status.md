@@ -1,7 +1,7 @@
 # GraphEvo 2 — current development status
 
 The Notes force-quit acceptance found a terminal-deletion recovery gap after an
-ordinary holder SIGKILL. The follow-up recovers only verified same-graph
+ordinary holder SIGKILL. [PR #196](https://github.com/bbruno84/GraphEvo/pull/196) recovers only verified same-graph
 nonretiring registrations inside the exclusive Apple deletion grant; live and
 unverifiable owners remain protected. See the updated
 [deletion acceptance report](results/graph-deletion-2026-11-08.md).
