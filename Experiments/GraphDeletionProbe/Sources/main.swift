@@ -10,11 +10,14 @@ import Foundation
         let args = CommandLine.arguments
         guard args.count == 4, let uuid = UUID(uuidString: args[3]) else { fatalError("Expected mode, directory and Graph UUID") }
         let root = URL(fileURLWithPath: args[2], isDirectory: true), id = GraphID(rawValue: uuid), url = root.appendingPathComponent("Graph.sqlite")
-        if ["seed", "hold", "delete"].contains(args[1]) {
+        if ["seed", "hold", "delete", "delete-normal"].contains(args[1]) {
             let context = GraphContext.localFiles()
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             if args[1] == "seed" {
                 let graph = try await context.createGraph(id: id, at: url)
+                let input = root.appendingPathComponent("Input.bin")
+                try Data(repeating: 42, count: 32 * 1024).write(to: input)
+                _ = try await graph.importFile(from: input)
                 try await graph.close(); return
             }
             let graph = try await context.openGraph(id: id, at: url)
@@ -25,6 +28,12 @@ import Foundation
                     try await Task.sleep(for: .milliseconds(100))
                 }
                 fatalError("Hold deadline exceeded")
+            }
+            if args[1] == "delete-normal" {
+                let status = try await context.deleteGraph(graph)
+                guard status.phase == .completed else { fatalError("Expected completed deletion") }
+                try await graph.close(); print("PASS normal process death registration recovered by exact deletion")
+                return
             }
             do { _ = try await context.deleteGraph(graph); fatalError("Independent holder must defer deletion") }
             catch { try await graph.close(); print("PENDING exact store retained; deleting owner detached") }

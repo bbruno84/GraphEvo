@@ -104,7 +104,7 @@ struct GraphDeletionTests {
         #expect(try await GraphDeletionIntent.read(owner.graphStoreConfiguration(id, at: url)) == nil)
         try await graph.close(); try await owner.stopCloudSession(config)
     }
-    @Test func anotherRegistrationDefersDestructionAndAllowsNormalDetach() async throws {
+    @Test func livePresenterDefersDestructionAndAllowsNormalDetach() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let id = GraphID(), url = root.appendingPathComponent("A.sqlite"), first = manager()
         let graph = try await first.createGraph(id: id, at: url)
@@ -113,11 +113,13 @@ struct GraphDeletionTests {
         try await AppGroupStoreAccess(presenter: peer).run {
             try AppGroupOwnerClaims.publish(peer.generation, for: resolved, creating: false)
         }
+        peer.register(); defer { peer.unregister() }
         await #expect(throws: (any Error).self) { try await first.deleteGraph(id, configuration: nil) }
         #expect(FileManager.default.fileExists(atPath: url.path))
         try await graph.close()
-        // Synthetic registration stands for an independently attached process.
+        // The registered presenter, not a bare registration, models a live peer.
         try await AppGroupStoreAccess(presenter: peer).run { try AppGroupOwnerClaims.remove(peer.generation, for: resolved) }
+        peer.unregister()
         let result = try await manager().resumeGraphDeletion(id, at: url, configuration: nil)
         #expect(result.phase == .completed)
         #expect(!FileManager.default.fileExists(atPath: url.path))
@@ -250,6 +252,59 @@ struct GraphDeletionTests {
         else { try Data().write(to: journal) }
         await #expect(throws: (any Error).self) { try await manager().openGraph(id: id, at: url) }
         #expect(try Data(contentsOf: url) == original)
+    }
+
+    @Test func recoveryOpeningRequiresExistingDeletionIntent() async throws {
+        let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
+        let id = GraphID(), url = root.appendingPathComponent("A.sqlite"), first = manager()
+        let graph = try await first.createGraph(id: id, at: url)
+        let configuration = first.graphStoreConfiguration(id, at: url)
+        try await graph.close()
+        let original = try Data(contentsOf: url)
+        await #expect(throws: (any Error).self) {
+            try await StoreRegistry().open(configuration, schema: GraphRuntimeSchema.attachmentFiles,
+                mode: .graphDeletionRecovery(storeID: UUID().uuidString, operationID: UUID()))
+        }
+        #expect(try Data(contentsOf: url) == original)
+        let reopened = try await manager().openGraph(id: id, at: url)
+        try await reopened.close()
+    }
+
+    @Test func abandonedOrdinaryRegistrationRecoversOnlyDuringExactDeletion() async throws {
+        let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
+        let id = GraphID(), url = root.appendingPathComponent("A.sqlite"), first = manager()
+        let graph = try await first.createGraph(id: id, at: url)
+        let resolved = try ResolvedStore(first.graphStoreConfiguration(id, at: url))
+        let peer = AppGroupStorePresenter(directory: try SQLiteStoreCoordination.directory(resolved))
+        try await AppGroupStoreAccess(presenter: peer).run { try AppGroupOwnerClaims.publish(peer.generation, for: resolved, creating: false) }
+        try await graph.close()
+        let resumed = manager(), reopened = try await resumed.openGraph(id: id, at: url)
+        // Normal opening keeps unresolved registrations; only terminal intent admits recovery.
+        let registration = peer.presentedItemURL!.appendingPathComponent(peer.generation.uuidString)
+        #expect(FileManager.default.fileExists(atPath: registration.path))
+        #expect(try await resumed.deleteGraph(id, configuration: nil).phase == .completed)
+        #expect(!FileManager.default.fileExists(atPath: registration.path))
+        try await reopened.close()
+    }
+    @Test(arguments: [false, true])
+    func foreignOrRetiringRegistrationsRemainUnresolved(retiring: Bool) async throws {
+        let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
+        let id = GraphID(), url = root.appendingPathComponent("A.sqlite"), first = manager()
+        let graph = try await first.createGraph(id: id, at: url)
+        let config = StoreConfiguration(location: .sqlite(url), exclusiveGraphID: retiring ? id.rawValue : UUID())
+        let resolved = try ResolvedStore(config)
+        let peer = AppGroupStorePresenter(directory: try SQLiteStoreCoordination.directory(resolved))
+        try await AppGroupStoreAccess(presenter: peer).run {
+            try AppGroupOwnerClaims.publish(peer.generation, for: resolved, creating: false)
+            if retiring { try AppGroupOwnerClaims.markRetiring(peer.generation, for: resolved) }
+        }
+        await #expect(throws: (any Error).self) { try await first.deleteGraph(id, configuration: nil) }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        #expect(FileManager.default.fileExists(atPath: peer.presentedItemURL!.appendingPathComponent(peer.generation.uuidString).path))
+        try await graph.close()
+        // Remove only this synthetic fixture's claim, never an unverified production owner.
+        try await AppGroupStoreAccess(presenter: peer).run { try AppGroupOwnerClaims.remove(peer.generation, for: resolved) }
+        #expect(try await manager().resumeGraphDeletion(id, at: url, configuration: nil).phase == .completed)
     }
 
 }

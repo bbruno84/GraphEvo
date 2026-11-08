@@ -1,5 +1,11 @@
 # GraphEvo 2 — current development status
 
+The Notes force-quit acceptance found a terminal-deletion recovery gap after an
+ordinary holder SIGKILL. The follow-up recovers only verified same-graph
+nonretiring registrations inside the exclusive Apple deletion grant; live and
+unverifiable owners remain protected. See the updated
+[deletion acceptance report](results/graph-deletion-2026-11-08.md).
+
 Updated: 2026-11-08. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical

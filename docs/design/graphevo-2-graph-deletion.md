@@ -46,8 +46,18 @@ relative component. Recovery acquires current and recorded Apple grants together
 after a quiescent container move; file identity checks remain required. After process death an exclusive Apple grant excludes live presenters;
 only the recorded generation can be recovered. Surviving captured artifacts can
 then be cleaned even when SQLite has already disappeared or become a native
-cleanup artifact. Another registration defers deletion and leaves normal detachment
-possible. Unverifiable/replaced evidence fails closed and remains for diagnosis.
+cleanup artifact.
+
+A process killed during ordinary use can leave a nonretiring registration before
+any deletion receipt exists. Under the exclusive Apple `.forDeleting` grant only,
+the terminal protocol validates its exact operation journal, source inode and
+native store UUID, then validates the complete registration set before removing
+abandoned nonretiring peers for that same graph. Live presenters still deny the
+grant. Foreign, generic, workspace, retiring or malformed registrations remain
+unresolved and defer destruction while leaving normal detachment possible.
+Ordinary opening never performs this recovery. A recovery-mode opening without
+its matching durable deletion intent is refused. Unverifiable/replaced evidence
+fails closed and remains for diagnosis.
 
 Cloud requests require a ready connection before admission; a readiness refusal
 creates no native intent. Cloud intents also persist in session format 12, scoped to the original identity.

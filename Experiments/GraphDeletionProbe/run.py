@@ -35,6 +35,28 @@ for stage in ("before", "after", "cleaned"):
     assert (relocated / "Input.bin").read_bytes() == bytes([42]) * (32 * 1024), "Consumer source changed"
     checks.append(stage + ": SIGKILL, relative container relocation and exact terminal recovery passed")
 
+directory = args.output / "normal-process-death"
+graph = str(uuid.uuid4())
+assert run("seed", directory, graph).returncode == 0
+with (args.output / "normal-holder.log").open("w") as log:
+    holder = subprocess.Popen([binary, "hold", str(directory), graph], stdout=log, stderr=log)
+    try:
+        deadline = time.monotonic() + 20
+        while not (directory / "ready").exists():
+            assert holder.poll() is None and time.monotonic() < deadline
+            time.sleep(0.1)
+        holder.kill()
+        assert holder.wait(timeout=10) == -9
+        assert run("delete-normal", directory, graph).returncode == 0
+        assert run("resume", directory, graph).returncode == 0
+        assert not list(directory.glob(".Graph.sqlite.files-*"))
+        assert (directory / "Input.bin").read_bytes() == bytes([42]) * (32 * 1024)
+        checks.append("Normal process SIGKILL: fresh deletion recovered only verified nonretiring registrations")
+    finally:
+        if holder.poll() is None:
+            holder.terminate()
+            holder.wait(timeout=10)
+
 directory = args.output / "live-holder"
 graph = str(uuid.uuid4())
 assert run("seed", directory, graph).returncode == 0
