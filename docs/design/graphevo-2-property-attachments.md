@@ -75,7 +75,7 @@ commit; resume never needs to replay a committed extraction.
 The property codec is version 3, ordinary cloud nodes use format 5, attachments
 use format 6, and File retains format 4. The graph descriptor uses format 3 with
 an explicit File capability. The initial contract used session format 10; ordinary private discovery advances
-it to format 11. Transport journal format 4 and the current session profile
+it to format 11; definitive deletion advances it to format 12. Transport journal format 4 and the current session profile
 refuse old state without erasing or resetting it. Asset references use format 2.
 CKAsset bytes remain outside CloudKit record/request payload sizing. Existing
 Apple request/record budgets remain unchanged. A single migrated attachment

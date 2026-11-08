@@ -220,3 +220,5 @@ public typealias GraphCloudJoinState = GraphEvoStore.GraphCloudJoinState
 public typealias GraphCloudJoin = GraphEvoStore.GraphCloudJoin
 @available(iOS 17, macOS 14, *)
 public typealias GraphCloudSharingPresentation = GraphEvoStore.GraphCloudSharingPresentation
+
+public typealias GraphDeletionStatus = GraphEvoStore.GraphDeletionStatus

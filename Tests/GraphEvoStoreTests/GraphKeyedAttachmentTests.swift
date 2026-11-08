@@ -87,7 +87,7 @@ private final class KeyedAttachmentReadGate: @unchecked Sendable {
         for child in children { #expect(try await reopened.attachment(child.id) == nil) }
         try await reopened.close()
     }
-    @Test func migratedOversizeIsReadableButCannotBeReinsertedOrReplaced() async throws {
+    @Test(.timeLimit(.minutes(2))) func migratedOversizeIsReadableButCannotBeReinsertedOrReplaced() async throws {
         guard #available(iOS 17, macOS 14, *) else { throw GraphV1ConversionError.unavailable }
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let source = root.appendingPathComponent("V1.sqlite"), destination = root.appendingPathComponent("V2.sqlite")
@@ -147,6 +147,17 @@ private final class KeyedAttachmentReadGate: @unchecked Sendable {
         let reopenManager = GraphContextManager(schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         await reopenManager.setLocalAccountAdapter(accountAdapter)
         let reopened = try await reopenManager.openGraph(id: graphID, at: destination)
+        // Local opening does not await account verification. The injected adapter
+        // verifies asynchronously; under full-suite load the first read can race it.
+        let access = try await reopened.observeCloudAccountState()
+        for await state in access {
+            if state == .available { break }
+            guard state == .isolated(.verificationRequired) else {
+                Issue.record("Unexpected injected account state during reopen")
+                break
+            }
+        }
+        access.cancel()
         #expect(try await reopened.read { try $0.record(for: id)?.attachments["binary"]?.data.count } == size)
         try await reopened.deleteAttachment(metadata.id)
         #expect(try await reopened.read { try $0.record(for: id)?.attachments["binary"] } == nil)

@@ -2251,3 +2251,30 @@ same marked replica. References are revalidated against the current account and
 server descriptor. Existing unmarked files are refused unchanged. Ordinary
 graph recovery requires no v1 receipt; authoritative migrated graphs retain
 MF10 validation. See [private graph discovery](../design/graphevo-2-private-graph-discovery.md).
+
+### Definitive v2 graph deletion
+
+`GraphDeletionStatus` is a detached Codable/Sendable value with `id: UUID`,
+`graphID: GraphID`, and `phase: GraphDeletionStatus.Phase` (`prepared`,
+`remoteDeleted`, `completed`). It describes one durable removal operation,
+not global synchronization completion.
+
+```swift
+// Same-context local-only graph:
+let localDeletion = try await context.deleteGraph(graph)
+
+// Owner-private graph (including all participants' remote access):
+let cloudDeletion = try await connection.deleteGraph(graph)
+
+// After interruption, use the original logical identity and current exact URL:
+let localProgress = try await context.graphDeletionStatus(id: graphID, at: storeURL)
+let resumedLocal = try await context.resumeGraphDeletion(id: graphID, at: storeURL)
+// Cloud-bound deletion resumes through its account-verified connection instead:
+let resumedCloud = try await connection.resumeGraphDeletion(id: graphID, at: storeURL)
+```
+
+Errors preserve pending evidence and must be shown with a retry path. Do not
+remove consumer routing before `.completed`. Local-only deletion refuses
+cloud-bound stores; owner-cloud deletion refuses participants. Use
+`leaveSharedGraph(_:)` for participant removal. File absence is never sufficient
+to invent a completed deletion. See the [deletion contract](../design/graphevo-2-graph-deletion.md).

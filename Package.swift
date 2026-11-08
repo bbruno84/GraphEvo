@@ -69,6 +69,8 @@ let package = Package(
         //     path: "Tests/GraphEvoMigrationTests"
         // )
     ] + (ProcessInfo.processInfo.environment["GRAPHEVO_BUILD_LABS"] == "1" ? [
+        .executableTarget(name: "GraphDeletionProbe", dependencies: ["GraphEvo", "GraphEvoStore", "GraphEvoRuntime"],
+            path: "Experiments/GraphDeletionProbe/Sources", swiftSettings: [.swiftLanguageMode(.v6)]),
         .executableTarget(name: "ObservationCostProbe", dependencies: ["GraphEvo"],
             path: "Experiments/SharedObservation/Sources", swiftSettings: [.swiftLanguageMode(.v6)]),
         .executableTarget(name: "IdentityLookupProbe", dependencies: ["GraphEvo"],

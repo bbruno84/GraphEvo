@@ -28,6 +28,13 @@ remain subsequent work; no completion of those items is implied. The
 [acceptance report](results/private-graph-discovery-2026-11-08.md) records
 local, Simulator and real CloudKit checks; no hosted CI was requested.
 
+The next increment, `codex/v2-graph-deletion`, adds
+[definitive graph deletion](graphevo-2-graph-deletion.md), exact interrupted-native
+recovery and prevention of automatic zone recreation. Companion Notes model/UI
+adoption remains active work in its own repository. See the
+[deletion acceptance report](results/graph-deletion-2026-11-08.md) for actual scope;
+these prerequisites alone do not complete the Notes application.
+
 ## Latest increment — property and attachment contract
 
 [PR #191](https://github.com/bbruno84/GraphEvo/pull/191),

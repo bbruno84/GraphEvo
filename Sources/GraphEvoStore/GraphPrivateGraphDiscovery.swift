@@ -29,7 +29,7 @@ struct GraphPrivateGraphDescriptor: Sendable {
 
 struct GraphPrivateGraphService: Sendable {
     let list: @Sendable (GraphCloudConfiguration, String?) async throws -> [GraphPrivateGraphDescriptor]
-    let publish: @Sendable (GraphCloudConfiguration, GraphCloudBinding) async throws -> Void
+    let publish: @Sendable (GraphCloudConfiguration, GraphCloudBinding, Bool) async throws -> Void
     static let live = Self(list: { config, prefix in
         let database = CKContainer(identifier: config.containerIdentifier).privateCloudDatabase
         let zones = try await database.allRecordZones()
@@ -47,9 +47,11 @@ struct GraphPrivateGraphService: Sendable {
             } catch let error as CKError where error.code == .unknownItem || error.code == .zoneNotFound { continue }
         }
         return values
-    }, publish: { config, binding in
+    }, publish: { config, binding, mayCreate in
         let database = CKContainer(identifier: config.containerIdentifier).privateCloudDatabase
-        _ = try await database.save(CKRecordZone(zoneID: GraphCloudGraphDescriptor.id(in: binding.zone).zoneID))
+        let zoneID = GraphCloudGraphDescriptor.id(in: binding.zone).zoneID
+        if mayCreate { _ = try await database.save(CKRecordZone(zoneID: zoneID)) }
+        else { _ = try await database.recordZone(for: zoneID) }
         do {
             let current = try await database.record(for: GraphCloudGraphDescriptor.id(in: binding.zone))
             guard try GraphCloudGraphDescriptor.decode(current, zone: binding.zone, supportsFiles: config.supportsFiles) == binding.graphID else {
@@ -93,9 +95,9 @@ extension GraphCloudSession {
             return .init(graphs: graphs.filter { !ambiguous.contains($0.id) }, issues: issues)
         }
     }
-    func publishPrivateDescriptor(_ binding: GraphCloudBinding) async throws {
+    func publishPrivateDescriptor(_ binding: GraphCloudBinding, mayCreate: Bool) async throws {
         guard let service = privateGraphService else { return }
-        try await activationControl { _, _ in try await service.publish(self.configuration, binding) }
+        try await activationControl { _, _ in try await service.publish(self.configuration, binding, mayCreate) }
     }
 }
 

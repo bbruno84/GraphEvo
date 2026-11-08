@@ -156,7 +156,7 @@ actor StoreResources {
         let directory = try SQLiteStoreCoordination.directory(resolved)
         let directoryIdentity = try resolved.configuration.appGroup == nil ? SQLiteStoreCoordination.identity(directory) : nil
         let presenter = AppGroupStorePresenter(directory: directory, directoryIdentity: directoryIdentity)
-        let recovery = mode.isAppGroupPurgeRecovery
+        let recovery = mode.isPurgeRecovery
         let exclusive = recovery || resolved.configuration.workspaceID != nil
         let request = AppGroupStoreAccess(presenter: presenter, associatePresenter: false,
                                           options: exclusive ? .forDeleting : [], reportDenial: exclusive,
@@ -175,6 +175,20 @@ actor StoreResources {
                     guard let graphID = resolved.configuration.exclusiveGraphID else { throw StoreRuntimeError.resourceReserved }
                     try AppGroupOwnerClaims.requireNoClaims(for: resolved)
                     try validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
+                }
+                if let bytes = try StoreOperationJournal.readUnderGrant(resolved) {
+                    struct Header: Decodable {
+                        struct Graph: Decodable { let rawValue: UUID }
+                        let operationID: UUID
+                        let graphID: Graph
+                        let storeID: String
+                    }
+                    let header = try JSONDecoder().decode(Header.self, from: bytes)
+                    guard case .graphDeletionRecovery(let storeID, let operationID) = mode,
+                          header.operationID == operationID, header.storeID == storeID,
+                          header.graphID.rawValue == resolved.configuration.exclusiveGraphID else { throw StoreRuntimeError.resourceReserved }
+                    try AppGroupOwnerClaims.requireNoClaims(for: resolved, allowMissing: true)
+                    try validateDestructionIdentity(url, graphID: header.graphID.rawValue, storeID: storeID)
                 }
                 let initialDescription = try nativeMigration == nil ? storeDescription(resolved, model: model,
                     requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier, nativeMirroring: false) : nil
@@ -256,7 +270,7 @@ actor StoreResources {
             if let expectedIdentity, try resolved.fileIdentity() != expectedIdentity {
                 throw StoreRuntimeError.storeReplaced(url)
             }
-        case .existing, .appGroupPurgeRecovery:
+        case .existing, .appGroupPurgeRecovery, .graphDeletionRecovery:
             guard let expectedIdentity, let identity = try resolved.fileIdentity() else {
                 throw StoreRuntimeError.missingStore(url)
             }
@@ -1019,12 +1033,12 @@ actor StoreResources {
 
     /// Invalidate every lease and drain admitted work. Release claims only after
     /// destruction succeeds or a pre-destruction refusal has safely detached.
-    func destroy(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
-        try await destroyCoordinated(graphID: graphID, storeID: storeID)
+    func destroy(graphID: UUID, storeID: String, operationID: UUID? = nil) async throws -> StoreDestructionOutcome {
+        try await destroyCoordinated(graphID: graphID, storeID: storeID, operationID: operationID)
     }
 
     /// One Apple deletion grant covers identity, native destruction and cleanup.
-    private func destroyCoordinated(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
+    private func destroyCoordinated(graphID: UUID, storeID: String, operationID: UUID?) async throws -> StoreDestructionOutcome {
         try Self.checkProcessReentry(resolved)
         guard resolved.configuration.exclusiveGraphID == graphID, resolved.configuration.access == .readWrite,
               let url = resolved.url, let presenter = appGroupPresenter else {
@@ -1053,6 +1067,14 @@ actor StoreResources {
                 try AppGroupOwnerClaims.requireSoleClaim(presenter.generation, for: resolved)
                 if !progress.withLock({ $0.issued }) {
                     try Self.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
+                    if let operationID {
+                        if let prior = try StoreDestructionReceipt.read(url, graphID: graphID) {
+                            guard prior.operationID == operationID, prior.storeID == storeID else { throw StoreRuntimeError.resourceReserved }
+                        }
+                        try StoreDestructionReceipt(format: 1, operationID: operationID, graphID: graphID, storeID: storeID,
+                            generation: presenter.generation, anchorName: try StoreDestructionReceipt.relativeAnchor(presenter.coordinationDirectory, storeURL: url), nativeDestroyed: false, artifacts: try StoreDestructionReceipt.capture(url))
+                            .persist(url)
+                    }
                     let coordinator = container.persistentStoreCoordinator
                     if !progress.withLock({ $0.started }) {
                         if resolved.configuration.appGroup == nil {
@@ -1074,6 +1096,11 @@ actor StoreResources {
                         if let value = try Self.destructionArtifact(item) { result[item] = value }
                     }
                     progress.withLock { $0.artifacts = artifacts }
+                    if let operationID {
+                        try StoreDestructionReceipt(format: 1, operationID: operationID, graphID: graphID, storeID: storeID,
+                            generation: presenter.generation, anchorName: try StoreDestructionReceipt.relativeAnchor(presenter.coordinationDirectory, storeURL: url), nativeDestroyed: true, artifacts: try StoreDestructionReceipt.capture(url))
+                            .persist(url)
+                    }
                 }
                 guard let artifacts = progress.withLock({ $0.artifacts }) else {
                     throw StoreRuntimeError.storeReplaced(url)

@@ -19,6 +19,7 @@ enum GraphCloudAccessMetadata {
     }
     static func requireConsumerWrite(_ context: NSManagedObjectContext, id: GraphID) throws {
         let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+        if root[dynamicMember: GraphDeletionNative.key] != nil { throw GraphStoreError.writesSuspended }
         if let raw = root[dynamicMember: GraphSyncCheckpointAdapter.transportKey] {
             guard let data = raw as? Data, data.count <= 32 * 1024 * 1024 else { throw GraphCloudError.invalidState }
             struct Header: Decodable { let zoneDeleted: Bool }

@@ -7,6 +7,11 @@ package enum StoreOpeningMode: Sendable, Equatable {
     case new
     /// A cold purge cannot borrow an ordinary graph owner or attach ahead of a peer.
     case appGroupPurgeRecovery(storeID: String)
+    case graphDeletionRecovery(storeID: String, operationID: UUID)
+    var isPurgeRecovery: Bool {
+        if case .graphDeletionRecovery = self { return true }
+        return isAppGroupPurgeRecovery
+    }
 
     var isAppGroupPurgeRecovery: Bool {
         if case .appGroupPurgeRecovery = self { return true }
@@ -219,8 +224,8 @@ package actor StoreHandle {
                                             reservation: reservation.id, alongside: alongside)
     }
     @discardableResult
-    package func destroy(graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
-        try await registry.destroy(key, generation: generation, token: token, graphID: graphID, storeID: storeID)
+    package func destroy(graphID: UUID, storeID: String, operationID: UUID? = nil) async throws -> StoreDestructionOutcome {
+        try await registry.destroy(key, generation: generation, token: token, graphID: graphID, storeID: storeID, operationID: operationID)
     }
 
     /// Package implementation boundary, not a public raw-context escape hatch.
@@ -288,7 +293,7 @@ package actor StoreRegistry {
         let resolved: ResolvedStore
         let schema: StoreSchema
         let nativeMigrationDocument: Data?
-        let recoveringAppGroupPurge: Bool
+        let recoveringPurge: Bool
         let opening: Task<StoreResources, any Error>
         var fileIdentities: [StoreKey: FileIdentity] = [:]
         var tokens: Set<UUID> = []
@@ -397,7 +402,7 @@ package actor StoreRegistry {
             }
             if let entry = entries[resolved.key] {
                 if mode == .new, let url = resolved.url { throw StoreRuntimeError.storeAlreadyExists(url) }
-                guard !mode.isAppGroupPurgeRecovery, !entry.recoveringAppGroupPurge else {
+                guard !mode.isPurgeRecovery, !entry.recoveringPurge else {
                     throw StoreRuntimeError.resourceReserved
                 }
                 guard try entry.resolved.isCompatible(with: resolved), entry.schema.isCompatible(with: schema),
@@ -412,7 +417,7 @@ package actor StoreRegistry {
                         nativeMigration: nativeMigration, mode: mode, expectedIdentity: expectedIdentity)
                 }
                 entries[resolved.key] = Entry(resolved: resolved, schema: schema, nativeMigrationDocument: nativeMigration?.document,
-                                             recoveringAppGroupPurge: mode.isAppGroupPurgeRecovery,
+                                             recoveringPurge: mode.isPurgeRecovery,
                                              opening: opening, fileIdentities: identities)
             }
             let token = UUID()
@@ -594,7 +599,7 @@ package actor StoreRegistry {
         return try await value.opening.value.copyStore(to: url, reservation: reservation, alongside: alongside)
     }
 
-    fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String) async throws -> StoreDestructionOutcome {
+    fileprivate func destroy(_ key: StoreKey, generation: UUID, token: UUID, graphID: UUID, storeID: String, operationID: UUID? = nil) async throws -> StoreDestructionOutcome {
         guard var value = entries[key], value.generation == generation,
               value.resolved.configuration.exclusiveGraphID == graphID,
               value.destroyToken == token || (value.destroyToken == nil && value.tokens.contains(token) && value.shutdown == nil) else {
@@ -606,7 +611,7 @@ package actor StoreRegistry {
         }
         let opening = value.opening
         value.destroyToken = token; value.tokens.removeAll()
-        let job = Task { try await opening.value.destroy(graphID: graphID, storeID: storeID) }
+        let job = Task { try await opening.value.destroy(graphID: graphID, storeID: storeID, operationID: operationID) }
         value.destruction = job
         value.shutdown = Task { _ = try await job.value }
         entries[key] = value

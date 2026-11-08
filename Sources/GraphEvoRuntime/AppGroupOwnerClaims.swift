@@ -106,6 +106,20 @@ enum AppGroupOwnerClaims {
         }
     }
 
+    static func requireDestructionClaim(_ generation: UUID, for resolved: ResolvedStore, anchor: URL? = nil) throws {
+        let directory = try anchor.map(presentationURL(anchor:)) ?? directory(for: resolved)
+        try verifyDirectory(directory)
+        let entries = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        guard entries.isEmpty || (entries.count == 1 && entries[0].lastPathComponent == generation.uuidString) else { throw StoreRuntimeError.resourceReserved }
+        if let entry = entries.first { _ = try verify(entry, generation: generation, for: resolved) }
+    }
+    static func recoverDestruction(_ generation: UUID, for resolved: ResolvedStore, anchor: URL? = nil) throws {
+        try requireDestructionClaim(generation, for: resolved, anchor: anchor)
+        let directory = try anchor.map(presentationURL(anchor:)) ?? directory(for: resolved)
+        let entry = directory.appendingPathComponent(generation.uuidString)
+        if FileManager.default.fileExists(atPath: entry.path) { try FileManager.default.removeItem(at: entry) }
+    }
+
     static func requireSoleClaim(_ generation: UUID, for resolved: ResolvedStore) throws {
         let directory = try directory(for: resolved)
         try verifyDirectory(directory)
