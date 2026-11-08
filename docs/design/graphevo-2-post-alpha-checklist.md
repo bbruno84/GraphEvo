@@ -31,6 +31,30 @@ reopen verifies correctness, not throughput. Representative device capacity,
 actual CloudKit network latency and production-data acceptance remain open;
 this result does not close PA05/PA06/PA08 or establish a supported latency target.
 
+## Physical S06/S07 envelope follow-up — 2026-11-08
+
+Candidate evidence on `codex/v2-device-capacity`, shipping baseline `30c01ab6`:
+see the [physical report](results/device-capacity-s06-s07-2026-11-08.md).
+
+- [x] Exercise selected local Release cases on physical iPad/XR: 2 MiB attachment
+  admission/refusal, 64 MiB query materialization versus bounded reads, 25/128 MiB
+  Files, repeated 25.92 MB synthetic activation/recovery and representative v1
+  conversion/reopen. Twelve accepted trials pass 108 measured phases. This is
+  bounded branch evidence, not full PA05/PA06/PA08 or a network checkpoint.
+- [ ] Remove unrelated attachment body materialization from deletion planning,
+  preserving metadata/identity, dependency, permissions and pre-edit validation.
+  Empty File deletion with 64 MiB unrelated content costs 111/152 ms on iPad/XR,
+  versus 10/14 ms without it. This is a confirmed optimization task.
+- [ ] Retain broader physical limits: larger/mixed graphs and Files, jetsam/memory
+  pressure, provider/protected data, interrupted conversion/backup and wider
+  source corpus, plus real-network performance and distributed acceptance.
+
+The MyHomeBills sample yields 244 attachments (109.1 MB total, largest 489,900
+bytes); no File conversion is required for the selected admission threshold.
+Consumer-owned binary classification and an optional File transformation remain
+separate work. Initial checksum-helper retention was corrected in the external
+harness; no runtime memory fix is claimed from that correction.
+
 ## H01 public entry — 2026-11-04
 
 [PR #150](https://github.com/bbruno84/GraphEvo/pull/150) implements the selected

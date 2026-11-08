@@ -36,6 +36,26 @@ and fresh-store contract. Existing alpha fixtures are not silently upgraded.
 No new hosted CI checkpoint was requested under the current alpha policy; the
 last full hosted checkpoint below remains historical evidence on its stated head.
 
+## In progress — physical S06/S07 capacity evidence
+
+`codex/v2-device-capacity` records the [physical cost follow-up](results/device-capacity-s06-s07-2026-11-08.md)
+on integrated `30c01ab6`, without changing runtime code. Twelve accepted Release
+trials on iPad/XR pass 108 measured phases: repeated 25.92 MB synthetic
+publication/recovery, 64 MiB of bounded attachments, 25/128 MiB File operations,
+repeated representative MyHomeBills conversions and paired deletion controls.
+The source yields 1,577 mapped nodes and 244 attachments totaling 109.1 MB;
+all bodies stay below 2 MiB. Conversion with backup takes 36–37 seconds on iPad
+and about 85 seconds on XR. No application meaning or File mapping is inferred.
+These are local device costs, not new CloudKit network measurements.
+
+The follow-up confirms a remaining optimization: deleting an empty File reads
+unrelated attachment bodies while building the cascade owner map. The paired
+64 MiB control takes 111/152 ms on iPad/XR versus 10/14 ms without attachments.
+This is distinct from still-unperformed capacity, memory-pressure, provider,
+interruption and network tests. The selected cases pass; broader beta gates
+remain open. Evidence and reproduction sources are pending integration on this
+branch; the last hosted checkpoint is unchanged.
+
 ## Earlier integrated position — 2026-11-07
 
 The v2 integration line includes File synchronization through
