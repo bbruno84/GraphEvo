@@ -14,6 +14,8 @@ package struct GraphPrivateReplicaState: Codable, Sendable, Equatable {
 }
 
 package struct GraphPrivateReplicaAdapter: Sendable {
+    package var publicationBinding: (@Sendable (NSManagedObjectContext, GraphID) throws -> GraphCloudTransportBinding?)? = nil
+    package var preparePublication: (@Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, Bool) throws -> Bool)? = nil
     package let read: @Sendable (NSManagedObjectContext, GraphID) throws -> GraphPrivateReplicaState?
     package let prepare: @Sendable (NSManagedObjectContext, GraphID, GraphCloudTransportBinding, UUID) throws -> GraphPrivateReplicaState
     package let complete: @Sendable (NSManagedObjectContext, GraphID, UUID) throws -> Void

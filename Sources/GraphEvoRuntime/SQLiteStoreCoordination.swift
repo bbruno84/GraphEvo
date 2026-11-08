@@ -89,6 +89,16 @@ package enum SQLiteStoreCoordination {
         } catch is CoordinatedFiles.Denied { throw StoreRuntimeError.resourceReserved }
     }
 
+    static func controlIdentity(_ directory: URL, configuration: StoreConfiguration) throws -> FileIdentity {
+        if configuration.appGroup == nil { return try identity(directory) }
+        // App Group containers use system-managed group permissions. Their existing
+        // coordination contract requires a stable owned directory, not mode 0700.
+        var info = stat()
+        guard lstat(directory.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR,
+              info.st_uid == geteuid() else { throw StoreRuntimeError.resourceReserved }
+        return FileIdentity(device: UInt64(info.st_dev), inode: UInt64(info.st_ino))
+    }
+
     static func identity(_ directory: URL) throws -> FileIdentity {
         var info = stat()
         guard lstat(directory.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR,

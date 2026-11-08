@@ -32,6 +32,7 @@ struct GraphCloudSendOutcome: Sendable {
 }
 
 struct GraphCloudAdapter: Sendable {
+    var deletion: GraphCloudDeletionService? = nil
     var privateGraphs: GraphPrivateGraphService? = nil
     var nativeSharing: GraphCloudNativeSharingService? = nil
     var sharing: GraphCloudSharingService? = nil
@@ -119,7 +120,7 @@ actor GraphCloudSession {
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
                 if doc.format == 8, !config.allowsSessionUpgradeFromV8 { throw GraphCloudDiscoveryError.sessionUpgradeRequired }
-                guard doc.format == 11, doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
+                guard doc.format == 12, doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
                 guard doc.account == account else { await accountSignal(.differentAccount); throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -174,6 +175,8 @@ actor GraphCloudSession {
                         guard receipt.membershipGeneration == member.generation else { throw GraphCloudError.invalidState }
                     }
                 }
+                guard Set(doc.deletions.map { $0.graphID }).count == doc.deletions.count,
+                      doc.deletions.allSatisfy({ $0.valid && $0.binding?.identity == GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account) }) else { throw GraphCloudError.invalidState }
                 guard Set(doc.privateReplicas.map { $0.binding.graphID }).count == doc.privateReplicas.count,
                       doc.privateReplicas.allSatisfy({ $0.peer && $0.binding.zone.scope == .private && doc.bindings.contains($0.binding) }),
                       Set((doc.activations + doc.privateReplicas).map { $0.binding.graphID }).count == doc.activations.count + doc.privateReplicas.count else { throw GraphCloudError.invalidState }
@@ -335,7 +338,7 @@ actor GraphCloudSession {
         return url
     }
 
-    var pendingActivationIDs: Set<GraphID> { Set((document.activations + document.privateReplicas).filter { !$0.published }.map { $0.binding.graphID }) }
+    var pendingActivationIDs: Set<GraphID> { Set((document.activations + document.privateReplicas).filter { !$0.published }.map { $0.binding.graphID }).union(document.deletions.map(\.graphID)) }
     func stageActivationSnapshot(_ events: [GraphCloudIncoming], for binding: GraphCloudBinding, activationID: UUID) throws {
         try check()
         guard let route = activationRoute(for: binding.graphID) ?? document.privateReplicas.first(where: { $0.binding.graphID == binding.graphID }), route.binding == binding,
@@ -363,6 +366,7 @@ actor GraphCloudSession {
     }
 
     func bind(_ binding: GraphCloudBinding) throws {
+        guard !document.deletions.contains(where: { $0.graphID == binding.graphID || $0.binding?.route.zone == binding.zone }) else { throw GraphCloudError.zoneUnavailable }
         try check()
         guard !binding.zone.owner.isEmpty, !binding.zone.name.isEmpty else { throw GraphCloudError.invalidConfiguration }
         if document.memberships.contains(where: { $0.binding.graphID == binding.graphID && $0.terminal }) { throw GraphCloudError.zoneUnavailable }
@@ -566,7 +570,7 @@ actor GraphCloudSession {
 
     func routes(in scope: GraphCloudScope) throws -> [GraphCloudBinding] {
         try check()
-        return document.bindings.filter { $0.zone.scope == scope }
+        return document.bindings.filter { route in route.zone.scope == scope && !document.deletions.contains(where: { $0.graphID == route.graphID }) }
     }
 
     func fetch(_ scope: GraphCloudScope, zones selected: Set<GraphCloudZone>? = nil) async throws {
@@ -582,7 +586,7 @@ actor GraphCloudSession {
         }
         let zones = document.bindings.filter { $0.zone.scope == scope }.map(\.zone)
         if let selected { guard selected.isSubset(of: Set(zones)) else { throw GraphCloudError.invalidConfiguration } }
-        let blocked = Set((document.activations + document.privateReplicas).filter { !$0.published }.map { $0.binding.zone })
+        let blocked = Set((document.activations + document.privateReplicas).filter { !$0.published }.map { $0.binding.zone }).union(document.deletions.compactMap { $0.binding?.route.zone })
         let permitted = zones.filter { !blocked.contains($0) && (selected?.contains($0) ?? true) }
         if permitted.isEmpty && !zones.isEmpty { return }
         try await driver.fetch(permitted)
@@ -773,6 +777,7 @@ actor GraphCloudSession {
     }
     func route(for graph: GraphID) throws -> GraphCloudBinding {
         try check()
+        guard !document.deletions.contains(where: { $0.graphID == graph }) else { throw GraphCloudError.zoneUnavailable }
         guard let route = document.bindings.first(where: { $0.graphID == graph }) else { throw GraphCloudError.invalidConfiguration }
         return route
     }
@@ -1231,6 +1236,50 @@ extension GraphCloudSession {
             let value = try await body(session)
             try await session.verifyLedgerAccount()
             return value
+        }
+    }
+}
+
+extension GraphCloudSession {
+    func registerDeletion(_ value: GraphDeletionIntent, allowingUnbound: Bool = false) throws {
+        try check(control: true)
+        guard value.valid, let binding = value.binding, binding.identity == retainedIdentity(),
+              (allowingUnbound && value.allowsEmptyZone) || document.bindings.contains(binding.route) || document.deletions.contains(where: { $0.matches(value) }) else { throw GraphCloudError.ownershipConflict }
+        if let prior = document.deletions.first(where: { $0.graphID == value.graphID }) {
+            guard prior.matches(value), GraphDeletionIntent.rank(prior.phase) <= GraphDeletionIntent.rank(value.phase) else { throw GraphCloudError.ownershipConflict }
+        }
+        var next = document
+        next.deletions.removeAll { $0.graphID == value.graphID }; next.deletions.append(value)
+        try publish(next)
+    }
+    func removePrivateZone(_ value: GraphDeletionIntent) async throws {
+        guard let service = adapter.deletion, let binding = value.binding else { throw GraphCloudError.transportUnavailable }
+        try await withScopeControl(.private) { session in
+            guard try session.identity() == binding.identity,
+                  session.document.deletions.contains(where: { $0.matches(value) }) else { throw GraphCloudError.accountChanged }
+            try await session.verifyLedgerAccount()
+            try await service.remove(session.configuration, binding.route, value.allowsEmptyZone)
+            try await session.verifyLedgerAccount()
+        }
+    }
+    func finishDeletion(_ value: GraphDeletionIntent) async throws {
+        guard let binding = value.binding, value.phase == .completed else { throw GraphCloudError.invalidState }
+        if let forget = drivers[.private]?.forget {
+            try await control(.private, allowingDataLimit: true) { _, _ in try await forget(binding.route.zone) }
+        }
+        let prior = document.assetReferences
+        try registerDeletion(value)
+        var next = document
+        next.bindings.removeAll { $0.graphID == value.graphID }
+        next.inbox.removeAll { $0.change.zone == binding.route.zone }
+        next.sent.removeAll { $0.graphID == value.graphID }
+        next.activations.removeAll { $0.binding.graphID == value.graphID }
+        next.privateReplicas.removeAll { $0.binding.graphID == value.graphID }
+        next.ledgers.removeAll { $0.binding.graphID == value.graphID }
+        next.memberships.removeAll { $0.binding.graphID == value.graphID }
+        try publish(next)
+        if let spool = try? GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets")) {
+            await spool.remove(prior, retaining: next.assetReferences)
         }
     }
 }

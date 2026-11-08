@@ -17,7 +17,8 @@ enum GraphPrivateReplicaNative {
         }
         return state
     }
-    static let adapter = GraphPrivateReplicaAdapter(read: { try read($0, id: $1) }, prepare: { context, id, binding, operation in
+    static var adapter: GraphPrivateReplicaAdapter {
+        var adapter = GraphPrivateReplicaAdapter(read: { try read($0, id: $1) }, prepare: { context, id, binding, operation in
         if let prior = try read(context, id: id) {
             guard prior.binding == binding else { throw GraphCloudError.ownershipConflict }
             return prior
@@ -40,4 +41,29 @@ enum GraphPrivateReplicaNative {
     }, ids: { context, id in
         Set(try GraphTypedStoreAdapter.Session(context, id, database: true).nodes.keys)
     })
+        adapter.preparePublication = { context, id, binding, mayCreate in
+            let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+            let key = GraphTypedStoreAdapter.prefix + "privatePublicationAttempt"
+            if let raw = root[dynamicMember: key] {
+                guard let bytes = raw as? Data, bytes.count <= 16 * 1024,
+                      try JSONDecoder().decode(GraphCloudTransportBinding.self, from: bytes) == binding else {
+                    throw GraphCloudError.ownershipConflict
+                }
+                return false
+            }
+            guard mayCreate else { return false }
+            root[dynamicMember: key] = try JSONEncoder().encode(binding)
+            context.transactionAuthor = GraphSyncCheckpointAdapter.metadataAuthor
+            return true
+        }
+        adapter.publicationBinding = { context, id in
+            let root = try GraphTypedStoreAdapter.controlRoot(context, id: id)
+            guard let raw = root[dynamicMember: GraphTypedStoreAdapter.prefix + "privatePublicationAttempt"] else { return nil }
+            guard let bytes = raw as? Data, bytes.count <= 16 * 1024 else { throw GraphCloudError.invalidState }
+            let value = try JSONDecoder().decode(GraphCloudTransportBinding.self, from: bytes)
+            guard value.route.graphID == id, value.route.zone.scope == .private else { throw GraphCloudError.invalidState }
+            return value
+        }
+        return adapter
+    }
 }

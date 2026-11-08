@@ -92,7 +92,7 @@ extension GraphCloudNativeSharingService {
     static let live = Self(prepare: { config, binding, title, mayCreate, beforeCreate in
         let database = CKContainer(identifier: config.containerIdentifier).privateCloudDatabase
         let zoneID = GraphCloudGraphDescriptor.id(in: binding.zone).zoneID
-        _ = try await database.save(CKRecordZone(zoneID: zoneID))
+        _ = try await database.recordZone(for: zoneID)
         do {
             let record = try await database.record(for: GraphCloudGraphDescriptor.id(in: binding.zone))
             guard try GraphCloudGraphDescriptor.decode(record, zone: binding.zone, supportsFiles: config.supportsFiles) == binding.graphID else {

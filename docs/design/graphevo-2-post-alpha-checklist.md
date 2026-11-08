@@ -9,6 +9,19 @@ A1–A8 and the specification so they survive individual PRs. It complements the
 [delivery plan](graphevo-2-delivery-plan.md), [decision register](graphevo-2-decisions.md)
 and [experimental evidence register](graphevo-2-test-checklist.md).
 
+## Notes lifecycle prerequisites — 2026-11-08
+
+Transactional File import and ordinary private discovery integrate through #193
+and #194. Definitive deletion adds exact local/owner terminal recovery and prevents
+updated ordinary clients from recreating a deleted zone. See the
+[contract](graphevo-2-graph-deletion.md) and
+[bounded evidence](results/graph-deletion-2026-11-08.md).
+
+- [ ] Complete the companion Notes application and its two-account device acceptance.
+- [ ] Retain broader distributed deletion/account-switch, protected-data/storage
+  faults and old-client-return acceptance for beta. Sequential sessions on one
+  physical iPad are not two-device same-account evidence.
+
 ## Property and attachment admission — 2026-11-08
 
 The [S06/S07 contract](graphevo-2-property-attachments.md) selects a 2 MiB

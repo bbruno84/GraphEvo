@@ -20,6 +20,9 @@ extension GraphCloudAdapter {
             var configuration = CKSyncEngine.Configuration(database: database, stateSerialization: serialization, delegate: delegate)
             configuration.automaticallySync = false
             let engine = CKSyncEngine(configuration)
+            engine.state.remove(pendingDatabaseChanges: engine.state.pendingDatabaseChanges.filter {
+                if case .saveZone = $0 { return true }; return false
+            })
             return GraphCloudDriver(fetch: { zones in
                 var options = CKSyncEngine.FetchChangesOptions()
                 options.scope = .zoneIDs(zones.map { CKRecordZone.ID(zoneName: $0.name, ownerName: $0.owner) })
@@ -32,7 +35,7 @@ extension GraphCloudAdapter {
                 try await delegate.outbox.begin(batch)
                 do {
                     let zoneID = CKRecordZone.ID(zoneName: batch.zone.name, ownerName: batch.zone.owner)
-                    if scope == .private { engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zoneID))]) }
+                    // Zones are created only by explicit initial publication, never by a send.
                     let route = GraphCloudBinding(zone: batch.zone, graphID: batch.graphID)
                     let changes = try batch.items.map { item -> CKSyncEngine.PendingRecordZoneChange in
                         let id = try GraphCloudNodeCodec.recordID(for: item.change.id, binding: route)
@@ -60,6 +63,7 @@ extension GraphCloudAdapter {
                 })
             }, invalidateAccount: { delegate.outbox.accountFence.invalidate() })
         })
+        adapter.deletion = .live
         adapter.privateGraphs = .live
         adapter.accountAvailability = { try await GraphCloudAccountAvailability.live($0) }
         adapter.observeAccount = { GraphCloudAccountObservation(changed: $0) }

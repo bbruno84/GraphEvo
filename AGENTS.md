@@ -1591,3 +1591,19 @@ The bounded N result is recorded in
 pass, but physical faults, XR interaction and coupled transport/public observation
 remain unverified. Preserve its NO GO decision; do not treat baseline cloud tests,
 the surrogate feed or controlled termination as those missing acceptance results.
+
+
+## V2 definitive graph deletion
+
+Read [the deletion contract](docs/design/graphevo-2-graph-deletion.md) before
+changing terminal graph lifecycle. Local-only deletion, owner-private zone deletion
+and participant leave are distinct operations. Pending native/session evidence
+binds exact operation, identity, zone, store UUID and source file identity. Validate
+before remote destruction or loading a replacement. Keep terminal journals beside the store with relative recovery references.
+Check them inside the existing Apple opening grant; do not introduce an earlier competing grant.
+Recover interrupted destruction only from recorded owner/artifact evidence under
+an exclusive Apple grant. Missing SQLite alone never certifies completion.
+Ordinary record sends and sharing must not recreate missing zones. Initial private
+publication retains its one creation attempt; ambiguous failure can be resolved by
+explicit deletion, never implicit zone repair. Session format 12 refuses previous
+alpha state unchanged. Preserve S06/S07 schema and consumer-owned File semantics.

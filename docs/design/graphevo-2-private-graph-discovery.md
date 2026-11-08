@@ -32,8 +32,8 @@ account before and after native work. They allocate no additional CKSyncEngine.
 An ordinary bootstrap stores format-1 provenance in reserved root metadata,
 separate from application properties and MF10 documents: operation UUID,
 account-bound route, native store UUID and readiness. Startup reapplies runtime
-read/write admission while incomplete. Session format 11 records the ordinary
-pending routes; format 10 and earlier state is refused unchanged, not upgraded
+read/write admission while incomplete. Session format 11 introduced ordinary
+pending routes; definitive deletion now uses session format 12. Earlier state is refused unchanged, not upgraded
 or erased. Consumer applications use fresh alpha session namespaces as needed.
 
 Recovery uses the existing on-disk inventory, bounded batches and asset spool.

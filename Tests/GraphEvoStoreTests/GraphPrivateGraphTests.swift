@@ -6,7 +6,7 @@ import os
 @testable import GraphEvoStore
 @testable import GraphEvoRuntime
 
-private extension ActivationServer {
+extension ActivationServer {
     func descriptors(_ prefix: String?) throws -> [GraphPrivateGraphDescriptor] {
         try records.values.filter { value in
             value.recordType == GraphCloudGraphDescriptor.recordType && (prefix.map { value.zone.name.hasPrefix($0) } ?? true)
@@ -46,7 +46,7 @@ private extension ActivationServer {
     nonisolated func privateAdapter(root: URL) -> GraphCloudAdapter {
         var value = adapter
         value.privateGraphs = .init(list: { _, prefix in try await self.descriptors(prefix) },
-            publish: { config, binding in try await self.publishDescriptor(binding, files: config.supportsFiles) })
+            publish: { config, binding, _ in try await self.publishDescriptor(binding, files: config.supportsFiles) })
         let activation = GraphCloudActivationService(ensureZone: service.ensureZone, fetch: service.fetch, save: service.save,
             inventory: { config, identity, binding, _ in
             var inventory = try GraphCloudActivationInventory(sessionDirectory: config.directory)

@@ -199,7 +199,7 @@ package actor GraphContextManager {
                                configuration: GraphCloudConfiguration) async throws {
         // Input/route refusal must precede the immutable local account claim.
         guard !zone.owner.isEmpty, !zone.name.isEmpty else { throw GraphCloudError.invalidConfiguration }
-        guard !activatingCloudGraphs.contains(graphID) else { throw GraphCloudActivationError.busy }
+        guard !sharingGraphs.contains(graphID), !activatingCloudGraphs.contains(graphID) else { throw GraphCloudActivationError.busy }
         guard localV1Bootstraps[graphID] == nil else { throw GraphStoreMigrationError.busy }
         guard let entry = entries[graphID], entry.closing == nil else { throw GraphStoreError.missingGraph }
         let owner = try await entry.opening.value
@@ -225,7 +225,12 @@ package actor GraphContextManager {
             } else if activation != nil { throw GraphCloudActivationError.recoveryRequired }
         }
         guard !activatingCloudGraphs.contains(graphID) else { throw GraphCloudActivationError.busy }
-        if zone.scope == .private { try await session.publishPrivateDescriptor(route) }
+        if zone.scope == .private, await session.privateGraphService != nil {
+            let transport = GraphCloudTransportBinding(identity: try await session.identity(), route: route)
+            let mayCreate = try await owner.preparePrivatePublication(transport)
+            try await claimCloudAccount(transport.identity, for: graphID, owner: owner)
+            try await session.publishPrivateDescriptor(route, mayCreate: mayCreate)
+        }
         try await claimCloudAccount(session.identity(), for: graphID, owner: owner)
         try await session.bind(route)
         automaticChanged()

@@ -5,6 +5,7 @@ import GraphEvoRuntime
 
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
+    package var deletion: GraphDeletionAdapter? = nil
     package var privateReplica: GraphPrivateReplicaAdapter? = nil
     package var activation: GraphCloudActivationAdapter? = nil
     package var account: GraphCloudAccountNativeAdapter? = nil
@@ -40,13 +41,14 @@ package actor GraphCoordinator {
     private let adapter: GraphStoreAdapter
     private let syncSession: GraphSyncSession?
     private let workspace: GraphMigrationWorkspaceAdapter?
+    private let deletion: GraphDeletionAdapter?
     private let privateReplica: GraphPrivateReplicaAdapter?
     private let activation: GraphCloudActivationAdapter?
     private let account: GraphCloudAccountNativeAdapter?
     private let publication: GraphMigrationPublicationAdapter?
 
-    private init(id: GraphID, handle: StoreHandle, storeURL: URL, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil, privateReplica: GraphPrivateReplicaAdapter? = nil, account: GraphCloudAccountNativeAdapter? = nil) {
-        self.id = id; self.handle = handle; self.storeURL = storeURL; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation; self.privateReplica = privateReplica; self.account = account
+    private init(id: GraphID, handle: StoreHandle, storeURL: URL, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil, privateReplica: GraphPrivateReplicaAdapter? = nil, deletion: GraphDeletionAdapter? = nil, account: GraphCloudAccountNativeAdapter? = nil) {
+        self.deletion = deletion; self.id = id; self.handle = handle; self.storeURL = storeURL; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation; self.privateReplica = privateReplica; self.account = account
         self.syncSession = sync.map { GraphSyncSession(graphID: id, handle: handle, adapter: $0) }
     }
 
@@ -62,7 +64,7 @@ package actor GraphCoordinator {
         let handle = try await registry.open(configuration, schema: schema, mode: creating ? .new : .existing)
         let owner = GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
             adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace,
-            publication: adapter.publication, activation: adapter.activation, privateReplica: adapter.privateReplica, account: adapter.account)
+            publication: adapter.publication, activation: adapter.activation, privateReplica: adapter.privateReplica, deletion: adapter.deletion, account: adapter.account)
         do {
             if creating {
                 try await handle.transaction {
@@ -94,6 +96,9 @@ package actor GraphCoordinator {
             if let activation = adapter.activation, let value = try await handle.controlRead({ try activation.read($0, id) }) {
                 if appGroupLocalOnly { throw GraphStoreError.resourceReserved }
                 if value.blocksWrites { try await handle.restrictActivation(value.authority.activationID, reads: value.peer) }
+            }
+            if let deletion = adapter.deletion, try await handle.controlRead({ try deletion.state($0, id, nil) }) != nil {
+                try await handle.setDataAvailable(false, terminal: true)
             }
             if let replica = adapter.privateReplica, let state = try await handle.controlRead({ try replica.read($0, id) }), !state.ready {
                 if appGroupLocalOnly { throw GraphStoreError.resourceReserved }
@@ -151,6 +156,20 @@ package actor GraphCoordinator {
         guard let activation else { throw GraphCloudActivationError.unavailable }
         return try await handle.controlTransaction { try activation.peer($0, binding, authority, limits) }
     }
+    func deletionIntent(_ value: GraphDeletionIntent? = nil) async throws -> GraphDeletionIntent? {
+        guard let deletion else { throw GraphCloudError.invalidConfiguration }; let id = id
+        if let value { return try await handle.controlTransaction { try deletion.state($0, id, value) } }
+        return try await handle.controlRead { try deletion.state($0, id, nil) }
+    }
+    func privatePublicationBinding() async throws -> GraphCloudTransportBinding? {
+        guard let read = privateReplica?.publicationBinding else { return nil }; let id = id
+        return try await handle.controlRead { try read($0, id) }
+    }
+    func preparePrivatePublication(_ binding: GraphCloudTransportBinding) async throws -> Bool {
+        guard let prepare = privateReplica?.preparePublication else { return false }
+        let id = id, mayCreate = try await accountIdentity() == nil
+        return try await handle.controlTransaction { try prepare($0, id, binding, mayCreate) }
+    }
     func privateReplicaState() async throws -> GraphPrivateReplicaState? {
         guard let replica = privateReplica else { throw GraphCloudError.invalidConfiguration }; let id = id
         return try await handle.controlRead { try replica.read($0, id) }
@@ -180,9 +199,10 @@ package actor GraphCoordinator {
     }
 
     static func recoverForPurge(id: GraphID, configuration: StoreConfiguration, storeID: String, registry: StoreRegistry,
-                                schema: StoreSchema, adapter: GraphCoordinatorAdapter) async throws -> GraphCoordinator {
+                                schema: StoreSchema, adapter: GraphCoordinatorAdapter, operationID: UUID? = nil) async throws -> GraphCoordinator {
         guard case .sqlite(let url) = configuration.location else { throw GraphStoreError.unsupportedLayout }
-        let mode: StoreOpeningMode = configuration.appGroup == nil ? .existing : .appGroupPurgeRecovery(storeID: storeID)
+        let mode: StoreOpeningMode = operationID.map { .graphDeletionRecovery(storeID: storeID, operationID: $0) }
+            ?? (configuration.appGroup == nil ? .existing : .appGroupPurgeRecovery(storeID: storeID))
         let handle = try await registry.open(configuration, schema: schema, mode: mode)
         do { try await handle.setDataAvailable(false, terminal: true) }
         catch {
@@ -191,7 +211,7 @@ package actor GraphCoordinator {
             throw original
         }
         return GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
-            adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication)
+            adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace, publication: adapter.publication, deletion: adapter.deletion)
     }
     func publicationReceipt(for workspace: UUID) async throws -> GraphMigrationPublicationReceipt? {
         guard let publication else { return nil }
@@ -252,9 +272,9 @@ package actor GraphCoordinator {
         if let value { return try await handle.controlTransaction { try access($0, id, value) } }
         return try await handle.controlRead { try access($0, id, nil) }
     }
-    func destroy(storeID: String) async throws -> StoreDestructionOutcome {
+    func destroy(storeID: String, operationID: UUID? = nil) async throws -> StoreDestructionOutcome {
         await syncSession?.retire()
-        return try await handle.destroy(graphID: id.rawValue, storeID: storeID)
+        return try await handle.destroy(graphID: id.rawValue, storeID: storeID, operationID: operationID)
     }
 
     func validateCloudBinding(_ initialize: @escaping @Sendable (NSManagedObjectContext, GraphID, Bool) throws -> Void) async throws {
