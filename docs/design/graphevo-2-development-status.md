@@ -30,11 +30,36 @@ property compile fixtures passed at the initial contract checkpoint. Physical
 iPad/XR replicas reopen and verify with the correction; this does not measure
 device throughput. Broader capacity and actual CloudKit latency remain open.
 The selected alpha value-channel increment and local performance regression are
-complete. The next acceptance work is representative device capacity/memory and
-remaining PA05/PA06/PA08 cases; companion demo adoption must use the S06/S07 API
-and fresh-store contract. Existing alpha fixtures are not silently upgraded.
+complete. The selected physical follow-up and alpha limits closure are recorded below.
+Remaining PA05/PA06/PA08 acceptance belongs to the beta backlog; companion demo
+adoption must use the S06/S07 API and fresh-store contract. Existing alpha fixtures are not silently upgraded.
 No new hosted CI checkpoint was requested under the current alpha policy; the
 last full hosted checkpoint below remains historical evidence on its stated head.
+
+## Alpha thresholds and limits — closed 2026-11-08
+
+[PR #192](https://github.com/bbruno84/GraphEvo/pull/192),
+`codex/v2-device-capacity`, records the [physical cost follow-up](results/device-capacity-s06-s07-2026-11-08.md)
+on integrated `30c01ab6`, without changing runtime code. Twelve accepted Release
+trials on iPad/XR pass 108 measured phases: repeated 25.92 MB synthetic
+publication/recovery, 64 MiB of bounded attachments, 25/128 MiB File operations,
+repeated representative MyHomeBills conversions and paired deletion controls.
+The source yields 1,577 mapped nodes and 244 attachments totaling 109.1 MB;
+all bodies stay below 2 MiB. Conversion with backup takes 36–37 seconds on iPad
+and about 85 seconds on XR. No application meaning or File mapping is inferred.
+These are local device costs, not new CloudKit network measurements.
+
+The follow-up confirms a remaining optimization: deleting an empty File reads
+unrelated attachment bodies while building the cascade owner map. The paired
+64 MiB control takes 111/152 ms on iPad/XR versus 10/14 ms without attachments.
+This is distinct from still-unperformed capacity, memory-pressure, provider,
+interruption and network tests. The selected cases pass; broader beta gates
+remain open. The maintainer accepts the selected thresholds/limits block as
+complete for alpha. Evidence and reproduction sources integrate through #192;
+reviewed laboratory implementation is `15d5bb15`, followed by documentation-only
+closure notes. Unrelated-body deletion optimization and wider device/source/
+network acceptance remain beta work, not additional blockers for this alpha
+block. No runtime behavior changes here; the last hosted checkpoint is unchanged.
 
 ## Earlier integrated position — 2026-11-07
 

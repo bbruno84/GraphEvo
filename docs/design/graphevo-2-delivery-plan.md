@@ -2,7 +2,13 @@
 
 ## Current delivery position — audited 2026-11-06
 
-The integration baseline is `8bbb195f` ([PR #185](https://github.com/bbruno84/GraphEvo/pull/185)).
+The 2026-11-06 audit baseline was `8bbb195f`
+([PR #185](https://github.com/bbruno84/GraphEvo/pull/185)). Update 2026-11-08:
+the selected thresholds/limits block is **closed for alpha** through #191/#192,
+with the property/attachment contract and bounded physical iPad/XR acceptance.
+See the [physical result](results/device-capacity-s06-s07-2026-11-08.md).
+The confirmed deletion optimization and wider capacity/memory/source/network
+acceptance remain beta backlog; this is not beta entry or closure of all B gates.
 The [development status](graphevo-2-development-status.md) records integrated
 revisions and evidence. The [post-alpha checklist](graphevo-2-post-alpha-checklist.md)
 tracks the broader beta (B) and stable (R) acceptance gates.
@@ -12,7 +18,7 @@ tracks the broader beta (B) and stable (R) acceptance gates.
 | Store coordination and process roles | Foundation store and backup coordination (#173–#175), foreground CloudKit session ownership (#176), and public App Group roles with direct local secondary writes on synchronized replicas (#180/#183). | Complete broader PA02 first-launch, migration, interrupted-owner recovery and supported OS/process acceptance. |
 | Public opening and sharing | H01 public contexts and staged v1 bootstrap (#150–#151). H02 Apple invitation UI, graph identity, permissions and resumable leave/rejoin (#152–#154). Demo adoption merged separately. | Recheck H02 on the current library pin, including rejoining after leave without restarting. Confirm supported device/account behavior and deploy the selected CloudKit schema for production. |
 | Account isolation | Default isolation and recovery policy (#147), public account-aware local opening and foreground CloudKit lifecycle. | Protected-data and independent-reader acceptance. Physical account-change trials and optional merge/deletion policies retain their existing beta backlog. |
-| Query, observation and attachments | Descriptor-first queries, async/Combine observation and durable CKAsset transport (#143–#146). [O04](https://github.com/bbruno84/GraphEvo/pull/186) selects live observation and rescan. It passed local regressions and explicit CloudKit import on a physical iPad. | Publish supported query and attachment envelopes. Validate automatic delivery, broader observer cost, and the remaining shared/interruption paths. |
+| Query, observation, attachments and File | Descriptor-first queries, async/Combine observation and durable CKAsset transport (#143–#146). O04 live observation/rescan (#186), synchronized File (#189/#190), and the S06/S07 value contract with 2 MiB ordinary attachments (#191). Bounded physical thresholds/limits acceptance closes the selected alpha block (#192). | Beta: optimize deletion planning; widen capacity/memory/source/network acceptance, automatic delivery, observer cost, and shared/interruption coverage. Publish supported envelopes from that evidence. |
 | Migration and recovery | Public staged v1 bootstrap, private cloud authority and empty-peer recovery, plus native conversion and maintenance recovery under Foundation grants. | Extend the MyHomeBills result from #185 to the supported source matrix and define cloud cutover, including returning offline v1 clients. |
 
 The public App Group alpha increment is integrated. Physical evidence covers a
@@ -26,8 +32,9 @@ The companion Demo pins `e0f2a07c` through
 [Demo PR #5](https://github.com/bbruno84/GraphEvoDemo/pull/5). The H02 device
 check for that pin remains open. The representative MyHomeBills migration and
 recovery passed on CloudKit Development in #185. O04 has local and bounded
-physical acceptance through #186. The next library increment defines supported
-query and attachment envelopes, including the costs visible to applications.
+physical acceptance through #186. The subsequent File/value increments and
+physical limits evidence are recorded above; the selected alpha thresholds/limits
+block is complete. Broader supported envelopes and optimization remain beta work.
 Enter beta after the B gates are accepted. Beta completes R validation, including
 real application adoption, performance and distribution.
 
