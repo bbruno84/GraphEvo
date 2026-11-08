@@ -176,7 +176,9 @@ actor StoreResources {
                     try AppGroupOwnerClaims.requireNoClaims(for: resolved)
                     try validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
                 }
-                if let bytes = try StoreOperationJournal.readUnderGrant(resolved) {
+                let deletionBytes = try StoreOperationJournal.readUnderGrant(resolved)
+                if case .graphDeletionRecovery = mode, deletionBytes == nil { throw StoreRuntimeError.resourceReserved }
+                if let bytes = deletionBytes {
                     struct Header: Decodable {
                         struct Graph: Decodable { let rawValue: UUID }
                         let operationID: UUID
@@ -187,8 +189,11 @@ actor StoreResources {
                     guard case .graphDeletionRecovery(let storeID, let operationID) = mode,
                           header.operationID == operationID, header.storeID == storeID,
                           header.graphID.rawValue == resolved.configuration.exclusiveGraphID else { throw StoreRuntimeError.resourceReserved }
-                    try AppGroupOwnerClaims.requireNoClaims(for: resolved, allowMissing: true)
+                    try StoreOperationJournal.requireDeletionIntent(resolved, operationID: operationID,
+                        graphID: header.graphID.rawValue, storeID: storeID)
                     try validateDestructionIdentity(url, graphID: header.graphID.rawValue, storeID: storeID)
+                    try AppGroupOwnerClaims.recoverAbandonedDeletionPeers(for: resolved)
+                    try AppGroupOwnerClaims.requireNoClaims(for: resolved, allowMissing: true)
                 }
                 let initialDescription = try nativeMigration == nil ? storeDescription(resolved, model: model,
                     requiredModelVersionIdentifier: schema.requiredModelVersionIdentifier, nativeMirroring: false) : nil
@@ -1062,8 +1067,13 @@ actor StoreResources {
                                           options: .forDeleting, reportDenial: true)
         do {
             try await request.run {
-                // A granted request has passed the live presenters. Any other
-                // registration still on disk is unresolved recovery evidence.
+                // Only the new exact deletion protocol can recover ordinary
+                // nonretiring registrations after this exclusive Apple grant.
+                if let operationID, !progress.withLock({ $0.issued }) {
+                    try StoreOperationJournal.requireDeletionIntent(resolved, operationID: operationID, graphID: graphID, storeID: storeID)
+                    try Self.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)
+                    try AppGroupOwnerClaims.recoverAbandonedDeletionPeers(for: resolved, keeping: presenter.generation)
+                }
                 try AppGroupOwnerClaims.requireSoleClaim(presenter.generation, for: resolved)
                 if !progress.withLock({ $0.issued }) {
                     try Self.validateDestructionIdentity(url, graphID: graphID, storeID: storeID)

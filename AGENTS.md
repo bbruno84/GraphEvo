@@ -1602,7 +1602,12 @@ binds exact operation, identity, zone, store UUID and source file identity. Vali
 before remote destruction or loading a replacement. Keep terminal journals beside the store with relative recovery references.
 Check them inside the existing Apple opening grant; do not introduce an earlier competing grant.
 Recover interrupted destruction only from recorded owner/artifact evidence under
-an exclusive Apple grant. Missing SQLite alone never certifies completion.
+an exclusive Apple grant. Before a receipt exists, exact terminal intent, source
+inode and native UUID may admit same-graph nonretiring abandoned peer recovery
+inside `.forDeleting`; validate the entire claim set first. Live presenters deny
+the grant. Foreign, generic, workspace, retiring or malformed evidence stays
+protected. Ordinary opening never cleans registrations. Missing SQLite alone
+never certifies completion.
 Ordinary record sends and sharing must not recreate missing zones. Initial private
 publication retains its one creation attempt; ambiguous failure can be resolved by
 explicit deletion, never implicit zone repair. Session format 12 refuses previous

@@ -106,6 +106,30 @@ enum AppGroupOwnerClaims {
         }
     }
 
+    /// A granted `.forDeleting` request excludes all other live cooperating
+    /// presenters. Exact terminal intent/native identity must be checked first.
+    /// Retiring, foreign and workspace registrations remain unresolved evidence.
+    static func recoverAbandonedDeletionPeers(for resolved: ResolvedStore, keeping generation: UUID? = nil) throws {
+        guard resolved.configuration.exclusiveGraphID != nil, resolved.configuration.workspaceID == nil else { throw StoreRuntimeError.resourceReserved }
+        let directory = try directory(for: resolved)
+        if !FileManager.default.fileExists(atPath: directory.path),
+           (try? FileManager.default.destinationOfSymbolicLink(atPath: directory.path)) == nil {
+            guard generation == nil else { throw StoreRuntimeError.resourceReserved }
+            return
+        }
+        try verifyDirectory(directory)
+        let entries = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        let claims = try entries.map { entry in
+            let claim = try read(entry)
+            _ = try verify(entry, generation: claim.generation, for: resolved)
+            guard claim.generation == generation || claim.retiring != true else { throw StoreRuntimeError.resourceReserved }
+            return (entry, claim)
+        }
+        guard generation.map({ expected in claims.contains(where: { $0.1.generation == expected }) }) ?? true else { throw StoreRuntimeError.resourceReserved }
+        // Validate the complete set before removing any abandoned peer.
+        for (entry, claim) in claims where claim.generation != generation { try FileManager.default.removeItem(at: entry) }
+    }
+
     static func requireDestructionClaim(_ generation: UUID, for resolved: ResolvedStore, anchor: URL? = nil) throws {
         let directory = try anchor.map(presentationURL(anchor:)) ?? directory(for: resolved)
         try verifyDirectory(directory)

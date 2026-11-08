@@ -46,6 +46,22 @@ package enum StoreOperationJournal {
         let data = try Data(contentsOf: journal)
         return data.isEmpty ? nil : data
     }
+    /// The caller holds the store's exclusive Apple deletion grant.
+    static func requireDeletionIntent(_ resolved: ResolvedStore, operationID: UUID, graphID: UUID, storeID: String) throws {
+        struct Header: Decodable {
+            struct Graph: Decodable { let rawValue: UUID }
+            struct Source: Decodable { let device: UInt64; let inode: UInt64 }
+            let format: Int
+            let operationID: UUID
+            let graphID: Graph
+            let storeID: String
+            let source: Source
+        }
+        guard let bytes = try readUnderGrant(resolved), let current = try resolved.fileIdentity() else { throw StoreRuntimeError.resourceReserved }
+        let value = try JSONDecoder().decode(Header.self, from: bytes)
+        guard value.format == 1, value.operationID == operationID, value.graphID.rawValue == graphID,
+              value.storeID == storeID, value.source.device == current.device, value.source.inode == current.inode else { throw StoreRuntimeError.resourceReserved }
+    }
     package static func read(_ configuration: StoreConfiguration) async throws -> Data? {
         // Empty return data represents absence; an existing empty file is corrupt.
         let value = try await update(configuration) { $0 ?? Data() }

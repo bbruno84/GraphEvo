@@ -93,3 +93,26 @@ independent sessions on one physical device. They do not certify same-account
 cross-device convergence, participant UI delivery, all account-switch interleavings,
 protected-data/storage/power faults or beta readiness. The XR has a different
 account and remains for shared Notes acceptance in the companion app increment.
+
+## Follow-up: ordinary process death before deletion
+
+[PR #196](https://github.com/bbruno84/GraphEvo/pull/196) fixes the gap.
+The Notes force-quit smoke exposed a case outside the original three destruction
+crash points: SIGKILL during ordinary opening left a nonretiring registration and
+blocked a later, newly requested deletion. The terminal protocol now recovers
+only exact same-graph nonretiring peers after an exclusive Apple deletion grant,
+matching durable intent, source inode and native UUID verification. It validates
+the complete registration set before deleting any peer evidence. Foreign or
+retiring registrations remain protected; ordinary opening does not clean them.
+
+Separate macOS processes pass five fresh cases: the original three SIGKILL
+points with container relocation and File cleanup; ordinary holder SIGKILL
+followed by fresh deletion and independent completion resume; and a still-live
+holder that defers deletion until normal detachment. Consumer input bytes remain
+unchanged. External evidence: `ge-deletion-stale-owner-process-20261108`.
+Focused deletion tests pass all 14 functions, including parameterized foreign and
+retiring claims. The complete macOS v2 profile before the additional missing-intent regression passes 792 functions (665 store,
+94 runtime, 33 model). The corresponding iOS 18.5 Simulator profile passes
+790 functions with zero failures or skips before that additional regression.
+The final missing-intent regression also passes separately on iOS (1 test,
+zero failures/skips). This follow-up does not add new real-CloudKit evidence.
