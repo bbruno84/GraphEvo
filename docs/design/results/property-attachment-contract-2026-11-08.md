@@ -74,7 +74,7 @@ check avoids repeated empty owner fetches for graphs without named attachments.
 
 ## Validation
 
-The final macOS v2 profile passes all **769 tests**: 645 store, 91 runtime and
+The initial contract checkpoint passes all **769 macOS v2 tests**: 645 store, 91 runtime and
 33 model tests. It includes the 2,000-record query capacity fixture with its
 unchanged step budget and the complete large-publication fixture. The legacy
 macOS facade passes all **331 tests**. Manifest validation and `git diff --check`
@@ -93,18 +93,23 @@ A controlled local-only counterfactual with the read grant disabled completed in
 84.718 seconds. This is diagnostic evidence, not an allowed shipping mode.
 With the selected read protection retained, the complete Debug publication and
 independent recovery passed every assertion in 214.782 seconds; the final broad run repeats that
-success in 214.120 seconds. The capacity
-case now has a five-minute hang guard; ordinary activation cases retain their
+success in 214.120 seconds. At that checkpoint, the capacity
+case received a five-minute hang guard; ordinary activation cases retained their
 explicit two-minute guards. No correctness assertion, query work/byte budget,
 writer exclusion or read protection was removed. No diagnostic environment
 switch or alternate read mode from this counterfactual remains in the fixture.
 
-The timing is a synthetic macOS Debug functional fixture with repeated native
-validation, not a production latency certificate. Native read coordination has a
-real cost; PA05 retains the need for representative Release/device measurement
-and optimization before supported performance claims. Core Data also emits external-reference
-clone diagnostics during temporary fixture cleanup; passing assertions do not
-turn those messages into independent integrity certificates.
+These are historical timings from the initial contract checkpoint. The subsequent
+[cost investigation](initial-publication-cost-2026-11-08.md) identifies and corrects
+two local regressions while retaining native read coordination. The same complete
+fixture now passes in 12.83 seconds Debug and 12.59/12.66 seconds Release, with
+the original two-minute hang guard restored. Final validation passes 773 macOS
+v2 tests, 331 legacy tests, both Swift 6 consumers and 197 affected iOS tests;
+physical iPad/XR replicas reopen and verify the existing values. The investigation
+report separates synthetic local timing from physical correctness and unmeasured
+network/device performance. Broader PA05 acceptance remains open. Core Data also
+emits external-reference clone diagnostics during temporary fixture cleanup;
+passing assertions do not turn those messages into independent integrity certificates.
 
 ## Limits
 

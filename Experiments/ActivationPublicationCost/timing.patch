@@ -1,0 +1,101 @@
+--- a/Tests/GraphEvoStoreTests/GraphCloudActivationTests.swift
++++ b/Tests/GraphEvoStoreTests/GraphCloudActivationTests.swift
+@@ -7,0 +8,49 @@
++
++private final class ActivationNativeCostProfile: @unchecked Sendable {
++    private let lock = NSLock()
++    private var totals: [String: (calls: Int, seconds: Double)] = [:]
++    func measure<Value>(_ name: String, _ body: () throws -> Value) rethrows -> Value {
++        let began = ContinuousClock.now
++        defer {
++            let duration = began.duration(to: .now).components
++            lock.withLock {
++                let old = totals[name] ?? (0, 0)
++                totals[name] = (old.calls + 1, old.seconds + Double(duration.seconds) + Double(duration.attoseconds) / 1e18)
++            }
++        }
++        return try body()
++    }
++    func report() {
++        let snapshot = lock.withLock { totals }
++        for key in snapshot.keys.sorted() {
++            let value = snapshot[key]!
++            FileHandle.standardError.write(Data("NATIVE \(key) calls=\(value.calls) seconds=\(value.seconds)\n".utf8))
++        }
++    }
++    func wrapping(_ base: GraphCoordinatorAdapter) -> GraphCoordinatorAdapter {
++        guard let sync = base.sync, let cloud = sync.cloud else { return base }
++        let measuredCloud = GraphCloudStoreAdapter(prepare: { c, id, b, n, limits, selected in
++            try self.measure("prepare") { try cloud.prepare(c, id, b, n, limits, selected) }
++        }, finishPrepared: { c, id, b, batch, limits in
++            try self.measure("finish") { try cloud.finishPrepared(c, id, b, batch, limits) }
++        }, currentAttempt: { c, id, b, limits in
++            try self.measure("current") { try cloud.currentAttempt(c, id, b, limits) }
++        }, sent: { c, id, b, receipts, assets, remoteAssets, files, limits in
++            try self.measure("sent") { try cloud.sent(c, id, b, receipts, assets, remoteAssets, files, limits) }
++        }, apply: { c, id, b, effects, limits in
++            try self.measure("apply") { try cloud.apply(c, id, b, effects, limits) }
++        }, trim: { c, id, b, cleanup in
++            try self.measure("trim") { try cloud.trim(c, id, b, cleanup) }
++        })
++        var measuredSync = GraphSyncAdapter(cloud: measuredCloud, collect: { c, id, limits in
++            try self.measure("collect") { try sync.collect(c, id, limits) }
++        }, prepare: sync.prepare, acknowledge: sync.acknowledge, importPatches: sync.importPatches)
++        measuredSync.policy = sync.policy
++        var result = GraphCoordinatorAdapter(graph: base.graph, sync: measuredSync, v1Conversion: base.v1Conversion,
++            migrationSource: base.migrationSource, initializePolicy: base.initializePolicy, publication: base.publication,
++            workspace: base.workspace, prepareWorkspace: base.prepareWorkspace, validateBackup: base.validateBackup,
++            account: base.account, initialize: base.initialize)
++        result.activation = base.activation; result.nativeV1Migration = base.nativeV1Migration
++        return result
++    }
++}
+@@ -120 +169 @@
+-    private func fixture(_ server: ActivationServer, oversized: Bool = false, attachments: Bool = false, id: GraphID = GraphID(), container: String? = nil) async throws -> Fixture {
++    private func fixture(_ server: ActivationServer, oversized: Bool = false, attachments: Bool = false, id: GraphID = GraphID(), container: String? = nil, adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) async throws -> Fixture {
+@@ -122 +171 @@
+-        let m = manager()
++        let m = manager(adapter: adapter)
+@@ -298,3 +347,16 @@
+-    @Test(.timeLimit(.minutes(2))) func publishesAndRecoversSeedAboveTheFormerAggregatePayloadLimit() async throws {
+-        let server = ActivationServer(), f = try await fixture(server)
+-        defer { try? FileManager.default.removeItem(at: f.root) }
++    @Test(.timeLimit(.minutes(5))) func publishesAndRecoversSeedAboveTheFormerAggregatePayloadLimit() async throws {
++        let began = ContinuousClock.now
++        var prior = began
++        func mark(_ stage: String) {
++            let now = ContinuousClock.now
++            let elapsed = prior.duration(to: now).components
++            let total = began.duration(to: now).components
++            let line = "PROFILE " + stage + " phase=" + String(Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18) + " total=" + String(Double(total.seconds) + Double(total.attoseconds) / 1e18) + "\n"
++            FileHandle.standardError.write(Data(line.utf8)); prior = now
++        }
++        let nativeCosts = ActivationNativeCostProfile()
++        defer { nativeCosts.report() }
++        let measured = nativeCosts.wrapping(GraphCoordinatorFactory.adapter)
++        let server = ActivationServer(), f = try await fixture(server, adapter: measured)
++        defer { try? FileManager.default.removeItem(at: f.root) }
++        mark("fixture")
+@@ -307,0 +370 @@
++        mark("insert")
+@@ -308,0 +372 @@
++        mark("prepare")
+@@ -310 +374 @@
+-        for _ in 0..<ids.count + 4 where phase != .published {
++        for iteration in 0..<ids.count + 4 where phase != .published {
+@@ -313,0 +378 @@
++            mark("advance_" + String(iteration))
+@@ -318,2 +383,3 @@
+-
+-        let peer = manager()
++        mark("close_owner")
++
++        let peer = manager(adapter: measured)
+@@ -322,0 +389 @@
++        mark("start_peer")
+@@ -324,0 +392 @@
++        mark("open_replica")
+@@ -330,0 +399 @@
++        mark("verify_replica")
+@@ -332,0 +402 @@
++        mark("close_peer")

@@ -72,7 +72,7 @@ enum GraphNativePropertyStorage {
             guard v.isFinite else { throw GraphModelError.invalidValue }
             return v == 0 && v.sign == .minus ? try envelope(.floating) : native(.floating, "ge2Double", v)
         case .decimal(let v): guard !v.isNaN else { throw GraphModelError.invalidValue }; return try envelope(.decimal)
-        case .string(let v): return v.utf8.contains(0) ? try envelope(.string) : native(.string, "ge2String", v)
+        case .string(let v): return containsNull(v) ? try envelope(.string) : native(.string, "ge2String", v)
         case .date(let v):
             let interval = v.timeIntervalSinceReferenceDate
             guard interval.isFinite else { throw GraphModelError.invalidValue }
@@ -83,10 +83,14 @@ enum GraphNativePropertyStorage {
         case .object: return try envelope(.object)
         }
     }
+    // Core Data can return foreign NSString storage; avoid per-byte Swift bridging.
+    private static func containsNull(_ value: String) -> Bool {
+        (value as NSString).range(of: "\0", options: .literal).location != NSNotFound
+    }
     static func requiresEnvelope(_ value: GraphValue) -> Bool {
         switch value {
         case .decimal, .array, .object: return true
-        case .string(let string): return string.utf8.contains(0)
+        case .string(let string): return containsNull(string)
         case .floatingPoint(let number): return number == 0 && number.sign == .minus
         case .date(let date): return date.timeIntervalSinceReferenceDate == 0 && date.timeIntervalSinceReferenceDate.sign == .minus
         case .url(let url): return url.baseURL != nil
@@ -138,7 +142,7 @@ enum GraphNativePropertyStorage {
                   string.utf8.allSatisfy({ (48...57).contains($0) }), let value = UInt64(string),
                   String(repeating: "0", count: 20 - String(value).count) + String(value) == string else { throw GraphStoreError.corruptIdentity }
             result = .unsignedInteger(value)
-        case .string: guard let v = row.value(forKey: field!) as? String, !v.utf8.contains(0) else { throw GraphStoreError.corruptIdentity }; result = .string(v)
+        case .string: guard let v = row.value(forKey: field!) as? String else { throw GraphStoreError.corruptIdentity }; result = .string(v)
         case .data: throw GraphStoreError.corruptIdentity
         case .date: guard let v = row.value(forKey: field!) as? Date, v.timeIntervalSinceReferenceDate.isFinite else { throw GraphStoreError.corruptIdentity }; result = .date(v)
         case .uuid: guard let v = row.value(forKey: field!) as? UUID else { throw GraphStoreError.corruptIdentity }; result = .uuid(v)

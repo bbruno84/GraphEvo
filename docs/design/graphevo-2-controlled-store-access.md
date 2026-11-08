@@ -8,6 +8,11 @@ integrate through #144. No public
 opening API is added. Native S04 and ordinary
 serialized application values stay unchanged.
 
+The value-channel statements below describe the historical consolidation.
+The current [S06/S07 contract](graphevo-2-property-attachments.md) supersedes them:
+scalars and supported collections remain properties; Data and generic Codable
+use keyed attachments.
+
 ## Selected configuration
 
 The maintainer selected descriptor-first Core Data queries with query-local
@@ -63,13 +68,23 @@ survives workspace discard. Unmarked read-only archives and stopped v1
 sources can still open without creating coordination directories.
 
 Apple grants cover native opening, transactions, close and destruction.
-Reads keep their existing query-generation snapshot. A local FIFO writer gate
+Reads keep their existing query-generation snapshot. S06/S07 additionally retain
+a finite, unassociated Foundation read intent through external-content copying
+and context reset; the SQL generation alone does not retain old external bytes.
+A local FIFO writer gate
 and the same-store reentry check remain in force. A native SQLite writer
 completes its synchronous callback, save and context cleanup within one
 accessor. Cancellation before the save aborts the operation. A successful
 save returns its committed result.
 
 A presenter and durable owner registration follow each native coordinator.
+The presenter watches the existing stable `.owners-v1` descendant directory;
+ordinary intents still coordinate on the canonical root. Root deletion consults
+that descendant presenter, preserving live-owner refusal without ordinary
+same-item presenter handoffs. Use `coordinationDirectory`, never
+`presentedItemURL`, for operation, copy and registration-cleanup anchors. Atomic
+replacement of an individual generation file does not replace the presented
+directory. See the [scope and cost evidence](results/initial-publication-cost-2026-11-08.md).
 Close removes the registration after confirmed detachment. Destruction uses
 a deletion grant and verifies the sole registration before native changes.
 A failed or interrupted destruction can leave a retirement registration that

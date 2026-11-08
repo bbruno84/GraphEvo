@@ -296,7 +296,7 @@ actor StoreResources {
     private static func detachCoordinatedStores(_ container: NSPersistentContainer, presenter: AppGroupStorePresenter,
                                       resolved: ResolvedStore) throws {
         try detachStores(container)
-        try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.presentedItemURL)
+        try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.coordinationDirectory)
         presenter.unregister()
     }
 
@@ -820,7 +820,7 @@ actor StoreResources {
                 do { try Self.detachStores(container) }
                 catch { throw StoreRuntimeError.shutdownFailed(resolved.url, underlying: error) }
                 try body()
-                try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.presentedItemURL)
+                try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.coordinationDirectory)
                 presenter.unregister()
             }
         } catch is AppGroupAccessDenied { throw StoreRuntimeError.resourceReserved }
@@ -922,8 +922,9 @@ actor StoreResources {
         let destinationAnchor = try SQLiteStoreCoordination.directory(destinationResource)
         let destinationAnchorIdentity = try SQLiteStoreCoordination.identity(destinationAnchor)
         let sourceAnchorIdentity = appGroupPresenter?.directoryIdentity
-        let sourceAccess: CoordinatedFiles.Access = if let presenter = appGroupPresenter,
-            let directory = presenter.presentedItemURL { .read(directory) } else { .read(source) }
+        let sourceAccess: CoordinatedFiles.Access = if let presenter = appGroupPresenter {
+            .read(presenter.coordinationDirectory)
+        } else { .read(source) }
         let container = container, readOnly = resolved.configuration.access == .readOnly
         let sourceIdentity = try attachedIdentity ?? resolved.fileIdentity(), resolved = resolved
         let value: Value
@@ -1095,7 +1096,7 @@ actor StoreResources {
                     progress.withLock { _ = $0.artifacts?.removeValue(forKey: item) }
                 }
                 try hooks.didDestroy?()
-                try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.presentedItemURL)
+                try AppGroupOwnerClaims.remove(presenter.generation, for: resolved, anchor: presenter.coordinationDirectory)
                 presenter.unregister()
             }
         } catch {

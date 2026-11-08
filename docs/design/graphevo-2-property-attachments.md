@@ -48,6 +48,12 @@ a concurrent replacement. The read intent uses the existing store coordinator
 without associating the writer presenter, so the same presenter cannot bypass
 an active reader. Historical schema profiles retain their existing behavior.
 Synchronous read bodies must finish before a waiting writer can proceed.
+Lifetime presentation watches the stable `.owners-v1` child directory while
+finite intents continue to coordinate the same canonical root. Parent deletion
+still consults the descendant presenter. Operations, copies and claim cleanup
+must use `coordinationDirectory`, not the presentation URL. This avoids redundant
+same-item presenter handoffs without changing exclusion or persisted formats;
+see the [cost investigation](results/initial-publication-cost-2026-11-08.md).
 `withFileURL` retains normal store admission but reads native File metadata without
 the binary grant; its immutable revision remains protected by the existing
 per-file Foundation intent through the callback.

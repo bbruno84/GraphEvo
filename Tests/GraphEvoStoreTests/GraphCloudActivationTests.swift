@@ -295,7 +295,7 @@ actor ActivationServer {
         try await close(f)
     }
 
-    @Test(.timeLimit(.minutes(5))) func publishesAndRecoversSeedAboveTheFormerAggregatePayloadLimit() async throws {
+    @Test(.timeLimit(.minutes(2))) func publishesAndRecoversSeedAboveTheFormerAggregatePayloadLimit() async throws {
         let server = ActivationServer(), f = try await fixture(server)
         defer { try? FileManager.default.removeItem(at: f.root) }
         let ids = (0..<36).map { _ in f.graph.makeNodeID() }

@@ -42,6 +42,12 @@ Apple read intent through external-content detachment and context reset. Do not
 wait for a writer inside a synchronous read body. File URL scopes retain native
 admission with their existing per-revision intent, without the binary-store read
 grant; keep those scopes free of attachment body reads.
+Lifetime presentation watches the stable `.owners-v1` directory below the
+coordination root. Keep all ordinary intents, copies and claim cleanup anchored
+at `coordinationDirectory`, never `presentedItemURL`. Root deletion must still
+consult the descendant presenter; individual registration replacement must not
+replace the presented directory. See the
+[cost investigation](docs/design/results/initial-publication-cost-2026-11-08.md).
 
 ## Selected v2 synchronization transition
 

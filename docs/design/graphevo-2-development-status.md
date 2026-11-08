@@ -17,12 +17,16 @@ it does not change the integrated checkpoint below. The
 [acceptance report](results/property-attachment-contract-2026-11-08.md) records
 real iPad/XR cross-account recovery, replacements in both directions and reopen,
 including the oversized migrated value. It also records the native invitation
-flag correction and the external-binary read-grant finding. Final local
-validation passes 769 v2 tests, 331 legacy tests, both Swift 6 consumers and
-three rejected-property compile fixtures. Affected iOS groups pass without
-skips; their overlapping scopes are detailed in the report. The Debug capacity
-case takes about 215 seconds with the selected read protection, so representative
-Release/device cost acceptance remains open.
+flag correction and the external-binary read-grant finding. The subsequent
+[cost investigation](results/initial-publication-cost-2026-11-08.md) corrects
+foreign-string scanning and redundant Foundation presenter handoffs: the same
+complete synthetic publication/recovery falls from 214 to 13 seconds Debug and
+174 to 12.6 seconds Release, retaining read protection and restoring the original
+two-minute guard. Final local validation passes 773 v2 tests, 331 legacy tests,
+both Swift 6 consumers and 197 affected iOS tests without skips. Three rejected-
+property compile fixtures passed at the initial contract checkpoint. Physical
+iPad/XR replicas reopen and verify with the correction; this does not measure
+device throughput. Broader capacity and actual CloudKit latency remain open.
 
 ## Current position — 2026-11-07
 

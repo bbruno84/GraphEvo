@@ -6,7 +6,7 @@ struct AppGroupAccessDenied: Error {
     let underlying: any Error
 }
 
-/// A single finite Apple coordination request.
+/// A single finite Apple request on the shared root, distinct from lifetime presentation.
 final class AppGroupStoreAccess: @unchecked Sendable {
     // Foundation permits cancel() from any thread. Submission and the accessor
     // remain confined to their designated operation queues.
@@ -47,9 +47,7 @@ final class AppGroupStoreAccess: @unchecked Sendable {
     }
 
     func run<Value: Sendable>(_ body: @escaping @Sendable () throws -> Value) async throws -> Value {
-        guard let directory = presenter.presentedItemURL else {
-            throw StoreRuntimeError.invalidConfiguration("App Group coordination requires its owner's directory.")
-        }
+        let directory = presenter.coordinationDirectory
         let expected = directory.standardizedFileURL.path
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in

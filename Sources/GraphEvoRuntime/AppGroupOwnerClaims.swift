@@ -10,9 +10,12 @@ enum AppGroupOwnerClaims {
         var retiring: Bool? = nil
     }
 
+    static func presentationURL(anchor: URL) -> URL {
+        anchor.appendingPathComponent(".owners-v1", isDirectory: true)
+    }
+
     private static func directory(for resolved: ResolvedStore) throws -> URL {
-        try SQLiteStoreCoordination.directory(resolved, create: false)
-            .appendingPathComponent(".owners-v1", isDirectory: true)
+        presentationURL(anchor: try SQLiteStoreCoordination.directory(resolved, create: false))
     }
 
     private static func verifyDirectory(_ url: URL) throws {
@@ -58,7 +61,7 @@ enum AppGroupOwnerClaims {
     }
 
     static func remove(_ generation: UUID, for resolved: ResolvedStore, anchor: URL? = nil) throws {
-        let directory = try anchor?.appendingPathComponent(".owners-v1", isDirectory: true) ?? directory(for: resolved)
+        let directory = try anchor.map(presentationURL(anchor:)) ?? directory(for: resolved)
         try verifyDirectory(directory)
         let entry = directory.appendingPathComponent(generation.uuidString)
         try verify(entry, generation: generation, for: resolved)

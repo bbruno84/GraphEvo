@@ -22,10 +22,13 @@ part of beta validation. Current branch evidence belongs to the development
 status page until integration. The
 [bounded physical checkpoint](results/property-attachment-contract-2026-11-08.md)
 verifies private/shared exchange and reopen on iPad/XR; it does not close the
-broader gates above. The 36-large-property publication/recovery capacity case
-passes with native read coordination but takes about 215 seconds in macOS Debug.
-Retain representative Release/device cost measurement before performance claims;
-the functional test's five-minute hang guard is not a supported latency target.
+broader gates above. The selected 36-large-property publication/recovery
+regression is corrected by the [cost investigation](results/initial-publication-cost-2026-11-08.md):
+214 to 13 seconds Debug and 174 to 12.6 seconds Release, with native read
+coordination retained and the original two-minute hang guard restored. Physical
+reopen verifies correctness, not throughput. Representative device capacity,
+actual CloudKit network latency and production-data acceptance remain open;
+this result does not close PA05/PA06/PA08 or establish a supported latency target.
 
 ## H01 public entry — 2026-11-04
 

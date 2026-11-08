@@ -102,3 +102,31 @@ import GraphEvoStore
     }
 
 }
+
+
+extension GraphTypedPropertyStorageTests {
+    @Test func nativeStringRepresentationPreservesUnicodeAndRefusesInlineNull() async throws {
+        let values: [(String, Int)] = [("", 0), ("\\0", 0), ("e\u{301}🙂", 0),
+            ("\0", 1), ("\0prefix", 1), ("e\u{301}\0🙂", 1), ("suffix\0", 1)]
+        for (value, encoding) in values {
+            #expect(Int(try GraphNativePropertyStorage.prepare(.string(value)).encoding) == encoding)
+        }
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let graph = try await GraphContext().createGraph(id: GraphID(), at: root.appendingPathComponent("Strings.sqlite"))
+        let id = graph.makeNodeID()
+        try await graph.transaction { try $0.insert(GraphRecord(id: id, type: "String", properties: ["text": .string("safe")])) }
+        try await graph.transaction { scope in
+            try scope.withContext { c, _ in
+                let fetch = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityPropertyName)
+                fetch.predicate = NSPredicate(format: "name == %@", "text")
+                let row = try #require(try c.fetch(fetch).first)
+                let original = row.value(forKey: "ge2String")
+                defer { row.setValue(original, forKey: "ge2String") }
+                row.setValue("e\u{301}\0🙂", forKey: "ge2String")
+                #expect(throws: GraphStoreError.self) { try GraphNativePropertyStorage.read(row) }
+            }
+        }
+        #expect(try await graph.read { try $0.record(for: id)?.properties["text"] } == .string("safe"))
+        try await graph.close()
+    }
+}
