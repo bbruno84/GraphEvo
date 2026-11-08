@@ -148,6 +148,12 @@ these are different workloads and this result alone does not select an API chang
 
 ## Remaining acceptance and reproduction
 
+The maintainer accepts the selected thresholds/limits block as **closed for
+alpha**, integrating evidence through #192. The deletion optimization and wider
+physical/source/network verification remain beta backlog. Review of laboratory
+implementation `15d5bb15` found no unresolved integration blocker; final closure
+notes change documentation only. This acceptance changes no runtime or limit.
+
 The selected physical functional cases pass. Broader PA05/PA06/PA08 remain open:
 larger/mixed graphs, 50 GB physical File acceptance, jetsam and memory pressure,
 provider storage, protected data, interrupted backup/conversion, wider source
