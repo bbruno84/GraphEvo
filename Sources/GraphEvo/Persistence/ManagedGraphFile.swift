@@ -57,7 +57,8 @@ final class ManagedGraphFile: ManagedEntity {
 extension ManagedGraphFile {
     static func root(in context: NSManagedObjectContext, relocatingTo destination: URL? = nil) throws -> URL {
         guard let coordinator = context.persistentStoreCoordinator,
-              coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphFileDisk.schemaIdentifier)],
+              (coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphFileDisk.schemaIdentifier)] ||
+               coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphNativeAttachmentStorage.fileIdentifier)]),
               coordinator.persistentStores.count == 1, let store = coordinator.persistentStores.first,
               store.type == NSSQLiteStoreType, let url = store.url else { throw GraphFileError.unavailable }
         guard let rawID = coordinator.metadata(for: store)[NSStoreUUIDKey] as? String,

@@ -14,7 +14,7 @@ package enum GraphCloudAsset {
     static func bytes(_ value: Any?) throws -> Data {
         if let data = value as? Data {
             try validateNativeByteCount(UInt64(data.count))
-            guard data.count <= GraphAttachmentPayload.maximumByteCount else { throw GraphCloudError.inboxLimit }
+            guard data.count <= Int(GraphCloudAsset.maximumNativeByteCount) else { throw GraphCloudError.inboxLimit }
             return data
         }
         guard let asset = value as? CKAsset, let url = asset.fileURL, url.isFileURL,
@@ -23,12 +23,12 @@ package enum GraphCloudAsset {
         defer { try? file.close() }
         let size = try file.seekToEnd()
         try validateNativeByteCount(size)
-        guard size <= UInt64(GraphAttachmentPayload.maximumByteCount) else { throw GraphCloudError.inboxLimit }
+        guard size <= UInt64(Int(GraphCloudAsset.maximumNativeByteCount)) else { throw GraphCloudError.inboxLimit }
         try file.seek(toOffset: 0)
         var data = Data()
         while true {
             try Task.checkCancellation()
-            let remaining = GraphAttachmentPayload.maximumByteCount - data.count
+            let remaining = Int(GraphCloudAsset.maximumNativeByteCount) - data.count
             guard let chunk = try file.read(upToCount: min(256 * 1024, remaining + 1)), !chunk.isEmpty else { break }
             guard chunk.count <= remaining else { throw GraphCloudError.inboxLimit }
             data.append(chunk)

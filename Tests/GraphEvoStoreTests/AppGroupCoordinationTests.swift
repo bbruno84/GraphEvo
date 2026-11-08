@@ -42,7 +42,7 @@ private actor AsyncCheckpoint {
         try await graph.close()
 
         let resolved = try ResolvedStore(.init(location: .sqlite(url), exclusiveGraphID: id.rawValue, appGroup: group))
-        let schema = GraphRuntimeSchema.typedProperties
+        let schema = GraphRuntimeSchema.attachmentProperties
         let owner = UUID(), identity = try resolved.fileIdentity()
         // The shared gateway UUID lets this fixture use two independent
         // coordinators while still executing the real Apple access path.
@@ -115,7 +115,7 @@ private actor AsyncCheckpoint {
         let fault = StoreRegistry(hooks: .init(didLoadStore: { _ in throw StoreRuntimeError.resourceReserved }))
         let configuration = StoreConfiguration(location: .sqlite(url), exclusiveGraphID: id.rawValue, appGroup: group)
         await #expect(throws: StoreRuntimeError.self) {
-            try await fault.open(configuration, schema: GraphRuntimeSchema.typedProperties, mode: .existing)
+            try await fault.open(configuration, schema: GraphRuntimeSchema.attachmentProperties, mode: .existing)
         }
         let owners = url.deletingLastPathComponent().appendingPathComponent(".owners-v1")
         #expect(try FileManager.default.contentsOfDirectory(atPath: owners.path).isEmpty)
@@ -140,14 +140,14 @@ private actor AsyncCheckpoint {
         var assets: [GraphAttachmentMetadata] = []
         for number in 1...2 {
             let input = root.appendingPathComponent("asset-\(number).bin")
-            try Data(repeating: UInt8(number), count: 4 * 1024 * 1024).write(to: input)
+            try Data(repeating: UInt8(number), count: 2 * 1024 * 1024).write(to: input)
             assets.append(try await graph.importAttachment(from: input, ownedBy: owner))
             try FileManager.default.removeItem(at: input)
         }
         try await graph.close()
 
         let configuration = StoreConfiguration(location: .sqlite(url), exclusiveGraphID: graphID.rawValue, appGroup: group)
-        let schema = GraphRuntimeSchema.typedProperties
+        let schema = GraphRuntimeSchema.attachmentProperties
         let adapter = GraphCoordinatorFactory.adapter.graph
         let submitted = AsyncCheckpoint()
         let registry = StoreRegistry(hooks: .init(didSubmitCoordinatedWrite: { Task { await submitted.signal() } }))
@@ -239,7 +239,7 @@ private actor AsyncCheckpoint {
         for (index, asset) in assets.enumerated() {
             let observed = try #require(try await fresh.attachment(asset.id))
             #expect(observed.metadata == asset)
-            #expect(observed.data == Data(repeating: UInt8(index + 1), count: 4 * 1024 * 1024))
+            #expect(observed.data == Data(repeating: UInt8(index + 1), count: 2 * 1024 * 1024))
         }
         try await fresh.close()
         let files = try FileManager.default.contentsOfDirectory(atPath: root.path)
@@ -266,21 +266,18 @@ private actor AsyncCheckpoint {
             try await secondary.readAppGroupGraph(id: id) { scope in
                 let before = try scope.record(for: note)
                 Task { await entered.signal() }
-                if release.wait(timeout: .now() + 10) == .timedOut { Issue.record("Concurrent writer did not finish.") }
+                if release.wait(timeout: .now() + 10) == .timedOut { Issue.record("Coordinated reader was not released.") }
                 let after = try scope.record(for: note)
                 return before == nil && after == nil
             }
         }
         await entered.wait()
-        let written: GraphAppGroupOperationResult<GraphNodeID>
-        do {
-            written = try await secondary.transactionAppGroupGraph(id: id) { try $0.insert(.init(id: note, type: "Note")) }
-            release.signal()
-        } catch {
-            release.signal()
-            _ = try? await reading.value
-            throw error
+        let writing = Task {
+            try await secondary.transactionAppGroupGraph(id: id) { try $0.insert(.init(id: note, type: "Note")) }
         }
+        // S06 readers retain their Apple grant, so a writer waits for this read.
+        release.signal()
+        let written = try await writing.value
         #expect(written.value == note)
         #expect(try await reading.value.value)
         #expect(try await secondary.readAppGroupGraph(id: id) { try $0.record(for: note)?.id }.value == note)
@@ -321,7 +318,7 @@ private actor AsyncCheckpoint {
             environment: .development, directory: root.appendingPathComponent("Cloud"))
         let configuration = GraphAppGroupConfiguration(identifier: "fixture", role: .primary, allowsCloudSynchronization: true)
         func primary(account: String) -> GraphContext {
-            let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+            let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
                 adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: configuration)
             let driver = GraphCloudAdapter(account: { _ in account }, make: { _, _, _, _ in
                 GraphCloudDriver(fetch: { _ in }, cancel: {})
@@ -568,6 +565,6 @@ private func appGroupContext(_ group: AppGroupStoreLocation, role: GraphAppGroup
                              access: GraphAppGroupConfiguration.SecondaryAccess = .readOnly, label: String? = nil,
                              registry: StoreRegistry = .shared) -> GraphContext {
     let configuration = role.map { GraphAppGroupConfiguration(identifier: "fixture", role: $0, secondaryAccess: access, diagnosticLabel: label) }
-    return GraphContext(manager: GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
+    return GraphContext(manager: GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties,
         adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group, publicAppGroup: configuration))
 }

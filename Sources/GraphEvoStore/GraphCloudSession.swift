@@ -117,7 +117,7 @@ actor GraphCloudSession {
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
                 if doc.format == 8, !config.allowsSessionUpgradeFromV8 { throw GraphCloudDiscoveryError.sessionUpgradeRequired }
-                guard (doc.format == 8 || doc.format == 9), doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
+                guard doc.format == 10, doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
                 guard doc.account == account else { await accountSignal(.differentAccount); throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -135,7 +135,6 @@ actor GraphCloudSession {
                         && ($0.role == .owner || $0.storeID?.isEmpty == false)
                         && ($0.phase != .removed || !doc.bindings.contains($0.binding))
                       }) else { throw GraphCloudError.invalidState }
-                guard doc.format != 8 || (doc.joins == nil && doc.memberships.allSatisfy { $0.nativePresentationPending == nil }) else { throw GraphCloudError.invalidState }
                 let joins = doc.joins ?? []
                 guard Set(joins.map(\.id)).count == joins.count,
                       Set(joins.filter { $0.phase != .discarded }.map { $0.invitation.zone }).count == joins.filter({ $0.phase != .discarded }).count else { throw GraphCloudError.invalidState }
@@ -206,12 +205,6 @@ actor GraphCloudSession {
                 try await spool.presence(reference, role: .incoming,
                     identity: GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account),
                     binding: reference.binding, recordName: reference.recordName)
-            }
-            if doc.format == 8 {
-                doc.format = 9
-                let encoded = try JSONEncoder().encode(doc)
-                guard encoded.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
-                try disk.write(url, encoded)
             }
             let session = GraphCloudSession(configuration: config, owner: owner, adapter: adapter, disk: disk, lease: lease, document: doc, accountSignal: accountSignal)
             // Restoring shared state also restores shared engine ownership, even before a graph reopens.

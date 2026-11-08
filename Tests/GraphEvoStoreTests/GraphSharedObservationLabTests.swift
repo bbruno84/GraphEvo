@@ -110,7 +110,7 @@ private struct IndependentlyDecodedItem: GraphModel {
         try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: b, properties: ["rank": .set(.integer(0))], addingTags: ["ready"])) }
         _ = try await waitForObservation(relation) { $0.items.map(\.id) == [a] }; _ = try await waitForObservation(actions) { $0.items.map(\.id) == [a] }
         _ = try await waitForObservation(ordered) { $0.items.first?.id == b }
-        try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: b, properties: ["rank": .set(.data(Data([1])))])) }
+        try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: b, properties: ["rank": .set(.array([.integer(1)]))])) }
         var iterator = ordered.makeAsyncIterator()
         while let state = await iterator.next() { if case .failure = state { break } }
         try await graph.transaction { _ = try $0.patch(GraphRecordPatch(id: b, properties: ["rank": .set(.integer(3))])) }

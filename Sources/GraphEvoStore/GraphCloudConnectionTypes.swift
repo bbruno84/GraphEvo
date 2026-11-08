@@ -9,6 +9,7 @@ public struct GraphCloudConnectionConfiguration: Sendable, Equatable {
     public let maximumEvents: Int
     public let maximumBytes: Int
     /// Explicitly permits a validated, lossless session-document upgrade; never resets engine state.
+    /// Historical compatibility option; current format 10 never upgrades an older session.
     public let allowsSessionUpgradeFromV8: Bool
     var native: GraphCloudConfiguration
 

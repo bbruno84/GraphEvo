@@ -170,9 +170,9 @@ private func fixtureDirectory() throws -> URL {
         let url = directory.appendingPathComponent("Graph.sqlite")
         let store = try await GraphStore.open(at: url)
         let person = Person(id: store.makeNodeID(), name: "Ada")
-        let opaque = try GraphEncodedValue(codec: "app.future", version: 27, data: Data([0, 255, 128]))
+        let opaque = try GraphLegacyEncodedValue(codec: "app.future", version: 27, data: Data([0, 255, 128]))
         let extras: [String: GraphValue] = [
-            "uuid": .uuid(UUID()), "opaque": .encoded(opaque), "null": .null,
+            "uuid": .uuid(UUID()), "opaque": .object(["codec": .string(opaque.codec), "bytes": .string(opaque.data.base64EncodedString())]), "null": .null,
             "max": .unsignedInteger(.max), "min": .integer(.min),
             "decimal": .decimal(Decimal(string: "123456.7890123456789")!),
             "date": .date(Date(timeIntervalSince1970: 1_234_567.125)),

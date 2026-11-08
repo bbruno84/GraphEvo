@@ -43,7 +43,7 @@ private struct BootstrapFault: Error {}
         // Retain MF09's bounded-recipe lifecycle and injection coverage. MF11's
         // default native route has its own stage/recovery regressions.
         var bounded = adapter; bounded.nativeV1Migration = nil
-        return .init(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: bounded)
+        return .init(registry: registry, schema: GraphRuntimeSchema.attachmentProperties, adapter: bounded)
     }
     private func adapter(snapshot: (@Sendable () throws -> Void)? = nil, apply: (@Sendable () throws -> Void)? = nil,
                          opening: (@Sendable () throws -> Void)? = nil) -> GraphCoordinatorAdapter {
@@ -71,13 +71,13 @@ private struct BootstrapFault: Error {}
         let a = try #require(result.conversion.receipt.nodeIDs[old[0]]), b = try #require(result.conversion.receipt.nodeIDs[old[1]])
         let record = try #require(try await graph.read { try $0.record(for: a) })
         #expect(record.properties["amount"] == .decimal(Decimal(string: "12.34")!))
-        #expect(record.properties["binary"] == .data(Data(repeating: 91, count: 2 * 1024 * 1024)))
+        #expect(record.attachments["binary"]?.data == Data(repeating: 91, count: 2 * 1024 * 1024))
         #expect(record.tags == ["retained"] && record.groups == ["invoices"])
         #expect(try await graph.read { try $0.record(for: b)?.createdDate } == nil)
         let integrity = try await graph.validateIntegrity(), pending = try await graph.collectSyncChanges()
-        #expect(integrity == 5 && pending == 5)
+        #expect(integrity == 7 && pending == 7)
         let schema = try await graph.read { scope in try scope.withContext { context, _ in
-            context.persistentStoreCoordinator?.managedObjectModel.versionIdentifiers == [AnyHashable(GraphRuntimeSchema.typedProperties.identifier)]
+            context.persistentStoreCoordinator?.managedObjectModel.versionIdentifiers == [AnyHashable(GraphRuntimeSchema.attachmentProperties.identifier)]
         } }
         let after = try digest(r.sourceURL)
         #expect(schema && after == before)
@@ -222,7 +222,7 @@ private struct BootstrapFault: Error {}
         try FileManager.default.moveItem(at: replacement, to: r.sourceURL)
         await #expect(throws: (any Error).self) { try await m.openGraph(convertingLocalV1: r) }
         let preserved = try await m.openGraph(id: r.graphID, at: r.destinationURL)
-        #expect(try await preserved.validateIntegrity() == 5)
+        #expect(try await preserved.validateIntegrity() == 7)
         #expect(try await m.backups.list(in: r.backupRoot).count == 1)
         try await preserved.close()
     }

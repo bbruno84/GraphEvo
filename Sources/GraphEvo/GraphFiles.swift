@@ -7,10 +7,9 @@ import GraphEvoStore
 extension GraphReadScope {
     public func file(_ id: GraphNodeID) throws -> GraphFile? {
         guard id.graphID == graphID else { throw GraphStoreError.foreignGraph }
-        return try withContext { context, adapter in
+        return try withContext { context, _ in
             _ = try ManagedGraphFile.root(in: context)
-            guard let record = try adapter.fetch(context, graphID, id), record.endpoints == .file else { return nil }
-            return try ManagedGraphFile.fetch(context, id: id).metadata(id: id)
+            return try GraphNativeIdentityDatabaseAdapter.fileMetadata(context, id: id)
         }
     }
 
@@ -85,7 +84,7 @@ extension GraphStore {
         for attempt in 0...1 {
             let result: Result<Value, any Error>
             do {
-                result = try await read { scope in
+                result = try await readFileMetadata { scope in
                     guard let file = try scope.file(fileID) else { throw GraphStoreError.missingNode }
                     return try scope.withContext { context, _ in
                         let root = try ManagedGraphFile.root(in: context)
@@ -151,7 +150,7 @@ extension GraphStore {
 extension GraphContext {
     /// Migrates an ordinary, closed local S04 store into a new directory and returns its SQLite URL.
     /// The caller stops all owners of the source for the duration of the copy.
-    public static func migrateClosedS04Store(from source: URL, into destination: URL) async throws -> URL {
+    package static func migrateClosedS04Store(from source: URL, into destination: URL) async throws -> URL {
         do {
             return try await ManagedGraphFile.publishStore(into: destination) { staged in
                 try await SQLiteStoreCoordination.withStoppedSource(source) { source, check in
@@ -207,7 +206,7 @@ extension GraphStore {
     /// Open the returned URL with a local-files context to restore it.
     public func copyLocalFileGraph(into destination: URL) async throws -> URL {
         let snapshot = try await handle.snapshot()
-        guard snapshot.schemaIdentifier == GraphFileDisk.schemaIdentifier else { throw GraphFileError.unavailable }
+        guard [GraphFileDisk.schemaIdentifier, GraphNativeAttachmentStorage.fileIdentifier].contains(snapshot.schemaIdentifier) else { throw GraphFileError.unavailable }
         let graphID = id
         let reservation = try await handle.reserveMaintenance()
         do {

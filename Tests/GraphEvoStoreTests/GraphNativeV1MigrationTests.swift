@@ -40,7 +40,7 @@ struct GraphNativeV1MigrationTests {
               graphID: graph, operationID: operation, backupRoot: root.appendingPathComponent("Backups"), reason: "Native v1 conversion fixture")
     }
     private func manager(adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) -> GraphContextManager {
-        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
     }
 
     @Test(.enabled(if: nativeV1StagesAvailable)) func nativeStagesPreserveCompleteGraphAndRecoverReceiptAfterLaterEdits() async throws {
@@ -53,12 +53,12 @@ struct GraphNativeV1MigrationTests {
         let a = try #require(result.conversion.receipt.nodeIDs[old[0]])
         let b = try #require(result.conversion.receipt.nodeIDs[old[1]])
         let invoice = try #require(try await graph.read { try $0.record(for: a) })
-        #expect(invoice.properties["binary"] == .data(Data(repeating: 91, count: 2 * 1024 * 1024)))
+        #expect(invoice.attachments["binary"]?.data == Data(repeating: 91, count: 2 * 1024 * 1024))
         #expect(invoice.properties["amount"] == .decimal(Decimal(string: "12.34")!))
         #expect(invoice.tags == ["retained"] && invoice.groups == ["invoices"])
         #expect(try await graph.read { try $0.record(for: b)?.createdDate } == nil)
-        #expect(try await graph.validateIntegrity() == 5)
-        #expect(try await graph.collectSyncChanges() == 5)
+        #expect(try await graph.validateIntegrity() == 7)
+        #expect(try await graph.collectSyncChanges() == 7)
         _ = try await graph.transaction { try $0.patch(.init(id: a, properties: ["name": .set(.string("Later"))])) }
         try await graph.close()
         let restarted = manager(), resumed = try await restarted.openGraph(migratingNativeV1: r), opened = try resumed.opening.get()
@@ -93,7 +93,7 @@ struct GraphNativeV1MigrationTests {
             for id in ids {
                 let row = try #require(try session.record(id))
                 guard case .integer(let index) = row.properties["index"] else { throw GraphV1ConversionError.invalidReceipt }
-                if index < 18 { #expect(row.properties["bytes"] == .data(Data(repeating: UInt8(index), count: 2 * 1024 * 1024))) }
+                if index < 18 { #expect(row.attachments["bytes"]?.data == Data(repeating: UInt8(index), count: 2 * 1024 * 1024)) }
                 else { #expect(row.properties["bytes"] == nil) }
             }
             return ids.count
@@ -154,8 +154,8 @@ struct GraphNativeV1MigrationTests {
         #expect(try await first.backups.retentionOwners(at: r.backupRoot.appendingPathComponent(r.operationID.uuidString).appendingPathExtension("geb")) == [r.operationID])
         let restarted = manager(), result = try await restarted.openGraph(convertingLocalV1: r), graph = try result.opening.get()
         #expect(result.conversion.receipt.nodeIDs == retained.nodeIDs)
-        #expect(try await graph.validateIntegrity() == 5)
-        #expect(try await graph.collectSyncChanges() == 5)
+        #expect(try await graph.validateIntegrity() == 7)
+        #expect(try await graph.collectSyncChanges() == 7)
         #expect(try await restarted.backups.list(in: r.backupRoot).count == 1)
         try await graph.close()
     }
@@ -177,7 +177,7 @@ struct GraphNativeV1MigrationTests {
         let root = try directory(), r = request(root)
         _ = try await seedConversionSource(r.sourceURL)
         let registry = StoreRegistry(hooks: StoreLifecycleHooks(beforeNativePreparationDetach: { throw NativeV1InjectedFailure() }))
-        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
+        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties,
                                     adapter: GraphCoordinatorFactory.adapter)
         await #expect(throws: (any Error).self) { try await m.openGraph(convertingLocalV1: r) }
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: r.destinationURL)
@@ -222,7 +222,7 @@ struct GraphNativeV1MigrationTests {
         }
         let recovered = try await restarted.openGraph(migratingNativeV1: r, recoveringOfflineGeneration: abandoned)
         let graph = try recovered.opening.get()
-        #expect(try await graph.validateIntegrity() == 5)
+        #expect(try await graph.validateIntegrity() == 7)
         #expect(try await restarted.backups.list(in: r.backupRoot).count == 1)
         try await graph.close()
     }
@@ -252,7 +252,7 @@ struct GraphNativeV1MigrationTests {
         else { Issue.record("Cancelled caller unexpectedly received an open graph.") }
         let recovered = try await manager().openGraph(convertingLocalV1: r), graph = try recovered.opening.get()
         #expect(recovered.conversion.receipt == committed.conversion.receipt)
-        #expect(try await graph.collectSyncChanges() == 5)
+        #expect(try await graph.collectSyncChanges() == 7)
         try await graph.close()
     }
 
@@ -276,8 +276,8 @@ struct GraphNativeV1MigrationTests {
         let doc = try JSONDecoder().decode(GraphV1StagedMigration.Document.self, from: try #require(metadata[StoreNativeMigration.documentKey] as? Data))
         let result = try await manager().openGraph(convertingLocalV1: r), graph = try result.opening.get()
         #expect(result.conversion.receipt.nodeIDs == doc.nodeIDs)
-        #expect(try await graph.validateIntegrity() == 5)
-        #expect(try await graph.collectSyncChanges() == 5)
+        #expect(try await graph.validateIntegrity() == 7)
+        #expect(try await graph.collectSyncChanges() == 7)
         try await graph.close()
     }
 
@@ -295,8 +295,8 @@ struct GraphNativeV1MigrationTests {
             for r in requests {
                 group.addTask {
                     let result = try await m.openGraph(convertingLocalV1: r), graph = try result.opening.get()
-                    #expect(try await graph.validateIntegrity() == 5)
-                    #expect(try await graph.collectSyncChanges() == 5)
+                    #expect(try await graph.validateIntegrity() == 7)
+                    #expect(try await graph.collectSyncChanges() == 7)
                     try await graph.close()
                     return Set(result.conversion.receipt.nodeIDs.values)
                 }

@@ -140,7 +140,7 @@ private actor WeakObservedStore {
     @Test func failedRefreshIsVisibleAndCanRecoverWithoutResubscribing() async throws {
         let graph = try await GraphStore.inMemory()
         let id = graph.makeNodeID()
-        _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: ObservedItem.graphType, properties: ["rank": .data(Data([1]))])) }
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: id, type: ObservedItem.graphType, properties: ["rank": .array([.integer(1)])])) }
         let query = try observationQuery().sorted(by: [GraphQuerySort(.property("rank"))])
         let observation = try await graph.observe(query)
         var iterator = observation.makeAsyncIterator()

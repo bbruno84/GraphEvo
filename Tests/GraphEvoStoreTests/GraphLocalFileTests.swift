@@ -1,7 +1,7 @@
 import CoreData
 import Darwin
 import Foundation
-import GraphEvo
+@testable import GraphEvo
 import GraphEvoStore
 import Testing
 
@@ -53,14 +53,14 @@ import Testing
         let root = try workspace()
         defer { try? FileManager.default.removeItem(at: root) }
         let s04 = root.appendingPathComponent("S04.sqlite")
-        let graphID = GraphID(), local = GraphContext()
+        let graphID = GraphID(), local = GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter))
         let original = try await local.createGraph(id: graphID, at: s04)
         let a = original.makeNodeID(), b = original.makeNodeID(), relation = original.makeNodeID(), action = original.makeNodeID()
         let legacyBytes = Data(repeating: 0xA5, count: 2 * 1024 * 1024)
         let attachmentSource = root.appendingPathComponent("ExistingAttachment.bin")
         try legacyBytes.write(to: attachmentSource)
         let records = [
-            try GraphRecord(id: a, type: EntityView.graphType, properties: ["rank": .integer(7), "legacyBytes": .data(legacyBytes)]),
+            try GraphRecord(id: a, type: EntityView.graphType, properties: ["rank": .integer(7), "legacyBytes": .string(legacyBytes.base64EncodedString())]),
             try GraphRecord(id: b, type: EntityView.graphType),
             try GraphRecord(id: relation, type: "edge", endpoints: .relationship(subject: a, object: b)),
             try GraphRecord(id: action, type: "action", endpoints: .action(subjects: [a], objects: [b]))
@@ -80,7 +80,7 @@ import Testing
         #expect(try await old.read { try $0.record(for: relation)?.endpoints } == records[2].endpoints)
         try await old.close()
 
-        let fileContext = GraphContext.localFiles()
+        let fileContext = GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.localFiles, adapter: GraphCoordinatorFactory.adapter))
         let graph = try await fileContext.openGraph(id: graphID, at: migrated)
         let migratedAttachment = try await graph.attachment(attachment.id)
         #expect(migratedAttachment?.metadata == attachment)

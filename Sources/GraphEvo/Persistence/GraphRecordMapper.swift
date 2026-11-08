@@ -29,7 +29,7 @@ package enum GraphRecordMapper {
                 throw GraphModelError.unexpectedKind
             }
             var properties: [String: GraphValue] = [:]
-            for (key, value) in projectedProperties ?? propertyKeys.map({ node.runtimeProperties(including: $0) }) ?? node.properties { properties[key] = try detached(value, key: key) }
+            for (key, value) in projectedProperties ?? propertyKeys.map({ node.runtimeProperties(including: $0) }) ?? node.properties where !key.hasPrefix(GraphTypedStoreAdapter.prefix) { properties[key] = try detached(value, key: key) }
             return try GraphRecord(id: id, type: node.type, endpoints: endpoints, properties: properties,
                                    tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent,
                                    file: try (node.node as? ManagedGraphFile)?.metadata(id: id))
@@ -72,7 +72,7 @@ package enum GraphRecordMapper {
             case "C", "S", "I", "L", "Q": return .unsignedInteger(value.uint64Value)
             default: return .integer(value.int64Value)
             }
-        case let value as Data: return .data(value)
+        case is Data: throw GraphModelError.unsupportedLegacyValue(key)
         case let value as Date: return .date(value)
         case let value as URL: return .url(value)
         case let value as [Any]: return .array(try value.map { try detached($0, key: key) })
@@ -89,12 +89,11 @@ package enum GraphRecordMapper {
         case .floatingPoint(let value): return NSNumber(value: value)
         case .decimal(let value): return NSDecimalNumber(decimal: value)
         case .string(let value): return value
-        case .data(let value): return value
         case .date(let value): return value
         case .url(let value): return value
         case .array(let values): return try values.map { try native($0, key: key) }
         case .object(let values): return try values.mapValues { try native($0, key: key) }
-        case .null, .uuid, .encoded: throw GraphModelError.unsupportedLegacyValue(key)
+        case .null, .uuid: throw GraphModelError.unsupportedLegacyValue(key)
         }
     }
 }

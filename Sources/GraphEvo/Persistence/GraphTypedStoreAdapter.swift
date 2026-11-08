@@ -43,24 +43,16 @@ package enum GraphTypedStoreAdapter {
             insert: { context, graphID, record in try withMutationSession(context, graphID, database: database) { try $0.insert(record) } },
             patch: { context, graphID, patch in try withMutationSession(context, graphID, database: database) { try $0.patch(patch) } },
             delete: { context, graphID, id in try withMutationSession(context, graphID, database: database) { try $0.delete(id) } },
-            attachmentMetadata: { context, graphID in
+            attachmentMetadata: { context, graphID, ownerID in
+                if GraphNativeAttachmentStorage.enabled(context), !context.hasChanges {
+                    return try GraphNativeAttachmentStorage.listMetadata(context, graphID: graphID, ownerID: ownerID)
+                }
                 let session = try Session(context, graphID, database: database)
                 return try session.nodes.compactMap { id, node -> GraphAttachmentMetadata? in
                     guard node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType else { return nil }
                     guard session.kind(node) == .entity else { throw GraphAttachmentError.notAnAttachment }
-                    // A metadata projection must not decode the body or unrelated application values.
-                    let available = GraphNativePropertyStorage.enabled(context) ? try GraphNativePropertyStorage.keys(node) : try session.encodedKeys(node)
-                    let key = available.contains(GraphAttachmentPayload.metadataKey) ? GraphAttachmentPayload.metadataKey : GraphAttachmentPayload.contentKey
-                    let value: GraphValue
-                    if GraphNativePropertyStorage.enabled(context) {
-                        guard let stored = try GraphNativePropertyStorage.properties(node, keys: [key])[key] else { throw GraphStoreError.corruptIdentity }
-                        value = stored
-                    } else {
-                        guard available.contains(key), let bytes = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
-                        value = try GraphValueCodec.decode(bytes)
-                    }
-                    let record = try GraphRecord(id: id, type: node.type, properties: [key: value])
-                    return try GraphAttachmentPayload.metadata(from: record)
+                    let metadata = try GraphNativeAttachmentStorage.metadata(node, id: id)
+                    return ownerID == nil || metadata.ownerID == ownerID ? metadata : nil
                 }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
             },
             query: { context, graphID, request in
@@ -83,7 +75,7 @@ package enum GraphTypedStoreAdapter {
                     for id in session.nodes.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
                         try checkCancellation()
                         guard let node = session.nodes[id] else { throw GraphStoreError.corruptIdentity }
-                        records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), propertyRows: propertyRows, chargingBytes: GraphNativePropertyStorage.enabled(context) ? { try GraphQueryStoredCost.charge($0, remaining: &remaining) } : nil) { raw in
+                        records.append(try session.snapshot(node, id: id, propertyKeys: propertyPlan.properties(type: node.type, kind: session.kind(node), id: id), propertyRows: propertyRows, chargingBytes: { try GraphQueryStoredCost.charge($0, remaining: &remaining) }) { raw in
                             try GraphQueryStoredCost.charge(raw.type.utf8.count, remaining: &remaining)
                             for name in raw.tags.union(raw.groups) { try GraphQueryStoredCost.charge(name.utf8.count + 1, remaining: &remaining) }
                             for (key, value) in raw.properties where !GraphNativePropertyStorage.enabled(context) && !key.hasPrefix(prefix) {
@@ -97,11 +89,15 @@ package enum GraphTypedStoreAdapter {
                 }
             }
         )
+        adapter.attachmentOwnerExists = { context, graphID, id in
+            guard id.graphID == graphID else { throw GraphStoreError.foreignGraph }
+            return try Session(context, graphID, database: database).node(id).map { $0.runtimeTypeIfPresent != GraphAttachmentPayload.graphType } ?? false
+        }
         adapter.validateIntegrity = { context, graphID in
             try GraphValueDecodingDiagnostics.checking {
                 let session = try Session(context, graphID, database: database)
                 let check = StoreNativeContext.cancellationCheck(in: context)
-                for (id, node) in session.nodes { try check(); try session.validate(session.snapshot(node, id: id)) }
+                for (id, node) in session.nodes { try check(); try session.validate(session.snapshot(node, id: id, includingAttachments: false)) }
                 return session.nodes.count
             }
         }
@@ -174,7 +170,7 @@ package enum GraphTypedStoreAdapter {
     /// Validates the selected local graph before requesting its native share boundary.
     package static func mirroringRoot(_ context: NSManagedObjectContext, id: GraphID) throws -> Entity {
         let session = try Session(context, id, database: true)
-        for (nodeID, node) in session.nodes { try session.validate(session.snapshot(node, id: nodeID)) }
+        for (nodeID, node) in session.nodes { try session.validate(session.snapshot(node, id: nodeID, includingAttachments: false)) }
         guard let root = session.root else { throw GraphStoreError.corruptIdentity }
         return root
     }
@@ -182,7 +178,7 @@ package enum GraphTypedStoreAdapter {
     package static func nativeMembers(_ context: NSManagedObjectContext, id: GraphID) throws -> [NSManagedObjectID] {
         let session = try Session(context, id, database: true)
         guard let root = session.root, let membership = session.membership else { throw GraphStoreError.corruptIdentity }
-        for (nodeID, node) in session.nodes { try session.validate(session.snapshot(node, id: nodeID)) }
+        for (nodeID, node) in session.nodes { try session.validate(session.snapshot(node, id: nodeID, includingAttachments: false)) }
         return ([root, membership] + Array(session.nodes.values)).flatMap(\.runtimeOwnedObjectIDs)
     }
 
@@ -321,6 +317,27 @@ package enum GraphTypedStoreAdapter {
             root[dynamicMember: graphKey] = id.rawValue.uuidString
             root[dynamicMember: layoutKey] = layoutVersion
             try GraphNativeIdentityColumns.stamp(root, graphID: id, nodeID: nil)
+            for (node, ownerID, _) in identities {
+                var encoded = Set<String>()
+                for (key, value) in node.properties where !key.hasPrefix(prefix) {
+                    let converted = try GraphV1NativeConversion.convertedProperty(value, key: key)
+                    if let attachment = converted.attachment {
+                        let payload = try GraphAttachmentPayload(id: .init(graphID: id), ownerID: ownerID,
+                            fileName: "attachment", contentType: "application/octet-stream", data: attachment.data)
+                        var metadata = payload.content.metadata
+                        metadata.propertyKey = key; metadata.codec = attachment.codec; metadata.codecVersion = attachment.version
+                        metadata.origin = "v1"; metadata.sourcePropertyVersion = node.runtimePropertyVersions[key]
+                        let child = Entity(GraphAttachmentPayload.graphType, graph: graph)
+                        try stamp(child, id: payload.id)
+                        child[dynamicMember: formatsKey] = [String]()
+                        try GraphNativeAttachmentStorage.write(try GraphAttachmentPayload(metadata: metadata, data: attachment.data).content, to: child)
+                        node[dynamicMember: key] = nil
+                    } else if let property = converted.property {
+                        node[dynamicMember: key] = try GraphValueCodec.encode(property); encoded.insert(key)
+                    }
+                }
+                node[dynamicMember: formatsKey] = encoded.sorted()
+            }
             return GraphV1AdoptionReport(graphID: id, nodeIDs: mapping, backupURL: backupURL)
         }
     }
@@ -399,6 +416,7 @@ package enum GraphTypedStoreAdapter {
                         throw GraphStoreError.corruptIdentity
                     }
                     let id = GraphNodeID(graphID: graphID, rawValue: uuid)
+                    if type == GraphAttachmentPayload.graphType, kind(node) != .entity { throw GraphAttachmentError.notAnAttachment }
                     _ = try encodedKeys(node)
                     guard nodes.updateValue(node, forKey: id) == nil else { throw GraphStoreError.duplicateIdentity }
                 }
@@ -485,18 +503,39 @@ package enum GraphTypedStoreAdapter {
             return id
         }
 
-        func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, propertyRows: GraphRuntimeMetadata? = nil, chargingBytes: ((Int) throws -> Void)? = nil, charging: ((GraphRecord) throws -> Void)? = nil) throws -> GraphRecord {
+        func snapshot(_ node: Node, id: GraphNodeID, propertyKeys: Set<String>? = nil, propertyRows: GraphRuntimeMetadata? = nil, chargingBytes: ((Int) throws -> Void)? = nil, charging: ((GraphRecord) throws -> Void)? = nil, includingAttachments: Bool = true) throws -> GraphRecord {
             if !allowUnprojectedRows { try GraphNativeIdentityColumns.validate(node, graphID: graphID, nodeID: id.rawValue) }
+            if node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
+                var extra: [String: GraphValue] = [:]
+                if !GraphNativeAttachmentStorage.enabled(context) {
+                    let keys = try encodedKeys(node).subtracting([GraphAttachmentPayload.contentKey, GraphAttachmentPayload.metadataKey])
+                    for key in keys where propertyKeys == nil || propertyKeys!.contains(key) {
+                        guard let bytes = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
+                        try chargingBytes?(key.utf8.count + bytes.count)
+                        extra[key] = try GraphValueCodec.decode(bytes)
+                    }
+                }
+                var result = try GraphRecord(id: id, type: GraphAttachmentPayload.graphType, properties: extra,
+                    tags: Set(node.tags), groups: Set(node.groups), createdDate: node.createdDateIfPresent)
+                if propertyKeys == nil || propertyKeys!.contains(GraphAttachmentPayload.contentKey) {
+                    let metadata = try GraphNativeAttachmentStorage.metadata(node, id: id)
+                    try chargingBytes?(metadata.byteCount)
+                    result.storedAttachment = try GraphNativeAttachmentStorage.read(node, id: id)
+                    result.legacyAttachment = GraphNativeAttachmentStorage.isLegacy(node)
+                }
+                try charging?(result)
+                return result
+            }
             let typed = GraphNativePropertyStorage.enabled(context)
             let projected: [String: Any]? = propertyKeys.flatMap { keys in
                 propertyRows.map { rows in
                     keys.reduce(into: [:]) { values, key in
-                        if let value = rows.value(for: node, key: key) { values[key] = value }
+                        if (try? encodedKeys(node).contains(key)) != true, let value = rows.value(for: node, key: key) { values[key] = value }
                     }
                 }
             }
             let raw = try GraphRecordMapper.snapshot(node, id: id, excludingRoot: database ? root : nil,
-                propertyKeys: typed ? [] : propertyKeys, projectedProperties: typed ? [:] : projected, referenceID: referenceID)
+                propertyKeys: typed ? [] : (propertyKeys ?? Set(node.properties.keys)).subtracting(try encodedKeys(node)), projectedProperties: typed ? [:] : projected, referenceID: referenceID)
             try charging?(raw)
             if typed {
                 _ = try encodedKeys(node)
@@ -504,19 +543,87 @@ package enum GraphTypedStoreAdapter {
                 // source inventories headers separately with dictionary projections.
                 let properties = propertyKeys?.isEmpty == true ? [:] : try GraphNativePropertyStorage.properties(node, keys: propertyKeys, charge: chargingBytes)
                 return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: properties,
-                                       tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file)
+                                       tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file,
+                                       attachments: propertyKeys == nil && includingAttachments ? keyedAttachments(id, charging: chargingBytes) : [:])
             }
             var properties = raw.properties.filter { !$0.key.hasPrefix(prefix) }
             for key in try encodedKeys(node) where propertyKeys == nil || propertyKeys!.contains(key) {
-                guard let value = properties[key], case .data(let data) = value else { throw GraphStoreError.corruptIdentity }
+                guard let data = node[dynamicMember: key] as? Data else { throw GraphStoreError.corruptIdentity }
+                try chargingBytes?(key.utf8.count + data.count)
                 properties[key] = try GraphValueCodec.decode(data)
             }
             return try GraphRecord(id: id, type: raw.type, endpoints: raw.endpoints, properties: properties,
-                                   tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file)
+                                   tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: raw.file,
+                                   attachments: propertyKeys == nil && includingAttachments ? keyedAttachments(id, charging: chargingBytes) : [:])
         }
 
-        func record(_ id: GraphNodeID) throws -> GraphRecord? {
-            try node(id).map { try snapshot($0, id: id) }
+        func keyedAttachments(_ ownerID: GraphNodeID, charging: ((Int) throws -> Void)? = nil) throws -> [String: GraphAttachmentValue] {
+            if GraphNativeAttachmentStorage.enabled(context) { return try GraphNativeAttachmentStorage.values(context, ownerID: ownerID, charge: charging) }
+            var values: [String: GraphAttachmentValue] = [:]
+            for (id, child) in nodes where child.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
+                let metadata = try GraphNativeAttachmentStorage.metadata(child, id: id)
+                guard metadata.ownerID == ownerID, let key = metadata.propertyKey else { continue }
+                guard values[key] == nil else { throw GraphAttachmentError.conflict }
+                try charging?(key.utf8.count)
+                try charging?(metadata.byteCount)
+                let content = try GraphNativeAttachmentStorage.read(child, id: id)
+                values[key] = try .init(data: content.data, codec: metadata.codec ?? "GraphEvo.raw", version: metadata.codecVersion ?? 1)
+            }
+            return values
+        }
+
+        func attachmentMatches(ownerID: GraphNodeID, key: String) throws -> [GraphNodeID: Node] {
+            try nodes.filter { id, node in
+                guard node.runtimeTypeIfPresent == GraphAttachmentPayload.graphType else { return false }
+                if GraphNativeAttachmentStorage.enabled(context),
+                   node.node.value(forKey: GraphNativeAttachmentStorage.ownerKey) as? String != ownerID.rawValue.uuidString { return false }
+                let metadata = try GraphNativeAttachmentStorage.metadata(node, id: id)
+                return metadata.ownerID == ownerID && metadata.propertyKey == key
+            }
+        }
+
+        func preflightAttachments(_ values: [String: GraphAttachmentChange], ownerID: GraphNodeID, migrated: Bool = false) throws {
+            for (key, change) in values {
+                let matches = try attachmentMatches(ownerID: ownerID, key: key)
+                guard matches.count <= 1 else { throw GraphAttachmentError.conflict }
+                switch change {
+                case .set(let value): if !migrated { try value.validateWrite() }
+                case .remove:
+                    if let id = matches.first?.key {
+                        guard try !deletionPlan(id).contains(ownerID) else { throw GraphStoreError.unresolvedReference }
+                    }
+                }
+            }
+        }
+
+        func setAttachments(_ values: [String: GraphAttachmentChange], ownerID: GraphNodeID, migrated: Bool = false) throws {
+            for (_, change) in values {
+                if case .set(let value) = change, !migrated { try value.validateWrite() }
+            }
+            for (key, change) in values {
+                let matches = try attachmentMatches(ownerID: ownerID, key: key)
+                guard matches.count <= 1 else { throw GraphAttachmentError.invalidMetadata }
+                if case .remove = change {
+                    if let (id, _) = matches.first { try delete(id) }
+                    continue
+                }
+                if case .set(let value) = change {
+                    let payload = try GraphAttachmentPayload(id: matches.first?.key ?? .init(graphID: graphID), ownerID: ownerID,
+                        fileName: "attachment", contentType: "application/octet-stream", data: value.data)
+                    var metadata = payload.content.metadata
+                    metadata.propertyKey = key; metadata.codec = value.codec; metadata.codecVersion = value.version
+                    metadata.origin = migrated ? "v1" : nil
+                    let record = try GraphAttachmentPayload(metadata: metadata, data: value.data).graphRecord(in: graphID)
+                    if let (id, node) = matches.first {
+                        try GraphNativeAttachmentStorage.write(try GraphAttachmentPayload(graphRecord: record).content, to: node)
+                        GraphMutationMetadata.touch(context, node, id: id)
+                    } else { try insert(record, migrated: migrated) }
+                }
+            }
+        }
+
+        func record(_ id: GraphNodeID, includingAttachments: Bool = true) throws -> GraphRecord? {
+            try node(id).map { try snapshot($0, id: id, includingAttachments: includingAttachments) }
         }
 
         func encodedKeys(_ node: Node) throws -> Set<String> {
@@ -528,17 +635,28 @@ package enum GraphTypedStoreAdapter {
 
         func validate(_ record: GraphRecord) throws {
             guard record.id.graphID == graphID else { throw GraphStoreError.foreignGraph }
-            guard !record.type.hasPrefix(prefix), !record.properties.keys.contains(where: { $0.hasPrefix(prefix) }) else {
+            guard !record.type.hasPrefix(prefix), !record.properties.keys.contains(where: { $0.hasPrefix(prefix) }),
+                  !record.attachments.keys.contains(where: { $0.hasPrefix(prefix) }) else {
                 throw GraphStoreError.reservedName
             }
             if record.type == GraphAttachmentPayload.graphType {
                 let payload = try GraphAttachmentPayload(graphRecord: record)
+                guard payload.content.metadata.propertyKey.map({ !$0.hasPrefix(prefix) }) ?? true else { throw GraphStoreError.reservedName }
+                guard (!GraphNativeAttachmentStorage.enabled(context) || record.properties.isEmpty), record.attachments.isEmpty else { throw GraphAttachmentError.invalidMetadata }
                 guard let owner = nodes[payload.ownerID], owner.runtimeTypeIfPresent != GraphAttachmentPayload.graphType else {
                     throw GraphAttachmentError.missingOwner
                 }
+                if let key = payload.content.metadata.propertyKey, GraphNativeAttachmentStorage.enabled(context) {
+                    guard try !GraphNativePropertyStorage.keys(owner).contains(key) else { throw GraphAttachmentError.conflict }
+                    for (id, candidate) in nodes where id != record.id && candidate.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
+                        guard candidate.node.value(forKey: GraphNativeAttachmentStorage.ownerKey) as? String == payload.ownerID.rawValue.uuidString else { continue }
+                        let metadata = try GraphNativeAttachmentStorage.metadata(candidate, id: id)
+                        guard metadata.propertyKey != key else { throw GraphAttachmentError.conflict }
+                    }
+                }
                 if let existing = nodes[record.id] {
                     let previous = try GraphAttachmentPayload(graphRecord: snapshot(existing, id: record.id))
-                    guard previous.ownerID == payload.ownerID else { throw GraphAttachmentError.invalidMetadata }
+                    guard previous.ownerID == payload.ownerID, previous.content.metadata.propertyKey == payload.content.metadata.propertyKey else { throw GraphAttachmentError.invalidMetadata }
                 }
             }
         }
@@ -569,10 +687,18 @@ package enum GraphTypedStoreAdapter {
             }
         }
 
-        func insert(_ record: GraphRecord, file: GraphFile? = nil) throws {
+        func insert(_ record: GraphRecord, file: GraphFile? = nil, migrated: Bool = false) throws {
             try requireWriteAccess()
             guard !isShared else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             try validate(record)
+            try preflightAttachments(record.attachments.mapValues(GraphAttachmentChange.set), ownerID: record.id, migrated: migrated)
+            guard record.attachments.isEmpty || GraphNativeAttachmentStorage.enabled(context) else { throw GraphStoreError.unsupportedLayout }
+            if !migrated {
+                for value in record.attachments.values { try value.validateWrite() }
+                if let content = record.storedAttachment, content.data.count > GraphAttachmentValue.maximumByteCount {
+                    throw GraphAttachmentError.limitExceeded(maxBytes: GraphAttachmentValue.maximumByteCount)
+                }
+            }
             guard nodes[record.id] == nil else { throw GraphStoreError.duplicateIdentity }
             guard !GraphMutationMetadata.isDeleted(context, id: record.id) else { throw GraphStoreError.duplicateIdentity }
             if let root, try GraphMutationMetadata.deletedIDs(root).contains(record.id.rawValue.uuidString) { throw GraphStoreError.duplicateIdentity }
@@ -608,12 +734,15 @@ package enum GraphTypedStoreAdapter {
             setEndpoints(node, subjects: subjects, objects: objects)
             try assign(node)
             nodes[record.id] = node
+            if let content = record.storedAttachment { try GraphNativeAttachmentStorage.write(content, to: node, legacy: record.legacyAttachment) }
+            try setAttachments(record.attachments.mapValues(GraphAttachmentChange.set), ownerID: record.id, migrated: migrated)
             GraphMutationMetadata.touch(context, node, id: record.id)
         }
 
-        func patch(_ patch: GraphRecordPatch, completing operationID: UUID? = nil) throws -> GraphRecord {
-            guard patch.properties.keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.reservedName }
+        func patch(_ patch: GraphRecordPatch, completing operationID: UUID? = nil, imported: Bool = false) throws -> GraphRecord {
+            guard patch.properties.keys.allSatisfy({ !$0.hasPrefix(prefix) }), patch.attachments.keys.allSatisfy({ !$0.hasPrefix(prefix) }) else { throw GraphStoreError.reservedName }
             try requireWriteAccess(completing: operationID)
+            guard patch.attachments.isEmpty || GraphNativeAttachmentStorage.enabled(context) else { throw GraphStoreError.unsupportedLayout }
             guard let node = try node(patch.id) else { throw GraphStoreError.missingNode }
             if node.node is ManagedGraphFile, !patch.properties.isEmpty || patch.endpoints != nil {
                 throw GraphFileError.fixedMetadata
@@ -626,6 +755,11 @@ package enum GraphTypedStoreAdapter {
                 guard !createsDetails else { throw GraphStoreError.sharedInsertionRequiresPreparation }
             }
             try validate(updated)
+            try preflightAttachments(patch.attachments, ownerID: patch.id)
+            if let content = patch.storedAttachment, !imported, content.data.count > GraphAttachmentValue.maximumByteCount {
+                throw GraphAttachmentError.limitExceeded(maxBytes: GraphAttachmentValue.maximumByteCount)
+            }
+            for change in patch.attachments.values { if case .set(let value) = change { try value.validateWrite() } }
             if updated == current { return current }
             let (subjects, objects) = try resolve(updated.endpoints)
             let typed = GraphNativePropertyStorage.enabled(context)
@@ -648,6 +782,8 @@ package enum GraphTypedStoreAdapter {
                     else { node[dynamicMember: key] = nil; encoded.remove(key) }
                 }
             }
+            if let content = patch.storedAttachment { try GraphNativeAttachmentStorage.write(content, to: node, legacy: current.legacyAttachment) }
+            try setAttachments(patch.attachments, ownerID: patch.id)
             node[dynamicMember: formatsKey] = encoded.sorted()
             node.add(tags: Array(patch.addingTags)); node.remove(tags: Array(patch.removingTags))
             node.add(to: Array(patch.addingGroups)); node.remove(from: Array(patch.removingGroups))
@@ -669,7 +805,7 @@ package enum GraphTypedStoreAdapter {
             }
             for (id, node) in selected {
                 try check()
-                try validate(snapshot(node, id: id))
+                try validate(snapshot(node, id: id, includingAttachments: false))
                 if isShared, let container = context.userInfo[StoreNativeContext.containerKey] as? NSPersistentCloudKitContainer,
                    !container.canDeleteRecord(forManagedObjectWith: node.runtimeObjectID) {
                     throw GraphStoreError.permissionDenied
@@ -706,7 +842,7 @@ package enum GraphTypedStoreAdapter {
             return selected.count
         }
 
-        func delete(_ id: GraphNodeID) throws {
+        private func deletionPlan(_ id: GraphNodeID) throws -> [GraphNodeID] {
             try requireWriteAccess()
             guard try node(id) != nil else { throw GraphStoreError.missingNode }
             var filesByOwner: [GraphNodeID: [GraphNodeID]] = [:]
@@ -735,7 +871,11 @@ package enum GraphTypedStoreAdapter {
                     }
                 }
             }
-            let ordered = selected.sorted { (nodes[$0] is Entity ? 1 : 0) < (nodes[$1] is Entity ? 1 : 0) }
+            return selected.sorted { (nodes[$0] is Entity ? 1 : 0) < (nodes[$1] is Entity ? 1 : 0) }
+        }
+
+        func delete(_ id: GraphNodeID) throws {
+            let ordered = try deletionPlan(id)
             for next in ordered {
                 guard let node = nodes[next] else { continue }
                 if let entity = node as? Entity {

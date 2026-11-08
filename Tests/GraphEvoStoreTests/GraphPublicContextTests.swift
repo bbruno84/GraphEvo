@@ -55,7 +55,7 @@ private final class PublicAccountDriver: @unchecked Sendable {
     private func root() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("PublicContext-" + UUID().uuidString) }
     @available(iOS 17, macOS 14, *)
     private func context(_ driver: PublicAccountDriver = PublicAccountDriver(), registry: StoreRegistry = .shared) -> GraphContext {
-        GraphContext(manager: GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
+        GraphContext(manager: GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()), adapter: driver.adapter)
     }
     @available(iOS 17, macOS 14, *)
@@ -292,7 +292,7 @@ private final class PublicAccountDriver: @unchecked Sendable {
     @available(iOS 17, macOS 14, *)
     @Test func foregroundCanRestartAfterAnOpeningFailsDuringBackgroundDrain() async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
-        let manager = GraphContextManager(registry: .shared, schema: GraphRuntimeSchema.typedProperties,
+        let manager = GraphContextManager(registry: .shared, schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID())
         let config = try configuration(root)
         let attempt = OSAllocatedUnfairLock(initialState: 0)
@@ -368,11 +368,11 @@ private final class PublicAccountDriver: @unchecked Sendable {
         #expect(!initial.conversion.receipt.nodeIDs.isEmpty)
         #expect(FileManager.default.fileExists(atPath: initial.conversion.backupURL.path))
         let later = graph.makeNodeID()
-        try await graph.transaction { try $0.insert(GraphRecord(id: later, type: "Later", properties: ["body": .data(Data([0, 128, 255]))])) }
+        try await graph.transaction { try $0.insert(GraphRecord(id: later, type: "Later", attachments: ["body": .init(data: Data([0, 128, 255]))])) }
         try await graph.close()
         let recovered = try await owner.openGraph(convertingLocalV1: request), reopened = try recovered.opening.get()
         #expect(recovered.conversion.receipt == initial.conversion.receipt)
-        #expect(try await reopened.read { try $0.record(for: later)?.properties["body"] } == .data(Data([0, 128, 255])))
+        #expect(try await reopened.read { try $0.record(for: later)?.attachments["body"]?.data } == Data([0, 128, 255]))
         try await reopened.close()
     }
     @available(iOS 17, macOS 14, *)
@@ -425,20 +425,17 @@ private final class PublicAccountDriver: @unchecked Sendable {
         let source = root.appendingPathComponent("V1.sqlite"); let oldIDs = try await seedConversionSource(source)
         let server = ActivationServer(), config = try configuration(root)
         func instance() -> GraphContext {
-            GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.typedProperties,
+            GraphContext(manager: GraphContextManager(schema: GraphRuntimeSchema.attachmentProperties,
                 adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()), adapter: server.adapter)
         }
         let owner = instance(), request = GraphV1BootstrapRequest(sourceURL: source, destinationURL: root.appendingPathComponent("Owner.sqlite"),
             graphID: GraphID(), operationID: UUID(), backupRoot: root.appendingPathComponent("Backups"), reason: "Public authority regression")
         let converted = try await owner.openGraph(convertingLocalV1: request), graph = try converted.opening.get()
         let invoice = try #require(converted.conversion.receipt.nodeIDs[oldIDs[0]])
-        let data = try await graph.read { try $0.record(for: invoice)?.properties["binary"] }
-        guard case .data(let originalBytes) = data else { throw GraphModelError.invalidValue }
+        let data = try await graph.read { try $0.record(for: invoice)?.attachments["binary"]?.data }
+        guard let originalBytes = data else { throw GraphModelError.invalidValue }
         #expect(originalBytes.count == 2 * 1024 * 1024)
-        // Explicit consumer optimization; neither schema conversion nor activation infers attachments.
-        let input = root.appendingPathComponent("consumer.bin"); try originalBytes.write(to: input)
-        let attachment = try await graph.importAttachment(from: input, ownedBy: invoice)
-        try await graph.transaction { try $0.patch(.init(id: invoice, properties: ["binary": .remove])) }
+        let attachment = try #require(try await graph.attachments(ownedBy: invoice).first { $0.propertyKey == "binary" })
         let connection = try await owner.connectCloud(using: config)
         try await wait { try await connection.state == .ready }
         let declaration = GraphCloudCutoverDeclaration(sourceSelection: "Fixture source", completeness: "Exact seeded graph",

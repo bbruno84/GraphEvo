@@ -29,7 +29,7 @@ import GraphEvoModel
         try await graph.transaction { scope in
             try scope.insert(GraphRecord(id: a, type: Item.graphType, properties: ["rank": .integer(2), "extra": .string("complete"), "optional": .null]))
             try scope.insert(GraphRecord(id: b, type: Item.graphType, properties: ["rank": .integer(1)]))
-            try scope.insert(GraphRecord(id: large, type: Item.graphType, properties: ["body": .data(Data(repeating: 7, count: 1024 * 1024))]))
+            try scope.insert(GraphRecord(id: large, type: Item.graphType, properties: ["body": .string(Data(repeating: 7, count: 1024 * 1024).base64EncodedString())]))
         }
         let query = GraphQuery<Item>(budget: try budget()).where(.id(a) || .id(b)).sorted(by: [GraphQuerySort(.property("rank"))]).limit(1)
         let page = try await graph.query(query)
@@ -55,7 +55,7 @@ import GraphEvoModel
         let graph = try await GraphStore.inMemory(), a = graph.makeNodeID(), b = graph.makeNodeID(), edge = graph.makeNodeID()
         try await graph.transaction { scope in
             try scope.insert(GraphRecord(id: a, type: Item.graphType, properties: ["rank": .integer(1)]))
-            try scope.insert(GraphRecord(id: b, type: Item.graphType, properties: ["rank": .string("incomparable"), "body": .data(Data(repeating: 1, count: 1024 * 1024))]))
+            try scope.insert(GraphRecord(id: b, type: Item.graphType, properties: ["rank": .string("incomparable"), "body": .string(Data(repeating: 1, count: 1024 * 1024).base64EncodedString())]))
             try scope.insert(GraphRecord(id: edge, type: "matrix.edge", endpoints: .relationship(subject: a, object: b)))
         }
         let base = GraphQuery<Item>(budget: try budget())
@@ -73,7 +73,7 @@ import GraphEvoModel
     @Test func identityMaterializationSeesPendingEditsAndStillRejectsExcludedRoutingCorruption() async throws {
         let database = try await GraphDatabase.inMemory(), graph = try await database.createGraph()
         let a = graph.makeNodeID(), excluded = graph.makeNodeID()
-        _ = try await graph.transaction { try $0.insert(GraphRecord(id: excluded, type: Item.graphType, properties: ["body": .data(Data(repeating: 2, count: 1024 * 1024))])) }
+        _ = try await graph.transaction { try $0.insert(GraphRecord(id: excluded, type: Item.graphType, properties: ["body": .string(Data(repeating: 2, count: 1024 * 1024).base64EncodedString())])) }
         let query = GraphQuery<Item>(budget: try budget()).where(.id(a))
         try await graph.transaction { scope in
             try scope.insert(GraphRecord(id: a, type: Item.graphType, properties: ["rank": .integer(1)]))

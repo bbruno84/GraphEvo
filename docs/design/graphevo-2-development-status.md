@@ -1,12 +1,42 @@
 # GraphEvo 2 — current development status
 
-Updated: 2026-11-07. This is the single entry point for **integrated work,
+Updated: 2026-11-08. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
-## Current position — 2026-11-07
+## Latest increment — property and attachment contract
+
+[PR #191](https://github.com/bbruno84/GraphEvo/pull/191),
+`codex/v2-property-attachment-contract`, implements the agreed separation of
+scalar/collection properties from raw Data and generic Codable attachments,
+with 2 MiB ordinary admission and a mandatory v1 migration exception. See the
+[S06/S07 contract](graphevo-2-property-attachments.md). Integration through #191
+uses reviewed implementation `9ecd920f`; final notes are documentation-only.
+The [pre-merge review](results/property-attachment-review-2026-11-08.md) records
+no unresolved actionable findings. The
+[acceptance report](results/property-attachment-contract-2026-11-08.md) records
+real iPad/XR cross-account recovery, replacements in both directions and reopen,
+including the oversized migrated value. It also records the native invitation
+flag correction and the external-binary read-grant finding. The subsequent
+[cost investigation](results/initial-publication-cost-2026-11-08.md) corrects
+foreign-string scanning and redundant Foundation presenter handoffs: the same
+complete synthetic publication/recovery falls from 214 to 13 seconds Debug and
+174 to 12.6 seconds Release, retaining read protection and restoring the original
+two-minute guard. Final local validation passes 773 v2 tests, 331 legacy tests,
+both Swift 6 consumers and 197 affected iOS tests without skips. Three rejected-
+property compile fixtures passed at the initial contract checkpoint. Physical
+iPad/XR replicas reopen and verify with the correction; this does not measure
+device throughput. Broader capacity and actual CloudKit latency remain open.
+The selected alpha value-channel increment and local performance regression are
+complete. The next acceptance work is representative device capacity/memory and
+remaining PA05/PA06/PA08 cases; companion demo adoption must use the S06/S07 API
+and fresh-store contract. Existing alpha fixtures are not silently upgraded.
+No new hosted CI checkpoint was requested under the current alpha policy; the
+last full hosted checkpoint below remains historical evidence on its stated head.
+
+## Earlier integrated position — 2026-11-07
 
 The v2 integration line includes File synchronization through
 [PR #190](https://github.com/bbruno84/GraphEvo/pull/190), following the local
@@ -48,7 +78,7 @@ production cutover remain open.
 alpha increment. The live observation and rescan contract passed local regressions
 and [explicit CloudKit import on a physical iPad](graphevo-2-observation.md#acceptance-and-remaining-work).
 PA07 retains automatic delivery, wider lifecycle and observer cost acceptance.
-The current alpha increment adds synchronized File nodes; the broader
+The subsequent File and property/attachment increments are recorded above; the broader
 query/attachment capacity and performance gates remain in the post-alpha checklist.
 
 [PR #189](https://github.com/bbruno84/GraphEvo/pull/189) adds the opt-in
@@ -1131,7 +1161,7 @@ signed device build and all thirteen original passed stage reports remain retain
 |---|---|---|
 | A1–A3 | Resource ownership, awaited scopes, persistent IDs, GraphModel/GraphRecord and typed CRUD | Full distributed/platform boundary and concurrency stress gates |
 | A4–A5 | Graph catalog/membership, paired resources, sharing and interrupted-assignment ledgers | Account/offline/conflict/recovery and scale gates |
-| A6 files | Separate attachment identity, exclusive owner, split metadata/content, binary Data, integrity and cascades | Whole-content backups, providers and physical resource envelopes |
+| A6 attachments and File | S06/S07 fixed attachment fields, keyed raw/Codable bodies, 2 MiB ordinary admission, oversized v1 preservation; synchronized File nodes and immutable revisions (#189–#191) | Production source coverage, providers, wider fault/conflict and physical capacity/memory envelopes |
 | A7 queries | Bounded descriptors, count/projection/aggregate/traversal, selective bodies and finite-ID guards | Inventory remains; budgets are not total memory/time/SQL-I/O bounds |
 | A8 observation | Async current state, cold Combine adapter, shared per-handle query work and dependency invalidation | O04 selects live hints and rescan for beta. PA07 acceptance remains open. |
 | Consolidation | Selected metadata batching, file/query representation and shared-observation implementations | Synthetic measurements do not define production thresholds |

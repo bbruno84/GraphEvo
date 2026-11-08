@@ -51,7 +51,7 @@ private func adoptionDirectory() throws -> URL {
         let noteID = try #require(report.nodeIDs[oldIDs[1]])
         let author = try #require(try await store.read { try $0.record(for: authorID) })
         #expect(author.properties["name"] == .string("Ada"))
-        #expect(author.properties["unknown"] == .data(Data([0, 255, 137])))
+        #expect(author.attachments["unknown"]?.data == Data([0, 255, 137]))
         #expect(author.createdDate == Date(timeIntervalSince1970: 123_456))
         #expect(author.tags == ["retained"])
         #expect(author.groups == ["authors"])
@@ -154,7 +154,7 @@ private func adoptionDirectory() throws -> URL {
             let node = try #require(Search<Entity>(graph: graph).where(.type("A")).sync().first)
             var envelope = try #require(node[dynamicMember: "value"] as? Data)
             let text = try #require(String(data: envelope, encoding: .utf8))
-            envelope = Data(text.replacingOccurrences(of: "\"version\":1", with: "\"version\":99").utf8)
+            envelope = Data(text.replacingOccurrences(of: "\"version\":3", with: "\"version\":99").utf8)
             node[dynamicMember: "value"] = envelope
         }
         await #expect(throws: (any Error).self) { try await store.read { try $0.record(for: a.id) } }
@@ -173,7 +173,7 @@ private func adoptionDirectory() throws -> URL {
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("Main.sqlite")
         let store = try await GraphStore.open(at: url)
-        let record = try GraphRecord(id: store.makeNodeID(), type: "binary", properties: ["blob": .data(Data([0, 255]))])
+        let record = try GraphRecord(id: store.makeNodeID(), type: "binary", properties: ["blob": .string(Data([0, 255]).base64EncodedString())])
         try await store.transaction { try $0.insert(record) }
         let handle = try await StoreRegistry.shared.open(.init(location: .sqlite(url)), schema: GraphRuntimeSchema.current)
         try await handle.transaction { context in

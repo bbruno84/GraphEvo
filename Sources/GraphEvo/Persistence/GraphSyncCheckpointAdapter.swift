@@ -173,7 +173,9 @@ enum GraphSyncCheckpointAdapter {
         guard limits.maximumTransactions > 0, limits.maximumChanges > 0, limits.maximumPending > 0 else { throw GraphSyncError.invalidLimit }
         guard !(context.userInfo[StoreNativeContext.containerKey] is NSPersistentCloudKitContainer),
               let coordinator = context.persistentStoreCoordinator, coordinator.persistentStores.count == 1,
-              ((coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphRuntimeSchema.nativeModelIdentifier)] &&
+              ((GraphNativeAttachmentStorage.enabled(context) &&
+                coordinator.managedObjectModel.entityVersionHashesByName == (coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphNativeAttachmentStorage.identifier)] ? GraphRuntimeSchema.attachmentProperties.entityVersionHashes : GraphRuntimeSchema.attachmentFiles.entityVersionHashes)) ||
+               (coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphRuntimeSchema.nativeModelIdentifier)] &&
                 coordinator.managedObjectModel.entityVersionHashesByName == GraphRuntimeSchema.nativeIdentity.entityVersionHashes) ||
                (coordinator.managedObjectModel.versionIdentifiers == [AnyHashable(GraphNativePropertyStorage.identifier)] &&
                 coordinator.managedObjectModel.entityVersionHashesByName == GraphRuntimeSchema.typedProperties.entityVersionHashes) ||

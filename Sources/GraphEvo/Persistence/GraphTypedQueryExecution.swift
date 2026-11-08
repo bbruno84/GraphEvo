@@ -21,6 +21,7 @@ final class GraphTypedQueryExecution {
     private var remaining: Int
     private var fetches = 0
     private var materialized = 0
+    private var hasNamedAttachments: Bool?
     private var nativePredicates = 0
     private var lastNativeKey: String?
     private var reasons: [GraphQueryDiagnostics.FallbackReason] = []
@@ -173,6 +174,28 @@ final class GraphTypedQueryExecution {
         if let value { cached[id, default: [:]][key] = value }
         return value
     }
+    private func recordAttachments(_ id: GraphNodeID) throws -> [String: GraphAttachmentValue] {
+        guard GraphNativeAttachmentStorage.enabled(context) else { return [:] }
+        if hasNamedAttachments == nil {
+            let request = NSFetchRequest<NSManagedObject>(entityName: ModelIdentifier.entityName)
+            request.predicate = NSPredicate(format: "ge2GraphID == %@ AND type == %@ AND geAttachmentKey != nil",
+                graphID.rawValue.uuidString, GraphAttachmentPayload.graphType)
+            request.fetchLimit = 1; request.includesPropertyValues = false
+            hasNamedAttachments = try !context.fetch(request).isEmpty
+            fetches += 1
+        }
+        guard hasNamedAttachments == true else { return [:] }
+        fetches += 1
+        return try GraphNativeAttachmentStorage.values(context, ownerID: id) { bytes in
+            try self.work.consume()
+            try self.charge(bytes)
+        }
+    }
+
+    private var loadsAttachments: Bool {
+        if case .projection = request.operation { return false }
+        return true
+    }
     private func full(_ raw: GraphRecord) throws -> GraphRecord {
         materialized += 1
         let keys: Set<String>
@@ -188,7 +211,8 @@ final class GraphTypedQueryExecution {
             file = try ManagedGraphFile.fetch(context, id: raw.id).metadata(id: raw.id)
         } else { file = nil }
         return try GraphRecord(id: raw.id, type: raw.type, endpoints: raw.endpoints, properties: properties,
-            tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: file)
+            tags: raw.tags, groups: raw.groups, createdDate: raw.createdDate, file: file,
+            attachments: loadsAttachments ? recordAttachments(raw.id) : [:])
     }
     private func note(_ reason: GraphQueryDiagnostics.FallbackReason) { if !reasons.contains(reason) { reasons.append(reason) } }
     private func atoms(_ predicate: GraphQueryPredicate) -> [GraphQueryPredicate] {

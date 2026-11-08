@@ -89,6 +89,19 @@ private actor NativeInviteGate {
         record["format"] = NSNumber(value: true)
         #expect(throws: GraphCloudDiscoveryError.invalidDescriptor) { try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) }
     }
+    @Test func descriptorFileCapabilityAcceptsCloudKitNumericFlagsOnlyInItsKnownRange() throws {
+        let binding = GraphCloudBinding(zone: .init(scope: .shared, owner: "owner", name: "files"), graphID: GraphID())
+        let record = GraphCloudGraphDescriptor.encode(binding, supportsFiles: true)
+        record["files"] = NSNumber(value: Int64(1))
+        #expect(try GraphCloudGraphDescriptor.decode(record, zone: binding.zone, supportsFiles: true) == binding.graphID)
+        #expect(throws: GraphCloudDiscoveryError.unsupportedDescriptor) { try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) }
+        record["files"] = NSNumber(value: Int64(0))
+        #expect(try GraphCloudGraphDescriptor.decode(record, zone: binding.zone) == binding.graphID)
+        for flag in [2.0, -1.0, 0.5] {
+            record["files"] = NSNumber(value: flag)
+            #expect(throws: GraphCloudDiscoveryError.unsupportedDescriptor) { try GraphCloudGraphDescriptor.decode(record, zone: binding.zone, supportsFiles: true) }
+        }
+    }
     @Test func descriptorRejectsForeignZoneOversizeAndNoncanonicalIdentity() throws {
         let binding = GraphCloudBinding(zone: .init(scope: .shared, owner: "owner", name: "empty"), graphID: GraphID())
         let record = GraphCloudGraphDescriptor.encode(binding)
@@ -142,10 +155,8 @@ private actor NativeInviteGate {
         let original = try Data(contentsOf: path)
         await #expect(throws: GraphCloudDiscoveryError.sessionUpgradeRequired) { try await GraphCloudSession.open(refused, adapter: server.adapter) }
         #expect(try Data(contentsOf: path) == original)
-        let session = try await GraphCloudSession.open(config, adapter: server.adapter)
-        let upgraded = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: path))
-        #expect(upgraded.format == 9 && upgraded.states == doc.states)
-        try await session.stop()
+        await #expect(throws: GraphCloudError.invalidState) { try await GraphCloudSession.open(config, adapter: server.adapter) }
+        #expect(try Data(contentsOf: path) == original)
         doc.format = 8
         doc.joins = [.init(id: UUID(), invitation: await server.invitation())]
         let bad = try JSONEncoder().encode(doc); try bad.write(to: path)
@@ -157,7 +168,7 @@ private actor NativeInviteGate {
         let native = config(), server = NativeInvitationServer()
         defer { try? FileManager.default.removeItem(at: native.directory) }
         await server.available()
-        let context = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let context = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()), adapter: server.adapter)
         let config = try GraphCloudConnectionConfiguration(containerIdentifier: native.containerIdentifier, environment: native.environment, directory: native.directory)
         let connection = try await context.connectCloud(using: config)
@@ -197,7 +208,7 @@ private actor NativeInviteGate {
         let native = config(), server = NativeInvitationServer(permission: .readWrite)
         defer { try? FileManager.default.removeItem(at: native.directory) }
         let group = AppGroupStoreLocation(container: native.directory)
-        let context = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let context = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group,
             publicAppGroup: .init(identifier: "fixture", role: .primary, allowsCloudSynchronization: true)), adapter: server.adapter)
         let id = await server.graphID, note = GraphNodeID(graphID: id)
@@ -221,7 +232,7 @@ private actor NativeInviteGate {
         try await graph.close()
         try await connection.close()
 
-        let secondary = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let secondary = GraphContext(manager: GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID(), appGroup: group,
             publicAppGroup: .init(identifier: "fixture", role: .secondary, secondaryAccess: .readWrite)))
         let result = try await secondary.transactionAppGroupGraph(id: id) {
@@ -241,7 +252,7 @@ private actor NativeInviteGate {
         defer { try? FileManager.default.removeItem(at: native.directory) }
         await server.available()
         func context() -> GraphContext {
-            GraphContext(manager: GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties,
+            GraphContext(manager: GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties,
                 adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()), adapter: server.adapter)
         }
         func ready(_ connection: GraphCloudConnection) async throws {
@@ -308,7 +319,7 @@ private actor NativeInviteGate {
         let native = config(), server = NativeInvitationServer()
         defer { try? FileManager.default.removeItem(at: native.directory) }
         await server.available()
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID())
         _ = try await manager.startCloudSession(native, adapter: server.adapter)
         let session = try await manager.cloud(native)
@@ -325,7 +336,7 @@ private actor NativeInviteGate {
         await #expect(throws: (any Error).self) { try await prepared.read { _ in () } }
         #expect(try await session.membership(id) == nil)
         try await prepared.close(); try await manager.stopCloudSession(native)
-        let recovered = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let recovered = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID())
         _ = try await recovered.startCloudSession(native, adapter: server.adapter)
         let graph = try await recovered.openNativeReplica(intent.id, at: url, configuration: native)
@@ -350,7 +361,7 @@ private actor NativeInviteGate {
     @Test func descriptorControlsAreValidatedBeforeApplicationImport() async throws {
         let config = config(), server = NativeInvitationServer()
         defer { try? FileManager.default.removeItem(at: config.directory) }
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let id = await server.graphID
         let graph = try await manager.createGraph(id: id, at: config.directory.appendingPathComponent("Control.sqlite"))
         _ = try await manager.startCloudSession(config, adapter: server.adapter)
@@ -407,7 +418,7 @@ private actor NativeInviteGate {
     @Test func malformedDescriptorCannotHideAPermissionReductionBehindTheEventLimit() async throws {
         let config = config(), id = GraphID()
         defer { try? FileManager.default.removeItem(at: config.directory) }
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: id, at: config.directory.appendingPathComponent("Reduction.sqlite"))
         let invitation = GraphCloudInvitation(container: config.containerIdentifier, environment: config.environment,
             graphID: id, owner: "owner", zoneName: "reduction", recipient: "participant", url: URL(string: "https://www.icloud.com/share/reduction")!)
@@ -459,7 +470,7 @@ private actor NativeInviteGate {
     @Test func accountLossAfterNativeAcceptanceStillReturnsTheDurableJoinID() async throws {
         let native = config(), server = NativeInvitationServer()
         defer { try? FileManager.default.removeItem(at: native.directory) }
-        let context = GraphContext(manager: .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let context = GraphContext(manager: .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter, contextOwnerID: UUID()), adapter: server.adapter)
         let connection = try await context.connectCloud(using: .init(containerIdentifier: native.containerIdentifier,
             environment: native.environment, directory: native.directory))
@@ -481,7 +492,7 @@ private actor NativeInviteGate {
         let config = config(), server = NativeInvitationServer(permission: writable ? .readWrite : .readOnly), entered = NativeInviteGate(), proceed = NativeInviteGate()
         defer { try? FileManager.default.removeItem(at: config.directory) }
         await server.available()
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         _ = try await manager.startCloudSession(config, adapter: server.adapter)
         let clock = GraphAutomaticClock(now: { 0 }, sleep: { _ in try await Task.sleep(for: .seconds(3600)) }, jitter: { 1 })
         try await manager.setAutomaticCloudSynchronizationActive(true, configuration: config, clock: clock)
@@ -490,7 +501,7 @@ private actor NativeInviteGate {
         try await session.nativeAdvanceJoin(join.id)
         let id = await server.graphID
         let remote = try GraphRecord(id: GraphNodeID(graphID: id, rawValue: UUID()), type: "Native.Shared.Note",
-            properties: ["title": .string("Independent owner note"), "bytes": .data(Data([0, 128, 255]))])
+            properties: ["title": .string("Independent owner note"), "bytes": .string(Data([0, 128, 255]).base64EncodedString())])
         await server.seedRemote(remote)
         await server.setInspectHook { await entered.release(); await proceed.wait() }
         let opening = Task { try await manager.openNativeReplica(join.id, at: config.directory.appendingPathComponent("Automatic.sqlite"), configuration: config) }

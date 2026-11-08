@@ -159,7 +159,30 @@ enum GraphV1StagedMigration {
                             guard let key = row.value(forKey: "name") as? String else { throw GraphV1ConversionError.unsupportedSource }
                             if key.hasPrefix(GraphTypedStoreAdapter.prefix) || row.value(forKey: GraphNativePropertyStorage.kindKey) != nil { continue }
                             guard let value = row.value(forKey: "object") else { throw GraphV1ConversionError.unsupportedSource }
-                            let prepared = try GraphNativePropertyStorage.prepare(GraphV1NativeConversion.valueFromLegacy(value, key: key))
+                            let converted = try GraphV1NativeConversion.convertedProperty(value, key: key)
+                            if let attachment = converted.attachment {
+                                guard let owner = row.value(forKey: "node") as? NSManagedObject,
+                                      let legacy = try property(GraphTypedStoreAdapter.legacyKey, on: owner)?.value(forKey: "object") as? String,
+                                      let ownerID = stored.nodeIDs[legacy] else { throw StageFailure.missingLegacyKey }
+                                let native = NSEntityDescription.insertNewObject(forEntityName: ModelIdentifier.entityName, into: context)
+                                native.setValue(GraphAttachmentPayload.graphType, forKey: "type"); native.setValue(NodeClass.entity.rawValue, forKey: "nodeClass")
+                                native.setValue(Date(), forKey: "createdDate")
+                                let id = GraphNodeID(graphID: ownerID.graphID)
+                                try set(id.rawValue.uuidString, key: GraphTypedStoreAdapter.idKey, node: native, context: context)
+                                try set(id.graphID.rawValue.uuidString, key: GraphTypedStoreAdapter.graphKey, node: native, context: context)
+                                try set([String](), key: GraphTypedStoreAdapter.formatsKey, node: native, context: context)
+                                native.setValue(id.rawValue.uuidString, forKey: GraphNativeIdentityColumns.nodeAttribute)
+                                native.setValue(id.graphID.rawValue.uuidString, forKey: GraphNativeIdentityColumns.graphAttribute)
+                                let payload = try GraphAttachmentPayload(id: id, ownerID: ownerID, fileName: "attachment", contentType: "application/octet-stream", data: attachment.data)
+                                var metadata = payload.content.metadata
+                                metadata.propertyKey = key; metadata.codec = attachment.codec; metadata.codecVersion = attachment.version; metadata.origin = "v1"
+                                metadata.sourcePropertyVersion = (row.value(forKey: "appDataVersion") as? NSNumber)?.intValue
+                                try GraphNativeAttachmentStorage.write(try GraphAttachmentPayload(metadata: metadata, data: attachment.data).content, to: native)
+                                context.delete(row)
+                                continue
+                            }
+                            guard let value = converted.property else { throw GraphV1ConversionError.unsupportedSource }
+                            let prepared = try GraphNativePropertyStorage.prepare(value)
                             row.setValue(nil, forKey: "object")
                             for (slot, _) in GraphNativePropertyStorage.slots { row.setValue(nil, forKey: slot) }
                             row.setValue(prepared.kind.rawValue, forKey: GraphNativePropertyStorage.kindKey)
@@ -173,6 +196,7 @@ enum GraphV1StagedMigration {
             for entity in GraphV1NativeInventory.nodeEntities {
                 try batches(context, entity: entity) { nodes in
                     for node in nodes {
+                        if node.value(forKey: "type") as? String == GraphAttachmentPayload.graphType { continue }
                         let legacyRow = try property(GraphTypedStoreAdapter.legacyKey, on: node)
                         guard let legacy = legacyRow?.value(forKey: "object") as? String else { throw StageFailure.missingLegacyKey }
                         guard let id = stored.nodeIDs[legacy] else { throw StageFailure.unknownLegacyKey }
@@ -241,23 +265,19 @@ enum GraphV1StagedMigration {
                 }
                 if !existing.root { try GraphNativeIdentityDatabaseAdapter.activateMigratedGraph(context, graphID: id) }
                 let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
-                guard session.nodes.count == stored.nodeIDs.count else { throw GraphV1ConversionError.invalidReceipt }
+                guard session.nodes.filter({ $0.value.type != GraphAttachmentPayload.graphType }).count == stored.nodeIDs.count else { throw GraphV1ConversionError.invalidReceipt }
                 let reverse = Dictionary(uniqueKeysWithValues: stored.nodeIDs.map { ($0.value, $0.key) })
                 var digest = SHA256()
                 for legacy in stored.nodeIDs.keys.sorted() {
                     let nodeID = stored.nodeIDs[legacy]!
                     guard let node = try session.node(nodeID), node[dynamicMember: GraphTypedStoreAdapter.legacyKey] as? String == legacy,
                           let record = try session.record(nodeID) else { throw GraphV1ConversionError.invalidReceipt }
-                    var properties = record.properties
-                    for (key, value) in properties {
-                        if case .encoded(let archive) = value, archive.codec == GraphV1NativeConversion.legacyArchiveCodec {
-                            let decoded = try GraphArchiver.unarchive(archive.data)
-                            properties[key] = try GraphV1NativeConversion.valueFromLegacy(decoded, key: key, canonical: true)
-                        }
+                    var versions = node.runtimePropertyVersions
+                    for (attachmentID, attachmentNode) in session.nodes where attachmentNode.runtimeTypeIfPresent == GraphAttachmentPayload.graphType {
+                        let metadata = try GraphNativeAttachmentStorage.metadata(attachmentNode, id: attachmentID)
+                        if metadata.ownerID == nodeID, let key = metadata.propertyKey, let version = metadata.sourcePropertyVersion { versions[key] = version }
                     }
-                    let canonical = try GraphRecord(id: nodeID, type: record.type, endpoints: record.endpoints, properties: properties,
-                        tags: record.tags, groups: record.groups, createdDate: record.createdDate)
-                    try GraphV1NativeInventory.append(canonical, legacy: legacy, reverse: reverse, versions: node.runtimePropertyVersions, digest: &digest)
+                    try GraphV1NativeInventory.append(record, legacy: legacy, reverse: reverse, versions: versions, digest: &digest)
                     for row in node.node.propertySet where !row.name.hasPrefix(GraphTypedStoreAdapter.prefix) { context.refresh(row, mergeChanges: false) }
                 }
                 guard digest.finalize().map({ String(format: "%02x", $0) }).joined() == intent.fingerprint else { throw GraphV1ConversionError.staleSource }
@@ -271,7 +291,7 @@ enum GraphV1StagedMigration {
                 // Its target PH transaction supplies the new baseline token.
                 try Task.checkCancellation(); if context.hasChanges { try context.save() }
                 try afterCatalogSave?()
-                try GraphSyncCheckpointAdapter.seedNativeConversion(context, graphID: id, ids: Set(stored.nodeIDs.values))
+                try GraphSyncCheckpointAdapter.seedNativeConversion(context, graphID: id, ids: Set(session.nodes.keys))
                 root[dynamicMember: GraphV1NativeConversion.receiptKey] = data
                 root[dynamicMember: GraphTypedStoreAdapter.prefix + "nativeV1Seal"] = UUID().uuidString
                 try releaseWorkspace(container)

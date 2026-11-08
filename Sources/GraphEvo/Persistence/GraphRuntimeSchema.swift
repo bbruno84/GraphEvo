@@ -55,4 +55,32 @@ package enum GraphRuntimeSchema {
         return GraphNativePropertyStorage.makeModel()
     }
 
+    package static let attachmentProperties = StoreSchema(
+        identifier: GraphNativeAttachmentStorage.identifier,
+        entityVersionHashes: GraphNativeAttachmentStorage.makeModel().entityVersionHashesByName,
+        requiredModelVersionIdentifier: GraphNativeAttachmentStorage.identifier,
+        coordinatesReads: true,
+        removeOwnedContent: { url, storeID in
+            try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: url, storeID: storeID)).removeOwnedRoot()
+        }
+    ) {
+        GraphValueTransformer.register()
+        return GraphNativeAttachmentStorage.makeModel()
+    }
+
+    static let attachmentFiles = StoreSchema(
+        identifier: GraphNativeAttachmentStorage.fileIdentifier,
+        entityVersionHashes: GraphNativeAttachmentStorage.makeModel(files: true).entityVersionHashesByName,
+        requiredModelVersionIdentifier: GraphNativeAttachmentStorage.fileIdentifier,
+        coordinatesReads: true,
+        removeOwnedContent: { url, storeID in
+            guard let uuid = UUID(uuidString: storeID) else { throw GraphFileError.invalidMetadata }
+            try GraphFileDisk.removeOwnedRoot(GraphFileDisk.root(for: url, storeID: uuid))
+            try GraphCloudAssetSpool(root: GraphCloudAssetSpool.outgoingRoot(storeURL: url, storeID: storeID)).removeOwnedRoot()
+        }
+    ) {
+        GraphValueTransformer.register()
+        return GraphNativeAttachmentStorage.makeModel(files: true)
+    }
+
 }

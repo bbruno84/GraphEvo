@@ -52,3 +52,16 @@ A child packaged in a synthetic .appex bundle also exercises real Bundle.main
 classification and refuses both public mirrored overloads/schemas before native
 loading. CI runs this on macOS. It does not certify an iOS extension, App Group sandbox,
 CloudKit mirroring, suspended widget delivery or concurrent widget writes.
+
+The coordinated fixture also exercises keyed raw attachments and automatic v1
+binary extraction through the public Swift 6 surface. After building the model
+consumer, verify that binary property APIs stay unavailable:
+
+```sh
+python3 IntegrationTests/PackageConsumer/verify_property_boundary.py \
+  --modules IntegrationTests/PackageConsumer/.build/out/Products/Debug
+```
+
+Pass the directory containing the built GraphEvo Swift modules when using a
+toolchain with a different build output layout. These fixtures must fail for
+the named missing API, rather than an unrelated module-resolution error.

@@ -13,6 +13,10 @@ enum GraphNativeIdentityDatabaseAdapter {
 
     static var database: GraphDatabaseAdapter { makeDatabase() }
 
+    static func fileMetadata(_ context: NSManagedObjectContext, id: GraphNodeID) throws -> GraphFile? {
+        try access().fileMetadata(context, id: id)
+    }
+
     static func activateMigratedGraph(_ context: NSManagedObjectContext, graphID: GraphID) throws {
         guard let coordinator = context.persistentStoreCoordinator, let store = coordinator.persistentStores.first,
               coordinator.metadata(for: store)[StoreNativeContext.workspaceKey] is String,
@@ -41,10 +45,10 @@ enum GraphNativeIdentityDatabaseAdapter {
             }, delete: { context, graphID, id in
                 try access.checkGraph(context, graphID: graphID)
                 try base.graph.delete(context, graphID, id)
-            }, attachmentMetadata: { context, graphID in
+            }, attachmentMetadata: { context, graphID, ownerID in
                 _ = try access.validateIdentityInventory(context, graphID: graphID)
                 guard let list = base.graph.attachmentMetadata else { throw GraphStoreError.unsupportedLayout }
-                return try list(context, graphID)
+                return try list(context, graphID, ownerID)
             }, query: { context, graphID, request in
                 try access.checkGraph(context, graphID: graphID)
                 if GraphNativePropertyStorage.enabled(context), !allowsMirroring {
@@ -56,6 +60,10 @@ enum GraphNativeIdentityDatabaseAdapter {
                 guard let query = base.graph.query else { throw GraphStoreError.unsupportedLayout }
                 return try query(context, graphID, request)
             })
+        graph.attachmentOwnerExists = { context, graphID, id in
+            guard id.graphID == graphID else { throw GraphStoreError.foreignGraph }
+            return try access.attachmentOwnerExists(context, id: id)
+        }
         graph.validateIntegrity = { context, id in
             try validate(context, graphID: id, allowsMirroring: allowsMirroring)
         }

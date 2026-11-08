@@ -48,6 +48,8 @@ package struct StoreSchema: Sendable {
     package let identifier: String
     package let entityVersionHashes: [String: Data]
     package let requiredModelVersionIdentifier: String?
+    /// External binary references need a finite read grant as well as a pinned SQL generation.
+    package let coordinatesReads: Bool
     /// Terminal purge only, after exact identity validation and exclusive Apple admission.
     package let removeOwnedContent: (@Sendable (URL, String) throws -> Void)?
     let makeModel: @Sendable () -> NSManagedObjectModel
@@ -56,19 +58,21 @@ package struct StoreSchema: Sendable {
         identifier: String,
         entityVersionHashes: [String: Data],
         requiredModelVersionIdentifier: String? = nil,
+        coordinatesReads: Bool = false,
         removeOwnedContent: (@Sendable (URL, String) throws -> Void)? = nil,
         makeModel: @escaping @Sendable () -> NSManagedObjectModel
     ) {
         self.identifier = identifier
         self.entityVersionHashes = entityVersionHashes
         self.requiredModelVersionIdentifier = requiredModelVersionIdentifier
+        self.coordinatesReads = coordinatesReads
         self.removeOwnedContent = removeOwnedContent
         self.makeModel = makeModel
     }
 
     func isCompatible(with other: StoreSchema) -> Bool {
         identifier == other.identifier && entityVersionHashes == other.entityVersionHashes &&
-            requiredModelVersionIdentifier == other.requiredModelVersionIdentifier
+            requiredModelVersionIdentifier == other.requiredModelVersionIdentifier && coordinatesReads == other.coordinatesReads
     }
 }
 

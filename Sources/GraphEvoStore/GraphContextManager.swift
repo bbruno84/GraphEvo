@@ -481,7 +481,7 @@ package actor GraphContextManager {
     }
     static func drainIncoming(_ session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding,
                                       maximumEvents: Int) async throws -> GraphCloudApplyReport {
-        var entries = try await session.incoming(for: binding.route.zone, limit: maximumEvents)
+        var entries = try await session.incoming(for: binding.route.zone, limit: session.configuration.maximumEvents)
         if await session.supportsSharingOperations(), let member = try await session.membership(graph.id), member.role == .participant {
             if member.terminal { throw GraphCloudError.zoneUnavailable }
             // A live server inspection already settled access before entering this data path.
@@ -518,6 +518,26 @@ package actor GraphContextManager {
             try await session.consume(Set(descriptors.map(\.id)))
             entries.removeAll { GraphCloudGraphDescriptor.isControl($0.change) }
         }
+        // Retain orphan attachments without letting their arrival order hide a later owner.
+        // Only headers are inspected here; asset bytes stay in the durable inbox spool.
+        var ordinary: [GraphCloudInboxEntry] = []
+        var attachments: [(GraphCloudInboxEntry, GraphNodeID)] = []
+        for entry in entries {
+            if let owner = try GraphCloudNodeCodec.attachmentOwner(entry.change, binding: binding.route) { attachments.append((entry, owner)) }
+            else { ordinary.append(entry) }
+        }
+        var selected = Array(ordinary.prefix(maximumEvents))
+        var available = Set(selected.compactMap { entry -> GraphNodeID? in
+            guard entry.change.kind == .recordChanged, let name = entry.change.recordName,
+                  name.hasPrefix("node."), let uuid = UUID(uuidString: String(name.dropFirst(5))) else { return nil }
+            return .init(graphID: binding.route.graphID, rawValue: uuid)
+        })
+        for (entry, owner) in attachments where selected.count < maximumEvents {
+            let exists = available.contains(owner) ? true : try await graph.transportContains(owner)
+            if exists { selected.append(entry); available.insert(owner) }
+        }
+        entries = selected
+        if entries.isEmpty { return GraphCloudApplyReport(applied: controls.count + descriptors.count, cleanupPending: false) }
         var effects: [GraphCloudEffect] = []
         for entry in entries {
             let data = try await session.assetData(for: entry.change, binding: binding.route)

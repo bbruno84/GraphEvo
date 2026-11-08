@@ -175,10 +175,9 @@ package enum GraphCloudRecordCodec {
         let record = try restore(archive)
         guard record["asset"] != nil else { return incoming }
         let reference: GraphCloudAssetReference
-        if record["kind"] as? String == "file" {
-            guard let source = incoming.transientAssetURL else { throw GraphCloudError.invalidState }
+        if let source = incoming.transientAssetURL {
             reference = try spool.stageFileBlocking(from: source, role: .incoming, namespace: namespace,
-                identity: identity, binding: binding, recordName: name)
+                identity: identity, binding: binding, recordName: name, isFile: record["kind"] as? String == "file")
         } else {
             let data = try GraphCloudAsset.bytes(record["asset"])
             reference = try spool.stageBlocking(data, role: .incoming, namespace: namespace,
@@ -193,7 +192,8 @@ package enum GraphCloudRecordCodec {
     }
 
     static func archive(_ record: CKRecord, scope: GraphCloudScope, portableAsset: Bool = false) throws -> GraphCloudIncoming {
-        if record.recordType == GraphCloudNodeCodec.recordType, record["kind"] as? String == "file",
+        if record.recordType == GraphCloudNodeCodec.recordType,
+           (record["kind"] as? String == "file" || record["type"] as? String == GraphAttachmentPayload.graphType),
            let asset = record["asset"] as? CKAsset, let source = asset.fileURL {
             guard let copy = record.copy() as? CKRecord else { throw GraphCloudError.invalidState }
             copy["asset"] = Data() as CKRecordValue

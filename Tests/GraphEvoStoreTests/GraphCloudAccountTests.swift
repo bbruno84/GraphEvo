@@ -62,7 +62,7 @@ private actor AccountQueryGate {
         let node: GraphNodeID
     }
     private func manager() -> GraphContextManager {
-        GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
     }
     private func fixture(driver: AccountDriver = AccountDriver()) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("AccountIsolation-" + UUID().uuidString)

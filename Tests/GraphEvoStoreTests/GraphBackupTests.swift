@@ -23,7 +23,7 @@ private struct BackupValidationGate: Sendable {
 
 @Suite(.timeLimit(.minutes(2))) struct GraphBackupTests {
     private func manager() -> GraphContextManager {
-        GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
     }
     private func legacyBackup(_ m: GraphContextManager, graph: GraphStore, root: URL,
                               artifacts: [GraphBackupArtifact] = []) async throws -> GraphBackup {
@@ -61,7 +61,7 @@ private struct BackupValidationGate: Sendable {
         defer { try? FileManager.default.removeItem(at: root) }
         let restricted = AsyncStream<Void>.makeStream(), gate = BackupValidationGate()
         let registry = StoreRegistry(hooks: .init(didRestrictWrites: { restricted.continuation.yield(()) }))
-        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
         let observation = try await graph.observe(observationQuery())
         var values = observation.makeAsyncIterator()
@@ -166,7 +166,7 @@ private struct BackupValidationGate: Sendable {
         let gate = BackupValidationGate(), base = GraphCoordinatorFactory.adapter
         let adapter = GraphCoordinatorAdapter(graph: base.graph, sync: base.sync, initializePolicy: base.initializePolicy,
             validateBackup: { context, id in try gate.block(); try base.validateBackup?(context, id) }, initialize: base.initialize)
-        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
         let graph = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
         let other = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Other.sqlite"))
         let operation = Task { try await m.createBackup(for: graph.id, in: root.appendingPathComponent("Backups")) }

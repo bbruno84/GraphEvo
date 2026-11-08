@@ -1,5 +1,10 @@
 # GraphEvo 2 — File synchronization
 
+The current S06/S07 property and attachment contract advances the descriptor,
+node, session, transport and asset-reference formats described below. See
+[properties and attachments](graphevo-2-property-attachments.md); earlier format
+numbers in this document retain their historical increment scope.
+
 Status: integrated through [PR #190](https://github.com/bbruno84/GraphEvo/pull/190),
 following the local File increment in
 [PR #189](https://github.com/bbruno84/GraphEvo/pull/189). Read with

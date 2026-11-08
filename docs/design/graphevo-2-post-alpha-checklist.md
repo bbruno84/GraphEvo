@@ -9,6 +9,28 @@ A1–A8 and the specification so they survive individual PRs. It complements the
 [delivery plan](graphevo-2-delivery-plan.md), [decision register](graphevo-2-decisions.md)
 and [experimental evidence register](graphevo-2-test-checklist.md).
 
+## Property and attachment admission — 2026-11-08
+
+The [S06/S07 contract](graphevo-2-property-attachments.md) selects a 2 MiB
+ordinary attachment limit and separates supported property collections from
+raw Data and generic Codable content. V1 migration preserves larger attachments
+without forcing File conversion. New profiles refuse old alpha stores and
+operational state unchanged. This fixes the value-channel contract; it does
+not close PA05's broader memory/capacity and production-data gates. Wider
+concurrent field-conflict and representative legacy-corpus acceptance remain
+part of beta validation. The alpha contract integrates through #191; the
+[pre-merge review](results/property-attachment-review-2026-11-08.md) records the
+reviewed head and local acceptance scope. The
+[bounded physical checkpoint](results/property-attachment-contract-2026-11-08.md)
+verifies private/shared exchange and reopen on iPad/XR; it does not close the
+broader gates above. The selected 36-large-property publication/recovery
+regression is corrected by the [cost investigation](results/initial-publication-cost-2026-11-08.md):
+214 to 13 seconds Debug and 174 to 12.6 seconds Release, with native read
+coordination retained and the original two-minute hang guard restored. Physical
+reopen verifies correctness, not throughput. Representative device capacity,
+actual CloudKit network latency and production-data acceptance remain open;
+this result does not close PA05/PA06/PA08 or establish a supported latency target.
+
 ## H01 public entry — 2026-11-04
 
 [PR #150](https://github.com/bbruno84/GraphEvo/pull/150) implements the selected

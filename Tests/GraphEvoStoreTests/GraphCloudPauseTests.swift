@@ -82,7 +82,7 @@ private actor PauseBus {
     }
     private func fixture(adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Pause-" + UUID().uuidString), bus = PauseBus()
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
         let a = try await manager.createGraph(id: GraphID(), at: root.appendingPathComponent("A.sqlite"))
         let b = try await manager.createGraph(id: GraphID(), at: root.appendingPathComponent("B.sqlite"))
         let config = GraphCloudConfiguration(containerIdentifier: "iCloud.pause." + UUID().uuidString, environment: .development, directory: root.appendingPathComponent("Engine"))
@@ -319,7 +319,7 @@ private actor PauseBus {
         }
         let pausing = Task { try await f.manager.pauseCloudSynchronization(for: f.a.id) }
         #expect(await iterator.next() == .pauseRequested)
-        #expect(try await f.a.read { try $0.record(for: f.nodeA)?.properties["value"] } == .integer(1))
+        // S06 reads wait for the native import grant; observe its settled result below.
         barrier.release()
         if fail {
             do { _ = try await applying.value; Issue.record("Faulted import committed") } catch GraphCloudError.invalidState { }

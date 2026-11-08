@@ -12,6 +12,17 @@ struct GraphSharedInsertionPlan: Codable, Sendable {
     let rows: [Row]
     let patch: Patch?
 
+    struct BinaryValue: Codable, Sendable {
+        let data: Data
+        let codec: String
+        let version: UInt
+        init(_ value: GraphAttachmentValue) { data = value.data; codec = value.codec; version = value.version }
+        func value() throws -> GraphAttachmentValue { try .init(data: data, codec: codec, version: version) }
+    }
+    struct Attachment: Codable, Sendable {
+        let metadata: GraphAttachmentMetadata
+        let data: Data
+    }
     struct Row: Codable, Sendable {
         let id: GraphNodeID
         let type: String
@@ -19,11 +30,17 @@ struct GraphSharedInsertionPlan: Codable, Sendable {
         let subjects: [GraphNodeID]
         let objects: [GraphNodeID]
         let properties: [String: Data]
+        let attachments: [String: BinaryValue]?
+        let storedAttachment: Attachment?
+        let legacyAttachment: Bool?
         let tags: Set<String>
         let groups: Set<String>
         let createdDate: Date?
 
         init(_ record: GraphRecord) throws {
+            legacyAttachment = record.legacyAttachment
+            attachments = record.attachments.mapValues(BinaryValue.init)
+            storedAttachment = record.storedAttachment.map { Attachment(metadata: $0.metadata, data: $0.data) }
             id = record.id; type = record.type
             switch record.endpoints {
             case .file: throw GraphFileError.localOnly
@@ -47,8 +64,11 @@ struct GraphSharedInsertionPlan: Codable, Sendable {
             case "action": endpoints = .action(subjects: Set(subjects), objects: Set(objects))
             default: throw GraphStoreError.unsupportedLayout
             }
-            return try GraphRecord(id: id, type: type, endpoints: endpoints,
-                properties: properties.mapValues { try GraphValueCodec.decode($0) }, tags: tags, groups: groups, createdDate: createdDate)
+            var record = try GraphRecord(id: id, type: type, endpoints: endpoints,
+                properties: properties.mapValues { try GraphValueCodec.decode($0) }, tags: tags, groups: groups, createdDate: createdDate, attachments: (attachments ?? [:]).mapValues { try $0.value() })
+            if let storedAttachment { record.storedAttachment = try GraphAttachmentPayload(metadata: storedAttachment.metadata, data: storedAttachment.data).content }
+            record.legacyAttachment = legacyAttachment ?? false
+            return record
         }
     }
 

@@ -8,7 +8,7 @@ import GraphEvoStore
 extension GraphSyncCheckpointAdapter {
     static let transportKey = GraphTypedStoreAdapter.prefix + "cloudTransport"
     private struct Transport: Codable {
-        var format = 3
+        var format = 4
         let binding: GraphCloudTransportBinding
         let storeID: String
         let epoch: UUID
@@ -36,7 +36,7 @@ extension GraphSyncCheckpointAdapter {
             do { state = try JSONDecoder().decode(Transport.self, from: bytes) }
             catch { throw GraphCloudError.invalidState }
         } else { state = Transport(binding: binding, storeID: value.state.storeID, epoch: value.state.epoch) }
-        guard state.format == 3, state.binding == binding, state.storeID == value.state.storeID,
+        guard state.format == 4, state.binding == binding, state.storeID == value.state.storeID,
               state.epoch == value.state.epoch, state.metadata.count <= 100_000, state.receipts.count <= 4096,
               state.metadata.keys.allSatisfy({ UUID(uuidString: $0)?.uuidString == $0 }),
               state.receipts.allSatisfy({ UUID(uuidString: $0.key)?.uuidString == $0.key && $0.value.utf8.count == 64 &&
@@ -163,10 +163,12 @@ extension GraphSyncCheckpointAdapter {
                 guard old.type == record.type, old.endpoints.kind == record.endpoints.kind else { throw GraphCloudNodeError.invalidRecord }
                 var changes = record.properties.mapValues { GraphPropertyChange.set($0) }
                 for key in old.properties.keys where record.properties[key] == nil { changes[key] = .remove }
-                _ = try session.patch(GraphRecordPatch(id: record.id, properties: changes,
+                var patch = try GraphRecordPatch(id: record.id, properties: changes,
                     addingTags: record.tags.subtracting(old.tags), removingTags: old.tags.subtracting(record.tags),
-                    addingGroups: record.groups.subtracting(old.groups), removingGroups: old.groups.subtracting(record.groups), endpoints: record.endpoints))
-            } else { try session.insert(record) }
+                    addingGroups: record.groups.subtracting(old.groups), removingGroups: old.groups.subtracting(record.groups), endpoints: record.endpoints)
+                patch.storedAttachment = record.storedAttachment
+                _ = try session.patch(patch, imported: true)
+            } else { try session.insert(record, migrated: true) }
             if let node = try session.node(record.id) {
                 node.setImportedCreatedDate(record.createdDate)
                 node[dynamicMember: GraphMutationMetadata.modifiedKey] = remote.modifiedAt
@@ -223,7 +225,7 @@ extension GraphSyncCheckpointAdapter {
             var fileSources: [String: URL] = [:]
             let session = try GraphTypedStoreAdapter.Session(context, id, database: true)
             for change in value.state.pending.sorted(by: ordered).filter({ onlyIDs?.contains($0.id) ?? true }).prefix(maximum) {
-                let record = change.operation == .save ? try session.record(change.id) : nil
+                let record = change.operation == .save ? try session.record(change.id, includingAttachments: false) : nil
                 guard change.operation == .delete || record != nil else { throw GraphSyncError.unresolvedChange }
                 if let file = record?.file {
                     let count = Int(file.byteCount)
@@ -232,14 +234,15 @@ extension GraphSyncCheckpointAdapter {
                 }
                 if let record, record.type == GraphAttachmentPayload.graphType {
                     let count = try GraphAttachmentPayload(graphRecord: record).content.data.count
-                    if count > remainingAssetBytes { break }
-                    remainingAssetBytes -= count
+                    if count > remainingAssetBytes && !items.isEmpty { break }
+                    remainingAssetBytes = max(0, remainingAssetBytes - count)
                 }
                 let date = try session.node(change.id).flatMap { try GraphMutationMetadata.modifiedAt($0) }
                 let item = try GraphCloudNodeCodec.encode(GraphSyncItem(change: change, record: record),
                     binding: binding.route, systemFields: state.metadata[change.id.rawValue.uuidString], modifiedAt: date)
                 guard try sizing.append(GraphCloudBatchSizing.estimate(item, zone: binding.route.zone)) else { break }
                 items.append(item)
+                if (record?.storedAttachment?.data.count ?? 0) > 32 * 1024 * 1024 { break }
                 if let file = record?.file {
                     fileSources[item.recordName] = GraphFileDisk.url(for: file, in: try ManagedGraphFile.root(in: context))
                 }

@@ -864,11 +864,10 @@ public actor GraphContext {
 
 `GraphContext.localFiles()` selects the local SQLite schema with file
 nodes. Use its ordinary `createGraph(id:at:)` and `openGraph(id:at:)` APIs.
-`GraphContext.migrateClosedS04Store(from:into:)` migrates a stopped local S04
-source into a new directory and returns the new SQLite URL. The source must
-remain closed through the copy. This context also enables File-aware CloudKit
-connections through the ordinary `connectCloud(using:)` API. The schema
-identifier selected in the local increment is retained.
+The ordinary context selects S06; `localFiles()` selects S07 with the same
+property/attachment contract and File-aware CloudKit connections. Existing
+S04/S05 stores are refused unchanged. The historical S04-to-S05 migration helper
+is package-only and is not a current public upgrade path.
 
 `GraphNodeKind.file` and `GraphEndpoints.file` identify a file node. A
 `Relationship` or `Action` endpoint can name its `GraphNodeID`. Entity
@@ -987,27 +986,36 @@ available for v1 stores. See the
   read-only `kind`.
 - `GraphValue`: `.null`, `.boolean(Bool)`, `.integer(Int64)`,
   `.unsignedInteger(UInt64)`, `.floatingPoint(Double)`, `.decimal(Decimal)`,
-  `.string(String)`, `.data(Data)`, `.date(Date)`, `.url(URL)`, `.uuid(UUID)`,
-  `.array([GraphValue])`, `.object([String: GraphValue])`,
-  `.encoded(GraphEncodedValue)`; Sendable and Equatable.
-- `GraphEncodedValue(codec: String, version: UInt, data: Data) throws`: read-only
-  codec/version/data; unknown codecs retain bytes without implicit execution.
+  `.string(String)`, `.date(Date)`, `.url(URL)`, `.uuid(UUID)`,
+  `.array([GraphValue])`, `.object([String: GraphValue])`; Sendable and Equatable.
+  Raw Data and generic Codable values use attachments, not properties.
 - `GraphPropertyValue: Sendable`: `var graphValue: GraphValue { get }` and
   `init(graphValue: GraphValue) throws`. Conformances: GraphValue,
-  GraphEncodedValue, String, Bool, Int8, Int16, Int32, Int, Int64, UInt8, UInt16,
-  UInt32, UInt, UInt64, Float, Double, Decimal, Data,
+  String, Bool, Int8, Int16, Int32, Int, Int64, UInt8, UInt16,
+  UInt32, UInt, UInt64, Float, Double, Decimal,
   Date, URL, UUID, and conditional Optional, Array and string-keyed Dictionary.
   Integer widths widen to the existing signed/unsigned 64-bit cases; narrowing
   checks exact range and preserves signedness. Float widens to Double and decodes
   only finite exactly representable values, without rounding/underflow/overflow.
-  GraphValue cases and wire formats remain unchanged. See
+  Supported numeric cases retain their exactness rules. See
   [numeric property mapping](../design/graphevo-2-numeric-properties.md).
-- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:file:) throws`:
+- `GraphRecord(id:type:endpoints:properties:tags:groups:createdDate:file:attachments:) throws`:
   read-only fields; endpoints defaults to `.entity`, properties/tags/groups to
   empty and creation date/file metadata to nil. Type/property keys must be nonempty and
-  references must have the same graph ID.
+  references must have the same graph ID. `attachments: [String: GraphAttachmentValue]`
+  defaults to empty; its keys must be nonempty and disjoint from property keys.
 - `GraphRecord.value<Value: GraphPropertyValue>(for:as:) throws -> Value`:
   defaults `as` to Value.self; missing keys and failed typed decoding differ.
+- `GraphAttachmentValue(data: Data)` and `init<Value: Encodable & Sendable>(codable: Value) throws`:
+  detached content with read-only `data`, `codec`, `version` and static
+  `maximumByteCount` (2,097,152 bytes). The fixed Codable codec is sorted-key JSON.
+  `decoded<Value: Decodable & Sendable>(as: Value.Type = Value.self) throws -> Value`
+  accepts that fixed codec/version and propagates decoder failures; raw or legacy
+  archive content is not implicitly interpreted as Codable JSON.
+- `GraphRecord.attachmentData(for:) throws -> Data` and
+  `attachmentValue<Value: Decodable & Sendable>(for:as:) throws -> Value`:
+  explicit keyed attachment reads; missing keys and decoding failures propagate.
+- `GraphAttachmentChange`: `.set(GraphAttachmentValue)` and `.remove`.
 - `GraphModel: Identifiable, Sendable where ID: Sendable`: application identity
   (`UUID` and `GraphNodeID` have default bindings); static `graphType: String`
   and `graphKind: GraphNodeKind`; `init(graphRecord: GraphRecord) throws`,
@@ -1021,7 +1029,7 @@ available for v1 stores. See the
 - `GraphPropertyChange`: `.set(GraphValue)` and `.remove`; setting null is
   distinct from removing a property in the detached contract.
 - `GraphRecordPatch(id:properties:addingTags:removingTags:addingGroups:
-  removingGroups:endpoints:) throws`: defaults all changes to empty/unchanged;
+  removingGroups:endpoints:attachments:) throws`: defaults all changes to empty/unchanged;
   read-only matching fields. `applying(to: GraphRecord) throws -> GraphRecord`
   preserves unknown fields and metadata, rejecting identity/kind conflicts.
 - `GraphModelError`: `invalidRecord(String)`, `invalidValue`,
@@ -1312,7 +1320,7 @@ permissions, physical evidence and remaining beta gates.
 
 ```swift
 extension GraphStore {
-    nonisolated static var maximumAttachmentByteCount: Int { get } // 10 MiB
+    nonisolated static var maximumAttachmentByteCount: Int { get } // 2 MiB
     func importAttachment(from source: URL, ownedBy ownerID: GraphNodeID,
                           fileName: String? = nil,
                           contentType: String = "public.data") async throws -> GraphAttachmentMetadata
@@ -1336,13 +1344,16 @@ enum GraphStoreBackup {
 
 `GraphAttachmentMetadata: Sendable, Equatable, Codable` exposes read-only
 `id: GraphNodeID`, `ownerID: GraphNodeID`, `fileName: String`, `contentType: String`,
-`byteCount: Int`, `sha256: String` and `revision: UUID`.
+`byteCount: Int`, `sha256: String` and `revision: UUID`. Optional metadata also
+records `propertyKey`, `codec`, `codecVersion`, `origin` and `sourcePropertyVersion`.
+The latter fields describe persisted content; they do not grant write admission.
 `GraphAttachmentContent: Sendable, Equatable` exposes `metadata` and `data: Data`.
 Codable metadata is transport data, not authority or proof that bytes are locally
 available. Complete reads verify content, version, identities, owner and checksum.
-On the C03a experimental branch, `attachments(ownedBy:)` validates descriptive
-metadata without decoding/verifying split content; listing does not certify body availability
-or integrity. Existing A6 single-envelope files retain full validation on listing.
+On current S06/S07 stores, `attachments(ownedBy:)` projects descriptive metadata
+without materializing or verifying content; listing does not certify body
+availability or integrity. Historical A6 single-envelope files retain full
+validation on listing.
 Nil denotes an absent local node; incomplete/invalid content or an unavailable
 owner throws. This does not establish permanent cloud absence or corruption.
 
@@ -1352,9 +1363,9 @@ owner and creation date and rejects a locally changed revision. Owner deletion
 cleans owned files, including those on implicitly deleted relationship edges;
 transaction rollback preserves the previous content. Raw patches cannot transfer
 ownership or replace valid content with malformed metadata. `GraphEvo.Attachment.v1`
-and its `content` / experimental `attachmentMetadata` properties are reserved for this alpha feature. Current
-native model hashes remain unchanged; v1 binary fields are not automatically
-converted into attachments.
+is reserved for this feature. Current S06/S07 profiles use fixed native
+attachment attributes; v1 conversion automatically extracts recoverable binary
+properties while preserving each owner and property key.
 
 Import coordinates/security-scopes source access outside the write scope and
 copies bounded bytes rather than retaining a source URL. Export snapshots then
@@ -1365,7 +1376,9 @@ started native shared assignment can retain partial intent, requiring A5 recover
 rather than an import replay. A locally committed result is distinct from export
 or independent replica recovery.
 
-The alpha buffers complete content and accepts empty files through 10 MiB.
+Ordinary writes buffer complete content and accept empty attachments through
+2 MiB (2,097,152 bytes). Migrated v1 attachments may exceed this limit and remain
+readable, exportable, deletable and synchronizable.
 Listing split metadata does not decode/verify the body; old envelopes retain full validation. Streaming, per-file
 progress, eviction, selective download, a persistent offline-retention guarantee
 and distributed replacement conflict resolution are unsupported.
@@ -2065,7 +2078,10 @@ for the complete two-file example and Sendable constraints.
 
 ## Package-only S04 property storage
 
-The custom-sync ContextManager now selects
+This paragraph records the historical P01 contract. Current coordinated contexts
+select S06/S07 and property codec 3 as described in
+[properties and attachments](../design/graphevo-2-property-attachments.md).
+The historical custom-sync ContextManager selected
 [S04 typed properties](../design/graphevo-2-typed-properties.md). Scalars route to
 lossless native columns after GraphModel mapping; compound values and special
 cases retain a single serialized representation. The public GraphRecord,
@@ -2147,8 +2163,9 @@ explicit consumer declarations about v1 source completeness/writers. It holds
 consumer writes across handles and restart. Advancement obtains one conditional
 cloud authority, sends at most 100 primitives per call through existing PH/
 transport, then verifies the complete server seed before publication. Status is
-local; starting the account session remains explicit. No ordinary Data is
-implicitly converted into an attachment or admitted beyond existing codec limits.
+local; starting the account session remains explicit. Current S06/S07 native v1
+conversion extracts recoverable Data into attachments, including oversized source
+values. Ordinary new attachment writes still require the 2 MiB admission limit.
 
 Activation results separate durable status, operationError and cleanupPending;
 native-close failure carries status and separate operation/cleanup errors.
@@ -2210,6 +2227,6 @@ and [contract](../design/graphevo-2-public-sharing.md).
   Existing typed store/sharing errors remain available; native operation errors
   never imply that durable acceptance/removal rolled back.
 - GraphCloudConnectionConfiguration adds `allowsSessionUpgradeFromV8: Bool = false`.
-  True permits only validated atomic format-8 to format-9 session conversion;
-  it neither resets data nor starts a cross-account session. Known errors and
-  bounded state remain separate from native cleanup quarantine.
+  This historical compatibility flag does not upgrade to current session format
+  10; older sessions are refused unchanged. Known errors and bounded state remain
+  separate from native cleanup quarantine.

@@ -29,7 +29,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         return root
     }
     private func manager() -> GraphContextManager {
-        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
     }
     private func create(_ m: GraphContextManager, _ root: URL) async throws -> GraphStore {
         try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("Source.sqlite"))
@@ -223,7 +223,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
                 try gate.blockOnce()
                 return result
             }), prepareWorkspace: base.prepareWorkspace, validateBackup: base.validateBackup, initialize: base.initialize)
-        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        let m = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
         let source = try await create(m, root), w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         gate.enable()
         let sealing = Task { try await w.seal() }
@@ -240,7 +240,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let gate = WorkspaceSealGate()
         let registry = StoreRegistry(hooks: .init(afterCommit: { try? gate.blockOnce() }))
-        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let source = try await create(m, root), w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         gate.enable()
         let sealing = Task { try await w.seal() }
@@ -280,7 +280,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let gate = WorkspaceSealGate()
         let registry = StoreRegistry(hooks: .init(didRestrictWrites: { gate.signalRestriction() }))
-        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let source = try await create(m, root), w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         let id = w.graph.makeNodeID()
         gate.enable()
@@ -294,9 +294,10 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         let sealing = Task { try await w.seal() }
         var restrictions = gate.restriction.stream.makeAsyncIterator(); _ = await restrictions.next()
         await #expect(throws: (any Error).self) { try await w.graph.transaction { _ in () } }
-        #expect(try await w.graph.read { try $0.record(for: id) } == nil)
+        let reading = Task { try await w.graph.read { try $0.record(for: id) } }
         let joined = Task { try await w.seal() }
         gate.release(); try await writer.value
+        #expect(try await reading.value?.id == id)
         let result = try await sealing.value
         #expect(try await joined.value == result)
         #expect(result.changes.map(\.id) == [id])
@@ -309,7 +310,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         let w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         let session = try #require(UUID(uuidString: String(decoding: Data(contentsOf: w.directory.appendingPathComponent("activation")), as: UTF8.self)))
         let aliasHandle = try await m.registry.open(.init(location: .sqlite(w.directory.appendingPathComponent("Graph.sqlite")),
-            exclusiveGraphID: source.id.rawValue, workspaceID: w.id, workspaceSessionID: session), schema: GraphRuntimeSchema.typedProperties)
+            exclusiveGraphID: source.id.rawValue, workspaceID: w.id, workspaceSessionID: session), schema: GraphRuntimeSchema.attachmentProperties)
         let alias = GraphStore.attached(id: source.id, handle: aliasHandle, adapter: GraphCoordinatorFactory.adapter.graph)
         _ = try await w.seal()
         await #expect(throws: (any Error).self) { try await alias.transaction { _ in () } }
@@ -338,7 +339,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
             try Data("{}".utf8).write(to: w.directory.appendingPathComponent("workspace.json"))
         } else {
             let raw = try await m.registry.open(.init(location: .sqlite(store), exclusiveGraphID: source.id.rawValue,
-                workspaceID: w.id, workspaceSessionID: UUID()), schema: GraphRuntimeSchema.typedProperties)
+                workspaceID: w.id, workspaceSessionID: UUID()), schema: GraphRuntimeSchema.attachmentProperties)
             try await raw.controlTransaction { context in
                 let root = try GraphTypedStoreAdapter.controlRoot(context, id: source.id)
                 root[dynamicMember: GraphMigrationNativeWorkspace.sealKey] = Data("{}".utf8)
@@ -356,7 +357,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
     @Test func structuralForeignRowsRefuseSealAndOrdinaryStoresCannotUseWorkspacePrivileges() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let m = manager(), source = try await create(m, root)
-        let raw = try await m.registry.open(.init(location: .sqlite(root.appendingPathComponent("Source.sqlite")), exclusiveGraphID: source.id.rawValue), schema: GraphRuntimeSchema.typedProperties)
+        let raw = try await m.registry.open(.init(location: .sqlite(root.appendingPathComponent("Source.sqlite")), exclusiveGraphID: source.id.rawValue), schema: GraphRuntimeSchema.attachmentProperties)
         let maintenance = try await raw.reserveMaintenance()
         await #expect(throws: StoreRuntimeError.self) { try await raw.workspaceTransaction(reservation: maintenance) { _ in () } }
         await maintenance.release()
@@ -430,7 +431,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         // The native store is detached, but cleanup still owns its global gateway claim.
         await #expect(throws: StoreRuntimeError.self) {
             try await StoreRegistry().open(.init(location: .sqlite(w.directory.appendingPathComponent("Graph.sqlite")),
-                exclusiveGraphID: source.id.rawValue, workspaceID: w.id, workspaceSessionID: UUID()), schema: GraphRuntimeSchema.typedProperties)
+                exclusiveGraphID: source.id.rawValue, workspaceID: w.id, workspaceSessionID: UUID()), schema: GraphRuntimeSchema.attachmentProperties)
         }
         try await source.transaction { _ in () }
         try before.write(to: owner)
@@ -458,7 +459,7 @@ private final class WorkspaceSealGate: @unchecked Sendable {
         let w = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))
         _ = try await w.seal(); try await w.close()
         let raw = try await m.registry.open(.init(location: .sqlite(w.directory.appendingPathComponent("Graph.sqlite")),
-            exclusiveGraphID: source.id.rawValue, workspaceID: w.id, workspaceSessionID: UUID()), schema: GraphRuntimeSchema.typedProperties)
+            exclusiveGraphID: source.id.rawValue, workspaceID: w.id, workspaceSessionID: UUID()), schema: GraphRuntimeSchema.attachmentProperties)
         try await raw.controlTransaction { context in
             let root = try GraphTypedStoreAdapter.controlRoot(context, id: source.id)
             // Deliberate native corruption fixture: retain the marker row, remove only its value.

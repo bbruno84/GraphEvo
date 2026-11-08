@@ -6,7 +6,7 @@ struct AppGroupAccessDenied: Error {
     let underlying: any Error
 }
 
-/// A single finite Apple coordination request.
+/// A single finite Apple request on the shared root, distinct from lifetime presentation.
 final class AppGroupStoreAccess: @unchecked Sendable {
     // Foundation permits cancel() from any thread. Submission and the accessor
     // remain confined to their designated operation queues.
@@ -30,30 +30,30 @@ final class AppGroupStoreAccess: @unchecked Sendable {
     private let presenter: AppGroupStorePresenter
     private let associatePresenter: Bool
     private let cancellable: Bool
+    private let reading: Bool
     private let options: NSFileCoordinator.WritingOptions
     private let reportDenial: Bool
     private let onSubmit: (@Sendable () -> Void)?
 
     init(presenter: AppGroupStorePresenter, associatePresenter: Bool = true, cancellable: Bool = true,
-         options: NSFileCoordinator.WritingOptions = [], reportDenial: Bool = false, onSubmit: (@Sendable () -> Void)? = nil) {
+         options: NSFileCoordinator.WritingOptions = [], reading: Bool = false, reportDenial: Bool = false, onSubmit: (@Sendable () -> Void)? = nil) {
         self.presenter = presenter
         self.associatePresenter = associatePresenter
         self.cancellable = cancellable
         self.options = options
+        self.reading = reading
         self.reportDenial = reportDenial
         self.onSubmit = onSubmit
     }
 
     func run<Value: Sendable>(_ body: @escaping @Sendable () throws -> Value) async throws -> Value {
-        guard let directory = presenter.presentedItemURL else {
-            throw StoreRuntimeError.invalidConfiguration("App Group coordination requires its owner's directory.")
-        }
+        let directory = presenter.coordinationDirectory
         let expected = directory.standardizedFileURL.path
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 presenter.presentedItemOperationQueue.addOperation { [self] in
                     let coordinator = Coordinator(NSFileCoordinator(filePresenter: associatePresenter ? presenter : nil))
-                    let intent = NSFileAccessIntent.writingIntent(with: directory, options: options)
+                    let intent = reading ? NSFileAccessIntent.readingIntent(with: directory, options: []) : NSFileAccessIntent.writingIntent(with: directory, options: options)
                     let submitted = state.withLock { current in
                         guard !current.cancelled else { return false }
                         current.coordinator = coordinator

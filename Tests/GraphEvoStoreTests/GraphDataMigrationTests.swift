@@ -44,7 +44,7 @@ private actor MigrationReadGate {
         }
         let rows = try (0..<2).map { n in
             try GraphDataMigrationRow(record: GraphRecord(id: GraphNodeID(graphID: graphID), type: "migration.item", endpoints: endpoints,
-                properties: ["old": .integer(Int64(n)), "unknown": .object(["max": .unsignedInteger(UInt64.max), "null": .null, "bytes": .data(Data([0,255]))])],
+                properties: ["old": .integer(Int64(n)), "unknown": .object(["max": .unsignedInteger(UInt64.max), "null": .null, "bytes": .string(Data([0,255]).base64EncodedString())])],
                 tags: ["keep"], createdDate: n == 0 ? nil : Date(timeIntervalSince1970: 1_700_000_000)), dataVersion: version)
         }
         do { try await lab.seed(rows) }

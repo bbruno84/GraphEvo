@@ -31,7 +31,7 @@ private actor WorkspaceOpenFailure {
         return url
     }
     private func manager(adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) -> GraphContextManager {
-        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        .init(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
     }
     private func boundary(_ graph: GraphStore) async throws -> GraphMigrationBoundary {
         try await graph.nativeOperation { container in
@@ -106,20 +106,20 @@ private actor WorkspaceOpenFailure {
         await #expect(throws: (any Error).self) { try await manager().openGraph(id: source.id, at: url) }
         await #expect(throws: (any Error).self) { try await GraphDatabase.open(at: url, schema: .nativeIdentity) }
         await #expect(throws: (any Error).self) {
-            try await StoreRegistry().open(.init(location: .sqlite(url), exclusiveGraphID: source.id.rawValue, workspaceID: UUID()), schema: GraphRuntimeSchema.typedProperties)
+            try await StoreRegistry().open(.init(location: .sqlite(url), exclusiveGraphID: source.id.rawValue, workspaceID: UUID()), schema: GraphRuntimeSchema.attachmentProperties)
         }
         await #expect(throws: (any Error).self) {
-            try await StoreRegistry().open(.init(location: .sqlite(url), exclusiveGraphID: UUID(), workspaceID: workspace.id), schema: GraphRuntimeSchema.typedProperties)
+            try await StoreRegistry().open(.init(location: .sqlite(url), exclusiveGraphID: UUID(), workspaceID: workspace.id), schema: GraphRuntimeSchema.attachmentProperties)
         }
         await #expect(throws: (any Error).self) {
-            try await StoreRegistry().open(.init(location: .sqlite(root.appendingPathComponent("Missing.sqlite")), exclusiveGraphID: source.id.rawValue, workspaceID: UUID()), schema: GraphRuntimeSchema.typedProperties)
+            try await StoreRegistry().open(.init(location: .sqlite(root.appendingPathComponent("Missing.sqlite")), exclusiveGraphID: source.id.rawValue, workspaceID: UUID()), schema: GraphRuntimeSchema.attachmentProperties)
         }
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("Missing.sqlite").path))
         await #expect(throws: (any Error).self) { try await workspace.graph.read { _ in true } }
         try await workspace.discard(); try await source.close()
         await #expect(throws: (any Error).self) {
             try await StoreRegistry().open(.init(location: .sqlite(root.appendingPathComponent("A.sqlite")),
-                exclusiveGraphID: source.id.rawValue, workspaceID: workspace.id), schema: GraphRuntimeSchema.typedProperties)
+                exclusiveGraphID: source.id.rawValue, workspaceID: workspace.id), schema: GraphRuntimeSchema.attachmentProperties)
         }
     }
 
@@ -308,7 +308,7 @@ private actor WorkspaceOpenFailure {
         let failure = WorkspaceOpenFailure()
         // Simulate the registry's failed-open error without leaving a native test owner attached.
         let registry = StoreRegistry(hooks: .init(beforeLoad: { try await failure.load() }))
-        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: GraphCoordinatorFactory.adapter)
+        let m = GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphCoordinatorFactory.adapter)
         let source = try await m.createGraph(id: GraphID(), at: root.appendingPathComponent("A.sqlite"))
         do {
             _ = try await m.prepareMigrationWorkspace(for: source.id, at: root.appendingPathComponent("Working"))

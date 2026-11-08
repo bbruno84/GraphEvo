@@ -29,7 +29,7 @@ private struct CanonicalDescriptorItem: GraphModel {
     }
     private func fixture() async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("DescriptorQuery-" + UUID().uuidString)
-        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.typedProperties,
+        let manager = GraphContextManager(registry: StoreRegistry(), schema: GraphRuntimeSchema.attachmentProperties,
             adapter: GraphCoordinatorFactory.adapter)
         let graph = try await manager.createGraph(id: GraphID(), at: root.appendingPathComponent("Store.sqlite"))
         return Fixture(root: root, graph: graph, manager: manager)
@@ -41,13 +41,13 @@ private struct CanonicalDescriptorItem: GraphModel {
     @Test func scalarCountDoesNotBuildApplicationFacadesOrIndexUnrequestedBodies() async throws {
         let f = try await fixture()
         let records = try (0..<100).map { index in
-            var values: [String: GraphValue] = ["rank": .integer(Int64(index)), "body": .data(Data(repeating: 9, count: 4_096))]
+            var values: [String: GraphValue] = ["rank": .integer(Int64(index)), "body": .string(Data(repeating: 9, count: 4_096).base64EncodedString())]
             for field in 0..<20 { values["extra\(field)"] = .array([.string("serialized")]) }
             return try GraphRecord(id: f.graph.makeNodeID(), type: DescriptorItem.graphType, properties: values)
         }
         try await f.graph.transaction { scope in
             for record in records { try scope.insert(record) }
-            try scope.insert(GraphRecord(id: f.graph.makeNodeID(), type: "Unrelated", properties: ["body": .data(Data(repeating: 1, count: 64_000))]))
+            try scope.insert(GraphRecord(id: f.graph.makeNodeID(), type: "Unrelated", properties: ["body": .string(Data(repeating: 1, count: 64_000).base64EncodedString())]))
         }
         let q = try query(103, steps: 1_200).where(.property("rank", .greaterThanOrEqual, .integer(50)))
         try await f.graph.read { scope in
@@ -170,7 +170,7 @@ private struct CanonicalDescriptorItem: GraphModel {
 
     @Test func pendingMemoryRowsAndCanonicalTypeSpellingsRetainTheResourceCandidateBoundary() async throws {
         let database = try await GraphDatabase.open(configuration: .init(location: .inMemory(UUID())),
-            schema: GraphRuntimeSchema.typedProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
+            schema: GraphRuntimeSchema.attachmentProperties, adapter: GraphNativeIdentityDatabaseAdapter.database)
         let graph = try await database.createGraph(), other = try await database.createGraph()
         let id = graph.makeNodeID()
         try await other.transaction { try $0.insert(GraphRecord(id: other.makeNodeID(), type: "Unrelated")) }

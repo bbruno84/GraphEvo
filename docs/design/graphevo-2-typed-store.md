@@ -83,7 +83,11 @@ is supplied; adoption does not synthesize missing source creation dates.
 linear in-process identity index assembled from facade reads, with no query-cost
 or scalable paging guarantee. This is the explicit local foundation for A7,
 not a silent fallback for an unsupported query operator. SQLite read scopes
-retain A2's pinned-view contract; in-memory/native external-writer limits remain.
+retain A2's pinned-view contract. Current S06/S07 scopes additionally retain a
+finite Foundation read grant to protect Core Data external binary references;
+writers wait for these synchronous read bodies to finish. File URL access retains
+its separate immutable-revision grant instead. In-memory/native external-writer
+limits remain. See [properties and attachments](graphevo-2-property-attachments.md).
 
 ## Alpha layout a3.1
 

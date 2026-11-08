@@ -6,7 +6,7 @@ import Testing
 @testable import GraphEvoStore
 @testable import GraphEvoRuntime
 
-@MainActor func seedConversionSource(_ url: URL, empty: Bool = false, reserved: Bool = false, nullable: Bool = false) throws -> [String] {
+@MainActor func seedConversionSource(_ url: URL, empty: Bool = false, reserved: Bool = false, nullable: Bool = false, binaryByteCount: Int = 2 * 1024 * 1024) throws -> [String] {
     try autoreleasepool {
         let graph = Graph(storeURL: url, migrationEnabled: false)
         guard graph.isReady else { throw GraphV1ConversionError.unsupportedSource }
@@ -20,7 +20,7 @@ import Testing
             a[dynamicMember: "codableArchive"] = try GraphArchiver.archive(AnyCodableObject(["flag": AnyCodableObject(true), "bytes": AnyCodableObject(Data([4,5]))]))
             a[dynamicMember: "appDataVersion"] = 7
             a[dynamicMember: "nested"] = ["values": [1, true, "text"]]
-            a[dynamicMember: "binary"] = Data(repeating: 91, count: 2 * 1024 * 1024)
+            a[dynamicMember: "binary"] = Data(repeating: 91, count: binaryByteCount)
             a[dynamicMember: "url"] = URL(string: "https://example.test/retained")!
             a[dynamicMember: "date"] = Date(timeIntervalSince1970: 5678)
             if reserved { a[dynamicMember: "__graphevo_v2.claim"] = "not-library-metadata" }
@@ -66,7 +66,7 @@ private final class V1ConversionGate: @unchecked Sendable {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true); return root
     }
     private func manager(registry: StoreRegistry = StoreRegistry(), adapter: GraphCoordinatorAdapter = GraphCoordinatorFactory.adapter) -> GraphContextManager {
-        .init(registry: registry, schema: GraphRuntimeSchema.typedProperties, adapter: adapter)
+        .init(registry: registry, schema: GraphRuntimeSchema.attachmentProperties, adapter: adapter)
     }
     @Test func convertsCompleteLegacyGraphIntoS04WithVerifiedPortableBackupAndFreshHistory() async throws {
         let root = try root(), source = root.appendingPathComponent("Legacy.sqlite"), target = root.appendingPathComponent("V2.sqlite")
@@ -83,25 +83,25 @@ private final class V1ConversionGate: @unchecked Sendable {
         #expect(record.properties["amount"] == .decimal(Decimal(string: "12.34")!))
         #expect(record.properties["uuid"] == .string("00000000-0000-0000-0000-000000000123"))
         #expect(record.properties["appDataVersion"] == .integer(7))
-        guard case .data(let archive) = record.properties["codableArchive"] else { throw GraphV1ConversionError.invalidReceipt }
+        guard let archive = record.attachments["codableArchive"]?.data else { throw GraphV1ConversionError.invalidReceipt }
         let restoredWrapper = try #require(GraphArchiver.unarchive(archive) as? AnyCodableObject)
         let wrapped = try #require(restoredWrapper.value as? [String: AnyCodableObject])
         #expect(wrapped["flag"]?.value as? Bool == true && wrapped["bytes"]?.value as? Data == Data([4,5]))
-        #expect(record.properties["binary"] == .data(Data(repeating: 91, count: 2 * 1024 * 1024)))
+        #expect(record.attachments["binary"]?.data == Data(repeating: 91, count: 2 * 1024 * 1024))
         #expect(record.tags == ["retained"] && record.groups == ["invoices"] && record.createdDate == Date(timeIntervalSince1970: 1234))
         #expect(try await graph.read { try $0.record(for: b)?.createdDate } == nil)
         let records = try await graph.read { scope in try result.receipt.nodeIDs.values.compactMap { try scope.record(for: $0) } }
         #expect(records.contains { $0.endpoints == .relationship(subject: a, object: b) })
         #expect(records.contains { $0.endpoints == .action(subjects: [a], objects: [b]) })
         #expect(records.contains { $0.type == "optional" && $0.endpoints == .relationship(subject: nil, object: nil) })
-        #expect(try await graph.read { try $0.attachments(ownedBy: a).isEmpty })
+        #expect(try await graph.read { try $0.attachments(ownedBy: a).count == 2 })
         let legacyVersion = try await graph.read { try $0.withContext { context, _ in
             try GraphTypedStoreAdapter.Session(context, id, database: true).node(a)?.runtimePropertyVersions["name"]
         } }
         #expect(legacyVersion == 9)
-        #expect(try await graph.collectSyncChanges() == 5)
+        #expect(try await graph.collectSyncChanges() == 7)
         let batch = try await graph.prepareSyncBatch(maximumRecords: 100)
-        #expect(Set(batch.items.map { $0.change.id }) == Set(result.receipt.nodeIDs.values))
+        #expect(Set(batch.items.map { $0.change.id }) == Set(result.receipt.nodeIDs.values).union(try await graph.attachments(ownedBy: a).map(\.id)))
         let backup = try await m.backups.verify(at: result.backupURL)
         #expect(backup.manifest.schemaIdentifier == GraphRuntimeSchema.current.identifier)
         let restored = try await m.backups.restore(at: result.backupURL, to: root.appendingPathComponent("Restored"))
@@ -252,9 +252,14 @@ private final class V1ConversionGate: @unchecked Sendable {
             NSArrayOfAnyCodableObject([AnyCodableObject(Date(timeIntervalSince1970: 4321))]),
             DictionaryOfAnyCodableObject(["bytes": AnyCodableObject(Data([4,5]))])]
         for wrapper in wrappers {
-            guard case .encoded(let encoded) = try GraphV1NativeConversion.valueFromLegacy(wrapper, key: "wrapped") else { throw GraphV1ConversionError.invalidReceipt }
-            #expect(encoded.codec == GraphV1NativeConversion.legacyArchiveCodec)
-            #expect(try GraphV1NativeConversion.valueFromLegacy(GraphArchiver.unarchive(encoded.data), key: "wrapped", canonical: true) == GraphV1NativeConversion.valueFromLegacy(wrapper, key: "wrapped", canonical: true))
+            let converted = try GraphV1NativeConversion.convertedProperty(wrapper, key: "wrapped")
+            if let attachment = converted.attachment {
+                #expect(attachment.codec == GraphV1NativeConversion.legacyArchiveCodec)
+                #expect(try GraphV1NativeConversion.valueFromLegacy(GraphArchiver.unarchive(attachment.data), key: "wrapped", canonical: true) == GraphV1NativeConversion.valueFromLegacy(wrapper, key: "wrapped", canonical: true))
+            } else {
+                #expect(converted.property != nil)
+                #expect(try GraphV1NativeConversion.valueFromLegacy(wrapper, key: "wrapped", canonical: true).property() == converted.property)
+            }
         }
         try FileManager.default.removeItem(at: root)
     }
