@@ -1,7 +1,8 @@
 # GraphEvo 2 — properties and attachments
 
-Status: implementation branch; integration and acceptance evidence are recorded
-in the development status page. This contract supersedes binary GraphValue
+Status: alpha increment integrates through
+[PR #191](https://github.com/bbruno84/GraphEvo/pull/191); review and acceptance
+evidence are recorded in the development status page. This contract supersedes binary GraphValue
 properties and the former 10 MiB ordinary attachment admission.
 
 ## Consumer contract

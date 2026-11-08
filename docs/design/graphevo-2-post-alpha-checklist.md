@@ -18,8 +18,9 @@ without forcing File conversion. New profiles refuse old alpha stores and
 operational state unchanged. This fixes the value-channel contract; it does
 not close PA05's broader memory/capacity and production-data gates. Wider
 concurrent field-conflict and representative legacy-corpus acceptance remain
-part of beta validation. Current branch evidence belongs to the development
-status page until integration. The
+part of beta validation. The alpha contract integrates through #191; the
+[pre-merge review](results/property-attachment-review-2026-11-08.md) records the
+reviewed head and local acceptance scope. The
 [bounded physical checkpoint](results/property-attachment-contract-2026-11-08.md)
 verifies private/shared exchange and reopen on iPad/XR; it does not close the
 broader gates above. The selected 36-large-property publication/recovery
