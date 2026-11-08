@@ -10,9 +10,11 @@ integration into the main v2 branch or beta readiness.
 
 The accepted Notes app plan needs generic transactional File configuration,
 private graph discovery/recovery and definitive graph deletion before the
-companion UI adopts the complete flow. The first focused branch,
-`codex/v2-file-import-transaction`, adds the public synchronous File-configuration
-callback and rollback/reclamation tests. This is not integration of discovery,
+companion UI adopts the complete flow. The first prerequisite integrates through
+[PR #193](https://github.com/bbruno84/GraphEvo/pull/193), reviewed implementation
+`50296723`: the public synchronous File-configuration callback and rollback/
+reclamation tests. Its local checkpoint passes 775 macOS v2-profile tests and
+15 affected iOS File tests. This is not integration of discovery,
 deletion or the Notes application. No native schema or transport format changes
 are included in this first increment.
 
