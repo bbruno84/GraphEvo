@@ -267,7 +267,7 @@ extension GraphContextManager {
         return report.failures.isEmpty ? nil : GraphCloudActivationError.recoveryRequired
     }
 
-    private static func importActivationInventory(_ inventory: GraphCloudActivationInventory, manifest: GraphCloudSeedManifest,
+    static func importActivationInventory(_ inventory: GraphCloudActivationInventory, manifest: GraphCloudSeedManifest,
         previous: Set<GraphNodeID>, session: GraphCloudSession, graph: GraphStore, binding: GraphCloudTransportBinding,
         activationID: UUID, configuration: GraphCloudConfiguration) async throws {
         let limit = min(configuration.maximumEvents, GraphCloudBatchSizing.engineMaximumOperations)
@@ -325,8 +325,8 @@ extension GraphContextManager {
         try await flush(events)
     }
 
-    private static func seedManifest(_ inventory: GraphCloudActivationInventory, session: GraphCloudSession,
-                                     binding: GraphCloudBinding, authority: GraphCloudAuthority,
+    static func seedManifest(_ inventory: GraphCloudActivationInventory, session: GraphCloudSession,
+                                     binding: GraphCloudBinding, authority: GraphCloudAuthority?,
                                      limits: GraphCloudActivationLimits) async throws -> GraphCloudSeedManifest {
         var entries: [GraphCloudSeedEntry] = []
         var remaining = limits.maximumPayloadBytes
@@ -347,7 +347,7 @@ extension GraphContextManager {
             } else if GraphCloudShareControl.isControl(event) {
                 try GraphCloudShareControl.validateOwnerInventory(event, binding: binding)
             } else if GraphCloudAuthorityCodec.isControl(event) {
-                guard try GraphCloudAuthorityCodec.decode(record, binding: binding).value.matches(authority) else {
+                guard let authority, try GraphCloudAuthorityCodec.decode(record, binding: binding).value.matches(authority) else {
                     throw GraphCloudActivationError.authorityConflict
                 }
                 controls += 1
@@ -357,7 +357,7 @@ extension GraphContextManager {
                 entries.append(try GraphCloudSeedManifest.entry(record, binding: binding))
             }
         }
-        guard controls == 1 else { throw GraphCloudActivationError.recoveryRequired }
+        guard controls == (authority == nil ? 0 : 1) else { throw GraphCloudActivationError.recoveryRequired }
         return try GraphCloudSeedManifest.make(entries: entries, binding: binding, limits: limits)
     }
 }

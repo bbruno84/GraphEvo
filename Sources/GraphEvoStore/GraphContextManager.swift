@@ -225,6 +225,7 @@ package actor GraphContextManager {
             } else if activation != nil { throw GraphCloudActivationError.recoveryRequired }
         }
         guard !activatingCloudGraphs.contains(graphID) else { throw GraphCloudActivationError.busy }
+        if zone.scope == .private { try await session.publishPrivateDescriptor(route) }
         try await claimCloudAccount(session.identity(), for: graphID, owner: owner)
         try await session.bind(route)
         automaticChanged()

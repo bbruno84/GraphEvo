@@ -118,7 +118,7 @@ package struct GraphCloudStatus: Sendable {
 }
 
 struct GraphCloudDocument: Codable, Sendable {
-    var format = 10
+    var format = 11
     var accountResetRequired: Bool? = nil
     var clientID = UUID()
     let container: String
@@ -133,7 +133,8 @@ struct GraphCloudDocument: Codable, Sendable {
     var sent: [GraphCloudSentReceipt] = []
     var ledgers: [GraphLedgerReplica] = []
     var activations: [GraphCloudActivationRoute] = []
-    var eventCount: Int { (joins?.count ?? 0) + activations.count + ledgers.count + memberships.count + shareAttempts.count + inbox.count + sent.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count + $1.failures.count } }
+    var privateReplicas: [GraphCloudActivationRoute] = []
+    var eventCount: Int { (joins?.count ?? 0) + activations.count + privateReplicas.count + ledgers.count + memberships.count + shareAttempts.count + inbox.count + sent.reduce(0) { $0 + $1.saved.count + $1.deletedNames.count + $1.failures.count } }
     var assetReferences: [GraphCloudAssetReference] {
         inbox.compactMap { $0.change.assetReference }
         + sent.flatMap { $0.saved.compactMap(\.assetReference)

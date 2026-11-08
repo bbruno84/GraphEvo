@@ -164,6 +164,9 @@ extension GraphContext {
 
 @available(iOS 17, macOS 14, *)
 public typealias GraphCloudConnection = GraphEvoStore.GraphCloudConnection
+public typealias GraphCloudPrivateGraph = GraphEvoStore.GraphCloudPrivateGraph
+public typealias GraphCloudPrivateGraphIssue = GraphEvoStore.GraphCloudPrivateGraphIssue
+public typealias GraphCloudPrivateGraphDiscovery = GraphEvoStore.GraphCloudPrivateGraphDiscovery
 
 public typealias GraphCloudConnectionConfiguration = GraphEvoStore.GraphCloudConnectionConfiguration
 
