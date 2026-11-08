@@ -288,3 +288,59 @@ import Testing
     }
 #endif
 }
+
+
+extension GraphLocalFileTests {
+    @Test func configuredImportCommitsFileAndRelationshipTogether() async throws {
+        let root = try workspace(); defer { try? FileManager.default.removeItem(at: root) }
+        let path = root.appendingPathComponent("Atomic.sqlite"), source = root.appendingPathComponent("Input.bin")
+        let bytes = Data(repeating: 43, count: 256 * 1024); try bytes.write(to: source)
+        let context = GraphContext.localFiles(), graph = try await context.createGraph(id: GraphID(), at: path)
+        let note = graph.makeNodeID(), edge = graph.makeNodeID()
+        try await graph.transaction { try $0.insert(GraphRecord(id: note, type: "Note")) }
+        let file = try await graph.importFile(from: source) { scope, file in
+            #expect(try scope.file(file.id) == file)
+            try scope.insert(GraphRecord(id: edge, type: "NoteFile", endpoints: .relationship(subject: note, object: file.id)))
+            _ = try scope.patch(GraphRecordPatch(id: note, properties: ["hasFile": .set(.boolean(true))]))
+        }
+        try await graph.close()
+        let reopened = try await context.openGraph(id: graph.id, at: path)
+        #expect(try await reopened.read { try $0.record(for: edge)?.endpoints } == .relationship(subject: note, object: file.id))
+        #expect(try await reopened.read { try $0.record(for: note)?.properties["hasFile"] } == .boolean(true))
+        #expect(try await reopened.withFileURL(file.id) { try Data(contentsOf: $0) } == bytes)
+        try await reopened.close()
+    }
+
+    @Test func configuredImportFailureRollsBackAllRowsAndLeavesReclaimableBytes() async throws {
+        let root = try workspace(); defer { try? FileManager.default.removeItem(at: root) }
+        let path = root.appendingPathComponent("Atomic.sqlite"), source = root.appendingPathComponent("Input.bin")
+        try Data(repeating: 8, count: 1024).write(to: source)
+        let context = GraphContext.localFiles(), graph = try await context.createGraph(id: GraphID(), at: path)
+        let note = graph.makeNodeID(), edge = graph.makeNodeID()
+        try await graph.transaction { try $0.insert(GraphRecord(id: note, type: "Note", properties: ["name": .string("before")])) }
+        await #expect(throws: Interrupted.self) {
+            _ = try await graph.importFile(from: source) { scope, file in
+                try scope.insert(GraphRecord(id: edge, type: "NoteFile", endpoints: .relationship(subject: note, object: file.id)))
+                _ = try scope.patch(GraphRecordPatch(id: note, properties: ["name": .set(.string("after"))]))
+                throw Interrupted.beforeCommit
+            }
+        }
+        #expect(try await graph.files().isEmpty)
+        #expect(try await graph.read { try $0.record(for: edge) } == nil)
+        #expect(try await graph.read { try $0.record(for: note)?.properties["name"] } == .string("before"))
+        #expect(try await graph.reclaimFiles() == 1)
+        try await graph.close()
+    }
+    @Test func configuredImportCannotReturnAnAlreadyDeletedFile() async throws {
+        let root = try workspace(); defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("Input.bin"); try Data([1,2,3]).write(to: source)
+        let graph = try await GraphContext.localFiles().createGraph(id: GraphID(), at: root.appendingPathComponent("Store.sqlite"))
+        await #expect(throws: GraphFileError.self) {
+            _ = try await graph.importFile(from: source) { scope, file in try scope.delete(file.id) }
+        }
+        #expect(try await graph.files().isEmpty)
+        #expect(try await graph.reclaimFiles() == 1)
+        try await graph.close()
+    }
+
+}

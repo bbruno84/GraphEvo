@@ -880,6 +880,12 @@ survive content replacement and support tag and group query predicates.
 
 - `GraphStore.importFile(from:name:contentType:)` copies content into the
   graph and returns a `GraphFile`.
+- `GraphStore.importFile(from:name:contentType:configuring:)` invokes a synchronous
+  `@Sendable (GraphMutation, GraphFile) throws -> Void` callback before the same
+  transaction commits. Use it to link the new File to an application node. A
+  thrown error rolls back both the File and callback edits; prepared bytes remain
+  reclaimable. The callback must retain the imported File, cannot escape its
+  scope, save independently or reenter the store.
 - `GraphStore.file(_:)` and `files()` read fixed metadata. Their synchronous
   counterparts are available on `GraphReadScope`.
 - `GraphStore.withFileURL(_:_:)` gives the synchronous accessor a read-only
