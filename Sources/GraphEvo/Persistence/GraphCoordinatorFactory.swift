@@ -78,6 +78,7 @@ enum GraphCoordinatorFactory {
             if creating { try GraphSyncCheckpointAdapter.reservePurpose(context, graphID: id) }
             else { try GraphSyncCheckpointAdapter.requirePurpose(context, graphID: id) }
         }
+        coordinator.privateReplica = GraphPrivateReplicaNative.adapter
         coordinator.activation = GraphCloudActivationNative.adapter
         if #available(iOS 17, macOS 14, *) {
             coordinator.nativeV1Migration = GraphV1StagedMigration.adapter

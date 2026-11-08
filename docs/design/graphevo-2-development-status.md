@@ -18,6 +18,16 @@ reclamation tests. Its local checkpoint passes 775 macOS v2-profile tests and
 deletion or the Notes application. No native schema or transport format changes
 are included in this first increment.
 
+[PR #194](https://github.com/bbruno84/GraphEvo/pull/194),
+`codex/v2-private-graph-discovery`, integrates
+[ordinary private discovery/recovery](graphevo-2-private-graph-discovery.md),
+separate from MF10/v1 provenance, with account-bound references and resumable
+read/write-gated replicas. It advances session state to format 11, refusing old
+alpha state unchanged. Definitive graph deletion and the companion Notes UI
+remain subsequent work; no completion of those items is implied. The
+[acceptance report](results/private-graph-discovery-2026-11-08.md) records
+local, Simulator and real CloudKit checks; no hosted CI was requested.
+
 ## Latest increment — property and attachment contract
 
 [PR #191](https://github.com/bbruno84/GraphEvo/pull/191),

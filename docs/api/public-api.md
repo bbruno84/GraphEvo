@@ -2236,3 +2236,18 @@ and [contract](../design/graphevo-2-public-sharing.md).
   This historical compatibility flag does not upgrade to current session format
   10; older sessions are refused unchanged. Known errors and bounded state remain
   separate from native cleanup quarantine.
+
+
+### Ordinary private graph discovery
+
+`GraphCloudConnection.discoverPrivateGraphs(zoneNamePrefix:)` returns
+`GraphCloudPrivateGraphDiscovery`, containing verified `graphs` and per-zone
+`issues`. `GraphCloudPrivateGraph` exposes `id`, `zoneName` and `supportsFiles`;
+its route/account binding cannot be constructed publicly. Each issue exposes
+a bounded failure and typed descriptor reason.
+
+`openPrivateGraph(_:at:)` restores into a new SQLite destination or resumes that
+same marked replica. References are revalidated against the current account and
+server descriptor. Existing unmarked files are refused unchanged. Ordinary
+graph recovery requires no v1 receipt; authoritative migrated graphs retain
+MF10 validation. See [private graph discovery](../design/graphevo-2-private-graph-discovery.md).

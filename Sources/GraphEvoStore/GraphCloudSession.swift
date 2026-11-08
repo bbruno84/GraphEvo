@@ -32,6 +32,7 @@ struct GraphCloudSendOutcome: Sendable {
 }
 
 struct GraphCloudAdapter: Sendable {
+    var privateGraphs: GraphPrivateGraphService? = nil
     var nativeSharing: GraphCloudNativeSharingService? = nil
     var sharing: GraphCloudSharingService? = nil
     var ledger: GraphLedgerService? = nil
@@ -58,6 +59,7 @@ actor GraphCloudSession {
     private var directoryLease: GraphCloudDirectoryLease?
     private var document: GraphCloudDocument
     var activationService: GraphCloudActivationService? { adapter.activation }
+    var privateGraphService: GraphPrivateGraphService? { adapter.privateGraphs }
     private var joinObservers: [UUID: [UUID: AsyncStream<GraphCloudJoinState>.Continuation]] = [:]
     private var activeJoins = Set<UUID>()
     private var sharingObservers: [GraphID: [UUID: AsyncStream<GraphCloudSharingStatus>.Continuation]] = [:]
@@ -117,7 +119,7 @@ actor GraphCloudSession {
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
                 catch { throw GraphCloudError.invalidState }
                 if doc.format == 8, !config.allowsSessionUpgradeFromV8 { throw GraphCloudDiscoveryError.sessionUpgradeRequired }
-                guard doc.format == 10, doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
+                guard doc.format == 11, doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
                 guard doc.account == account else { await accountSignal(.differentAccount); throw GraphCloudError.invalidState }
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
@@ -172,6 +174,9 @@ actor GraphCloudSession {
                         guard receipt.membershipGeneration == member.generation else { throw GraphCloudError.invalidState }
                     }
                 }
+                guard Set(doc.privateReplicas.map { $0.binding.graphID }).count == doc.privateReplicas.count,
+                      doc.privateReplicas.allSatisfy({ $0.peer && $0.binding.zone.scope == .private && doc.bindings.contains($0.binding) }),
+                      Set((doc.activations + doc.privateReplicas).map { $0.binding.graphID }).count == doc.activations.count + doc.privateReplicas.count else { throw GraphCloudError.invalidState }
                 guard Set(doc.activations.map { $0.binding.graphID }).count == doc.activations.count else { throw GraphCloudError.invalidState }
                 for activation in doc.activations {
                     guard doc.bindings.contains(activation.binding), activation.binding.zone.scope == .private else { throw GraphCloudError.invalidState }
@@ -290,6 +295,19 @@ actor GraphCloudSession {
         next.activations.append(.init(binding: binding, activationID: activationID, published: published, peer: peer))
         try publish(next); try enable(.private)
     }
+    func bindPrivateReplica(_ binding: GraphCloudBinding, operation: UUID, ready: Bool) throws {
+        try check()
+        guard binding.zone.scope == .private, !document.activations.contains(where: { $0.binding.graphID == binding.graphID }),
+              !document.bindings.contains(where: { ($0.graphID == binding.graphID || $0.zone == binding.zone) && $0 != binding }) else { throw GraphCloudError.ownershipConflict }
+        if let prior = document.privateReplicas.first(where: { $0.binding.graphID == binding.graphID }) {
+            guard prior.binding == binding, prior.activationID == operation else { throw GraphCloudError.ownershipConflict }
+        }
+        var next = document
+        if !next.bindings.contains(binding) { next.bindings.append(binding) }
+        next.privateReplicas.removeAll { $0.binding.graphID == binding.graphID }
+        next.privateReplicas.append(.init(binding: binding, activationID: operation, published: ready, peer: true))
+        try publish(next)
+    }
     func activationRoute(for id: GraphID) -> GraphCloudActivationRoute? { document.activations.first { $0.binding.graphID == id } }
     func pruneUnpublishedAssets() async {
         guard let spool = try? GraphCloudAssetSpool(root: configuration.directory.appendingPathComponent("GraphEvoCloudAssets")) else { return }
@@ -317,10 +335,10 @@ actor GraphCloudSession {
         return url
     }
 
-    var pendingActivationIDs: Set<GraphID> { Set(document.activations.filter { !$0.published }.map { $0.binding.graphID }) }
+    var pendingActivationIDs: Set<GraphID> { Set((document.activations + document.privateReplicas).filter { !$0.published }.map { $0.binding.graphID }) }
     func stageActivationSnapshot(_ events: [GraphCloudIncoming], for binding: GraphCloudBinding, activationID: UUID) throws {
         try check()
-        guard let route = activationRoute(for: binding.graphID), route.binding == binding,
+        guard let route = activationRoute(for: binding.graphID) ?? document.privateReplicas.first(where: { $0.binding.graphID == binding.graphID }), route.binding == binding,
               route.activationID == activationID, route.peer, !route.published,
               !document.inbox.contains(where: { $0.change.zone == binding.zone }),
               events.allSatisfy({ $0.valid && $0.zone == binding.zone && ($0.kind == .recordChanged || $0.kind == .recordDeleted) && $0.recordType == GraphCloudNodeCodec.recordType }) else {
@@ -564,7 +582,7 @@ actor GraphCloudSession {
         }
         let zones = document.bindings.filter { $0.zone.scope == scope }.map(\.zone)
         if let selected { guard selected.isSubset(of: Set(zones)) else { throw GraphCloudError.invalidConfiguration } }
-        let blocked = Set(document.activations.filter { !$0.published }.map { $0.binding.zone })
+        let blocked = Set((document.activations + document.privateReplicas).filter { !$0.published }.map { $0.binding.zone })
         let permitted = zones.filter { !blocked.contains($0) && (selected?.contains($0) ?? true) }
         if permitted.isEmpty && !zones.isEmpty { return }
         try await driver.fetch(permitted)

@@ -5,6 +5,7 @@ import GraphEvoRuntime
 
 /// Facade-owned initialization; the runtime transaction owns the single save.
 package struct GraphCoordinatorAdapter: Sendable {
+    package var privateReplica: GraphPrivateReplicaAdapter? = nil
     package var activation: GraphCloudActivationAdapter? = nil
     package var account: GraphCloudAccountNativeAdapter? = nil
     package let migrationSource: GraphStoreMigrationSource?
@@ -39,12 +40,13 @@ package actor GraphCoordinator {
     private let adapter: GraphStoreAdapter
     private let syncSession: GraphSyncSession?
     private let workspace: GraphMigrationWorkspaceAdapter?
+    private let privateReplica: GraphPrivateReplicaAdapter?
     private let activation: GraphCloudActivationAdapter?
     private let account: GraphCloudAccountNativeAdapter?
     private let publication: GraphMigrationPublicationAdapter?
 
-    private init(id: GraphID, handle: StoreHandle, storeURL: URL, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil, account: GraphCloudAccountNativeAdapter? = nil) {
-        self.id = id; self.handle = handle; self.storeURL = storeURL; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation; self.account = account
+    private init(id: GraphID, handle: StoreHandle, storeURL: URL, adapter: GraphStoreAdapter, sync: GraphSyncAdapter?, workspace: GraphMigrationWorkspaceAdapter? = nil, publication: GraphMigrationPublicationAdapter? = nil, activation: GraphCloudActivationAdapter? = nil, privateReplica: GraphPrivateReplicaAdapter? = nil, account: GraphCloudAccountNativeAdapter? = nil) {
+        self.id = id; self.handle = handle; self.storeURL = storeURL; self.adapter = adapter; self.workspace = workspace; self.publication = publication; self.activation = activation; self.privateReplica = privateReplica; self.account = account
         self.syncSession = sync.map { GraphSyncSession(graphID: id, handle: handle, adapter: $0) }
     }
 
@@ -60,7 +62,7 @@ package actor GraphCoordinator {
         let handle = try await registry.open(configuration, schema: schema, mode: creating ? .new : .existing)
         let owner = GraphCoordinator(id: id, handle: handle, storeURL: url.standardizedFileURL.resolvingSymlinksInPath(),
             adapter: adapter.graph, sync: adapter.sync, workspace: adapter.workspace,
-            publication: adapter.publication, activation: adapter.activation, account: adapter.account)
+            publication: adapter.publication, activation: adapter.activation, privateReplica: adapter.privateReplica, account: adapter.account)
         do {
             if creating {
                 try await handle.transaction {
@@ -92,6 +94,10 @@ package actor GraphCoordinator {
             if let activation = adapter.activation, let value = try await handle.controlRead({ try activation.read($0, id) }) {
                 if appGroupLocalOnly { throw GraphStoreError.resourceReserved }
                 if value.blocksWrites { try await handle.restrictActivation(value.authority.activationID, reads: value.peer) }
+            }
+            if let replica = adapter.privateReplica, let state = try await handle.controlRead({ try replica.read($0, id) }), !state.ready {
+                if appGroupLocalOnly { throw GraphStoreError.resourceReserved }
+                try await handle.restrictActivation(state.operationID, reads: true)
             }
             if !localAppGroupWrite, try await owner.accountIdentity() != nil {
                 if appGroupLocalOnly { throw GraphStoreError.accountIsolated }
@@ -144,6 +150,22 @@ package actor GraphCoordinator {
                                limits: GraphCloudActivationLimits) async throws -> GraphCloudActivationDocument {
         guard let activation else { throw GraphCloudActivationError.unavailable }
         return try await handle.controlTransaction { try activation.peer($0, binding, authority, limits) }
+    }
+    func privateReplicaState() async throws -> GraphPrivateReplicaState? {
+        guard let replica = privateReplica else { throw GraphCloudError.invalidConfiguration }; let id = id
+        return try await handle.controlRead { try replica.read($0, id) }
+    }
+    func preparePrivateReplica(_ binding: GraphCloudTransportBinding, operation: UUID) async throws -> GraphPrivateReplicaState {
+        guard let replica = privateReplica else { throw GraphCloudError.invalidConfiguration }; let id = id
+        return try await handle.controlTransaction { try replica.prepare($0, id, binding, operation) }
+    }
+    func completePrivateReplica(_ operation: UUID) async throws {
+        guard let replica = privateReplica else { throw GraphCloudError.invalidConfiguration }; let id = id
+        try await handle.controlTransaction { try replica.complete($0, id, operation) }
+    }
+    func privateReplicaIDs() async throws -> Set<GraphNodeID> {
+        guard let replica = privateReplica else { throw GraphCloudError.invalidConfiguration }; let id = id
+        return try await handle.controlRead { try replica.ids($0, id) }
     }
     func activationAccess(_ id: UUID, peer: Bool = false, release: Bool = false) async throws {
         try await handle.restrictActivation(id, reads: peer, release: release)

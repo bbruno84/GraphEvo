@@ -60,6 +60,7 @@ extension GraphCloudAdapter {
                 })
             }, invalidateAccount: { delegate.outbox.accountFence.invalidate() })
         })
+        adapter.privateGraphs = .live
         adapter.accountAvailability = { try await GraphCloudAccountAvailability.live($0) }
         adapter.observeAccount = { GraphCloudAccountObservation(changed: $0) }
         return adapter
