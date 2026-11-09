@@ -55,7 +55,8 @@ recovery of an earlier orphan while preserving the neighboring binding/attempt,
 client ID and opaque checkpoint bytes; and unchanged refusal for unfinished,
 foreign-zone, duplicate and other-corruption cases. Local verification passes 796 macOS v2 functions, 794 iOS functions with no
 failures or skips, both Swift 6 consumers, manifest and diff checks. Focused
-source review found no unresolved actionable findings. No hosted CI is requested.
+source review found no unresolved actionable findings. No hosted CI was requested
+at the initial implementation checkpoint.
 
 
 ## Requested hosted checkpoint and test availability correction
@@ -87,3 +88,17 @@ matching method-level iOS 17/macOS 14 annotation, preserving lower-floor interna
 tests and runtime-guarded cases. Existing availability on the remaining public
 context/connection references was checked before another checkpoint. No shipping
 source, assertions, package floors or test selections change.
+
+
+The [third checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/42670656253)
+on `932798d6` passes macOS and both consumers but finds the remaining omission
+on the native-outbox classification test; again no iOS test executes. Inventory
+now includes every iOS-17-restricted type, not only public context/connection
+references. The outbox method receives the same annotation. All 19 automatic
+synchronization functions pass locally, and a complete local `build-for-testing`
+with explicit `IPHONEOS_DEPLOYMENT_TARGET=16.0` succeeds. This exercises the
+legacy compilation floor instead of relying on the destination's defaults.
+The seven annotations across deletion, configured File import, string storage
+and native-outbox tests match their existing API requirements. Assertions and
+shipping Sources remain unchanged. The fourth checkpoint validates this grouped
+compilation correction; earlier failures are not reclassified as passing.
