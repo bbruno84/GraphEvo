@@ -56,3 +56,23 @@ client ID and opaque checkpoint bytes; and unchanged refusal for unfinished,
 foreign-zone, duplicate and other-corruption cases. Local verification passes 796 macOS v2 functions, 794 iOS functions with no
 failures or skips, both Swift 6 consumers, manifest and diff checks. Focused
 source review found no unresolved actionable findings. No hosted CI is requested.
+
+
+## Requested hosted checkpoint and test availability correction
+
+The maintainer requested review, CI and merge on 2026-11-09. The first
+[v2 checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/42667130923)
+on `6452a7b2` fails the iOS build before tests: the older hosted Xcode 16.4
+compiler requires an explicit availability annotation on the existing public
+GraphContext deletion test. Its API requires iOS 17/macOS 14 while the package
+still compiles test sources against the legacy floor. The correction annotates
+only that public-entry test; it does not raise the package floor, skip the test
+on the supported iOS 18.5 runner, reduce coverage or change production code.
+The initial failure remains part of the evidence; the replacement checkpoint
+is recorded separately after local re-verification.
+
+The first checkpoint's macOS job and both Swift 6 consumers pass. After the
+annotation correction, all 17 local deletion functions and all 794 iOS v2
+functions pass again with no failures or skips. Source review confirms the
+annotation matches GraphContext's declared platform availability; all shipping
+source is byte-identical to the physically tested correction.

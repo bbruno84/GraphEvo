@@ -39,6 +39,7 @@ struct GraphDeletionTests {
         GraphContextManager(registry: registry, schema: GraphRuntimeSchema.attachmentFiles,
             adapter: GraphCoordinatorFactory.makeAdapter(files: true))
     }
+    @available(iOS 17, macOS 14, *)
     @Test func localDeletionPreservesAdjacentGraphAndDurableCompletion() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let context = GraphContext.localFiles(), id = GraphID(), url = root.appendingPathComponent("A.sqlite")

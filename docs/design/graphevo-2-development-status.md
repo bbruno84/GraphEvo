@@ -12,7 +12,7 @@ delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
 
-## In progress — shared deletion restart correction
+## Latest correction — shared deletion restart and Notes acceptance
 
 The Notes device run with XR owner and iPad participant found an owner session
 restart refusal after shared graph deletion: its retained share-attempt entry no
@@ -24,7 +24,14 @@ The companion also corrects permission-observation startup before a remote refre
 that can transiently return busy. Physical XR recovery/restart, iPad restart after leave and both unchanged
 neighbor fingerprints pass with the correction. Local checks pass 796 macOS and
 794 iOS functions plus both Swift 6 consumers; previous device failures remain
-retained evidence. This focused correction is prepared for integration.
+retained evidence. [PR #197](https://github.com/bbruno84/GraphEvo/pull/197) contains the reviewed
+correction `6452a7b2`. The selected Notes alpha implementation and bounded
+physical acceptance are complete in
+[Demo PR #6](https://github.com/bbruno84/GraphEvoDemo/pull/6); application merge
+and its final library pin belong to that companion PR. The
+[post-alpha checklist](graphevo-2-post-alpha-checklist.md) records the narrow
+closure and retained broader gates. The maintainer requested review, hosted CI
+and integration on 2026-11-09; checkpoint outcomes are retained in the report.
 
 ## In progress — Notes demo prerequisites
 
