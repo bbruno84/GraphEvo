@@ -88,3 +88,19 @@ require cooperating updated clients; old alpha binaries must be stopped.
 Native S06/S07 schemas, node/descriptor wire formats and public local operations
 remain unchanged. This adds operation evidence and session format 12, not a new
 application command queue or independent CloudKit engine.
+
+## Shared-owner attempt bookkeeping and interrupted cleanup
+
+Terminal cleanup removes the deleted zone's retained share-creation attempt in
+the same session publication that removes its binding. Attempts for other zones
+remain unchanged. Retaining an unbound attempt would invalidate the next session
+open even though native and remote deletion had completed.
+
+Session-format-12 opening can recover that specific earlier incomplete cleanup
+under its existing directory writer lease and verified account. It removes an
+unbound attempt only when a valid completed deletion proves the exact zone and
+matching container/environment/account identity. Duplicates, unfinished deletions,
+foreign zones and other malformed state remain refused. The complete document
+and retained asset references must validate before writing recovery. No engine
+checkpoint, route, queue or user payload is reset, and no native/remote destruction
+is inferred or repeated. Other session formats remain refused unchanged.

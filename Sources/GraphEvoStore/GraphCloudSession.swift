@@ -115,6 +115,7 @@ actor GraphCloudSession {
             let lease = try GraphCloudDirectoryLease(directory: config.directory)
             let url = config.directory.appendingPathComponent("session.json")
             var doc: GraphCloudDocument
+            var recoveredTerminalShareAttempt = false
             if let data = try disk.read(url) {
                 guard data.count <= config.maximumBytes else { throw GraphCloudError.inboxLimit }
                 do { doc = try JSONDecoder().decode(GraphCloudDocument.self, from: data) }
@@ -122,6 +123,20 @@ actor GraphCloudSession {
                 if doc.format == 8, !config.allowsSessionUpgradeFromV8 { throw GraphCloudDiscoveryError.sessionUpgradeRequired }
                 guard doc.format == 12, doc.container == config.containerIdentifier, doc.environment == config.environment else { throw GraphCloudError.invalidState }
                 guard doc.account == account else { await accountSignal(.differentAccount); throw GraphCloudError.invalidState }
+                // Earlier terminal cleanup could leave an attempt after removing its
+                // binding. Only a valid completed deletion in this identity proves
+                // that this one bookkeeping entry is obsolete; preserve all other state.
+                guard Set(doc.shareAttempts).count == doc.shareAttempts.count else { throw GraphCloudError.invalidState }
+                let identity = GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account)
+                let completedZones = Set(doc.deletions.compactMap { value -> GraphCloudZone? in
+                    guard value.phase == .completed, value.valid, value.binding?.identity == identity else { return nil }
+                    return value.binding?.route.zone
+                })
+                let previousAttempts = doc.shareAttempts.count
+                doc.shareAttempts.removeAll { zone in
+                    completedZones.contains(zone) && !doc.bindings.contains(where: { $0.zone == zone })
+                }
+                recoveredTerminalShareAttempt = previousAttempts != doc.shareAttempts.count
                 guard doc.states.keys.allSatisfy({ GraphCloudScope(rawValue: $0) != nil }),
                       doc.eventCount <= config.maximumEvents, doc.inbox.allSatisfy({ $0.change.valid }),
                       Set(doc.inbox.map(\.id)).count == doc.inbox.count,
@@ -214,6 +229,9 @@ actor GraphCloudSession {
                     identity: GraphCloudSessionIdentity(container: doc.container, environment: doc.environment, account: doc.account),
                     binding: reference.binding, recordName: reference.recordName)
             }
+            // Persist recovery only after the complete document and retained assets
+            // have passed their existing validation, under the same directory lease.
+            if recoveredTerminalShareAttempt { try disk.write(url, JSONEncoder().encode(doc)) }
             let session = GraphCloudSession(configuration: config, owner: owner, adapter: adapter, disk: disk, lease: lease, document: doc, accountSignal: accountSignal)
             // Restoring shared state also restores shared engine ownership, even before a graph reopens.
             do { try await session.start(restoringShared: doc.states[GraphCloudScope.shared.rawValue] != nil || doc.bindings.contains { $0.zone.scope == .shared }) }
@@ -1270,6 +1288,7 @@ extension GraphCloudSession {
         let prior = document.assetReferences
         try registerDeletion(value)
         var next = document
+        next.shareAttempts.removeAll { $0 == binding.route.zone }
         next.bindings.removeAll { $0.graphID == value.graphID }
         next.inbox.removeAll { $0.change.zone == binding.route.zone }
         next.sent.removeAll { $0.graphID == value.graphID }

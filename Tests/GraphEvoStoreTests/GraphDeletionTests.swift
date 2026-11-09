@@ -307,4 +307,76 @@ struct GraphDeletionTests {
         #expect(try await manager().resumeGraphDeletion(id, at: url, configuration: nil).phase == .completed)
     }
 
+    func completedSharedDeletionFixture() async throws -> (URL, GraphCloudConfiguration, GraphCloudAdapter, GraphCloudZone, GraphCloudZone) {
+        let root = try root(), server = ActivationServer(), fault = DeletionFault()
+        var config = GraphCloudConfiguration(containerIdentifier: "synthetic.shared-deletion", environment: .development,
+            directory: root.appendingPathComponent("session")); config.supportsFiles = true
+        var adapter = server.privateAdapter(root: root.appendingPathComponent("server"))
+        adapter.deletion = .init(remove: { _, route, _ in try await fault.remove(server, route: route) })
+        let context = manager(), deletedID = GraphID(), neighborID = GraphID()
+        let graph = try await context.createGraph(id: deletedID, at: root.appendingPathComponent("Deleted.sqlite"))
+        let neighbor = try await context.createGraph(id: neighborID, at: root.appendingPathComponent("Neighbor.sqlite"))
+        let deletedZone = GraphCloudZone(scope: .private, owner: CKCurrentUserDefaultName, name: "Deleted")
+        let neighborZone = GraphCloudZone(scope: .private, owner: CKCurrentUserDefaultName, name: "Neighbor")
+        _ = try await context.startCloudSession(config, adapter: adapter)
+        try await context.bindCloudZone(deletedZone, to: deletedID, configuration: config)
+        try await context.bindCloudZone(neighborZone, to: neighborID, configuration: config)
+        try await context.stopCloudSession(config)
+        let url = config.directory.appendingPathComponent("session.json")
+        var document = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: url))
+        // Inject durable share-attempt bookkeeping, not a native CKShare certificate.
+        document.shareAttempts = [deletedZone, neighborZone]
+        try JSONEncoder().encode(document).write(to: url, options: .atomic)
+        _ = try await context.startCloudSession(config, adapter: adapter)
+        #expect(try await context.deleteGraph(deletedID, configuration: config).phase == .completed)
+        document = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: url))
+        #expect(document.shareAttempts == [neighborZone])
+        try await graph.close(); try await neighbor.close(); try await context.stopCloudSession(config)
+        return (root, config, adapter, deletedZone, neighborZone)
+    }
+    @Test func ownerDeletionRemovesOnlyItsShareAttemptAndSessionReopens() async throws {
+        let (root, config, adapter, _, neighborZone) = try await completedSharedDeletionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = try await GraphCloudSession.open(config, adapter: adapter)
+        #expect(try await session.routes(in: .private).map(\.zone) == [neighborZone])
+        try await session.stop()
+    }
+    @Test func completedDeletionRecoversOrphanAttemptWithoutResettingOtherState() async throws {
+        let (root, config, adapter, deletedZone, neighborZone) = try await completedSharedDeletionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = config.directory.appendingPathComponent("session.json")
+        var document = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: url))
+        document.shareAttempts.append(deletedZone)
+        document.states[GraphCloudScope.private.rawValue] = Data("Opaque engine checkpoint".utf8)
+        let states = document.states, client = document.clientID
+        try JSONEncoder().encode(document).write(to: url, options: .atomic)
+        let session = try await GraphCloudSession.open(config, adapter: adapter)
+        let recovered = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: url))
+        #expect(recovered.shareAttempts == [neighborZone])
+        #expect(recovered.states == states && recovered.clientID == client)
+        #expect(recovered.deletions.count == 1 && recovered.deletions[0].phase == .completed)
+        #expect(try await session.routes(in: .private).map(\.zone) == [neighborZone])
+        try await session.stop()
+        let reopened = try await GraphCloudSession.open(config, adapter: adapter)
+        try await reopened.stop()
+    }
+    @Test(arguments: ["unfinished", "foreign-zone", "duplicate", "other-corruption"])
+    func unprovenOrInvalidOrphanRecoveryPreservesDocument(reason: String) async throws {
+        let (root, config, adapter, deletedZone, _) = try await completedSharedDeletionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = config.directory.appendingPathComponent("session.json")
+        var document = try JSONDecoder().decode(GraphCloudDocument.self, from: Data(contentsOf: url))
+        document.shareAttempts.append(deletedZone)
+        switch reason {
+        case "unfinished": document.deletions[0].phase = .remoteDeleted
+        case "foreign-zone": document.shareAttempts.append(.init(scope: .private, owner: CKCurrentUserDefaultName, name: "Unproved"))
+        case "duplicate": document.shareAttempts.append(deletedZone)
+        default: document.states["Unknown scope"] = Data([1])
+        }
+        let original = try JSONEncoder().encode(document)
+        try original.write(to: url, options: .atomic)
+        await #expect(throws: GraphCloudError.invalidState) { try await GraphCloudSession.open(config, adapter: adapter) }
+        #expect(try Data(contentsOf: url) == original)
+    }
+
 }

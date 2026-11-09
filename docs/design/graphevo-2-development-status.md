@@ -6,11 +6,25 @@ nonretiring registrations inside the exclusive Apple deletion grant; live and
 unverifiable owners remain protected. See the updated
 [deletion acceptance report](results/graph-deletion-2026-11-08.md).
 
-Updated: 2026-11-08. This is the single entry point for **integrated work,
+Updated: 2026-11-09. This is the single entry point for **integrated work,
 laboratory-only work and next steps**. The specification defines contracts, the
 delivery plan defines milestones, and experiment reports retain historical
 evidence. A successful experiment or merged child PR alone does not establish
 integration into the main v2 branch or beta readiness.
+
+## In progress — shared deletion restart correction
+
+The Notes device run with XR owner and iPad participant found an owner session
+restart refusal after shared graph deletion: its retained share-attempt entry no
+longer had a binding. The focused correction removes both in one publication and
+recovers only the exact format-12 completed-deletion case under the existing
+session lease. Other malformed state and opaque engine checkpoints remain
+protected. See the [acceptance report](results/shared-deletion-restart-2026-11-09.md).
+The companion also corrects permission-observation startup before a remote refresh
+that can transiently return busy. Physical XR recovery/restart, iPad restart after leave and both unchanged
+neighbor fingerprints pass with the correction. Local checks pass 796 macOS and
+794 iOS functions plus both Swift 6 consumers; previous device failures remain
+retained evidence. This focused correction is prepared for integration.
 
 ## In progress — Notes demo prerequisites
 
