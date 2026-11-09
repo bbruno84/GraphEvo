@@ -17,7 +17,17 @@ updated ordinary clients from recreating a deleted zone. See the
 [contract](graphevo-2-graph-deletion.md) and
 [bounded evidence](results/graph-deletion-2026-11-08.md).
 
-- [ ] Complete the companion Notes application and its two-account device acceptance.
+- [x] Complete the selected companion Notes implementation and bounded two-account
+  acceptance on 2026-11-09: XR owner, iPad participant, exact note/cover/File
+  transfer, participant edit, read-only refusal, leave/delete/restart and unchanged
+  neighboring content. [Demo PR #6](https://github.com/bbruno84/GraphEvoDemo/pull/6)
+  owns application integration; [library PR #197](https://github.com/bbruno84/GraphEvo/pull/197)
+  corrects shared-owner deletion restart. See the
+  [device report](results/shared-deletion-restart-2026-11-09.md). Owner permission
+  changes used the public SDK against real CloudKit; iPad read-only/Quick Look UI
+  was inspected separately. This closes the selected Notes alpha block, not the
+  broader B/R gates. Accessibility, actual multiwindow use and broader account/
+  distributed acceptance remain open.
 - [ ] Retain broader distributed deletion/account-switch, protected-data/storage
   faults and old-client-return acceptance for beta. Sequential sessions on one
   physical iPad are not two-device same-account evidence.

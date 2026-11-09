@@ -1612,3 +1612,10 @@ Ordinary record sends and sharing must not recreate missing zones. Initial priva
 publication retains its one creation attempt; ambiguous failure can be resolved by
 explicit deletion, never implicit zone repair. Session format 12 refuses previous
 alpha state unchanged. Preserve S06/S07 schema and consumer-owned File semantics.
+
+For shared-owner definitive deletion, remove the exact zone's share attempt with
+its binding. Format-12 recovery may discard an unbound attempt only with a valid
+completed deletion for that zone in the verified session identity, after full
+document/asset validation under the existing directory lease. Preserve duplicates,
+unproved or unfinished work, other zones and opaque engine state; do not reset
+transport or weaken ordinary state admission.

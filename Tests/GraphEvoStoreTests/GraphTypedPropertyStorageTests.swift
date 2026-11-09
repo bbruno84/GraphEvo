@@ -55,6 +55,7 @@ import GraphEvoStore
         }
         try await handle.close(); try FileManager.default.removeItem(at: root)
     }
+    @available(iOS 17, macOS 14, *)
     @Test func longUnicodeAndEmbeddedNullStringsRetainTheirAuthoritativeRepresentation() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let path = root.appendingPathComponent("Strings.sqlite"), context = GraphContext()
@@ -105,6 +106,7 @@ import GraphEvoStore
 
 
 extension GraphTypedPropertyStorageTests {
+    @available(iOS 17, macOS 14, *)
     @Test func nativeStringRepresentationPreservesUnicodeAndRefusesInlineNull() async throws {
         let values: [(String, Int)] = [("", 0), ("\\0", 0), ("e\u{301}🙂", 0),
             ("\0", 1), ("\0prefix", 1), ("e\u{301}\0🙂", 1), ("suffix\0", 1)]

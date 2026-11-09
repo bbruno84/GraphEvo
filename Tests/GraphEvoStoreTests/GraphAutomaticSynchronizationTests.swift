@@ -189,6 +189,7 @@ private actor AutomaticBus {
         await scheduler.shutdown()
     }
 
+    @available(iOS 17, macOS 14, *)
     @Test func nativeZoneRefusalsPreserveCloudKitClassificationAndRetryAdvice() async throws {
         for code in [CKError.Code.serviceUnavailable, .requestRateLimited, .zoneBusy, .permissionFailure] {
             let bus = AutomaticBus(1), clock = AutomaticTestClock(), graph = await bus.inventory[0]

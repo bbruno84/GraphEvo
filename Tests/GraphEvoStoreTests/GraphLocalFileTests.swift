@@ -291,6 +291,7 @@ import Testing
 
 
 extension GraphLocalFileTests {
+    @available(iOS 17, macOS 14, *)
     @Test func configuredImportCommitsFileAndRelationshipTogether() async throws {
         let root = try workspace(); defer { try? FileManager.default.removeItem(at: root) }
         let path = root.appendingPathComponent("Atomic.sqlite"), source = root.appendingPathComponent("Input.bin")
@@ -311,6 +312,7 @@ extension GraphLocalFileTests {
         try await reopened.close()
     }
 
+    @available(iOS 17, macOS 14, *)
     @Test func configuredImportFailureRollsBackAllRowsAndLeavesReclaimableBytes() async throws {
         let root = try workspace(); defer { try? FileManager.default.removeItem(at: root) }
         let path = root.appendingPathComponent("Atomic.sqlite"), source = root.appendingPathComponent("Input.bin")
@@ -331,6 +333,7 @@ extension GraphLocalFileTests {
         #expect(try await graph.reclaimFiles() == 1)
         try await graph.close()
     }
+    @available(iOS 17, macOS 14, *)
     @Test func configuredImportCannotReturnAnAlreadyDeletedFile() async throws {
         let root = try workspace(); defer { try? FileManager.default.removeItem(at: root) }
         let source = root.appendingPathComponent("Input.bin"); try Data([1,2,3]).write(to: source)
