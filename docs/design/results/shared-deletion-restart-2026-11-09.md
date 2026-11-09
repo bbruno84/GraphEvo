@@ -102,3 +102,31 @@ The seven annotations across deletion, configured File import, string storage
 and native-outbox tests match their existing API requirements. Assertions and
 shipping Sources remain unchanged. The fourth checkpoint validates this grouped
 compilation correction; earlier failures are not reclassified as passing.
+
+
+## Final integration gate
+
+The [fourth requested checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/42672501837)
+on `0460072b` fails before creating any job: its check suite has zero check runs
+and its downloaded log archive is empty. The API exposes no more precise cause;
+the CLI's workflow-file hint is generic, not an established diagnosis. Workflow
+files are unchanged from the preceding runs that executed successfully on macOS.
+This latest run is unavailable evidence, not passing CI or a failed product test.
+No infrastructure-only retry is requested under the alpha policy.
+
+The final shipping Sources and manifest remain byte-identical to `6452a7b2`.
+All seven test-availability corrections are reviewed against their existing API
+requirements. Local verification comprises the original 796 macOS functions,
+794 iOS functions with no failures/skips, repeated 17 deletion and 13 File/string
+functions, 19 automatic synchronization functions, and a complete final iOS
+`build-for-testing` with explicit deployment target 16.0. Both Swift 6 consumers
+also pass locally and in all three executed macOS checkpoints (795 hosted
+functions per v2 profile). Physical evidence above is unchanged.
+
+The maintainer authorizes integration after review and the requested checkpoint;
+alpha policy permits this locally verified merge with the documented hosted
+startup limitation. No beta/release remote gate is declared closed. The companion
+checkpoint also receives no runner; its own report records GitHub's explicit
+macOS arm64 capacity annotation, 29 passing local model functions and signed
+Release plus unsigned Simulator builds. Companion integration uses the merged
+library revision, with all four pins aligned and a focused local recheck.

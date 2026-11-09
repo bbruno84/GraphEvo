@@ -31,7 +31,12 @@ physical acceptance are complete in
 and its final library pin belong to that companion PR. The
 [post-alpha checklist](graphevo-2-post-alpha-checklist.md) records the narrow
 closure and retained broader gates. The maintainer requested review, hosted CI
-and integration on 2026-11-09; checkpoint outcomes are retained in the report.
+and integration on 2026-11-09. Seven test-only availability omissions exposed
+by hosted Xcode 16.4 are corrected without production changes; a complete local
+test build at the explicit iOS 16 floor passes. Three hosted macOS v2 jobs and
+consumers pass; the final remote attempt creates no jobs, so final iOS hosted
+acceptance is not claimed. The report retains every failed checkpoint and the
+alpha-policy integration rationale.
 
 ## In progress — Notes demo prerequisites
 
