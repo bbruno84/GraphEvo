@@ -76,3 +76,14 @@ annotation correction, all 17 local deletion functions and all 794 iOS v2
 functions pass again with no failures or skips. Source review confirms the
 annotation matches GraphContext's declared platform availability; all shipping
 source is byte-identical to the physically tested correction.
+
+
+The [replacement checkpoint](https://github.com/bbruno84/GraphEvo/actions/runs/42668738093)
+on `81bc4d88` advances past the deletion test but exposes the same missing
+availability on three configured File-import tests; no iOS test runs. A full
+inventory of test references to the public GraphContext/connection types also
+finds two string-storage tests with the same omission. All five receive the
+matching method-level iOS 17/macOS 14 annotation, preserving lower-floor internal
+tests and runtime-guarded cases. Existing availability on the remaining public
+context/connection references was checked before another checkpoint. No shipping
+source, assertions, package floors or test selections change.
