@@ -204,6 +204,12 @@ local reclamation and terminal-purge findings. The integrated implementation
 passed 752 macOS v2-profile tests and 61 affected iOS simulator tests. Broader
 beta acceptance remains open; no remote checkpoint was requested for #190.
 
+The [second-increment probes](results/app-group-cloud-and-recovery-probes-2026-11-06.md)
+verify direct CloudKit account/permission inspection on two signed app
+processes and exact offline recovery after a supervised macOS child exit.
+CloudKit authorization inside the widget, production recovery authority and
+end-to-end publication of a secondary App Group commit remain open.
+
 ## Earlier physical checkpoint — durable spool, 2026-11-04
 
 The [private device result](results/durable-asset-spool-device-2026-11-04.md)
